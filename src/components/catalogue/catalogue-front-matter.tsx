@@ -1309,42 +1309,51 @@ export function JudgesListContent({ show }: FrontMatterProps) {
       {/* Other judges (JH, dogs/bitches-only, etc.) not in the breed
           table. Each gets a card-style row with photo + name + role +
           bio — matching the single-breed branch layout above. */}
-      {otherJudges.length > 0 && (
-        <View style={{ marginTop: 10 }}>
-          <Text style={{ fontFamily: 'Inter', fontSize: 8, fontWeight: 'bold', color: C.primary, textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 6 }}>
-            Other Judges
-          </Text>
-          {otherJudges.map(({ name, roles }, i) => {
-            const bio = judgeBios[name];
-            const photoUrl = show.judgePhotos?.[name];
-            const roleLabel = roles.length > 0 ? roles.join(' & ') : null;
-            return (
-              <View key={i} wrap={false} style={{ marginBottom: 8 }}>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                  {photoUrl && (
-                    <Image src={photoUrl} style={{ width: 36, height: 36, borderRadius: 18 }} />
-                  )}
-                  <View style={{ flex: 1 }}>
-                    <Text style={{ fontFamily: 'Inter', fontSize: 10, fontWeight: 'bold', color: C.textDark }}>
-                      {name}
-                    </Text>
-                    {roleLabel && (
-                      <Text style={{ fontFamily: 'Inter', fontSize: 8, fontStyle: 'italic', color: C.textMedium }}>
-                        {roleLabel}
-                      </Text>
-                    )}
-                  </View>
-                </View>
-                {bio && (
-                  <Text style={{ ...styles.judgeBio, marginTop: 3, marginBottom: 0 }}>
-                    {bio}
-                  </Text>
+      {otherJudges.length > 0 && (() => {
+        const renderOtherJudgeCard = ({ name, roles }: (typeof otherJudges)[number], i: number) => {
+          const bio = judgeBios[name];
+          const photoUrl = show.judgePhotos?.[name];
+          const roleLabel = roles.length > 0 ? roles.join(' & ') : null;
+          return (
+            <View key={i} wrap={false} style={{ marginBottom: 8 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                {photoUrl && (
+                  <Image src={photoUrl} style={{ width: 36, height: 36, borderRadius: 18 }} />
                 )}
+                <View style={{ flex: 1 }}>
+                  <Text style={{ fontFamily: 'Inter', fontSize: 10, fontWeight: 'bold', color: C.textDark }}>
+                    {name}
+                  </Text>
+                  {roleLabel && (
+                    <Text style={{ fontFamily: 'Inter', fontSize: 8, fontStyle: 'italic', color: C.textMedium }}>
+                      {roleLabel}
+                    </Text>
+                  )}
+                </View>
               </View>
-            );
-          })}
-        </View>
-      )}
+              {bio && (
+                <Text style={{ ...styles.judgeBio, marginTop: 3, marginBottom: 0 }}>
+                  {bio}
+                </Text>
+              )}
+            </View>
+          );
+        };
+
+        return (
+          <View style={{ marginTop: 10 }}>
+            {/* Keep subheading + first card atomic so it never sits alone
+                at the foot of a page (mirrors BestAwardsContent). */}
+            <View wrap={false}>
+              <Text style={{ fontFamily: 'Inter', fontSize: 8, fontWeight: 'bold', color: C.primary, textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 6 }}>
+                Other Judges
+              </Text>
+              {renderOtherJudgeCard(otherJudges[0], 0)}
+            </View>
+            {otherJudges.slice(1).map((oj, i) => renderOtherJudgeCard(oj, i + 1))}
+          </View>
+        );
+      })()}
 
     </>
   );
@@ -1474,33 +1483,40 @@ export function ExhibitorIndexPage({ show, entries, breedName, compact }: Exhibi
   // drop addresses entirely and pack ~70 exhibitors per A5 page (vs ~30
   // for the table layout).
   if (compact) {
+    const renderCompactRow = (ex: (typeof sorted)[number], idx: number) => {
+      const cats = ex.catNos.sort((a, b) => a.localeCompare(b, undefined, { numeric: true })).join(', ');
+      const cls = ex.classes.sort((a, b) => a.localeCompare(b, undefined, { numeric: true })).join(', ');
+      return (
+        <View
+          key={idx}
+          wrap={false}
+          style={{ flexDirection: 'row', paddingVertical: 1.4, borderBottomWidth: 0.4, borderBottomColor: C.ruleLight, alignItems: 'baseline' }}
+        >
+          <Text style={{ fontFamily: 'Inter', fontSize: 6.7, fontWeight: 'bold', color: C.textDark, width: '38%', paddingRight: 4 }}>
+            {ex.name}
+          </Text>
+          <Text style={{ fontFamily: 'Inter', fontSize: 6.7, color: C.textDark, width: '24%', paddingRight: 4 }}>
+            {cats || '—'}
+          </Text>
+          <Text style={{ fontFamily: 'Inter', fontSize: 6.5, color: C.textMedium, flex: 1 }}>
+            {cls ? `cl ${cls}` : ''}
+          </Text>
+        </View>
+      );
+    };
+
     return (
       <Page size="A5" style={styles.frontMatterPage} wrap>
-        <SectionBand title={title} />
-        <Text style={{ fontFamily: 'Times', fontStyle: 'italic', fontSize: 7, color: C.textMedium, marginBottom: 6 }}>
-          Cross-reference: full particulars for each dog appear on the class page indicated.
-        </Text>
-        {sorted.map((ex, idx) => {
-          const cats = ex.catNos.sort((a, b) => a.localeCompare(b, undefined, { numeric: true })).join(', ');
-          const cls = ex.classes.sort((a, b) => a.localeCompare(b, undefined, { numeric: true })).join(', ');
-          return (
-            <View
-              key={idx}
-              wrap={false}
-              style={{ flexDirection: 'row', paddingVertical: 1.4, borderBottomWidth: 0.4, borderBottomColor: C.ruleLight, alignItems: 'baseline' }}
-            >
-              <Text style={{ fontFamily: 'Inter', fontSize: 6.7, fontWeight: 'bold', color: C.textDark, width: '38%', paddingRight: 4 }}>
-                {ex.name}
-              </Text>
-              <Text style={{ fontFamily: 'Inter', fontSize: 6.7, color: C.textDark, width: '24%', paddingRight: 4 }}>
-                {cats || '—'}
-              </Text>
-              <Text style={{ fontFamily: 'Inter', fontSize: 6.5, color: C.textMedium, flex: 1 }}>
-                {cls ? `cl ${cls}` : ''}
-              </Text>
-            </View>
-          );
-        })}
+        {/* Keep banner + intro + first row atomic so the banner never sits
+            alone at the foot of a page (mirrors BestAwardsContent). */}
+        <View wrap={false}>
+          <SectionBand title={title} />
+          <Text style={{ fontFamily: 'Times', fontStyle: 'italic', fontSize: 7, color: C.textMedium, marginBottom: 6 }}>
+            Cross-reference: full particulars for each dog appear on the class page indicated.
+          </Text>
+          {sorted.length > 0 && renderCompactRow(sorted[0], 0)}
+        </View>
+        {sorted.slice(1).map((ex, idx) => renderCompactRow(ex, idx + 1))}
 
         <Text
           style={styles.footer}
@@ -1511,28 +1527,35 @@ export function ExhibitorIndexPage({ show, entries, breedName, compact }: Exhibi
     );
   }
 
+  const renderExhibitorRow = (ex: (typeof sorted)[number], idx: number) => (
+    <View key={idx} wrap={false} style={{ flexDirection: 'row', paddingVertical: 1.5, borderBottomWidth: 0.5, borderBottomColor: C.ruleLight }}>
+      <View style={{ width: '40%', paddingRight: 4 }}>
+        <Text style={{ fontFamily: 'Inter', fontSize: 7, fontWeight: 'bold', color: C.textDark }}>{ex.name}</Text>
+        {ex.address && <Text style={{ fontFamily: 'Inter', fontSize: 6, color: C.textLight }}>{ex.address}</Text>}
+      </View>
+      <Text style={{ fontFamily: 'Inter', fontSize: 7, width: '20%', color: C.textDark }}>
+        {ex.catNos.sort((a, b) => a.localeCompare(b, undefined, { numeric: true })).join(', ')}
+      </Text>
+      <Text style={{ fontFamily: 'Inter', fontSize: 6.5, width: '40%', color: C.textMedium }}>
+        {ex.classes.sort((a, b) => a.localeCompare(b, undefined, { numeric: true })).join(', ')}
+      </Text>
+    </View>
+  );
+
   return (
     <Page size="A5" style={styles.frontMatterPage} wrap>
-      <SectionBand title={title} />
-      <View style={{ flexDirection: 'row', borderBottomWidth: 1.5, borderBottomColor: C.primary, paddingBottom: 3, marginBottom: 4 }}>
-        <Text style={{ fontFamily: 'Inter', fontSize: 6.5, fontWeight: 'bold', width: '40%', color: C.textDark }}>Exhibitor</Text>
-        <Text style={{ fontFamily: 'Inter', fontSize: 6.5, fontWeight: 'bold', width: '20%', color: C.textDark }}>Cat No(s)</Text>
-        <Text style={{ fontFamily: 'Inter', fontSize: 6.5, fontWeight: 'bold', width: '40%', color: C.textDark }}>Classes</Text>
-      </View>
-      {sorted.map((ex, idx) => (
-        <View key={idx} wrap={false} style={{ flexDirection: 'row', paddingVertical: 1.5, borderBottomWidth: 0.5, borderBottomColor: C.ruleLight }}>
-          <View style={{ width: '40%', paddingRight: 4 }}>
-            <Text style={{ fontFamily: 'Inter', fontSize: 7, fontWeight: 'bold', color: C.textDark }}>{ex.name}</Text>
-            {ex.address && <Text style={{ fontFamily: 'Inter', fontSize: 6, color: C.textLight }}>{ex.address}</Text>}
-          </View>
-          <Text style={{ fontFamily: 'Inter', fontSize: 7, width: '20%', color: C.textDark }}>
-            {ex.catNos.sort((a, b) => a.localeCompare(b, undefined, { numeric: true })).join(', ')}
-          </Text>
-          <Text style={{ fontFamily: 'Inter', fontSize: 6.5, width: '40%', color: C.textMedium }}>
-            {ex.classes.sort((a, b) => a.localeCompare(b, undefined, { numeric: true })).join(', ')}
-          </Text>
+      {/* Keep banner + column header + first row atomic so the banner
+          never sits alone at the foot of a page (mirrors BestAwardsContent). */}
+      <View wrap={false}>
+        <SectionBand title={title} />
+        <View style={{ flexDirection: 'row', borderBottomWidth: 1.5, borderBottomColor: C.primary, paddingBottom: 3, marginBottom: 4 }}>
+          <Text style={{ fontFamily: 'Inter', fontSize: 6.5, fontWeight: 'bold', width: '40%', color: C.textDark }}>Exhibitor</Text>
+          <Text style={{ fontFamily: 'Inter', fontSize: 6.5, fontWeight: 'bold', width: '20%', color: C.textDark }}>Cat No(s)</Text>
+          <Text style={{ fontFamily: 'Inter', fontSize: 6.5, fontWeight: 'bold', width: '40%', color: C.textDark }}>Classes</Text>
         </View>
-      ))}
+        {sorted.length > 0 && renderExhibitorRow(sorted[0], 0)}
+      </View>
+      {sorted.slice(1).map((ex, idx) => renderExhibitorRow(ex, idx + 1))}
 
       <Text
         style={styles.footer}
@@ -1621,77 +1644,89 @@ export function TrophiesPage({ show, sponsorships }: TrophiesPageProps) {
     return a.className.localeCompare(b.className);
   });
 
+  const tableHeader = (
+    <View style={{
+      flexDirection: 'row',
+      borderBottomWidth: 1.5,
+      borderBottomColor: C.primary,
+      paddingBottom: 3,
+      marginBottom: 4,
+    }}>
+      <Text style={{ fontFamily: 'Inter', fontSize: 6.5, fontWeight: 'bold', width: '30%', color: C.textDark }}>Class</Text>
+      <Text style={{ fontFamily: 'Inter', fontSize: 6.5, fontWeight: 'bold', width: '35%', color: C.textDark }}>Trophy / Sponsor</Text>
+      <Text style={{ fontFamily: 'Inter', fontSize: 6.5, fontWeight: 'bold', width: '35%', color: C.textDark }}>Prize</Text>
+    </View>
+  );
+
+  const renderTrophyRow = (sp: (typeof sorted)[number], idx: number) => {
+    const label = sp.classLabel ?? (sp.classNumber != null ? String(sp.classNumber) : '');
+    const classHeading = label
+      ? `${label}. ${sp.className}`
+      : sp.className;
+
+    // Build trophy + sponsor combined text
+    const trophySponsorParts: string[] = [];
+    if (sp.trophyName) {
+      let part = sp.trophyName;
+      if (sp.trophyDonor) part += ` (${sp.trophyDonor})`;
+      trophySponsorParts.push(part);
+    }
+    if (sp.sponsorName) {
+      let part = `Sponsored by ${sp.sponsorName}`;
+      if (sp.sponsorAffix) part += ` (${sp.sponsorAffix})`;
+      trophySponsorParts.push(part);
+    }
+
+    return (
+      <View
+        key={`${label}-${sp.className}-${idx}`}
+        wrap={false}
+        style={{
+          flexDirection: 'row',
+          paddingVertical: 2.5,
+          borderBottomWidth: 0.5,
+          borderBottomColor: C.ruleLight,
+        }}
+      >
+        <Text style={{ fontFamily: 'Inter', fontSize: 7, fontWeight: 'bold', width: '30%', color: C.textDark }}>
+          {classHeading}
+        </Text>
+        <Text style={{ fontFamily: 'Times', fontSize: 6.5, fontStyle: 'italic', width: '35%', color: C.textMedium }}>
+          {trophySponsorParts.join('\n') || '—'}
+        </Text>
+        <Text style={{ fontFamily: 'Inter', fontSize: 6.5, width: '35%', color: C.textMedium }}>
+          {sp.prizeDescription || '—'}
+        </Text>
+      </View>
+    );
+  };
+
   return (
     <Page size="A5" style={styles.frontMatterPage} wrap>
       {showTrophyTable && (
         <>
-          <SectionBand title="Trophies & Sponsorships" />
-
-          {/* Table header */}
-          <View style={{
-            flexDirection: 'row',
-            borderBottomWidth: 1.5,
-            borderBottomColor: C.primary,
-            paddingBottom: 3,
-            marginBottom: 4,
-          }}>
-            <Text style={{ fontFamily: 'Inter', fontSize: 6.5, fontWeight: 'bold', width: '30%', color: C.textDark }}>Class</Text>
-            <Text style={{ fontFamily: 'Inter', fontSize: 6.5, fontWeight: 'bold', width: '35%', color: C.textDark }}>Trophy / Sponsor</Text>
-            <Text style={{ fontFamily: 'Inter', fontSize: 6.5, fontWeight: 'bold', width: '35%', color: C.textDark }}>Prize</Text>
+          {/* Keep banner + header + first row atomic so the banner never
+              sits alone at the foot of a page (mirrors BestAwardsContent). */}
+          <View wrap={false}>
+            <SectionBand title="Trophies & Sponsorships" />
+            {tableHeader}
+            {sorted.length > 0 && renderTrophyRow(sorted[0], 0)}
           </View>
-
-          {sorted.map((sp, idx) => {
-            const label = sp.classLabel ?? (sp.classNumber != null ? String(sp.classNumber) : '');
-            const classHeading = label
-              ? `${label}. ${sp.className}`
-              : sp.className;
-
-            // Build trophy + sponsor combined text
-            const trophySponsorParts: string[] = [];
-            if (sp.trophyName) {
-              let part = sp.trophyName;
-              if (sp.trophyDonor) part += ` (${sp.trophyDonor})`;
-              trophySponsorParts.push(part);
-            }
-            if (sp.sponsorName) {
-              let part = `Sponsored by ${sp.sponsorName}`;
-              if (sp.sponsorAffix) part += ` (${sp.sponsorAffix})`;
-              trophySponsorParts.push(part);
-            }
-
-            return (
-              <View
-                key={`${label}-${sp.className}-${idx}`}
-                wrap={false}
-                style={{
-                  flexDirection: 'row',
-                  paddingVertical: 2.5,
-                  borderBottomWidth: 0.5,
-                  borderBottomColor: C.ruleLight,
-                }}
-              >
-                <Text style={{ fontFamily: 'Inter', fontSize: 7, fontWeight: 'bold', width: '30%', color: C.textDark }}>
-                  {classHeading}
-                </Text>
-                <Text style={{ fontFamily: 'Times', fontSize: 6.5, fontStyle: 'italic', width: '35%', color: C.textMedium }}>
-                  {trophySponsorParts.join('\n') || '—'}
-                </Text>
-                <Text style={{ fontFamily: 'Inter', fontSize: 6.5, width: '35%', color: C.textMedium }}>
-                  {sp.prizeDescription || '—'}
-                </Text>
-              </View>
-            );
-          })}
+          {sorted.slice(1).map((sp, idx) => renderTrophyRow(sp, idx + 1))}
         </>
       )}
 
       {/* With Thanks — plain donors (name + optional affix, no amount). */}
       {donations.length > 0 && (
-        <View style={{ marginTop: sponsorships.length > 0 ? 14 : 0 }} wrap={false}>
-          <SectionBand title="With Thanks" />
-          <Text style={{ fontFamily: 'Inter', fontSize: 8, color: C.textMedium, marginBottom: 5 }}>
-            With thanks to the following for their kind donations:
-          </Text>
+        <View style={{ marginTop: sponsorships.length > 0 ? 14 : 0 }}>
+          {/* Only the banner + intro need to stay atomic; the donor list
+              itself is elastic and should flow across a page break. */}
+          <View wrap={false}>
+            <SectionBand title="With Thanks" />
+            <Text style={{ fontFamily: 'Inter', fontSize: 8, color: C.textMedium, marginBottom: 5 }}>
+              With thanks to the following for their kind donations:
+            </Text>
+          </View>
           <View style={{ flexDirection: 'row', flexWrap: 'wrap' }}>
             {donations.map((d, i) => (
               <Text
@@ -1738,41 +1773,48 @@ export function NotForCompetitionPage({
     );
   if (nfc.length === 0) return null;
 
+  const renderNfcRow = (entry: (typeof nfc)[number], idx: number) => {
+    const meta = [
+      entry.breed,
+      entry.sex === 'dog' ? 'Dog' : entry.sex === 'bitch' ? 'Bitch' : null,
+    ].filter(Boolean);
+    return (
+      <View
+        key={idx}
+        wrap={false}
+        style={{ marginBottom: 4, paddingBottom: 3, borderBottomWidth: 0.5, borderBottomColor: C.ruleLight }}
+      >
+        <View style={{ flexDirection: 'row', alignItems: 'baseline' }}>
+          <Text style={styles.catalogueNumber}>{entry.catalogueNumber ?? '—'}</Text>
+          <Text style={styles.dogName}>{uppercaseName(entry.dogName) || 'Unnamed'}</Text>
+        </View>
+        {meta.length > 0 && (
+          <Text style={styles.entryDetail}>{meta.join('  ·  ')}</Text>
+        )}
+        {entry.owners.length > 0 && (
+          <Text style={styles.entryDetail}>
+            <Text style={styles.entryDetailLabel}>
+              Owner{entry.owners.length > 1 ? 's' : ''}:{' '}
+            </Text>
+            {formatOwnerKC(entry.owners, entry.exhibitorId, entry.withholdFromPublication)}
+          </Text>
+        )}
+      </View>
+    );
+  };
+
   return (
     <Page size="A5" style={styles.frontMatterPage} wrap>
-      <SectionBand title="Not For Competition" />
-      <Text style={{ fontFamily: 'Times', fontStyle: 'italic', fontSize: 8, color: C.textMedium, marginBottom: 8 }}>
-        The following dogs are exhibited Not For Competition.
-      </Text>
-      {nfc.map((entry, idx) => {
-        const meta = [
-          entry.breed,
-          entry.sex === 'dog' ? 'Dog' : entry.sex === 'bitch' ? 'Bitch' : null,
-        ].filter(Boolean);
-        return (
-          <View
-            key={idx}
-            wrap={false}
-            style={{ marginBottom: 4, paddingBottom: 3, borderBottomWidth: 0.5, borderBottomColor: C.ruleLight }}
-          >
-            <View style={{ flexDirection: 'row', alignItems: 'baseline' }}>
-              <Text style={styles.catalogueNumber}>{entry.catalogueNumber ?? '—'}</Text>
-              <Text style={styles.dogName}>{uppercaseName(entry.dogName) || 'Unnamed'}</Text>
-            </View>
-            {meta.length > 0 && (
-              <Text style={styles.entryDetail}>{meta.join('  ·  ')}</Text>
-            )}
-            {entry.owners.length > 0 && (
-              <Text style={styles.entryDetail}>
-                <Text style={styles.entryDetailLabel}>
-                  Owner{entry.owners.length > 1 ? 's' : ''}:{' '}
-                </Text>
-                {formatOwnerKC(entry.owners, entry.exhibitorId, entry.withholdFromPublication)}
-              </Text>
-            )}
-          </View>
-        );
-      })}
+      {/* Keep banner + intro + first row atomic so the banner never sits
+          alone at the foot of a page (mirrors BestAwardsContent). */}
+      <View wrap={false}>
+        <SectionBand title="Not For Competition" />
+        <Text style={{ fontFamily: 'Times', fontStyle: 'italic', fontSize: 8, color: C.textMedium, marginBottom: 8 }}>
+          The following dogs are exhibited Not For Competition.
+        </Text>
+        {nfc.length > 0 && renderNfcRow(nfc[0], 0)}
+      </View>
+      {nfc.slice(1).map((entry, idx) => renderNfcRow(entry, idx + 1))}
       <Text
         style={styles.footer}
         render={({ pageNumber, totalPages }) => `Page ${pageNumber} of ${totalPages}  ·  Generated by Remi`}
@@ -1819,18 +1861,25 @@ export function BestsWriteInPage({ show }: FrontMatterProps) {
   const awards = buildBestAwards(show.showType, show.bestAwards ?? []);
   if (awards.length === 0) return null;
 
+  const renderBestsRow = (award: string, i: number) => (
+    <View key={i} style={bestsWriteInStyles.row} wrap={false}>
+      <Text style={bestsWriteInStyles.award}>{award}</Text>
+      <View style={bestsWriteInStyles.line} />
+    </View>
+  );
+
   return (
     <Page size="A5" style={styles.frontMatterPage} wrap>
-      <SectionBand title="Best Awards" />
-      <Text style={{ fontFamily: 'Times', fontStyle: 'italic', fontSize: 8, color: C.textMedium, marginBottom: 12 }}>
-        To be completed as the principal awards are decided.
-      </Text>
-      {awards.map((award, i) => (
-        <View key={i} style={bestsWriteInStyles.row} wrap={false}>
-          <Text style={bestsWriteInStyles.award}>{award}</Text>
-          <View style={bestsWriteInStyles.line} />
-        </View>
-      ))}
+      {/* Keep banner + intro + first row atomic so the banner never sits
+          alone at the foot of a page (mirrors BestAwardsContent). */}
+      <View wrap={false}>
+        <SectionBand title="Best Awards" />
+        <Text style={{ fontFamily: 'Times', fontStyle: 'italic', fontSize: 8, color: C.textMedium, marginBottom: 12 }}>
+          To be completed as the principal awards are decided.
+        </Text>
+        {awards.length > 0 && renderBestsRow(awards[0], 0)}
+      </View>
+      {awards.slice(1).map((award, i) => renderBestsRow(award, i + 1))}
       <Text
         style={styles.footer}
         render={({ pageNumber, totalPages }) => `Page ${pageNumber} of ${totalPages}  ·  Generated by Remi`}

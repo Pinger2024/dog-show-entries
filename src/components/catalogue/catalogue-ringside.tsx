@@ -558,7 +558,7 @@ export function CatalogueRingside({ show, entries, compact }: Props) {
                   )}
 
                   {/* Write-in placement lines */}
-                  <View style={s.placementRow}>
+                  <View style={s.placementRow} wrap={false}>
                     <View style={s.placementSlot}>
                       <Text style={s.placementLabel}>1st</Text>
                       <View style={s.placementLine} />

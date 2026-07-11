@@ -49,7 +49,13 @@ function Topper({ num, subject }: { num: number; subject: string }) {
 
 function SectionTitle({ title }: { title: string }) {
   return (
-    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+    // minPresenceAhead: never strand a section heading at the foot of a
+    // page — if less than a row's worth of space follows, the title moves
+    // with its content.
+    <View
+      style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 6 }}
+      minPresenceAhead={28}
+    >
       <Text style={{ fontFamily: SV_FONTS.serif, fontSize: 13, color: SV.ink }}>{title}</Text>
       <View style={{ flex: 1, height: 1, backgroundColor: SV.rule }} />
     </View>

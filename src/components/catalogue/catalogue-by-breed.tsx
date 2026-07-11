@@ -388,7 +388,7 @@ export function CatalogueByBreed({ show, entries }: Props) {
                       }
 
                       return (
-                        <View key={`${cls.classLabel}-${cls.className}`}>
+                        <View key={`${cls.classLabel}-${cls.className}`} wrap={false}>
                           <Text style={styles.classListSummary}>
                             {classSummaryLine(cls, sex)}
                           </Text>

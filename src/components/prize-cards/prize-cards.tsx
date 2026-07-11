@@ -286,7 +286,8 @@ export function PrizeCards({ show, classes, includeJudgeName, placements, cardSt
               key={`${classIdx}-${placement}`}
               {...(pageSize
                 ? { size: pageSize }
-                : { size: 'A5' as const, orientation: 'landscape' as const, wrap: false as const })}
+                : { size: 'A5' as const, orientation: 'landscape' as const })}
+              wrap={false}
               style={{ ...s.page, backgroundColor: bgColor }}
             >
               {/* Decorative double border — outer in placement colour,

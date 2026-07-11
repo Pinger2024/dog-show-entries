@@ -462,13 +462,13 @@ function BestAwardsColumn({
       </View>
 
       {awards.map((award) => (
-        <View key={award} style={bestAwardsStyles.awardRow}>
+        <View key={award} style={bestAwardsStyles.awardRow} wrap={false}>
           <Text style={bestAwardsStyles.awardLabel}>{award}</Text>
           <View style={bestAwardsStyles.awardWriteLine} />
         </View>
       ))}
 
-      <View style={s.signatureBlock}>
+      <View style={s.signatureBlock} wrap={false}>
         <Text style={s.signatureLabel}>Judge Signature</Text>
         <View style={s.signatureLine} />
       </View>
@@ -495,18 +495,18 @@ function PlacementColumn(props: ColumnHeaderProps & { isLast?: boolean; copyLabe
       <ColumnHeader {...props} />
 
       {PLACEMENTS.map((place) => (
-        <View key={place} style={s.placementRow}>
+        <View key={place} style={s.placementRow} wrap={false}>
           <Text style={s.placementLabel}>{place}</Text>
           <View style={s.placementWriteLine} />
         </View>
       ))}
 
-      <View style={s.placementRow}>
+      <View style={s.placementRow} wrap={false}>
         <Text style={s.placementLabelNarrow}>Withheld</Text>
         <View style={s.placementWriteLine} />
       </View>
 
-      <View style={s.absentRow}>
+      <View style={s.absentRow} wrap={false}>
         <Text style={s.placementLabel}>Abs</Text>
         <View style={s.absentWriteArea}>
           {Array.from({ length: 4 }, (_, i) => (
@@ -515,7 +515,7 @@ function PlacementColumn(props: ColumnHeaderProps & { isLast?: boolean; copyLabe
         </View>
       </View>
 
-      <View style={s.signatureBlock}>
+      <View style={s.signatureBlock} wrap={false}>
         <Text style={s.signatureLabel}>Judge Signature</Text>
         <View style={s.signatureLine} />
       </View>
@@ -633,7 +633,7 @@ export function JudgesBook({
       {/* Final page — Best Awards sign-off. Triplicate columns, no notes needed. */}
       {show.bestAwards.length > 0 && (
         <Page size="A4" style={s.page}>
-          <View style={s.pageHeader}>
+          <View style={s.pageHeader} fixed>
             <View style={s.pageHeaderLeft}>
               {show.organisation && (
                 <Text style={s.clubName}>{show.organisation}</Text>

@@ -588,7 +588,7 @@ export function ShowScheduleMultibreed({
 
           {/* ── Title & Show sponsors — featured prominently with logos ── */}
           {sponsors.filter((sp) => sp.tier === 'title' || sp.tier === 'show').map((sp, i) => (
-            <View key={i} style={{
+            <View key={i} wrap={false} style={{
               backgroundColor: sp.tier === 'title' ? '#FDFAF3' : C.cardBg,
               borderWidth: 1,
               borderColor: sp.tier === 'title' ? C.accent : C.cardBorder,
@@ -644,7 +644,7 @@ export function ShowScheduleMultibreed({
                 .filter((sp) => sp.classSponsorships.length > 0)
                 .flatMap((sp) =>
                   sp.classSponsorships.map((cs, j) => (
-                    <View key={`${sp.name}-${j}`} style={{
+                    <View key={`${sp.name}-${j}`} wrap={false} style={{
                       flexDirection: 'row', marginBottom: 4,
                       paddingBottom: 4, borderBottomWidth: 0.5, borderBottomColor: C.ruleLight,
                     }}>
@@ -691,7 +691,7 @@ export function ShowScheduleMultibreed({
               {sponsors
                 .filter((sp) => sp.specialPrizes)
                 .map((sp, i) => (
-                  <View key={i} style={{ marginBottom: 4 }}>
+                  <View key={i} wrap={false} style={{ marginBottom: 4 }}>
                     <Text style={{ fontFamily: 'Inter', fontWeight: 'bold', fontSize: 8, color: C.textDark }}>
                       {sp.name}
                     </Text>
@@ -765,7 +765,13 @@ export function ShowScheduleMultibreed({
 
             {orderedGroups.length > 0 && (
               <View>
-                <View style={{ flexDirection: 'row', backgroundColor: C.primary, paddingVertical: 5, paddingHorizontal: 6, borderTopLeftRadius: 4, borderTopRightRadius: 4 }}>
+                {/* minPresenceAhead: never strand this header row at the foot
+                    of a page — if less than one data row's worth of space
+                    follows, it moves with its content. */}
+                <View
+                  style={{ flexDirection: 'row', backgroundColor: C.primary, paddingVertical: 5, paddingHorizontal: 6, borderTopLeftRadius: 4, borderTopRightRadius: 4 }}
+                  minPresenceAhead={20}
+                >
                   <Text style={{ width: '22%', fontFamily: 'Inter', fontSize: 7, fontWeight: 'bold', color: C.textOnPrimary, textTransform: 'uppercase', letterSpacing: 0.4 }}>
                     Group
                   </Text>
@@ -931,7 +937,10 @@ export function ShowScheduleMultibreed({
 
           const sacSection = sacClasses.length > 0 ? (
             <View key="sac-section" wrap={false} style={{ marginTop: 12 }}>
-              <View style={s.twoColMixedHeader} wrap={false}>
+              {/* minPresenceAhead: never strand this heading at the foot of a
+                  page — if less than a row's worth of space follows, it moves
+                  with its content. */}
+              <View style={s.twoColMixedHeader} wrap={false} minPresenceAhead={22}>
                 <Text style={s.twoColHeaderText}>SPECIAL AWARD CLASSES</Text>
               </View>
               {sacJudges.length > 0 && (
@@ -984,7 +993,10 @@ export function ShowScheduleMultibreed({
             <>
               {sections.map((section, si) => (
                 <View key={`section-${si}`}>
-                  <View style={s.twoColMixedHeader} wrap={false}>
+                  {/* minPresenceAhead: never strand this heading at the foot
+                      of a page — if less than a row's worth of space follows,
+                      it moves with its content. */}
+                  <View style={s.twoColMixedHeader} wrap={false} minPresenceAhead={22}>
                     <Text style={s.twoColHeaderText}>{section.heading}</Text>
                   </View>
                   {section.judges && section.judges.length > 0 && (

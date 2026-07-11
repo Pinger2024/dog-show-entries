@@ -147,13 +147,17 @@ export function Sh01AbsenteeReport({ info, breeds }: { info: Sh01ReportInfo; bre
           The figures provided on this sheet are used to calculate the annual allocation of CCs and the Stud Book bands. Therefore, it is absolutely vital you ensure the correct statistics are provided in the columns above.
         </Text>
 
-        <View style={s.bar}><Text style={s.barText}>OFFICE USE ONLY</Text></View>
-        <View style={s.sign}>
-          <Text>I declare that the information provided on this form is correct.</Text>
-          <View style={{ flexDirection: 'row', marginTop: 14, alignItems: 'flex-end' }}>
-            <Text>Print Name </Text><View style={[s.line, { width: 150, marginRight: 18 }]} />
-            <Text>Signature </Text><View style={[s.line, { width: 150, marginRight: 18 }]} />
-            <Text>Date </Text><View style={[s.line, { width: 90 }]} />
+        {/* wrap={false}: the office-use bar and the declaration/signature block
+            are small and belong together — never split across a page break. */}
+        <View wrap={false}>
+          <View style={s.bar}><Text style={s.barText}>OFFICE USE ONLY</Text></View>
+          <View style={s.sign}>
+            <Text>I declare that the information provided on this form is correct.</Text>
+            <View style={{ flexDirection: 'row', marginTop: 14, alignItems: 'flex-end' }}>
+              <Text>Print Name </Text><View style={[s.line, { width: 150, marginRight: 18 }]} />
+              <Text>Signature </Text><View style={[s.line, { width: 150, marginRight: 18 }]} />
+              <Text>Date </Text><View style={[s.line, { width: 90 }]} />
+            </View>
           </View>
         </View>
 

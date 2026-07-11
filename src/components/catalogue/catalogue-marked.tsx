@@ -553,13 +553,13 @@ export function CatalogueMarked({ show, entries, results, absentees, achievement
       {/* Achievements summary page */}
       {achievements.length > 0 && (
         <Page size="A5" style={styles.frontMatterPage} wrap>
-          <Text style={markedStyles.achievementsSectionTitle}>Awards Summary</Text>
+          <Text style={markedStyles.achievementsSectionTitle} minPresenceAhead={60}>Awards Summary</Text>
 
           {showAwards.length > 0 && (
             <View>
-              <Text style={{ ...styles.breedHeading, marginTop: 4 }}>Show Awards</Text>
+              <Text style={{ ...styles.breedHeading, marginTop: 4 }} minPresenceAhead={60}>Show Awards</Text>
               {showAwards.map((a, i) => (
-                <View key={i} style={markedStyles.achievementRow}>
+                <View key={i} style={markedStyles.achievementRow} wrap={false}>
                   <Text style={markedStyles.achievementType}>
                     {achievementLabel(a.type, isChampionship)}
                   </Text>
@@ -572,9 +572,9 @@ export function CatalogueMarked({ show, entries, results, absentees, achievement
 
           {breedAwards.length > 0 && (
             <View>
-              <Text style={{ ...styles.breedHeading, marginTop: 8 }}>Breed Awards</Text>
+              <Text style={{ ...styles.breedHeading, marginTop: 8 }} minPresenceAhead={60}>Breed Awards</Text>
               {breedAwards.map((a, i) => (
-                <View key={i} style={markedStyles.achievementRow}>
+                <View key={i} style={markedStyles.achievementRow} wrap={false}>
                   <Text style={markedStyles.achievementType}>
                     {achievementLabel(a.type, isChampionship)}
                   </Text>

@@ -208,7 +208,11 @@ export function RingBoard({
           {show.venue && <Text style={s.venue}>{show.venue}</Text>}
         </View>
 
-        <Text style={s.pageTitle}>Ring Plan</Text>
+        {/* minPresenceAhead: keep the "Ring Plan" title with its first ring
+            card — don't strand it alone at the foot of a page. */}
+        <View minPresenceAhead={150}>
+          <Text style={s.pageTitle}>Ring Plan</Text>
+        </View>
 
         {rings.map((ring) => (
           <View key={ring.ringNumber} style={s.ringCard} wrap={false}>

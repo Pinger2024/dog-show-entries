@@ -120,7 +120,9 @@ function ReportShell({
         ))}
 
         {total ? (
-          <View style={s.totalRow}>
+          // minPresenceAhead: never strand the totals row alone at the foot
+          // of a near-blank page — move it to the next page if it doesn't fit.
+          <View style={s.totalRow} minPresenceAhead={24}>
             <Text style={[s.totalText, { flex: 1 }]}>{total.label}</Text>
             <Text style={s.totalText}>{total.value}</Text>
           </View>

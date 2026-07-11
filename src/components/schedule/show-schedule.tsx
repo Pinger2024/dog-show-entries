@@ -634,7 +634,7 @@ export function ShowSchedule({
 
           {/* ── Title & Show sponsors — featured prominently with logos ── */}
           {sponsors.filter((sp) => sp.tier === 'title' || sp.tier === 'show').map((sp, i) => (
-            <View key={i} style={{
+            <View key={i} wrap={false} style={{
               backgroundColor: sp.tier === 'title' ? '#FDFAF3' : C.cardBg,
               borderWidth: 1,
               borderColor: sp.tier === 'title' ? C.accent : C.cardBorder,
@@ -690,7 +690,7 @@ export function ShowSchedule({
                 .filter((sp) => sp.classSponsorships.length > 0)
                 .flatMap((sp) =>
                   sp.classSponsorships.map((cs, j) => (
-                    <View key={`${sp.name}-${j}`} style={{
+                    <View key={`${sp.name}-${j}`} wrap={false} style={{
                       flexDirection: 'row', marginBottom: 4,
                       paddingBottom: 4, borderBottomWidth: 0.5, borderBottomColor: C.ruleLight,
                     }}>
@@ -737,7 +737,7 @@ export function ShowSchedule({
               {sponsors
                 .filter((sp) => sp.specialPrizes)
                 .map((sp, i) => (
-                  <View key={i} style={{ marginBottom: 4 }}>
+                  <View key={i} wrap={false} style={{ marginBottom: 4 }}>
                     <Text style={{ fontFamily: 'Inter', fontWeight: 'bold', fontSize: 8, color: C.textDark }}>
                       {sp.name}
                     </Text>
@@ -1074,7 +1074,10 @@ export function ShowSchedule({
             "Junior Handling" section. */}
         {mixedTopClasses.length > 0 && (
           <View style={{ marginBottom: 8 }}>
-            <View style={s.twoColMixedHeader}>
+            {/* minPresenceAhead: never strand this heading at the foot of a
+                page — if less than a row's worth of space follows, it moves
+                with its content. */}
+            <View style={s.twoColMixedHeader} minPresenceAhead={22}>
               <Text style={s.twoColHeaderText}>Mixed</Text>
             </View>
             {mixedTopClasses.map((cls, i) => (
@@ -1116,7 +1119,10 @@ export function ShowSchedule({
 
         {mixedBottomClasses.length > 0 && (
           <View style={{ marginTop: 8 }}>
-            <View style={s.twoColMixedHeader}>
+            {/* minPresenceAhead: never strand this heading at the foot of a
+                page — if less than a row's worth of space follows, it moves
+                with its content. */}
+            <View style={s.twoColMixedHeader} minPresenceAhead={22}>
               <Text style={s.twoColHeaderText}>Junior Handling</Text>
             </View>
             {mixedBottomClasses.map((cls, i) => (
@@ -1137,7 +1143,10 @@ export function ShowSchedule({
             call-to-action that the host clubs actually use. */}
         {sacClasses.length > 0 && (
           <View style={{ marginTop: 12 }} wrap={false}>
-            <View style={s.twoColMixedHeader}>
+            {/* minPresenceAhead: never strand this heading at the foot of a
+                page — if less than a row's worth of space follows, it moves
+                with its content. */}
+            <View style={s.twoColMixedHeader} minPresenceAhead={22}>
               <Text style={s.twoColHeaderText}>Special Award Classes</Text>
             </View>
             {sacJudges.length > 0 && (

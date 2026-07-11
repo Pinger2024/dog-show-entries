@@ -290,7 +290,12 @@ export function JudgeContractPdf({ data }: { data: JudgeContractPdfData }) {
         </View>
 
         <View style={s.section}>
-          <Text style={s.sectionHeading}>Show Details</Text>
+          {/* minPresenceAhead: never strand a section heading at the foot of a
+              page — if less than a row's worth of space follows, the heading
+              moves with its content. */}
+          <View minPresenceAhead={28}>
+            <Text style={s.sectionHeading}>Show Details</Text>
+          </View>
           <View style={s.row}>
             <Text style={s.rowLabel}>Society</Text>
             <Text style={s.rowValue}>{data.societyName}</Text>
@@ -316,7 +321,10 @@ export function JudgeContractPdf({ data }: { data: JudgeContractPdfData }) {
         </View>
 
         <View style={s.section}>
-          <Text style={s.sectionHeading}>Judge</Text>
+          {/* minPresenceAhead: keep the heading with its content */}
+          <View minPresenceAhead={28}>
+            <Text style={s.sectionHeading}>Judge</Text>
+          </View>
           <View style={s.row}>
             <Text style={s.rowLabel}>Name</Text>
             <Text style={s.rowValue}>{judgeName}</Text>
@@ -334,7 +342,10 @@ export function JudgeContractPdf({ data }: { data: JudgeContractPdfData }) {
         </View>
 
         <View style={s.section}>
-          <Text style={s.sectionHeading}>Appointment</Text>
+          {/* minPresenceAhead: keep the heading with its content */}
+          <View minPresenceAhead={28}>
+            <Text style={s.sectionHeading}>Appointment</Text>
+          </View>
           <View style={s.breedsBlock}>
             {data.breedLine || data.classificationLine ? (
               <>
@@ -364,8 +375,13 @@ export function JudgeContractPdf({ data }: { data: JudgeContractPdfData }) {
 
         {hasExpenses && (
           <View style={s.section}>
-            <Text style={s.sectionHeading}>Agreed Expenses</Text>
-            <View style={s.expensesTable}>
+            {/* minPresenceAhead: keep the heading with its content */}
+            <View minPresenceAhead={28}>
+              <Text style={s.sectionHeading}>Agreed Expenses</Text>
+            </View>
+            {/* wrap={false}: max 4 rows (hotel/travel/other/total) — always
+                keep the expenses table together on one page. */}
+            <View style={s.expensesTable} wrap={false}>
               <View style={s.expenseRow}>
                 <Text style={s.expenseLabel}>Hotel / accommodation</Text>
                 <Text style={s.expenseAmount}>{formatPence(data.expenses.hotelPence)}</Text>
@@ -395,37 +411,47 @@ export function JudgeContractPdf({ data }: { data: JudgeContractPdfData }) {
 
         {data.terms && (
           <View style={s.section}>
-            <Text style={s.sectionHeading}>Additional Terms</Text>
+            {/* minPresenceAhead: keep the heading with its content */}
+            <View minPresenceAhead={28}>
+              <Text style={s.sectionHeading}>Additional Terms</Text>
+            </View>
             <Text style={s.notesBlock}>{data.terms}</Text>
           </View>
         )}
 
         <View style={s.section}>
-          <Text style={s.sectionHeading}>Acceptance</Text>
-          <Text style={s.paragraph}>
-            By clicking &quot;Accept Appointment&quot; on the offer link sent to the Judge&apos;s email
-            address, the Judge has confirmed acceptance of this appointment on the terms set out above.
-            This digital acceptance is recorded by Remi and is binding under {isWusv ? 'the GSDL British Regional Group Rules & Regulations' : 'Royal Kennel Club regulations'}.
-          </Text>
+          {/* minPresenceAhead: keep the heading with its content */}
+          <View minPresenceAhead={28}>
+            <Text style={s.sectionHeading}>Acceptance</Text>
+          </View>
+          {/* wrap={false}: the closing paragraph and both signature blocks
+              are small and belong together — never split across a page break. */}
+          <View wrap={false}>
+            <Text style={s.paragraph}>
+              By clicking &quot;Accept Appointment&quot; on the offer link sent to the Judge&apos;s email
+              address, the Judge has confirmed acceptance of this appointment on the terms set out above.
+              This digital acceptance is recorded by Remi and is binding under {isWusv ? 'the GSDL British Regional Group Rules & Regulations' : 'Royal Kennel Club regulations'}.
+            </Text>
 
-          <View style={s.signatureGrid}>
-            <View style={s.signatureCell}>
-              <Text style={s.signatureLabel}>For the Society</Text>
-              <Text style={s.signatureName}>{data.societyName}</Text>
-              <Text style={s.signatureStamp}>
-                Offer issued {formatDateShort(data.dates.offerSentAt ?? data.generatedAt)}
-              </Text>
-              {data.secretaryEmail && (
-                <Text style={s.signatureStamp}>{data.secretaryEmail}</Text>
-              )}
-            </View>
-            <View style={s.signatureCell}>
-              <Text style={s.signatureLabel}>The Judge</Text>
-              <Text style={s.signatureName}>{judgeName}</Text>
-              <Text style={s.signatureStamp}>
-                Accepted {formatDateShort(data.dates.acceptedAt)}
-              </Text>
-              <Text style={s.signatureStamp}>{data.judge.email}</Text>
+            <View style={s.signatureGrid}>
+              <View style={s.signatureCell}>
+                <Text style={s.signatureLabel}>For the Society</Text>
+                <Text style={s.signatureName}>{data.societyName}</Text>
+                <Text style={s.signatureStamp}>
+                  Offer issued {formatDateShort(data.dates.offerSentAt ?? data.generatedAt)}
+                </Text>
+                {data.secretaryEmail && (
+                  <Text style={s.signatureStamp}>{data.secretaryEmail}</Text>
+                )}
+              </View>
+              <View style={s.signatureCell}>
+                <Text style={s.signatureLabel}>The Judge</Text>
+                <Text style={s.signatureName}>{judgeName}</Text>
+                <Text style={s.signatureStamp}>
+                  Accepted {formatDateShort(data.dates.acceptedAt)}
+                </Text>
+                <Text style={s.signatureStamp}>{data.judge.email}</Text>
+              </View>
             </View>
           </View>
         </View>
