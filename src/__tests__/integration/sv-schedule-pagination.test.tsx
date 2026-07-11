@@ -4,7 +4,7 @@ import { renderToBuffer } from '@react-pdf/renderer';
 import { SvShowSchedule } from '@/components/schedule/sv-show-schedule';
 import {
   renderScheduleWithFit,
-  pdfPageCount as fitPageCount,
+  pdfPageCount,
 } from '@/server/services/schedule-render';
 import type {
   ScheduleShowInfo,
@@ -24,11 +24,6 @@ import type { ScheduleData } from '@/server/db/schema/shows';
  * These render for real — no react-pdf mock — because the bug is layout,
  * not data assembly.
  */
-
-/** Count the /Type /Page objects in a rendered PDF buffer. */
-function pdfPageCount(buf: Buffer): number {
-  return (buf.toString('latin1').match(/\/Type\s*\/Page[^s]/g) ?? []).length;
-}
 
 const svClass = (over: Partial<ScheduleClass>): ScheduleClass => ({
   classNumber: null,
@@ -199,7 +194,7 @@ describe('SV schedule pagination', () => {
         judges={judges}
       />,
     );
-    expect(pdfPageCount(buf)).toBe(6);
+    expect(await pdfPageCount(buf)).toBe(6);
   }, 60_000);
 
   it('renders exactly 6 pages for a lean SV show without a regional fee config', async () => {
@@ -217,7 +212,7 @@ describe('SV schedule pagination', () => {
         judges={judges}
       />,
     );
-    expect(pdfPageCount(buf)).toBe(6);
+    expect(await pdfPageCount(buf)).toBe(6);
   }, 60_000);
 
   // renderScheduleWithFit is the production render path (HTTP route +
@@ -259,7 +254,7 @@ describe('SV schedule pagination', () => {
 
     // Sanity: this fixture genuinely overflows at normal density…
     const normal = await renderToBuffer(<SvShowSchedule {...props} />);
-    expect(pdfPageCount(normal)).toBeGreaterThan(6);
+    expect(await pdfPageCount(normal)).toBeGreaterThan(6);
 
     // …and the fit renderer brings it back to the designed six pages.
     const fitted = await renderScheduleWithFit(
@@ -267,6 +262,6 @@ describe('SV schedule pagination', () => {
       props,
       6,
     );
-    expect(fitPageCount(fitted)).toBe(6);
+    expect(await pdfPageCount(fitted)).toBe(6);
   }, 60_000);
 });

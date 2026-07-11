@@ -13,7 +13,8 @@
  */
 import { ShowSchedule } from './show-schedule';
 import { ShowScheduleMultibreed } from './show-schedule-multibreed';
-import { SvShowSchedule } from './sv-show-schedule';
+import { SvShowSchedule, svSchedulePageCount } from './sv-show-schedule';
+import type { ScheduleAdvert } from './shared/types';
 
 export { ShowSchedule, ShowScheduleMultibreed, SvShowSchedule };
 export type {
@@ -40,4 +41,18 @@ export function pickScheduleComponent(
 ) {
   if (showRuleset === 'wusv') return SvShowSchedule;
   return showScope === 'single_breed' ? ShowSchedule : ShowScheduleMultibreed;
+}
+
+/**
+ * The designed page count for a show's schedule, or null when the renderer
+ * paginates freely. Owns the ruleset → page-budget mapping alongside the
+ * ruleset → component mapping above, so the two render paths (HTTP route and
+ * print-order pipeline) can't drift: only the SV schedule is a fixed
+ * six-page design (plus advert pages); the RKC renderers grow with content.
+ */
+export function designedSchedulePageCount(
+  showRuleset: 'rkc' | 'wusv' = 'rkc',
+  adverts?: readonly ScheduleAdvert[],
+): number | null {
+  return showRuleset === 'wusv' ? svSchedulePageCount(adverts) : null;
 }

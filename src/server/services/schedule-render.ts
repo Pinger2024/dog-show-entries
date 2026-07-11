@@ -1,5 +1,6 @@
 import React from 'react';
 import { renderToBuffer } from '@react-pdf/renderer';
+import { PDFDocument } from 'pdf-lib';
 
 /**
  * Fit-aware schedule rendering.
@@ -15,19 +16,21 @@ import { renderToBuffer } from '@react-pdf/renderer';
  *   1. Render at normal density and count the pages that actually came out.
  *   2. If the document overran its designed page count, re-render at
  *      'compact' density — the at-a-glance page tightens row pitch, gaps
- *      and its smallest type sizes to absorb a couple of extra sections.
- *   3. If even compact overruns (pathological content), prefer the compact
+ *      and its smallest type sizes to absorb several extra sections.
+ *   3. If even compact overruns (pathological content), ship the compact
  *      render anyway: its `wrap={false}` sections and `minPresenceAhead`
  *      titles mean the spill lands as whole sections on a continuation
  *      page, never a stranded line or two.
  *
  * The second render only happens when the first one overflowed, so the
- * common case pays nothing.
+ * common case pays nothing. Callers get the designed page count from
+ * `designedSchedulePageCount` (schedule component dispatcher), which owns
+ * the ruleset → page-budget mapping.
  */
 
-/** Count the page objects in a rendered PDF buffer. */
-export function pdfPageCount(buf: Buffer): number {
-  return (buf.toString('latin1').match(/\/Type\s*\/Page[^s]/g) ?? []).length;
+/** Page count of a rendered PDF (same pdf-lib route as `padPdfToMultiple`). */
+export async function pdfPageCount(buf: Uint8Array | Buffer): Promise<number> {
+  return (await PDFDocument.load(buf)).getPageCount();
 }
 
 export async function renderScheduleWithFit(
@@ -36,25 +39,21 @@ export async function renderScheduleWithFit(
   // `density`, and the extra prop is inert on the RKC components.
   Component: React.ComponentType<Record<string, unknown>>,
   props: Record<string, unknown>,
-  /** The document's designed page count, or null for schedules that are
-   *  meant to paginate freely (the RKC renderers). */
+  /** The document's designed page count (see `designedSchedulePageCount`),
+   *  or null for schedules that are meant to paginate freely. */
   designedPages: number | null,
 ): Promise<Buffer> {
-  const normal = Buffer.from(
-    await renderToBuffer(React.createElement(Component, props)),
-  );
-  if (designedPages == null || pdfPageCount(normal) <= designedPages) {
-    return normal;
-  }
+  const normal = await renderToBuffer(React.createElement(Component, props));
+  if (designedPages == null) return normal;
+
+  const normalPages = await pdfPageCount(normal);
+  if (normalPages <= designedPages) return normal;
 
   console.warn(
-    `[schedule-render] normal-density render produced ${pdfPageCount(normal)} pages ` +
+    `[schedule-render] normal-density render produced ${normalPages} pages ` +
       `(designed ${designedPages}) — retrying at compact density`,
   );
-  const compact = Buffer.from(
-    await renderToBuffer(
-      React.createElement(Component, { ...props, density: 'compact' }),
-    ),
+  return renderToBuffer(
+    React.createElement(Component, { ...props, density: 'compact' }),
   );
-  return compact;
 }

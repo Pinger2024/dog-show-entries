@@ -3,8 +3,7 @@ import { db } from '@/server/db';
 import { eq, asc } from 'drizzle-orm';
 import * as schema from '@/server/db/schema';
 import { renderScheduleWithFit } from '@/server/services/schedule-render';
-import { pickScheduleComponent } from '@/components/schedule';
-import { svSchedulePageCount } from '@/components/schedule/sv-show-schedule';
+import { pickScheduleComponent, designedSchedulePageCount } from '@/components/schedule';
 import type {
   ScheduleShowInfo,
   ScheduleClass,
@@ -384,12 +383,9 @@ export async function GET(
       washes = { cover, inside };
     }
 
-    // The SV schedule is a fixed six-page design (plus advert pages): if a
-    // fee-rich show overflows it, renderScheduleWithFit re-renders at
-    // compact density rather than shipping an orphaned extra page. The RKC
-    // renderers paginate freely — no designed count.
-    const designedPages =
-      showInfo.showRuleset === 'wusv' ? svSchedulePageCount(adverts) : null;
+    // Fit fallback: if a fee-rich show overflows its designed page count,
+    // renderScheduleWithFit re-renders at compact density rather than
+    // shipping an orphaned extra page.
     const buffer = await renderScheduleWithFit(
       ScheduleComponent as React.ComponentType<Record<string, unknown>>,
       {
@@ -401,7 +397,7 @@ export async function GET(
         panelJudges,
         washes,
       },
-      designedPages,
+      designedSchedulePageCount(showInfo.showRuleset ?? 'rkc', adverts),
     );
     const filename = `${sanitizeFilename(show.name)}-Schedule.pdf`;
     const isPreview = request.nextUrl.searchParams.has('preview');
