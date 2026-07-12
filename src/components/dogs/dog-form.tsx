@@ -117,6 +117,18 @@ const TITLE_OPTIONS = [
   { value: 'wt_ch', label: 'WT.Ch. — Working Trial Champion' },
 ] as const;
 
+/** Label suffix: a "Required" tag when a field is mandatory for the show the
+ *  exhibitor is entering (regional/SV), else the usual "(opt.)". Mandy
+ *  2026-07-12: regional fields shouldn't read "optional" — for these shows
+ *  they aren't. */
+function FieldTag({ required }: { required: boolean }) {
+  return required ? (
+    <span className="font-normal text-destructive">Required</span>
+  ) : (
+    <span className="font-normal text-muted-foreground">(opt.)</span>
+  );
+}
+
 /** Static reassurance line for the autosaved cards (edit mode). The live
  *  saving/saved/error status renders once, via DogFormAutosaveBridge. */
 function AutosaveHint() {
@@ -216,9 +228,13 @@ interface DogFormProps {
    *  entry to fill in mandatory info — send them straight back to that show's
    *  entry instead of the dog profile (Mandy 2026-06-26). Internal paths only. */
   returnTo?: string;
+  /** True when the dog is being added/edited for an SV/WUSV regional show —
+   *  flips the catalogue-mandatory fields from "(opt.)" to Required and adds
+   *  a guiding banner (Mandy 2026-07-12). */
+  isRegional?: boolean;
 }
 
-export function DogForm({ mode, defaultValues, dogId, svSection, returnTo }: DogFormProps) {
+export function DogForm({ mode, defaultValues, dogId, svSection, returnTo, isRegional = false }: DogFormProps) {
   const safeReturnTo = returnTo && returnTo.startsWith('/shows/') ? returnTo : null;
   const router = useRouter();
   const [breedOpen, setBreedOpen] = useState(false);
@@ -565,6 +581,35 @@ export function DogForm({ mode, defaultValues, dogId, svSection, returnTo }: Dog
         toast.error('Please add the sire, dam and breeder — they appear in the catalogue');
         return;
       }
+      // Regional (SV/WUSV) shows need the full catalogue/pedigree set — the
+      // entry gate (svMissingRequirements) would block them otherwise, so
+      // catch it here with clear inline errors (Mandy 2026-07-12).
+      if (isRegional) {
+        let regionalMissing = false;
+        const requireRegional = (
+          name: 'kcRegNumber' | 'breederCity' | 'breederPostcode' | 'sireRegistrationNumber' | 'damRegistrationNumber',
+          value: string | null | undefined,
+          message: string,
+        ) => {
+          if (!value || !value.trim()) {
+            form.setError(name, { type: 'manual', message });
+            regionalMissing = true;
+          }
+        };
+        requireRegional('kcRegNumber', data.kcRegNumber, "Your dog's registration number is required for regional shows");
+        requireRegional('breederCity', data.breederCity, 'Breeder town/city is required for regional shows');
+        requireRegional('breederPostcode', data.breederPostcode, 'Breeder postcode is required for regional shows');
+        requireRegional('sireRegistrationNumber', data.sireRegistrationNumber, "The sire's registration number is required for regional shows");
+        requireRegional('damRegistrationNumber', data.damRegistrationNumber, "The dam's registration number is required for regional shows");
+        if (!data.coatType) {
+          form.setError('coatType', { type: 'manual', message: 'Coat type is required for regional shows' });
+          regionalMissing = true;
+        }
+        if (regionalMissing) {
+          toast.error('Please complete the fields marked Required for regional shows');
+          return;
+        }
+      }
       createDog.mutate(data);
     } else if (dogId) {
       const { owners: _owners, ...dogFields } = data;
@@ -586,6 +631,19 @@ export function DogForm({ mode, defaultValues, dogId, svSection, returnTo }: Dog
   return (
     <Form {...form}>
       <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+        {isRegional && (
+          <div className="rounded-lg border border-amber-300/70 bg-amber-50 p-4 dark:border-amber-900/50 dark:bg-amber-950/30">
+            <p className="text-sm font-medium text-amber-900 dark:text-amber-200">
+              You&apos;re adding a dog for a regional show
+            </p>
+            <p className="mt-1 text-sm text-amber-800/90 dark:text-amber-200/80">
+              Regional (SV / WUSV) entries need a little more detail than a normal
+              show. The fields marked <span className="font-semibold">Required</span>{' '}
+              must be completed — they print in the show catalogue and we need them
+              to accept your entry.
+            </p>
+          </div>
+        )}
         {/* Registration Details */}
         <Card>
           <CardHeader>
@@ -1113,7 +1171,7 @@ export function DogForm({ mode, defaultValues, dogId, svSection, returnTo }: Dog
                 name="breederCity"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Breeder City <span className="text-muted-foreground font-normal">(opt.)</span></FormLabel>
+                    <FormLabel>Breeder Town / City <FieldTag required={isRegional} /></FormLabel>
                     <FormControl>
                       <Input placeholder="e.g. Augsburg" {...field} />
                     </FormControl>
@@ -1126,7 +1184,7 @@ export function DogForm({ mode, defaultValues, dogId, svSection, returnTo }: Dog
                 name="breederPostcode"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Breeder Postcode <span className="text-muted-foreground font-normal">(opt.)</span></FormLabel>
+                    <FormLabel>Breeder Postcode <FieldTag required={isRegional} /></FormLabel>
                     <FormControl>
                       <Input placeholder="e.g. 86150" {...field} />
                     </FormControl>
@@ -1149,7 +1207,9 @@ export function DogForm({ mode, defaultValues, dogId, svSection, returnTo }: Dog
                 The fields in this section are <span className="font-semibold text-foreground">required for SV Regional shows and the British Sieger</span> — these events are governed by the GSDL-BRG / WUSV, not the Royal Kennel Club.
               </span>
               <span className="block text-xs">
-                For RKC shows the section is optional. The dog&apos;s registration number can be entered either at the top of the form or below — both feed the same field.
+                {isRegional
+                  ? "The fields marked Required must be completed for this show. Your dog's own registration number is at the top of the form, with the registered name."
+                  : "For RKC shows this section is optional. Your dog's own registration number is at the top of the form, with the registered name."}
               </span>
               {mode === 'edit' && <AutosaveHint />}
             </CardDescription>
@@ -1185,7 +1245,7 @@ export function DogForm({ mode, defaultValues, dogId, svSection, returnTo }: Dog
                 name="coatType"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Coat Type <span className="text-muted-foreground font-normal">(optional)</span></FormLabel>
+                    <FormLabel>Coat Type <FieldTag required={isRegional} /></FormLabel>
                     <Select onValueChange={(v) => field.onChange(v === 'none' ? undefined : v)} value={field.value ?? 'none'}>
                       <FormControl>
                         <SelectTrigger className="w-full">
@@ -1248,7 +1308,7 @@ export function DogForm({ mode, defaultValues, dogId, svSection, returnTo }: Dog
                 name="sireRegistrationNumber"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Sire Registration Number <span className="text-muted-foreground font-normal">(opt.)</span></FormLabel>
+                    <FormLabel>Sire Registration Number <FieldTag required={isRegional} /></FormLabel>
                     <FormControl>
                       <Input placeholder="e.g. SZ 2355001" {...field} />
                     </FormControl>
@@ -1288,7 +1348,7 @@ export function DogForm({ mode, defaultValues, dogId, svSection, returnTo }: Dog
                 name="damRegistrationNumber"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Dam Registration Number <span className="text-muted-foreground font-normal">(opt.)</span></FormLabel>
+                    <FormLabel>Dam Registration Number <FieldTag required={isRegional} /></FormLabel>
                     <FormControl>
                       <Input placeholder="e.g. SZ 2344555" {...field} />
                     </FormControl>
