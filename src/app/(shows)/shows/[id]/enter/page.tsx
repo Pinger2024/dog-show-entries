@@ -73,6 +73,16 @@ import { SecLabel, Chip, Eyebrow, SEButton, SECard, SEDarkPanel } from '@/compon
 import { SE_H } from '@/components/show-experience/tokens';
 import { Confetti } from '@/components/show-experience/confetti';
 
+/** Read a club discount/membership label after "I am a …" — singularises a
+ *  plural label ("Members" → "Member") so the sentence reads right, while
+ *  leaving an already-singular label ("BRG member") untouched. Club labels are
+ *  plain role nouns, so stripping a plural "s" (but not "ss") is enough
+ *  (Mandy 2026-07-12: "a wee rogue S in members"). */
+function asRole(label: string): string {
+  const t = label.trim();
+  return /[^s]s$/i.test(t) ? t.slice(0, -1) : t;
+}
+
 /* ─── Local keyframes ────────────────────────────────
  * Two one-off animations that don't belong in the shared kit (kit.tsx is
  * owned by a parallel workstream): the running-total "scale pop" when the
@@ -1961,7 +1971,7 @@ export default function EnterShowPage() {
                       className="mt-0.5 size-4 cursor-pointer accent-se-green"
                     />
                     <span className="text-sm">
-                      <span className="font-medium text-se-ink">I am a {g.label}</span>
+                      <span className="font-medium text-se-ink">I am a {asRole(g.label)}</span>
                       <span className="ml-2 text-xs text-se-ink3">
                         {formatCurrency(g.firstEntryFeePence)}/first class
                       </span>
@@ -2008,7 +2018,7 @@ export default function EnterShowPage() {
                       onChange={() => setRegionalMembership(m.label)}
                       className="mt-0.5 size-4 cursor-pointer"
                     />
-                    <span className="text-sm font-medium">I am a {m.label}</span>
+                    <span className="text-sm font-medium">I am a {asRole(m.label)}</span>
                   </label>
                 ))}
                 <label className="flex min-h-[2.75rem] cursor-pointer items-start gap-3 rounded-md border p-3 hover:bg-muted/30">
