@@ -10,6 +10,7 @@ import { CalendarIcon, Check, ChevronsUpDown, Loader2, Plus, Trash2, Award, Sear
 import { toast } from 'sonner';
 import { trpc } from '@/lib/trpc';
 import { useBeaconAutosave } from '@/lib/use-beacon-autosave';
+import { blank } from '@/lib/sv-entry-readiness';
 import { cn, getTitleDisplay } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -581,29 +582,31 @@ export function DogForm({ mode, defaultValues, dogId, svSection, returnTo, isReg
         toast.error('Please add the sire, dam and breeder — they appear in the catalogue');
         return;
       }
-      // Regional (SV/WUSV) shows need the full catalogue/pedigree set — the
-      // entry gate (svMissingRequirements) would block them otherwise, so
-      // catch it here with clear inline errors (Mandy 2026-07-12).
+      // Regional (SV/WUSV) shows need the full catalogue/pedigree set, or the
+      // entry gate blocks the entry later. This is the always-required subset
+      // of svMissingRequirements (sv-entry-readiness.ts) that maps to a single
+      // form field — sire/dam NAMES + breeder name are already required for
+      // every create above. Reuses the gate's blank() predicate; keep the two
+      // in step if the required set ever changes (Mandy 2026-07-12).
       if (isRegional) {
+        const regionalRequired: Array<{
+          name: 'kcRegNumber' | 'coatType' | 'breederCity' | 'breederPostcode' | 'sireRegistrationNumber' | 'damRegistrationNumber';
+          value: string | null | undefined;
+          message: string;
+        }> = [
+          { name: 'kcRegNumber', value: data.kcRegNumber, message: "Your dog's registration number is required for regional shows" },
+          { name: 'coatType', value: data.coatType, message: 'Coat type is required for regional shows' },
+          { name: 'breederCity', value: data.breederCity, message: 'Breeder town/city is required for regional shows' },
+          { name: 'breederPostcode', value: data.breederPostcode, message: 'Breeder postcode is required for regional shows' },
+          { name: 'sireRegistrationNumber', value: data.sireRegistrationNumber, message: "The sire's registration number is required for regional shows" },
+          { name: 'damRegistrationNumber', value: data.damRegistrationNumber, message: "The dam's registration number is required for regional shows" },
+        ];
         let regionalMissing = false;
-        const requireRegional = (
-          name: 'kcRegNumber' | 'breederCity' | 'breederPostcode' | 'sireRegistrationNumber' | 'damRegistrationNumber',
-          value: string | null | undefined,
-          message: string,
-        ) => {
-          if (!value || !value.trim()) {
-            form.setError(name, { type: 'manual', message });
+        for (const f of regionalRequired) {
+          if (blank(f.value)) {
+            form.setError(f.name, { type: 'manual', message: f.message });
             regionalMissing = true;
           }
-        };
-        requireRegional('kcRegNumber', data.kcRegNumber, "Your dog's registration number is required for regional shows");
-        requireRegional('breederCity', data.breederCity, 'Breeder town/city is required for regional shows');
-        requireRegional('breederPostcode', data.breederPostcode, 'Breeder postcode is required for regional shows');
-        requireRegional('sireRegistrationNumber', data.sireRegistrationNumber, "The sire's registration number is required for regional shows");
-        requireRegional('damRegistrationNumber', data.damRegistrationNumber, "The dam's registration number is required for regional shows");
-        if (!data.coatType) {
-          form.setError('coatType', { type: 'manual', message: 'Coat type is required for regional shows' });
-          regionalMissing = true;
         }
         if (regionalMissing) {
           toast.error('Please complete the fields marked Required for regional shows');
@@ -1085,7 +1088,7 @@ export function DogForm({ mode, defaultValues, dogId, svSection, returnTo, isReg
           <CardHeader>
             <CardTitle>Pedigree</CardTitle>
             <CardDescription>
-              Your dog&apos;s lineage — sire, dam and breeder. {isGsd ? 'The sire\u2019s and dam\u2019s registration numbers sit with their names below.' : ''} These print in the show catalogue.
+              Your dog&apos;s lineage — sire, dam and breeder. {isGsd && 'The sire\u2019s and dam\u2019s registration numbers sit with their names below. '}These print in the show catalogue.
               {mode === 'edit' && <AutosaveHint />}
             </CardDescription>
             {kcProfileLookup.isPending && (

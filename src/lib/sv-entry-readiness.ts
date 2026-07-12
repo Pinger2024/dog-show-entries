@@ -34,7 +34,9 @@ export type SvPedigree = {
   breederPostcode?: string | null;
 } | null | undefined;
 
-const blank = (v: string | null | undefined) => !v || !v.trim();
+/** True when a required string field is empty/whitespace. Exported so the dog
+ *  form's regional validation reuses the same predicate the entry gate uses. */
+export const blank = (v: string | null | undefined) => !v || !v.trim();
 
 /**
  * The things still missing before this dog can be entered into its SV classes,
