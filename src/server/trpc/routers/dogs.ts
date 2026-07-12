@@ -9,6 +9,7 @@ import { scrapeKcDog, searchKcDogs, fetchKcDogProfile } from '@/server/services/
 import { isCcType, isRccType } from '@/lib/placements';
 import { effectiveCcType } from '@/lib/effective-achievement-type';
 import { isAgeEligibleOnShowDay, todayInLondon } from '@/lib/date-utils';
+import { pickRecommendedAgeClass } from '@/lib/class-recommendation';
 
 /**
  * Recommend the best class for a dog based on age eligibility first,
@@ -24,6 +25,9 @@ function getClassRecommendation(
     ageMonths: number;
     dob: string;
     showDate: string;
+    /** Dog's coat when known — a Long Coat class is only recommended for a
+     *  known long-coat dog (Mandy 2026-07-12). */
+    dogCoat?: 'stock' | 'long_stock' | null;
     availableAgeClasses: { name: string; minMonths: number | null; maxMonths: number | null }[];
   },
 ): {
@@ -37,10 +41,8 @@ function getClassRecommendation(
       isAgeEligibleOnShowDay(ageInfo.dob, ageInfo.showDate, cls.minMonths, cls.maxMonths),
     );
 
-    if (eligibleAgeClasses.length > 0) {
-      // Suggest the most specific age class (smallest age range)
-      const bestAgeClass = eligibleAgeClasses[0];
-
+    const bestAgeClass = pickRecommendedAgeClass(eligibleAgeClasses, ageInfo.dogCoat);
+    if (bestAgeClass) {
       // Still compute achievement eligibility for the full eligible list
       const achievementEligible = getAchievementEligible(firsts, hasCC, availableClassNames);
 
@@ -776,7 +778,7 @@ export const dogsRouter = createTRPCRouter({
 
       // Get achievement class names actually in this show's schedule
       let availableClassNames: string[] | undefined;
-      let ageInfo: { ageMonths: number; dob: string; showDate: string; availableAgeClasses: { name: string; minMonths: number | null; maxMonths: number | null }[] } | undefined;
+      let ageInfo: { ageMonths: number; dob: string; showDate: string; dogCoat?: 'stock' | 'long_stock' | null; availableAgeClasses: { name: string; minMonths: number | null; maxMonths: number | null }[] } | undefined;
 
       if (input.showId) {
         const showAchievementClasses = await ctx.db
@@ -795,7 +797,7 @@ export const dogsRouter = createTRPCRouter({
         const [dog, show] = await Promise.all([
           ctx.db.query.dogs.findFirst({
             where: eq(dogs.id, input.dogId),
-            columns: { dateOfBirth: true },
+            columns: { dateOfBirth: true, coatType: true },
           }),
           ctx.db.query.shows.findFirst({
             where: eq(shows.id, input.showId),
@@ -831,6 +833,7 @@ export const dogsRouter = createTRPCRouter({
               ageMonths,
               dob: dog.dateOfBirth,
               showDate: show.startDate,
+              dogCoat: dog.coatType ?? null,
               availableAgeClasses: showAgeClasses.map((c) => ({
                 name: c.name,
                 minMonths: c.minMonths,
