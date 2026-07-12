@@ -19,7 +19,8 @@ import { CatalogueByBreed } from '@/components/catalogue/catalogue-by-breed';
 import type { CatalogueEntry, CatalogueShowInfo } from '@/components/catalogue/catalogue-types';
 import { PrizeCards } from '@/components/prize-cards/prize-cards';
 import type { PrizeCardShowInfo, PrizeCardClass } from '@/components/prize-cards/prize-cards';
-import { pickScheduleComponent } from '@/components/schedule';
+import { pickScheduleComponent, designedSchedulePageCount } from '@/components/schedule';
+import { renderScheduleWithFit } from './schedule-render';
 import type { ScheduleShowInfo, ScheduleClass, ScheduleJudge, ScheduleSponsor, SchedulePanelJudge } from '@/components/schedule';
 import { RingBoard } from '@/components/ring-board/ring-board';
 import type { RingBoardShowInfo, RingBoardRing } from '@/components/ring-board/ring-board';
@@ -742,16 +743,21 @@ export async function generateSchedulePdf(showId: string): Promise<Buffer> {
     washes = { cover, inside };
   }
 
-  const pdfDocument = React.createElement(ScheduleComponent, {
-    show: showInfo,
-    classes,
-    judges,
-    sponsors,
-    adverts,
-    panelJudges,
-    washes,
-  });
-  const rawBuffer = await renderToBuffer(pdfDocument);
+  // Same fit fallback as the HTTP schedule route — re-render at compact
+  // density instead of shipping an orphaned extra page.
+  const rawBuffer = await renderScheduleWithFit(
+    ScheduleComponent as React.ComponentType<Record<string, unknown>>,
+    {
+      show: showInfo,
+      classes,
+      judges,
+      sponsors,
+      adverts,
+      panelJudges,
+      washes,
+    },
+    designedSchedulePageCount(showInfo.showRuleset ?? 'rkc', adverts),
+  );
   // Strip react-pdf's unembedded base-14 phantom font refs (Helvetica etc.)
   // before this goes to print — mirrors the /api/schedule route so both
   // schedule render paths pass the same print-preflight bar.

@@ -2,8 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/server/db';
 import { eq, asc } from 'drizzle-orm';
 import * as schema from '@/server/db/schema';
-import { renderToBuffer } from '@react-pdf/renderer';
-import { pickScheduleComponent } from '@/components/schedule';
+import { renderScheduleWithFit } from '@/server/services/schedule-render';
+import { pickScheduleComponent, designedSchedulePageCount } from '@/components/schedule';
 import type {
   ScheduleShowInfo,
   ScheduleClass,
@@ -384,16 +384,22 @@ export async function GET(
       washes = { cover, inside };
     }
 
-    const pdfDocument = React.createElement(ScheduleComponent, {
-      show: showInfo,
-      classes,
-      judges,
-      sponsors,
-      adverts,
-      panelJudges,
-      washes,
-    });
-    const rawBuffer = await renderToBuffer(pdfDocument);
+    // Fit fallback: if a fee-rich show overflows its designed page count,
+    // renderScheduleWithFit re-renders at compact density rather than
+    // shipping an orphaned extra page.
+    const rawBuffer = await renderScheduleWithFit(
+      ScheduleComponent as React.ComponentType<Record<string, unknown>>,
+      {
+        show: showInfo,
+        classes,
+        judges,
+        sponsors,
+        adverts,
+        panelJudges,
+        washes,
+      },
+      designedSchedulePageCount(showInfo.showRuleset ?? 'rkc', adverts),
+    );
     // Strip react-pdf's unembedded base-14 phantom font refs (Helvetica etc.)
     // so the schedule passes the same print-preflight bar as the catalogue.
     const buffer = Buffer.from(await stripUnembeddedBase14Fonts(rawBuffer));
