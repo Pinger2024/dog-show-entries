@@ -1085,8 +1085,7 @@ export function DogForm({ mode, defaultValues, dogId, svSection, returnTo, isReg
           <CardHeader>
             <CardTitle>Pedigree</CardTitle>
             <CardDescription>
-              Your dog&apos;s lineage details. These are often required for show
-              entries.
+              Your dog&apos;s lineage — sire, dam and breeder. {isGsd ? 'The sire\u2019s and dam\u2019s registration numbers sit with their names below.' : ''} These print in the show catalogue.
               {mode === 'edit' && <AutosaveHint />}
             </CardDescription>
             {kcProfileLookup.isPending && (
@@ -1114,6 +1113,51 @@ export function DogForm({ mode, defaultValues, dogId, svSection, returnTo, isReg
               )}
             />
 
+            {/* Sire's registration sits with the sire's name so the pedigree
+                reads as one block, not names here / numbers lower down (Mandy
+                2026-07-12). GSD-only — RKC dogs keep the simpler pedigree. */}
+            {isGsd && (
+              <div className="grid gap-3 sm:grid-cols-2">
+                <FormField
+                  control={form.control}
+                  name="sireRegistrationBody"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Sire Registration Body <span className="text-muted-foreground font-normal">(opt.)</span></FormLabel>
+                      <Select onValueChange={(v) => field.onChange(v === 'none' ? undefined : v)} value={field.value ?? 'none'}>
+                        <FormControl>
+                          <SelectTrigger className="w-full">
+                            <SelectValue placeholder="Select body" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          <SelectItem value="none">— Not specified —</SelectItem>
+                          <SelectItem value="kc">RKC</SelectItem>
+                          <SelectItem value="sv">SV</SelectItem>
+                          <SelectItem value="ikc">IKC</SelectItem>
+                          <SelectItem value="other">Other</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="sireRegistrationNumber"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Sire Registration Number <FieldTag required={isRegional} /></FormLabel>
+                      <FormControl>
+                        <Input placeholder="e.g. SZ 2355001" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+            )}
+
             <FormField
               control={form.control}
               name="damName"
@@ -1130,6 +1174,48 @@ export function DogForm({ mode, defaultValues, dogId, svSection, returnTo, isReg
                 </FormItem>
               )}
             />
+
+            {isGsd && (
+              <div className="grid gap-3 sm:grid-cols-2">
+                <FormField
+                  control={form.control}
+                  name="damRegistrationBody"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Dam Registration Body <span className="text-muted-foreground font-normal">(opt.)</span></FormLabel>
+                      <Select onValueChange={(v) => field.onChange(v === 'none' ? undefined : v)} value={field.value ?? 'none'}>
+                        <FormControl>
+                          <SelectTrigger className="w-full">
+                            <SelectValue placeholder="Select body" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          <SelectItem value="none">— Not specified —</SelectItem>
+                          <SelectItem value="kc">RKC</SelectItem>
+                          <SelectItem value="sv">SV</SelectItem>
+                          <SelectItem value="ikc">IKC</SelectItem>
+                          <SelectItem value="other">Other</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="damRegistrationNumber"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Dam Registration Number <FieldTag required={isRegional} /></FormLabel>
+                      <FormControl>
+                        <Input placeholder="e.g. SZ 2344555" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+            )}
 
             <FormField
               control={form.control}
@@ -1204,12 +1290,13 @@ export function DogForm({ mode, defaultValues, dogId, svSection, returnTo, isReg
             <CardTitle>German Shepherd — SV / WUSV Details</CardTitle>
             <CardDescription className="space-y-1">
               <span className="block">
-                The fields in this section are <span className="font-semibold text-foreground">required for SV Regional shows and the British Sieger</span> — these events are governed by the GSDL-BRG / WUSV, not the Royal Kennel Club.
+                Your German Shepherd&apos;s SV details — coat type, microchip and
+                registration body. <span className="font-semibold text-foreground">Coat type is required for SV Regional shows and the British Sieger</span> (governed by the GSDL-BRG / WUSV, not the Royal Kennel Club).
               </span>
               <span className="block text-xs">
-                {isRegional
-                  ? "The fields marked Required must be completed for this show. Your dog's own registration number is at the top of the form, with the registered name."
-                  : "For RKC shows this section is optional. Your dog's own registration number is at the top of the form, with the registered name."}
+                Your dog&apos;s own registration number is at the top of the form,
+                with the registered name; the sire&apos;s and dam&apos;s are in the
+                Pedigree section above.
               </span>
               {mode === 'edit' && <AutosaveHint />}
             </CardDescription>
@@ -1277,86 +1364,6 @@ export function DogForm({ mode, defaultValues, dogId, svSection, returnTo, isReg
                 </FormItem>
               )}
             />
-
-            <div className="grid gap-3 sm:grid-cols-2">
-              <FormField
-                control={form.control}
-                name="sireRegistrationBody"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Sire Registration Body <span className="text-muted-foreground font-normal">(opt.)</span></FormLabel>
-                    <Select onValueChange={(v) => field.onChange(v === 'none' ? undefined : v)} value={field.value ?? 'none'}>
-                      <FormControl>
-                        <SelectTrigger className="w-full">
-                          <SelectValue placeholder="Select body" />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        <SelectItem value="none">— Not specified —</SelectItem>
-                        <SelectItem value="kc">RKC</SelectItem>
-                        <SelectItem value="sv">SV</SelectItem>
-                        <SelectItem value="ikc">IKC</SelectItem>
-                        <SelectItem value="other">Other</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name="sireRegistrationNumber"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Sire Registration Number <FieldTag required={isRegional} /></FormLabel>
-                    <FormControl>
-                      <Input placeholder="e.g. SZ 2355001" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            </div>
-
-            <div className="grid gap-3 sm:grid-cols-2">
-              <FormField
-                control={form.control}
-                name="damRegistrationBody"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Dam Registration Body <span className="text-muted-foreground font-normal">(opt.)</span></FormLabel>
-                    <Select onValueChange={(v) => field.onChange(v === 'none' ? undefined : v)} value={field.value ?? 'none'}>
-                      <FormControl>
-                        <SelectTrigger className="w-full">
-                          <SelectValue placeholder="Select body" />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        <SelectItem value="none">— Not specified —</SelectItem>
-                        <SelectItem value="kc">RKC</SelectItem>
-                        <SelectItem value="sv">SV</SelectItem>
-                        <SelectItem value="ikc">IKC</SelectItem>
-                        <SelectItem value="other">Other</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name="damRegistrationNumber"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Dam Registration Number <FieldTag required={isRegional} /></FormLabel>
-                    <FormControl>
-                      <Input placeholder="e.g. SZ 2344555" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            </div>
           </CardContent>
         </Card>
         )}
