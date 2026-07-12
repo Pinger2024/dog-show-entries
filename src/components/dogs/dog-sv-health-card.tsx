@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Check, Loader2, Shield, TriangleAlert } from 'lucide-react';
 import { trpc } from '@/lib/trpc';
 import { useBeaconAutosave } from '@/lib/use-beacon-autosave';
@@ -120,7 +120,16 @@ export function DogSvHealthCard({ dogId, isOwner, sex }: DogSvHealthCardProps) {
 
   const isMale = sex === 'dog';
 
+  // Populate from the saved profile EXACTLY ONCE, when the query first
+  // resolves. Critically NOT on every `profile` change: the autosave
+  // invalidates getSvProfile on each save, which refetches and hands us a new
+  // `profile` object — re-running population then would overwrite whatever the
+  // exhibitor is mid-edit and could flash saved values back to blanks (Mandy
+  // 2026-07-12: hip/elbow grades showed empty on reload). After first load the
+  // local state is authoritative; the autosave pushes it to the server.
+  const populatedRef = useRef(false);
   useEffect(() => {
+    if (populatedRef.current || isLoading) return;
     if (profile) {
       setHipGrade(profile.hipGrade ?? 'not_required');
       setHipScore(profile.hipScore ?? '');
@@ -140,10 +149,10 @@ export function DogSvHealthCard({ dogId, isOwner, sex }: DogSvHealthCardProps) {
       setBreedSurveyYear(bsy != null ? String(bsy) : '');
       setBreedSurveyor((profile as { breedSurveyor?: string | null }).breedSurveyor ?? '');
     }
-    // Arm autosave in the same effect that populates the loaded values, so
-    // hydrated can never be true while the fields still hold mount
-    // defaults. Also covers the no-profile-yet case (profile === null).
-    if (!isLoading) setHydrated(true);
+    // Mark populated + arm autosave once the query has resolved (profile is the
+    // row, or null when the dog has no profile yet — a new dog).
+    populatedRef.current = true;
+    setHydrated(true);
   }, [profile, isLoading]);
 
   // Saves itself — no button. Mandy 2026-07-11: the separate "Save Health
@@ -157,10 +166,12 @@ export function DogSvHealthCard({ dogId, isOwner, sex }: DogSvHealthCardProps) {
     payload: {
       svProfile: {
         hipGrade: hipGrade as typeof HIP_OPTIONS[number]['value'],
-        hipScore: hipScore || null,
+        // Score only belongs with a BVA/ANKC grade — null it otherwise so a
+        // grade + orphaned score can never diverge (Mandy 2026-07-12).
+        hipScore: (hipGrade === 'bva' || hipGrade === 'ankc') ? (hipScore || null) : null,
         hipScoreOther: hipGrade === 'other' ? (hipScoreOther || null) : null,
         elbowGrade: elbowGrade as typeof HIP_OPTIONS[number]['value'],
-        elbowScore: elbowScore || null,
+        elbowScore: (elbowGrade === 'bva' || elbowGrade === 'ankc') ? (elbowScore || null) : null,
         elbowScoreOther: elbowGrade === 'other' ? (elbowScoreOther || null) : null,
         // Haemophilia is meaningless for bitches — persist as not_required.
         haemophiliaClear: (isMale ? haemophiliaClear : 'not_required') as typeof HAEM_OPTIONS[number]['value'],
