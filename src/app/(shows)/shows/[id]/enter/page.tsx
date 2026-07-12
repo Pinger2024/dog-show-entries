@@ -33,7 +33,7 @@ import {
 import { differenceInMonths, differenceInWeeks, format, parseISO } from 'date-fns';
 import { toast } from 'sonner';
 import { isWithinAgeRange, isAgeEligibleOnShowDay, handlerAgeYearsOnDate, formatCurrency } from '@/lib/date-utils';
-import { svWorkingClassAllowed, svMissingRequirements, hasWorkingTitle } from '@/lib/sv-entry-readiness';
+import { svAgeClassAllowed, svMissingRequirements, hasWorkingTitle } from '@/lib/sv-entry-readiness';
 import { trpc } from '@/lib/trpc/client';
 import { formatDogName } from '@/lib/utils';
 import { readReferralSource } from '@/lib/referral-source';
@@ -545,7 +545,7 @@ export default function EnterShowPage() {
       junior_handler: eligible.filter((sc) => sc.classDefinition.type === 'junior_handler').sort(byCanonicalOrder),
       sv_age: eligible
         .filter((sc) => sc.classDefinition.type === 'sv_age')
-        .filter((sc) => svWorkingClassAllowed(sc.classDefinition.name, dogHasWorkingTitle))
+        .filter((sc) => svAgeClassAllowed(sc.classDefinition.name, dogHasWorkingTitle))
         .sort(byCanonicalOrder),
     };
   }, [showClasses, selectedDogSex, selectedDog?.breed?.name, selectedDog?.coatType, selectedDogSvProfile?.workingTitle]);
