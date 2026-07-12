@@ -1,3 +1,5 @@
+import { isGsdOnlyClass } from '@/lib/class-templates';
+
 /**
  * Pick the single age class to recommend for a dog, from the age-eligible
  * classes in a show plus the dog's coat (when known).
@@ -11,9 +13,12 @@
  *     Puppy, the tightest band that fits.
  *  2. Never recommend a "Long Coat" class unless the dog is known to be long
  *     coat. A stock-coat or unknown-coat dog gets the general class; a known
- *     long-coat dog is steered to the Long Coat division. (RKC coated-breed
- *     classes carry the coat in the class name, e.g. "Special Long Coat
- *     Yearling"; the UI doesn't hard-filter them, so the recommendation must.)
+ *     long-coat dog is steered to the Long Coat division.
+ *
+ * Coat detection is name-based via `isGsdOnlyClass` ("Special Long Coat …"):
+ * RKC coated-breed classes encode the coat in the class name, and their
+ * `svCoatType` field is null (that field is SV/WUSV-only), so the name is the
+ * authoritative signal here — same regex the enter page + entries page use.
  */
 
 export type AgeClassOption = {
@@ -22,15 +27,12 @@ export type AgeClassOption = {
   maxMonths: number | null;
 };
 
-/** RKC coated-breed classes name the coat, e.g. "Special Long Coat Puppy". */
-export const isLongCoatClass = (name: string): boolean => /long\s*coat/i.test(name);
+/** Upper bound in months; an open-ended (null) max counts as the widest. */
+const effectiveMax = (cls: AgeClassOption): number =>
+  cls.maxMonths ?? Number.POSITIVE_INFINITY;
 
-/** Width of an age band in months; an open-ended (null) bound counts as widest. */
-function ageRange(cls: AgeClassOption): number {
-  const min = cls.minMonths ?? 0;
-  const max = cls.maxMonths ?? Number.POSITIVE_INFINITY;
-  return max - min;
-}
+/** Width of an age band in months. */
+const ageRange = (cls: AgeClassOption): number => effectiveMax(cls) - (cls.minMonths ?? 0);
 
 export function pickRecommendedAgeClass(
   eligible: AgeClassOption[],
@@ -44,19 +46,19 @@ export function pickRecommendedAgeClass(
   // that only offers a Long Coat class in that age band).
   const dogIsLongCoat = dogCoat === 'long_stock';
   const preferred = dogIsLongCoat
-    ? eligible.filter((c) => isLongCoatClass(c.name))
-    : eligible.filter((c) => !isLongCoatClass(c.name));
+    ? eligible.filter((c) => isGsdOnlyClass(c.name))
+    : eligible.filter((c) => !isGsdOnlyClass(c.name));
   const candidates = preferred.length > 0 ? preferred : eligible;
 
   // Most specific = smallest age range; ties broken to the lower upper bound
   // (more junior), then the shorter name (the general class over a qualified
-  // variant of the same band).
+  // variant of the same band) — a deterministic final order, never arbitrary
+  // DB order (that was the original bug).
   return [...candidates].sort((a, b) => {
     const byRange = ageRange(a) - ageRange(b);
     if (byRange !== 0) return byRange;
-    const aMax = a.maxMonths ?? Number.POSITIVE_INFINITY;
-    const bMax = b.maxMonths ?? Number.POSITIVE_INFINITY;
-    if (aMax !== bMax) return aMax - bMax;
+    const byMax = effectiveMax(a) - effectiveMax(b);
+    if (byMax !== 0) return byMax;
     return a.name.length - b.name.length;
   })[0]!;
 }

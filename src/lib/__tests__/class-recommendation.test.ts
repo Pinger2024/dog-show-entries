@@ -1,7 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
   pickRecommendedAgeClass,
-  isLongCoatClass,
   type AgeClassOption,
 } from '../class-recommendation';
 
@@ -60,14 +59,12 @@ describe('pickRecommendedAgeClass', () => {
   it('returns null when nothing is eligible', () => {
     expect(pickRecommendedAgeClass([])).toBeNull();
   });
-});
 
-describe('isLongCoatClass', () => {
-  it('matches the RKC "Special Long Coat" naming, case/space-insensitively', () => {
-    expect(isLongCoatClass('Special Long Coat Yearling Dog')).toBe(true);
-    expect(isLongCoatClass('Long Coat Puppy')).toBe(true);
-    expect(isLongCoatClass('longcoat junior')).toBe(true);
-    expect(isLongCoatClass('Yearling Dog')).toBe(false);
-    expect(isLongCoatClass('Minor Puppy')).toBe(false);
+  it('breaks a same-band tie deterministically (shorter/general name), not by input order', () => {
+    const general: AgeClassOption = { name: 'Puppy', minMonths: 6, maxMonths: 12 };
+    const variant: AgeClassOption = { name: 'AV Puppy', minMonths: 6, maxMonths: 12 };
+    expect(pickRecommendedAgeClass([general, variant])?.name).toBe('Puppy');
+    expect(pickRecommendedAgeClass([variant, general])?.name).toBe('Puppy');
   });
 });
+

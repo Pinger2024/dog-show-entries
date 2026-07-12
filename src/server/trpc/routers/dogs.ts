@@ -9,7 +9,7 @@ import { scrapeKcDog, searchKcDogs, fetchKcDogProfile } from '@/server/services/
 import { isCcType, isRccType } from '@/lib/placements';
 import { effectiveCcType } from '@/lib/effective-achievement-type';
 import { isAgeEligibleOnShowDay, todayInLondon } from '@/lib/date-utils';
-import { pickRecommendedAgeClass } from '@/lib/class-recommendation';
+import { pickRecommendedAgeClass, type AgeClassOption } from '@/lib/class-recommendation';
 
 /**
  * Recommend the best class for a dog based on age eligibility first,
@@ -17,19 +17,23 @@ import { pickRecommendedAgeClass } from '@/lib/class-recommendation';
  * when the dog is still within an age bracket.
  * If availableClassNames is provided, only suggest from classes in the show schedule.
  */
+/** Age context for the class recommendation — shared by the helper's
+ *  parameter and the call-site local so the shape lives in one place. */
+type RecommendationAgeInfo = {
+  ageMonths: number;
+  dob: string;
+  showDate: string;
+  /** Dog's coat when known — a Long Coat class is only recommended for a
+   *  known long-coat dog (Mandy 2026-07-12). */
+  dogCoat?: 'stock' | 'long_stock' | null;
+  availableAgeClasses: AgeClassOption[];
+};
+
 function getClassRecommendation(
   firsts: number,
   hasCC: boolean,
   availableClassNames?: string[],
-  ageInfo?: {
-    ageMonths: number;
-    dob: string;
-    showDate: string;
-    /** Dog's coat when known — a Long Coat class is only recommended for a
-     *  known long-coat dog (Mandy 2026-07-12). */
-    dogCoat?: 'stock' | 'long_stock' | null;
-    availableAgeClasses: { name: string; minMonths: number | null; maxMonths: number | null }[];
-  },
+  ageInfo?: RecommendationAgeInfo,
 ): {
   eligible: string[];
   suggested: string | null;
@@ -778,7 +782,7 @@ export const dogsRouter = createTRPCRouter({
 
       // Get achievement class names actually in this show's schedule
       let availableClassNames: string[] | undefined;
-      let ageInfo: { ageMonths: number; dob: string; showDate: string; dogCoat?: 'stock' | 'long_stock' | null; availableAgeClasses: { name: string; minMonths: number | null; maxMonths: number | null }[] } | undefined;
+      let ageInfo: RecommendationAgeInfo | undefined;
 
       if (input.showId) {
         const showAchievementClasses = await ctx.db
