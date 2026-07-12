@@ -9,6 +9,7 @@ import { Badge } from '@/components/ui/badge';
 import { statusConfig } from '../../_lib/show-utils';
 import { useShowId } from '../../_lib/show-context';
 import type { ActionPanelProps } from '../checklist-action-registry';
+import { ConfirmCloseEntries } from '../confirm-close-entries';
 
 /** Action keys that map to show status transitions */
 const STATUS_ACTIONS: Record<string, {
@@ -101,17 +102,30 @@ export function ShowStatusAction({ showId }: ActionPanelProps & { actionKey?: st
                 ))}
               </div>
             )}
-            <Button
-              size="sm"
-              onClick={() => updateMutation.mutate({
-                id: realShowId,
-                status: action.targetStatus as 'published' | 'entries_open' | 'entries_closed',
-              })}
-              disabled={updateMutation.isPending || !allMet}
-            >
-              {updateMutation.isPending ? <Loader2 className="size-3.5 animate-spin" /> : null}
-              {action.buttonLabel}
-            </Button>
+            {action.targetStatus === 'entries_closed' ? (
+              // Closing entries is confirmed — a stray tap once shut a live
+              // show's entries by accident (Mandy 2026-07-12).
+              <ConfirmCloseEntries
+                onConfirm={() => updateMutation.mutate({ id: realShowId, status: 'entries_closed' })}
+              >
+                <Button size="sm" disabled={updateMutation.isPending || !allMet}>
+                  {updateMutation.isPending ? <Loader2 className="size-3.5 animate-spin" /> : null}
+                  {action.buttonLabel}
+                </Button>
+              </ConfirmCloseEntries>
+            ) : (
+              <Button
+                size="sm"
+                onClick={() => updateMutation.mutate({
+                  id: realShowId,
+                  status: action.targetStatus as 'published' | 'entries_open' | 'entries_closed',
+                })}
+                disabled={updateMutation.isPending || !allMet}
+              >
+                {updateMutation.isPending ? <Loader2 className="size-3.5 animate-spin" /> : null}
+                {action.buttonLabel}
+              </Button>
+            )}
           </div>
         );
       })}

@@ -17,6 +17,7 @@ import {
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { trpc } from '@/lib/trpc';
+import { ConfirmCloseEntries } from './confirm-close-entries';
 import type { ScheduleData } from '@/server/db/schema/shows';
 import { Button } from '@/components/ui/button';
 import type { RouterOutputs } from '@/server/trpc/router';
@@ -274,22 +275,23 @@ function EntriesOpenContent({
             </p>
           </div>
         </div>
-        <Button
-          size="sm"
-          variant="destructive"
-          className="w-full sm:w-auto min-h-[2.75rem]"
-          disabled={closeEntriesMutation.isPending}
-          onClick={() => closeEntriesMutation.mutate({ id: show.id, status: 'entries_closed' })}
-        >
-          {closeEntriesMutation.isPending ? (
-            <>
-              <Loader2 className="size-4 animate-spin" />
-              Closing...
-            </>
-          ) : (
-            'Close Entries Now'
-          )}
-        </Button>
+        <ConfirmCloseEntries onConfirm={() => closeEntriesMutation.mutate({ id: show.id, status: 'entries_closed' })}>
+          <Button
+            size="sm"
+            variant="destructive"
+            className="w-full sm:w-auto min-h-[2.75rem]"
+            disabled={closeEntriesMutation.isPending}
+          >
+            {closeEntriesMutation.isPending ? (
+              <>
+                <Loader2 className="size-4 animate-spin" />
+                Closing...
+              </>
+            ) : (
+              'Close Entries Now'
+            )}
+          </Button>
+        </ConfirmCloseEntries>
       </div>
     );
   }
@@ -324,22 +326,23 @@ function EntriesOpenContent({
             View Entries
           </Link>
         </SEButton>
-        <SEButton
-          variant="ghost"
-          size="sm"
-          className="w-full disabled:pointer-events-none disabled:opacity-50 sm:w-auto"
-          disabled={closeEntriesMutation.isPending}
-          onClick={() => closeEntriesMutation.mutate({ id: show.id, status: 'entries_closed' })}
-        >
-          {closeEntriesMutation.isPending ? (
-            <>
-              <Loader2 className="size-4 animate-spin" />
-              Closing...
-            </>
-          ) : (
-            'Close entries now'
-          )}
-        </SEButton>
+        <ConfirmCloseEntries onConfirm={() => closeEntriesMutation.mutate({ id: show.id, status: 'entries_closed' })}>
+          <SEButton
+            variant="ghost"
+            size="sm"
+            className="w-full disabled:pointer-events-none disabled:opacity-50 sm:w-auto"
+            disabled={closeEntriesMutation.isPending}
+          >
+            {closeEntriesMutation.isPending ? (
+              <>
+                <Loader2 className="size-4 animate-spin" />
+                Closing...
+              </>
+            ) : (
+              'Close entries now'
+            )}
+          </SEButton>
+        </ConfirmCloseEntries>
       </div>
     </div>
   );

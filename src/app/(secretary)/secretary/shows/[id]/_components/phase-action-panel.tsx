@@ -42,6 +42,7 @@ import {
   formatDeadline,
 } from '../_lib/phase-utils';
 import { useShowId } from '../_lib/show-context';
+import { ConfirmCloseEntries } from './confirm-close-entries';
 
 type Show = NonNullable<RouterOutputs['shows']['getById']>;
 
@@ -449,22 +450,23 @@ function EntriesOpenPanel({ show, showId }: { show: Show; showId: string }) {
                 </p>
               </div>
             </div>
-            <Button
-              size="sm"
-              variant="destructive"
-              className="w-full shrink-0 sm:w-auto min-h-[2.75rem]"
-              disabled={closeEntriesMutation.isPending}
-              onClick={handleCloseEntries}
-            >
-              {closeEntriesMutation.isPending ? (
-                <>
-                  <Loader2 className="size-4 animate-spin" />
-                  Closing...
-                </>
-              ) : (
-                'Close Entries Now'
-              )}
-            </Button>
+            <ConfirmCloseEntries onConfirm={handleCloseEntries}>
+              <Button
+                size="sm"
+                variant="destructive"
+                className="w-full shrink-0 sm:w-auto min-h-[2.75rem]"
+                disabled={closeEntriesMutation.isPending}
+              >
+                {closeEntriesMutation.isPending ? (
+                  <>
+                    <Loader2 className="size-4 animate-spin" />
+                    Closing...
+                  </>
+                ) : (
+                  'Close Entries Now'
+                )}
+              </Button>
+            </ConfirmCloseEntries>
           </div>
         </SECard>
       )}
