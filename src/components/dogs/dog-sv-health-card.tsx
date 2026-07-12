@@ -233,12 +233,17 @@ export function DogSvHealthCard({ dogId, isOwner, sex }: DogSvHealthCardProps) {
             the old separate "Save Health Data" button lost exhibitors'
             data when they only pressed one of two buttons (Mandy
             2026-07-11). */}
+        {/* Every Select's onValueChange ignores a falsy value: Radix fires a
+            spurious onValueChange('') during some re-renders (seen on the edit
+            page, where this card sits inside DogForm), which would clobber a
+            just-loaded grade back to blank — the bug Mandy hit 2026-07-12
+            where saved hip/elbow grades showed empty. No option uses ''. */}
         <div className="space-y-4">
           {/* Hips — body dropdown + numeric score for BVA/ANKC + free text for Other */}
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div className="space-y-1.5">
               <Label>Hip Grade / Body</Label>
-              <Select value={hipGrade} onValueChange={setHipGrade} disabled={readOnly}>
+              <Select value={hipGrade} onValueChange={(v) => v && setHipGrade(v)} disabled={readOnly}>
                 <SelectTrigger className="w-full">
                   <SelectValue />
                 </SelectTrigger>
@@ -277,7 +282,7 @@ export function DogSvHealthCard({ dogId, isOwner, sex }: DogSvHealthCardProps) {
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div className="space-y-1.5">
               <Label>Elbow Grade / Body</Label>
-              <Select value={elbowGrade} onValueChange={setElbowGrade} disabled={readOnly}>
+              <Select value={elbowGrade} onValueChange={(v) => v && setElbowGrade(v)} disabled={readOnly}>
                 <SelectTrigger className="w-full">
                   <SelectValue />
                 </SelectTrigger>
@@ -317,7 +322,7 @@ export function DogSvHealthCard({ dogId, isOwner, sex }: DogSvHealthCardProps) {
             {isMale && (
               <div className="space-y-1.5">
                 <Label>Haemophilia Clear</Label>
-                <Select value={haemophiliaClear} onValueChange={setHaemophiliaClear} disabled={readOnly}>
+                <Select value={haemophiliaClear} onValueChange={(v) => v && setHaemophiliaClear(v)} disabled={readOnly}>
                   <SelectTrigger className="w-full">
                     <SelectValue />
                   </SelectTrigger>
@@ -331,7 +336,7 @@ export function DogSvHealthCard({ dogId, isOwner, sex }: DogSvHealthCardProps) {
             )}
             <div className="space-y-1.5">
               <Label>DM Test</Label>
-              <Select value={dmTest} onValueChange={setDmTest} disabled={readOnly}>
+              <Select value={dmTest} onValueChange={(v) => v && setDmTest(v)} disabled={readOnly}>
                 <SelectTrigger className="w-full">
                   <SelectValue />
                 </SelectTrigger>
@@ -350,7 +355,7 @@ export function DogSvHealthCard({ dogId, isOwner, sex }: DogSvHealthCardProps) {
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div className="space-y-1.5">
               <Label>DNA</Label>
-              <Select value={dna} onValueChange={setDna} disabled={readOnly}>
+              <Select value={dna} onValueChange={(v) => v && setDna(v)} disabled={readOnly}>
                 <SelectTrigger className="w-full">
                   <SelectValue />
                 </SelectTrigger>
@@ -364,7 +369,7 @@ export function DogSvHealthCard({ dogId, isOwner, sex }: DogSvHealthCardProps) {
             </div>
             <div className="space-y-1.5">
               <Label>Koerung</Label>
-              <Select value={koerung} onValueChange={setKoerung} disabled={readOnly}>
+              <Select value={koerung} onValueChange={(v) => v && setKoerung(v)} disabled={readOnly}>
                 <SelectTrigger className="w-full">
                   <SelectValue />
                 </SelectTrigger>
