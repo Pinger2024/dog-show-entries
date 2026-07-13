@@ -105,14 +105,20 @@ export default function EntriesPage() {
   const formatClassWithSex = (ec: {
     showClass?: {
       sex?: string | null;
+      svCoatType?: 'stock' | 'long_stock' | null;
       classDefinition?: { name?: string | null } | null;
     } | null;
   }): string => {
     const name = ec.showClass?.classDefinition?.name ?? '?';
+    // SV/regional coat-split classes: a long-coat entry must read e.g.
+    // "Adult Long Coat Dog", not just "Adult Dog" — the coat was being
+    // dropped (Mandy 2026-07-13). Stock/unsplit classes stay unlabelled.
+    const coat = ec.showClass?.svCoatType === 'long_stock' ? 'Long Coat ' : '';
+    const base = `${name} ${coat}`.trim();
     const sex = ec.showClass?.sex;
-    if (sex === 'dog') return `${name} Dog`;
-    if (sex === 'bitch') return `${name} Bitch`;
-    return name;
+    if (sex === 'dog') return `${base} Dog`;
+    if (sex === 'bitch') return `${base} Bitch`;
+    return base;
   };
 
   const filtered = useMemo(() => {
@@ -181,6 +187,12 @@ export default function EntriesPage() {
 
   const confirmedCount = entries.filter((e) => e.status === 'confirmed').length;
   const pendingCount = entries.filter((e) => e.status === 'pending').length;
+  // Total = active entries (matches the "Entries (N)" list header below).
+  // Withdrawn/cancelled are hidden by default, so counting them in Total made
+  // it read higher than the list (Mandy 2026-07-13: "3 total but 2 entered").
+  const activeCount = entries.filter(
+    (e) => e.status !== 'withdrawn' && e.status !== 'cancelled'
+  ).length;
 
   return (
     <>
@@ -188,7 +200,7 @@ export default function EntriesPage() {
       <div className="mb-4 grid grid-cols-3 gap-2.5">
         <SECard className="p-3.5">
           <Eyebrow>Total</Eyebrow>
-          <p className={cn(SE_H, 'mt-1 text-[22px] leading-none tabular-nums text-se-ink')}>{entries.length}</p>
+          <p className={cn(SE_H, 'mt-1 text-[22px] leading-none tabular-nums text-se-ink')}>{activeCount}</p>
         </SECard>
         <SECard className="p-3.5">
           <Eyebrow>Confirmed</Eyebrow>
