@@ -38,7 +38,7 @@ import {
 import { differenceInMonths, differenceInWeeks, format, parseISO } from 'date-fns';
 import { toast } from 'sonner';
 import { isWithinAgeRange, getAgeEligibilityDetail, handlerAgeYearsOnDate, formatCurrency } from '@/lib/date-utils';
-import { svWorkingClassAllowed, svMissingRequirements, hasWorkingTitle } from '@/lib/sv-entry-readiness';
+import { svAgeClassAllowed, svMissingRequirements, hasWorkingTitle } from '@/lib/sv-entry-readiness';
 import { trpc } from '@/lib/trpc/client';
 import { formatDogName } from '@/lib/utils';
 import { readReferralSource } from '@/lib/referral-source';
@@ -611,7 +611,7 @@ export default function EnterShowPage() {
       junior_handler: eligible.filter((sc) => sc.classDefinition.type === 'junior_handler').sort(byCanonicalOrder),
       sv_age: eligible
         .filter((sc) => sc.classDefinition.type === 'sv_age')
-        .filter((sc) => svWorkingClassAllowed(sc.classDefinition.name, dogHasWorkingTitle))
+        .filter((sc) => svAgeClassAllowed(sc.classDefinition.name, dogHasWorkingTitle))
         .sort(byCanonicalOrder),
     };
   }, [showClasses, selectedDogSex, selectedDog?.breed?.name, selectedDog?.coatType, selectedDogSvProfile?.workingTitle]);
@@ -1221,7 +1221,7 @@ export default function EnterShowPage() {
                 This is a {showBreedName ?? 'single breed'} show. None of your registered dogs are this breed.
               </p>
               <SEButton asChild variant="ghost" size="sm">
-                <Link href="/dogs/new">Register a {showBreedName ?? 'new'} dog</Link>
+                <Link href={`/dogs/new?returnTo=${encodeURIComponent(`/shows/${idOrSlug}/enter`)}`}>Register a {showBreedName ?? 'new'} dog</Link>
               </SEButton>
             </SECard>
           ) : (
@@ -1232,7 +1232,7 @@ export default function EnterShowPage() {
                 You need to add a dog before entering a show.
               </p>
               <SEButton asChild variant="fresh" size="sm">
-                <Link href="/dogs/new">Add a Dog</Link>
+                <Link href={`/dogs/new?returnTo=${encodeURIComponent(`/shows/${idOrSlug}/enter`)}`}>Add a Dog</Link>
               </SEButton>
             </SECard>
           )}

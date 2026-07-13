@@ -7,12 +7,20 @@
  */
 
 /**
- * The SV "Working" class (Gebrauchshundklasse) is only for dogs with a working
- * qualification. A dog with no working title recorded should not be offered it —
- * an adult without a title enters the Adult class instead (Mandy 2026-06-26).
+ * The two SV over-24-month classes are split by working qualification, and a
+ * dog belongs in exactly one of them:
+ *  - Working (Gebrauchshundklasse) is ONLY for dogs WITH a working title.
+ *  - Adult is ONLY for dogs WITHOUT one — a titled dog competes in Working,
+ *    not Adult, so Adult must not be offered to it (Mandy 2026-06-26; the
+ *    Adult-hidden-for-titled-dogs half added 2026-07-12 after she saw a
+ *    titled dog offered both).
+ * Every other age class (Baby Puppy … Yearling) is unaffected.
  */
-export function svWorkingClassAllowed(className: string, dogHasWorkingTitle: boolean): boolean {
-  return className.trim().toLowerCase() !== 'working' || dogHasWorkingTitle;
+export function svAgeClassAllowed(className: string, dogHasWorkingTitle: boolean): boolean {
+  const name = className.trim().toLowerCase();
+  if (name === 'working') return dogHasWorkingTitle;
+  if (name === 'adult') return !dogHasWorkingTitle;
+  return true;
 }
 
 export type SvHealthProfile = {
@@ -34,7 +42,9 @@ export type SvPedigree = {
   breederPostcode?: string | null;
 } | null | undefined;
 
-const blank = (v: string | null | undefined) => !v || !v.trim();
+/** True when a required string field is empty/whitespace. Exported so the dog
+ *  form's regional validation reuses the same predicate the entry gate uses. */
+export const blank = (v: string | null | undefined) => !v || !v.trim();
 
 /**
  * The things still missing before this dog can be entered into its SV classes,

@@ -32,6 +32,7 @@ export default function EditDogPage({
     { id: returnShowId! },
     { enabled: !!returnShowId },
   );
+  const isRegional = returnShow?.showRuleset === 'wusv';
 
   if (isLoading) {
     return (
@@ -90,6 +91,7 @@ export default function EditDogPage({
           mode="edit"
           dogId={id}
           returnTo={returnTo ?? undefined}
+          isRegional={isRegional}
           svSection={
             /german\s+shepherd/i.test(dog.breed?.name ?? '') ? (
               <DogSvHealthCard dogId={id} isOwner={true} sex={dog.sex} />

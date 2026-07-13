@@ -69,6 +69,7 @@ export default function NewDogPage() {
         <DogForm
           mode="create"
           returnTo={returnTo ?? undefined}
+          isRegional={isRegional}
           defaultValues={isRegional ? { registrationBody: 'sv' } : undefined}
         />
       </div>

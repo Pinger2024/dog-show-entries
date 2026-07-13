@@ -1,24 +1,32 @@
 import { describe, it, expect } from 'vitest';
 import {
-  svWorkingClassAllowed,
+  svAgeClassAllowed,
   svMissingRequirements,
   hasWorkingTitle,
 } from '@/lib/sv-entry-readiness';
 
-describe('svWorkingClassAllowed', () => {
+describe('svAgeClassAllowed', () => {
   it('hides the Working class for a dog with no working title', () => {
-    expect(svWorkingClassAllowed('Working', false)).toBe(false);
+    expect(svAgeClassAllowed('Working', false)).toBe(false);
   });
   it('shows the Working class for a dog that has a working title', () => {
-    expect(svWorkingClassAllowed('Working', true)).toBe(true);
+    expect(svAgeClassAllowed('Working', true)).toBe(true);
   });
-  it('never restricts non-Working classes', () => {
-    expect(svWorkingClassAllowed('Adult', false)).toBe(true);
-    expect(svWorkingClassAllowed('SV Yearling', false)).toBe(true);
-    expect(svWorkingClassAllowed('Baby Puppy', false)).toBe(true);
+  it('shows the Adult class for a dog with no working title', () => {
+    expect(svAgeClassAllowed('Adult', false)).toBe(true);
+  });
+  it('HIDES the Adult class for a dog with a working title — it belongs in Working (Mandy 2026-07-12)', () => {
+    expect(svAgeClassAllowed('Adult', true)).toBe(false);
+  });
+  it('never restricts the younger age classes, regardless of working title', () => {
+    expect(svAgeClassAllowed('SV Yearling', false)).toBe(true);
+    expect(svAgeClassAllowed('SV Yearling', true)).toBe(true);
+    expect(svAgeClassAllowed('Baby Puppy', true)).toBe(true);
+    expect(svAgeClassAllowed('SV Junior', true)).toBe(true);
   });
   it('is case/space-insensitive on the class name', () => {
-    expect(svWorkingClassAllowed('  working ', false)).toBe(false);
+    expect(svAgeClassAllowed('  working ', false)).toBe(false);
+    expect(svAgeClassAllowed('  ADULT ', true)).toBe(false);
   });
 });
 

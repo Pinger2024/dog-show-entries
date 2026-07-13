@@ -1,10 +1,9 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { Check, Loader2, Shield } from 'lucide-react';
-import { toast } from 'sonner';
+import { useState, useEffect, useRef } from 'react';
+import { Check, Loader2, Shield, TriangleAlert } from 'lucide-react';
 import { trpc } from '@/lib/trpc';
-import { Button } from '@/components/ui/button';
+import { useBeaconAutosave } from '@/lib/use-beacon-autosave';
 import { Input } from '@/components/ui/input';
 import {
   Card,
@@ -96,14 +95,6 @@ interface DogSvHealthCardProps {
 export function DogSvHealthCard({ dogId, isOwner, sex }: DogSvHealthCardProps) {
   const utils = trpc.useUtils();
   const { data: profile, isLoading } = trpc.dogs.getSvProfile.useQuery({ dogId });
-  const upsert = trpc.dogs.upsertSvProfile.useMutation({
-    onSuccess: () => {
-      utils.dogs.getSvProfile.invalidate({ dogId });
-      setSaved(true);
-      setTimeout(() => setSaved(false), 3000);
-    },
-    onError: (err) => toast.error('Failed to save', { description: err.message }),
-  });
 
   const [hipGrade, setHipGrade] = useState<string>('not_required');
   const [hipScore, setHipScore] = useState('');
@@ -123,11 +114,22 @@ export function DogSvHealthCard({ dogId, isOwner, sex }: DogSvHealthCardProps) {
   const [breedSurveyClass, setBreedSurveyClass] = useState('');
   const [breedSurveyYear, setBreedSurveyYear] = useState('');
   const [breedSurveyor, setBreedSurveyor] = useState('');
-  const [saved, setSaved] = useState(false);
+  // Autosave arms only once the loaded profile has been written into local
+  // state — never against blank mount defaults (the 2026-04-22 lesson).
+  const [hydrated, setHydrated] = useState(false);
 
   const isMale = sex === 'dog';
 
+  // Populate from the saved profile EXACTLY ONCE, when the query first
+  // resolves. Critically NOT on every `profile` change: the autosave
+  // invalidates getSvProfile on each save, which refetches and hands us a new
+  // `profile` object — re-running population then would overwrite whatever the
+  // exhibitor is mid-edit and could flash saved values back to blanks (Mandy
+  // 2026-07-12: hip/elbow grades showed empty on reload). After first load the
+  // local state is authoritative; the autosave pushes it to the server.
+  const populatedRef = useRef(false);
   useEffect(() => {
+    if (populatedRef.current || isLoading) return;
     if (profile) {
       setHipGrade(profile.hipGrade ?? 'not_required');
       setHipScore(profile.hipScore ?? '');
@@ -147,36 +149,47 @@ export function DogSvHealthCard({ dogId, isOwner, sex }: DogSvHealthCardProps) {
       setBreedSurveyYear(bsy != null ? String(bsy) : '');
       setBreedSurveyor((profile as { breedSurveyor?: string | null }).breedSurveyor ?? '');
     }
-  }, [profile]);
+    // Mark populated + arm autosave once the query has resolved (profile is the
+    // row, or null when the dog has no profile yet — a new dog).
+    populatedRef.current = true;
+    setHydrated(true);
+  }, [profile, isLoading]);
 
-  function handleSave(e: React.MouseEvent | React.FormEvent) {
-    e.preventDefault();
-    upsert.mutate({
-      dogId,
-      hipGrade: hipGrade as typeof HIP_OPTIONS[number]['value'],
-      hipScore: hipScore || null,
-      hipScoreOther: hipGrade === 'other' ? (hipScoreOther || null) : null,
-      elbowGrade: elbowGrade as typeof HIP_OPTIONS[number]['value'],
-      elbowScore: elbowScore || null,
-      elbowScoreOther: elbowGrade === 'other' ? (elbowScoreOther || null) : null,
-      // Haemophilia is meaningless for bitches — persist as not_required.
-      haemophiliaClear: (isMale ? haemophiliaClear : 'not_required') as typeof HAEM_OPTIONS[number]['value'],
-      dmTest: dmTest as typeof DM_OPTIONS[number]['value'],
-      // Defensive guard: anything that isn't a valid enum value becomes
-      // null on save (covers the '__unset__' sentinel + an empty string
-      // if the Select ever ends up uncontrolled — Amanda 2026-05-20).
-      koerung: (['none', 'current_year', 'lebenzeit'] as const).includes(koerung as 'none')
-        ? (koerung as 'none' | 'current_year' | 'lebenzeit')
-        : null,
-      dna: (['recorded', 'proven'] as const).includes(dna as 'recorded')
-        ? (dna as 'recorded' | 'proven')
-        : null,
-      workingTitle: workingTitle || null,
-      breedSurveyClass: breedSurveyClass || null,
-      breedSurveyYear: breedSurveyYear ? Number(breedSurveyYear) : null,
-      breedSurveyor: breedSurveyor || null,
-    });
-  }
+  // Saves itself — no button. Mandy 2026-07-11: the separate "Save Health
+  // Data" button was the second of two save buttons and exhibitors lost
+  // data to it. Same field mapping the old button used, including the
+  // '__unset__' sentinel guards (Amanda 2026-05-20).
+  const autosaveStatus = useBeaconAutosave({
+    url: `/api/dog-autosave/${dogId}`,
+    enabled: isOwner,
+    hydrated,
+    payload: {
+      svProfile: {
+        hipGrade: hipGrade as typeof HIP_OPTIONS[number]['value'],
+        // Score only belongs with a BVA/ANKC grade — null it otherwise so a
+        // grade + orphaned score can never diverge (Mandy 2026-07-12).
+        hipScore: (hipGrade === 'bva' || hipGrade === 'ankc') ? (hipScore || null) : null,
+        hipScoreOther: hipGrade === 'other' ? (hipScoreOther || null) : null,
+        elbowGrade: elbowGrade as typeof HIP_OPTIONS[number]['value'],
+        elbowScore: (elbowGrade === 'bva' || elbowGrade === 'ankc') ? (elbowScore || null) : null,
+        elbowScoreOther: elbowGrade === 'other' ? (elbowScoreOther || null) : null,
+        // Haemophilia is meaningless for bitches — persist as not_required.
+        haemophiliaClear: (isMale ? haemophiliaClear : 'not_required') as typeof HAEM_OPTIONS[number]['value'],
+        dmTest: dmTest as typeof DM_OPTIONS[number]['value'],
+        koerung: (['none', 'current_year', 'lebenzeit'] as const).includes(koerung as 'none')
+          ? (koerung as 'none' | 'current_year' | 'lebenzeit')
+          : null,
+        dna: (['recorded', 'proven'] as const).includes(dna as 'recorded')
+          ? (dna as 'recorded' | 'proven')
+          : null,
+        workingTitle: workingTitle || null,
+        breedSurveyClass: breedSurveyClass || null,
+        breedSurveyYear: breedSurveyYear ? Number(breedSurveyYear) : null,
+        breedSurveyor: breedSurveyor || null,
+      },
+    },
+    onSaved: () => utils.dogs.getSvProfile.invalidate({ dogId }),
+  });
 
   if (isLoading) {
     return (
@@ -216,14 +229,21 @@ export function DogSvHealthCard({ dogId, isOwner, sex }: DogSvHealthCardProps) {
       <CardContent>
         {/* Not a <form> — this card is rendered INSIDE the DogForm's
             <form>, and nested forms are invalid HTML (hydration error).
-            The "Save Health Data" button is a type="button" with an
-            explicit onClick handler instead (Amanda 2026-05-21). */}
+            It saves itself (debounce + unmount beacon) via useDogAutosave;
+            the old separate "Save Health Data" button lost exhibitors'
+            data when they only pressed one of two buttons (Mandy
+            2026-07-11). */}
+        {/* Every Select's onValueChange ignores a falsy value: Radix fires a
+            spurious onValueChange('') during some re-renders (seen on the edit
+            page, where this card sits inside DogForm), which would clobber a
+            just-loaded grade back to blank — the bug Mandy hit 2026-07-12
+            where saved hip/elbow grades showed empty. No option uses ''. */}
         <div className="space-y-4">
           {/* Hips — body dropdown + numeric score for BVA/ANKC + free text for Other */}
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div className="space-y-1.5">
               <Label>Hip Grade / Body</Label>
-              <Select value={hipGrade} onValueChange={setHipGrade} disabled={readOnly}>
+              <Select value={hipGrade} onValueChange={(v) => v && setHipGrade(v)} disabled={readOnly}>
                 <SelectTrigger className="w-full">
                   <SelectValue />
                 </SelectTrigger>
@@ -262,7 +282,7 @@ export function DogSvHealthCard({ dogId, isOwner, sex }: DogSvHealthCardProps) {
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div className="space-y-1.5">
               <Label>Elbow Grade / Body</Label>
-              <Select value={elbowGrade} onValueChange={setElbowGrade} disabled={readOnly}>
+              <Select value={elbowGrade} onValueChange={(v) => v && setElbowGrade(v)} disabled={readOnly}>
                 <SelectTrigger className="w-full">
                   <SelectValue />
                 </SelectTrigger>
@@ -302,7 +322,7 @@ export function DogSvHealthCard({ dogId, isOwner, sex }: DogSvHealthCardProps) {
             {isMale && (
               <div className="space-y-1.5">
                 <Label>Haemophilia Clear</Label>
-                <Select value={haemophiliaClear} onValueChange={setHaemophiliaClear} disabled={readOnly}>
+                <Select value={haemophiliaClear} onValueChange={(v) => v && setHaemophiliaClear(v)} disabled={readOnly}>
                   <SelectTrigger className="w-full">
                     <SelectValue />
                   </SelectTrigger>
@@ -316,7 +336,7 @@ export function DogSvHealthCard({ dogId, isOwner, sex }: DogSvHealthCardProps) {
             )}
             <div className="space-y-1.5">
               <Label>DM Test</Label>
-              <Select value={dmTest} onValueChange={setDmTest} disabled={readOnly}>
+              <Select value={dmTest} onValueChange={(v) => v && setDmTest(v)} disabled={readOnly}>
                 <SelectTrigger className="w-full">
                   <SelectValue />
                 </SelectTrigger>
@@ -335,7 +355,7 @@ export function DogSvHealthCard({ dogId, isOwner, sex }: DogSvHealthCardProps) {
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div className="space-y-1.5">
               <Label>DNA</Label>
-              <Select value={dna} onValueChange={setDna} disabled={readOnly}>
+              <Select value={dna} onValueChange={(v) => v && setDna(v)} disabled={readOnly}>
                 <SelectTrigger className="w-full">
                   <SelectValue />
                 </SelectTrigger>
@@ -349,7 +369,7 @@ export function DogSvHealthCard({ dogId, isOwner, sex }: DogSvHealthCardProps) {
             </div>
             <div className="space-y-1.5">
               <Label>Koerung</Label>
-              <Select value={koerung} onValueChange={setKoerung} disabled={readOnly}>
+              <Select value={koerung} onValueChange={(v) => v && setKoerung(v)} disabled={readOnly}>
                 <SelectTrigger className="w-full">
                   <SelectValue />
                 </SelectTrigger>
@@ -440,18 +460,27 @@ export function DogSvHealthCard({ dogId, isOwner, sex }: DogSvHealthCardProps) {
           </div>
 
           {!readOnly && (
-            <Button type="button" onClick={handleSave} size="sm" disabled={upsert.isPending} className="min-h-[2.75rem]">
-              {upsert.isPending ? (
-                <Loader2 className="size-4 animate-spin" />
-              ) : saved ? (
+            <p className="flex items-center gap-1.5 text-xs text-muted-foreground" aria-live="polite">
+              {autosaveStatus === 'saving' ? (
                 <>
-                  <Check className="size-4" />
-                  Saved
+                  <Loader2 className="size-3.5 animate-spin" /> Saving…
+                </>
+              ) : autosaveStatus === 'saved' ? (
+                <>
+                  <Check className="size-3.5 text-green-600" />
+                  <span className="text-green-700 dark:text-green-500">Saved</span>
+                </>
+              ) : autosaveStatus === 'error' ? (
+                <>
+                  <TriangleAlert className="size-3.5 text-destructive" />
+                  <span className="text-destructive">Couldn&apos;t save — check your connection.</span>
                 </>
               ) : (
-                'Save Health Data'
+                <>
+                  <Check className="size-3.5 text-green-600" /> Saves automatically as you type.
+                </>
               )}
-            </Button>
+            </p>
           )}
         </div>
       </CardContent>
