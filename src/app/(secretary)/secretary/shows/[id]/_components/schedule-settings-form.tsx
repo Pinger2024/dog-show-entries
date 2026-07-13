@@ -58,6 +58,7 @@ import type { ScheduleData } from '@/server/db/schema/shows';
 import { RKC_STATEMENTS, RKC_STATEMENT_CATEGORIES } from '@/lib/rkc-statements';
 import { SHOW_TIMES } from '@/lib/show-times';
 import { InlineHelp, type SectionHelpContent } from './section-help';
+import { SE_H } from '@/components/show-experience/tokens';
 
 const SECTION_HELP: Record<SectionId, SectionHelpContent> = {
   showday: {
@@ -659,7 +660,7 @@ export function ScheduleSettingsForm({ showId, onSaved }: ScheduleSettingsFormPr
       {/* Header */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h2 className="text-lg font-bold tracking-tight">Schedule Settings</h2>
+          <h2 className={cn(SE_H, 'text-lg')}>Schedule Settings</h2>
           <p className="text-sm text-muted-foreground">
             Configure your show schedule PDF.
             <span className="hidden sm:inline"> {isWusvShow ? 'The standard statements are auto-included.' : 'Mandatory RKC statements are auto-included.'}</span>
@@ -693,9 +694,9 @@ export function ScheduleSettingsForm({ showId, onSaved }: ScheduleSettingsFormPr
 
       {/* Smart defaults notice */}
       {appliedDefaults && (
-        <div className="flex items-start gap-2 rounded-lg border border-blue-200 bg-blue-50/50 px-3 py-2.5 text-sm dark:border-blue-800 dark:bg-blue-950/20">
-          <Info className="mt-0.5 size-4 shrink-0 text-blue-600 dark:text-blue-400" />
-          <p className="text-blue-800 dark:text-blue-300">
+        <div className="flex items-start gap-2 rounded-lg border border-se-honey-line bg-se-honey-soft px-3 py-2.5 text-sm">
+          <Info className="mt-0.5 size-4 shrink-0 text-se-honey-deep" />
+          <p className="text-se-honey-deep">
             Pre-filled from your last show. Review each section and save when ready.
           </p>
         </div>
@@ -723,7 +724,7 @@ export function ScheduleSettingsForm({ showId, onSaved }: ScheduleSettingsFormPr
                 <div className={cn(
                   'flex size-8 items-center justify-center rounded-full',
                   isComplete && !isEditing
-                    ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400'
+                    ? 'bg-se-fresh-soft text-se-fresh-deep'
                     : 'bg-muted text-muted-foreground',
                 )}>
                   {isComplete && !isEditing ? (
@@ -891,7 +892,7 @@ function SectionSummary({
       return parts.length > 0 ? (
         <p className="text-xs text-muted-foreground truncate">{parts.join(' · ')}</p>
       ) : (
-        <p className="text-xs text-amber-600 dark:text-amber-400">Set show times</p>
+        <p className="text-xs text-se-honey-deep">Set show times</p>
       );
     }
     case 'people': {
@@ -902,7 +903,7 @@ function SectionSummary({
       return parts.length > 0 ? (
         <p className="text-xs text-muted-foreground truncate">{parts.join(' · ')}</p>
       ) : (
-        <p className="text-xs text-amber-600 dark:text-amber-400">Add show manager & officers</p>
+        <p className="text-xs text-se-honey-deep">Add show manager & officers</p>
       );
     }
     case 'awards':
@@ -912,7 +913,7 @@ function SectionSummary({
           {prizeMoney ? ` · ${prizeMoney}` : ''}
         </p>
       ) : (
-        <p className="text-xs text-amber-600 dark:text-amber-400">Describe awards & rosettes</p>
+        <p className="text-xs text-se-honey-deep">Describe awards & rosettes</p>
       );
     case 'venue': {
       const parts: string[] = [];
@@ -1075,14 +1076,14 @@ function AutoSaveIndicator({
   }
   if (status === 'error') {
     return (
-      <span className="flex items-center gap-1.5 text-xs text-amber-700 dark:text-amber-400">
+      <span className="flex items-center gap-1.5 text-xs text-se-honey-deep">
         <AlertTriangle className="size-3" />
         Couldn&apos;t save
       </span>
     );
   }
   return (
-    <span className="flex items-center gap-1.5 text-xs text-emerald-700 dark:text-emerald-400">
+    <span className="flex items-center gap-1.5 text-xs text-se-fresh-deep">
       <Check className="size-3" />
       Saved {lastAutoSavedAt ? lastAutoSavedAt.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }) : ''}
     </span>
@@ -1249,8 +1250,8 @@ function PeopleSection({
             className={cn(
               'rounded-lg border px-3 py-2 text-sm flex items-start gap-2',
               met
-                ? 'border-emerald-200 bg-emerald-50 text-emerald-900 dark:border-emerald-900 dark:bg-emerald-950/30 dark:text-emerald-200'
-                : 'border-amber-200 bg-amber-50 text-amber-900 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-200',
+                ? 'border-se-fresh-line bg-se-fresh-soft text-se-fresh-deep'
+                : 'border-se-honey-line bg-se-honey-soft text-se-honey-deep',
             )}
           >
             {met ? <Check className="size-4 mt-0.5 shrink-0" /> : <AlertTriangle className="size-4 mt-0.5 shrink-0" />}
@@ -1332,8 +1333,8 @@ function AwardsSection({
         href={`/secretary/shows/${showId}/sponsors`}
         className="flex items-center gap-3 rounded-lg border p-3 transition-colors hover:bg-accent/50"
       >
-        <div className="flex size-9 shrink-0 items-center justify-center rounded-full bg-rose-100 dark:bg-rose-900/30">
-          <Heart className="size-4 text-rose-600 dark:text-rose-400" />
+        <div className="flex size-9 shrink-0 items-center justify-center rounded-full bg-accent">
+          <Heart className="size-4 text-accent-foreground" />
         </div>
         <div className="min-w-0 flex-1">
           <p className="text-sm font-medium">Show Sponsors</p>

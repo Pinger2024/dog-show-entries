@@ -22,6 +22,21 @@ vi.mock('@/lib/impersonation', () => ({
   getImpersonatedUserId: vi.fn(async () => null),
 }));
 
+// The schedule/judges-book routes post-process their rendered buffer through
+// pdf-lib (stripUnembeddedBase14Fonts) to strip react-pdf's unembedded
+// base-14 font refs before print. pdf-lib expects a real, well-formed PDF —
+// the react-pdf mock above only returns a text stub ("%PDF-1.4 stub"), which
+// isn't parseable. Pass the buffer through unchanged here; the real
+// stripping logic is exercised directly against real react-pdf output
+// elsewhere, not through this auth/response-shape test.
+vi.mock('@/lib/pdf-pad', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/lib/pdf-pad')>();
+  return {
+    ...actual,
+    stripUnembeddedBase14Fonts: vi.fn(async (buf: Buffer) => buf),
+  };
+});
+
 // Mock the higher-level PDF generation helpers so they don't pull in
 // renderToBuffer themselves and so we don't depend on their data assembly.
 vi.mock('@/server/services/pdf-generation', () => ({

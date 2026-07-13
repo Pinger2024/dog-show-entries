@@ -10,11 +10,13 @@ import { PENDING_STATUSES, calculatePrintOrderFee } from '@/lib/print-products';
 import { trpc } from '@/lib/trpc';
 import { useShowId } from '../_lib/show-context';
 import { formatCurrency } from '@/lib/date-utils';
+import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { StripeProvider } from '@/components/providers/stripe-provider';
+import { SE_H } from '@/components/show-experience/tokens';
 import { PrintPaymentForm } from './_components/print-payment-form';
 import { PrintOrderList } from './_components/print-order-list';
 
@@ -146,7 +148,7 @@ export default function PrintShopPage() {
       <div className="space-y-4">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h2 className="font-serif text-lg font-semibold">Print Shop</h2>
+            <h2 className={cn(SE_H, 'font-serif text-lg')}>Print Shop</h2>
             <p className="text-sm text-muted-foreground">
               Professional printing for your show documents
             </p>
@@ -202,7 +204,7 @@ export default function PrintShopPage() {
       <div className="space-y-4">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h2 className="font-serif text-lg font-semibold">Print Shop</h2>
+            <h2 className={cn(SE_H, 'font-serif text-lg')}>Print Shop</h2>
             <p className="text-sm text-muted-foreground">
               Everything you need for show day, in one order
             </p>
@@ -216,9 +218,9 @@ export default function PrintShopPage() {
         </div>
 
         {tooLarge ? (
-          <Card className="border-amber-200 bg-amber-50 dark:border-amber-900 dark:bg-amber-950">
+          <Card className="border-se-honey-line bg-se-honey-soft">
             <CardContent className="p-5 text-center">
-              <MessageCircle className="mx-auto mb-3 size-8 text-amber-600" />
+              <MessageCircle className="mx-auto mb-3 size-8 text-se-honey-deep" />
               <h3 className="font-serif text-base font-semibold">Your show is too large for standard pricing</h3>
               <p className="mt-1 text-sm text-muted-foreground">
                 Get in touch and we&apos;ll put together a bespoke quote for your show.
@@ -297,7 +299,7 @@ export default function PrintShopPage() {
             <ChevronLeft className="size-4" />
             Back
           </Button>
-          <h2 className="mt-2 font-serif text-lg font-semibold">Delivery Details</h2>
+          <h2 className={cn(SE_H, 'mt-2 font-serif text-lg')}>Delivery Details</h2>
           <p className="text-sm text-muted-foreground">
             Where should we send the printed documents?
           </p>
@@ -408,7 +410,7 @@ export default function PrintShopPage() {
             <ChevronLeft className="size-4" />
             Back
           </Button>
-          <h2 className="mt-2 font-serif text-lg font-semibold">How would you like to pay?</h2>
+          <h2 className={cn(SE_H, 'mt-2 font-serif text-lg')}>How would you like to pay?</h2>
         </div>
 
         <div className="space-y-3">
@@ -505,7 +507,7 @@ export default function PrintShopPage() {
     return (
       <div className="space-y-4">
         <div>
-          <h2 className="font-serif text-lg font-semibold">Payment</h2>
+          <h2 className={cn(SE_H, 'font-serif text-lg')}>Payment</h2>
           <p className="text-sm text-muted-foreground">
             Complete your payment to place the print order
           </p>
@@ -534,10 +536,10 @@ export default function PrintShopPage() {
   if (step === 'confirmation') {
     return (
       <div className="space-y-4">
-        <Card className="border-green-200 bg-green-50 dark:border-green-900 dark:bg-green-950">
+        <Card className="border-se-fresh-line bg-se-fresh-soft">
           <CardContent className="flex flex-col items-center p-6 text-center">
-            <div className="mb-4 flex size-14 items-center justify-center rounded-full bg-green-100 dark:bg-green-900">
-              <Check className="size-7 text-green-600 dark:text-green-400" />
+            <div className="mb-4 flex size-14 items-center justify-center rounded-full bg-se-fresh-soft">
+              <Check className="size-7 text-se-fresh-deep" />
             </div>
             <h2 className="font-serif text-lg font-semibold">Order Placed!</h2>
             <p className="mt-1 max-w-sm text-sm text-muted-foreground">

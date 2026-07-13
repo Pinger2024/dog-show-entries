@@ -12,7 +12,8 @@ import {
   breeds,
 } from '@/server/db/schema';
 import { getPlacementLabel, achievementLabels } from '@/lib/placements';
-import { resend, FROM } from '@/server/services/email';
+import { resend, FROM, emailHeader } from '@/server/services/email';
+import { BRAND } from '@/lib/brand';
 
 function esc(s: string) {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -29,9 +30,9 @@ function renderPage(title: string, body: string) {
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
-      background-color: #f5f3ef;
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-      color: #1a1a1a;
+      background-color: ${BRAND.paper};
+      font-family: 'Hanken Grotesk', -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+      color: ${BRAND.ink};
       min-height: 100vh;
       display: flex;
       align-items: center;
@@ -39,68 +40,61 @@ function renderPage(title: string, body: string) {
       padding: 24px;
     }
     .container { max-width: 680px; width: 100%; }
-    .logo {
-      text-align: center;
-      padding: 24px 0;
-      font-family: Georgia, 'Times New Roman', serif;
-      font-size: 28px;
-      color: #2D5F3F;
-      letter-spacing: -0.5px;
-    }
     .card {
       background: #ffffff;
-      border-radius: 12px;
+      border: 1px solid ${BRAND.line};
+      border-radius: 14px;
       overflow: hidden;
       box-shadow: 0 1px 3px rgba(0,0,0,0.1);
     }
     .banner {
-      background: #2D5F3F;
+      background: ${BRAND.green};
       padding: 24px;
       text-align: center;
-      color: #ffffff;
+      color: ${BRAND.cream};
     }
     .banner h2 { font-size: 22px; font-weight: 700; }
-    .banner .sub { color: #b8d4c4; font-size: 14px; margin-top: 8px; }
+    .banner .sub { color: rgba(243, 236, 220, 0.78); font-size: 14px; margin-top: 8px; }
     .body { padding: 24px; }
-    .body p { font-size: 15px; line-height: 1.6; color: #333; margin-bottom: 16px; }
+    .body p { font-size: 15px; line-height: 1.6; color: ${BRAND.ink}; margin-bottom: 16px; }
     .detail-table { width: 100%; border-collapse: collapse; margin: 16px 0; }
-    .detail-table td { padding: 8px 12px; border-bottom: 1px solid #e5e5e5; font-size: 14px; }
-    .detail-table .label { font-weight: 600; color: #444; width: 100px; }
-    .breed-section { margin: 24px 0; padding: 16px; background: #fafaf8; border-radius: 8px; border: 1px solid #e5e5e5; }
-    .breed-section h3 { font-size: 16px; font-weight: 700; color: #1a1a1a; margin-bottom: 12px; }
+    .detail-table td { padding: 8px 12px; border-bottom: 1px solid ${BRAND.line}; font-size: 14px; }
+    .detail-table .label { font-weight: 600; color: ${BRAND.ink}; width: 100px; }
+    .breed-section { margin: 24px 0; padding: 16px; background: ${BRAND.paper}; border-radius: 13px; border: 1px solid ${BRAND.line}; }
+    .breed-section h3 { font-size: 16px; font-weight: 700; color: ${BRAND.ink}; margin-bottom: 12px; }
     .class-table { width: 100%; border-collapse: collapse; margin: 8px 0; }
-    .class-table th { padding: 6px 10px; text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: #888; border-bottom: 2px solid #e5e5e5; }
-    .class-table td { padding: 6px 10px; border-bottom: 1px solid #f0f0f0; font-size: 13px; }
-    .class-header { font-weight: 600; color: #444; padding: 10px 10px 4px; font-size: 14px; }
+    .class-table th { padding: 6px 10px; text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: ${BRAND.ink2}; border-bottom: 2px solid ${BRAND.line}; }
+    .class-table td { padding: 6px 10px; border-bottom: 1px solid ${BRAND.line}; font-size: 13px; }
+    .class-header { font-weight: 700; color: ${BRAND.ink}; padding: 10px 10px 4px; font-size: 14px; }
     .placement-badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 12px; font-weight: 600; }
-    .p1 { background: #fef3c7; color: #92400e; }
-    .p2 { background: #f3f4f6; color: #374151; }
-    .p3 { background: #fde9d9; color: #7c3415; }
+    .p1 { background: #e3f5ea; color: #1f6b43; }
+    .p2 { background: ${BRAND.paper}; color: ${BRAND.ink2}; }
+    .p3 { background: #f2e6d3; color: #8a5a2b; }
     .buttons { text-align: center; margin: 28px 0; }
     .btn {
       display: inline-block;
       padding: 14px 32px;
-      border-radius: 8px;
+      border-radius: 13px;
       font-size: 16px;
-      font-weight: 600;
+      font-weight: 700;
       text-decoration: none;
       border: none;
       cursor: pointer;
       transition: opacity 0.2s;
     }
     .btn:hover { opacity: 0.9; }
-    .btn-primary { background: #2D5F3F; color: #ffffff; }
-    .btn-outline { background: transparent; border: 1px solid #ddd; color: #666; margin-left: 12px; }
+    .btn-primary { background: ${BRAND.green}; color: ${BRAND.cream}; }
+    .btn-outline { background: transparent; border: 1px solid ${BRAND.line}; color: ${BRAND.ink2}; margin-left: 12px; }
     .success-icon { font-size: 48px; margin-bottom: 12px; }
-    .footer { text-align: center; padding: 24px; font-size: 12px; color: #999; }
+    .footer { text-align: center; padding: 24px; font-size: 12px; color: ${BRAND.ink2}; }
     form { display: inline; }
-    textarea { width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 8px; font-size: 14px; font-family: inherit; resize: vertical; margin-bottom: 16px; }
-    .award-badge { display: inline-block; padding: 2px 8px; background: #fef3c7; color: #92400e; border-radius: 4px; font-size: 11px; font-weight: 600; margin: 2px; }
+    textarea { width: 100%; padding: 10px; border: 1px solid ${BRAND.line}; border-radius: 13px; font-size: 14px; font-family: inherit; resize: vertical; margin-bottom: 16px; }
+    .award-badge { display: inline-block; padding: 2px 8px; background: #e3f5ea; color: #1f6b43; border-radius: 4px; font-size: 11px; font-weight: 700; margin: 2px; }
   </style>
 </head>
 <body>
   <div class="container">
-    <div class="logo">Remi</div>
+    ${emailHeader()}
     <div class="card">
       ${body}
     </div>
@@ -155,7 +149,7 @@ export async function GET(
             ? `You have already approved the results for <strong>${esc(assignment.show.name)}</strong>.`
             : `A query has been submitted for the results of <strong>${esc(assignment.show.name)}</strong>. The secretary will review and contact you if needed.`
           }</p>
-          <p style="color: #666; font-size: 14px;">You can safely close this page.</p>
+          <p style="color: ${BRAND.ink2}; font-size: 14px;">You can safely close this page.</p>
         </div>
       `),
       { headers: { 'Content-Type': 'text/html' } }
@@ -262,8 +256,8 @@ export async function GET(
     const classNum = sc.classNumber != null ? `#${sc.classNumber} ` : '';
 
     breedGroupMap.get(breedName)!.classesHtml.push(`
-      <div class="class-header">${classNum}${sc.classDefinition.name}${sexLabel} <span style="color: #999; font-weight: normal; font-size: 12px;">(${confirmed.length} entered, ${dogsForward} forward)</span></div>
-      ${resultRows ? `<table class="class-table"><thead><tr><th>Cat #</th><th>Dog</th><th>Place</th><th>Award</th></tr></thead><tbody>${resultRows}</tbody></table>` : '<p style="padding: 4px 10px; font-size: 13px; color: #999;">No results recorded</p>'}
+      <div class="class-header">${classNum}${sc.classDefinition.name}${sexLabel} <span style="color: ${BRAND.ink2}; font-weight: normal; font-size: 12px;">(${confirmed.length} entered, ${dogsForward} forward)</span></div>
+      ${resultRows ? `<table class="class-table"><thead><tr><th>Cat #</th><th>Dog</th><th>Place</th><th>Award</th></tr></thead><tbody>${resultRows}</tbody></table>` : '<p style="padding: 4px 10px; font-size: 13px; color: ${BRAND.ink2};">No results recorded</p>'}
     `);
 
     breedGroupMap.get(breedName)!.entryCount += confirmed.length;
@@ -294,7 +288,7 @@ export async function GET(
     .sort((a, b) => a.breedName.localeCompare(b.breedName))
     .map((group) => `
       <div class="breed-section">
-        <h3>${group.breedName} <span style="font-weight: normal; font-size: 13px; color: #666;">(${group.entryCount} entries)</span></h3>
+        <h3>${group.breedName} <span style="font-weight: normal; font-size: 13px; color: ${BRAND.ink2};">(${group.entryCount} entries)</span></h3>
         ${group.achievementsHtml.length > 0 ? `<div style="margin-bottom: 12px;">${group.achievementsHtml.join('')}</div>` : ''}
         ${group.classesHtml.join('')}
       </div>
@@ -349,7 +343,7 @@ export async function GET(
 
         <form method="POST" action="/api/results-approval/${token}">
           <input type="hidden" name="action" value="approve">
-          <p style="font-size: 14px; color: #666;">Optional note (e.g., minor corrections):</p>
+          <p style="font-size: 14px; color: ${BRAND.ink2};">Optional note (e.g., minor corrections):</p>
           <textarea name="note" rows="3" placeholder="Any comments (optional)"></textarea>
           <div class="buttons">
             <button type="submit" class="btn btn-primary">I Approve These Results</button>
@@ -442,27 +436,25 @@ export async function POST(
 <!DOCTYPE html>
 <html>
 <head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
-<body style="margin: 0; padding: 0; background-color: #f5f3ef; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
+<body style="margin: 0; padding: 0; background-color: ${BRAND.paper}; font-family: 'Hanken Grotesk', -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
   <div style="max-width: 600px; margin: 0 auto; padding: 24px 16px;">
-    <div style="text-align: center; padding: 24px 0;">
-      <h1 style="margin: 0; font-family: Georgia, serif; font-size: 28px; color: #2D5F3F;">Remi</h1>
-    </div>
-    <div style="background: #fff; border-radius: 12px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
-      <div style="background: #2D5F3F; padding: 24px; text-align: center;">
+    ${emailHeader()}
+    <div style="background: #fff; border: 1px solid ${BRAND.line}; border-radius: 14px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+      <div style="background: ${BRAND.deep}; padding: 24px; text-align: center;">
         <div style="font-size: 32px; margin-bottom: 8px;">&#10003;</div>
-        <h2 style="margin: 0; color: #fff; font-size: 22px;">Results Approved</h2>
+        <h2 style="margin: 0; color: ${BRAND.cream}; font-size: 22px;">Results Approved</h2>
       </div>
       <div style="padding: 24px;">
-        <p style="font-size: 15px; color: #333; line-height: 1.6;">
+        <p style="font-size: 15px; color: ${BRAND.ink}; line-height: 1.6;">
           <strong>${judge.name}</strong> has approved the results for <strong>${show.name}</strong>.
         </p>
-        ${note ? `<p style="font-size: 14px; color: #555; padding: 12px; background: #f9f8f6; border-radius: 8px;"><strong>Note from judge:</strong> ${esc(note)}</p>` : ''}
-        <p style="font-size: 15px; color: #333; line-height: 1.6;">
+        ${note ? `<p style="font-size: 14px; color: ${BRAND.ink2}; padding: 12px; background: ${BRAND.paper}; border-radius: 8px;"><strong>Note from judge:</strong> ${esc(note)}</p>` : ''}
+        <p style="font-size: 15px; color: ${BRAND.ink}; line-height: 1.6;">
           When all judges have approved, you can publish the results to make them visible to exhibitors and the public.
         </p>
         <div style="text-align: center; margin: 24px 0;">
           <a href="${process.env.NEXTAUTH_URL ?? 'https://remishowmanager.co.uk'}/secretary/shows/${show.slug ?? show.id}/results"
-             style="display: inline-block; background: #2D5F3F; color: #fff; padding: 12px 24px; border-radius: 8px; font-size: 15px; font-weight: 600; text-decoration: none;">
+             style="display: inline-block; background: ${BRAND.green}; color: ${BRAND.cream}; padding: 12px 24px; border-radius: 13px; font-size: 15px; font-weight: 700; text-decoration: none;">
             View Results in Remi
           </a>
         </div>
@@ -485,8 +477,8 @@ export async function POST(
         <div class="body">
           <p>Thank you for approving the results for <strong>${show.name}</strong>.</p>
           <p>${orgName} has been notified and will publish the results shortly.</p>
-          ${note ? `<p style="font-size: 14px; padding: 12px; background: #f9f8f6; border-radius: 8px; color: #555;"><strong>Your note:</strong> ${esc(note)}</p>` : ''}
-          <p style="color: #666; font-size: 14px;">You can safely close this page.</p>
+          ${note ? `<p style="font-size: 14px; padding: 12px; background: ${BRAND.paper}; border-radius: 8px; color: ${BRAND.ink2};"><strong>Your note:</strong> ${esc(note)}</p>` : ''}
+          <p style="color: ${BRAND.ink2}; font-size: 14px;">You can safely close this page.</p>
         </div>
       `),
       { headers: { 'Content-Type': 'text/html' } }
@@ -540,28 +532,26 @@ export async function POST(
 <!DOCTYPE html>
 <html>
 <head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
-<body style="margin: 0; padding: 0; background-color: #f5f3ef; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
+<body style="margin: 0; padding: 0; background-color: ${BRAND.paper}; font-family: 'Hanken Grotesk', -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
   <div style="max-width: 600px; margin: 0 auto; padding: 24px 16px;">
-    <div style="text-align: center; padding: 24px 0;">
-      <h1 style="margin: 0; font-family: Georgia, serif; font-size: 28px; color: #2D5F3F;">Remi</h1>
-    </div>
-    <div style="background: #fff; border-radius: 12px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+    ${emailHeader()}
+    <div style="background: #fff; border: 1px solid ${BRAND.line}; border-radius: 14px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
       <div style="background: #dc2626; padding: 24px; text-align: center;">
-        <h2 style="margin: 0; color: #fff; font-size: 22px;">Results Query from Judge</h2>
+        <h2 style="margin: 0; color: ${BRAND.cream}; font-size: 22px;">Results Query from Judge</h2>
       </div>
       <div style="padding: 24px;">
-        <p style="font-size: 15px; color: #333; line-height: 1.6;">
+        <p style="font-size: 15px; color: ${BRAND.ink}; line-height: 1.6;">
           <strong>${judge.name}</strong> has raised a query about the results for <strong>${show.name}</strong>.
         </p>
-        <p style="font-size: 14px; color: #555; padding: 12px; background: #fef2f2; border-radius: 8px; border-left: 3px solid #dc2626;">
+        <p style="font-size: 14px; color: ${BRAND.ink2}; padding: 12px; background: #fef2f2; border-radius: 8px; border-left: 3px solid #dc2626;">
           <strong>Query:</strong> ${esc(note)}
         </p>
-        <p style="font-size: 15px; color: #333; line-height: 1.6;">
+        <p style="font-size: 15px; color: ${BRAND.ink}; line-height: 1.6;">
           Please review the results and make any corrections, then resend the approval request.
         </p>
         <div style="text-align: center; margin: 24px 0;">
           <a href="${process.env.NEXTAUTH_URL ?? 'https://remishowmanager.co.uk'}/secretary/shows/${show.slug ?? show.id}/results"
-             style="display: inline-block; background: #2D5F3F; color: #fff; padding: 12px 24px; border-radius: 8px; font-size: 15px; font-weight: 600; text-decoration: none;">
+             style="display: inline-block; background: ${BRAND.green}; color: ${BRAND.cream}; padding: 12px 24px; border-radius: 13px; font-size: 15px; font-weight: 700; text-decoration: none;">
             Review Results in Remi
           </a>
         </div>
@@ -580,9 +570,9 @@ export async function POST(
         <div class="banner"><h2>Query Submitted</h2></div>
         <div class="body">
           <p>Your query has been sent to the show secretary for <strong>${show.name}</strong>.</p>
-          <p style="font-size: 14px; padding: 12px; background: #f9f8f6; border-radius: 8px; color: #555;"><strong>Your query:</strong> ${esc(note)}</p>
+          <p style="font-size: 14px; padding: 12px; background: ${BRAND.paper}; border-radius: 8px; color: ${BRAND.ink2};"><strong>Your query:</strong> ${esc(note)}</p>
           <p>They will review the results and contact you if needed. Once any corrections have been made, you'll receive a new approval request.</p>
-          <p style="color: #666; font-size: 14px;">You can safely close this page.</p>
+          <p style="color: ${BRAND.ink2}; font-size: 14px;">You can safely close this page.</p>
         </div>
       `),
       { headers: { 'Content-Type': 'text/html' } }

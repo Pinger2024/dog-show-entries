@@ -59,12 +59,12 @@ import {
   CommandList,
 } from '@/components/ui/command';
 import {
-  Card,
   CardContent,
   CardDescription,
   CardHeader,
   CardTitle,
 } from '@/components/ui/card';
+import { SECard, Wordmark } from '@/components/show-experience/kit';
 import Link from 'next/link';
 
 // ── Types ───────────────────────────────────────────────────────
@@ -285,11 +285,8 @@ export function OnboardingWizard({ user }: OnboardingWizardProps) {
       <div className="w-full max-w-lg space-y-6 sm:space-y-8">
         {/* Logo */}
         <div className="text-center">
-          <Link
-            href="/"
-            className="font-serif text-2xl sm:text-3xl font-bold tracking-tight text-primary"
-          >
-            Remi
+          <Link href="/">
+            <Wordmark size={26} />
           </Link>
         </div>
 
@@ -321,7 +318,7 @@ function IntentStep({
   const firstName = userName?.split(' ')[0];
 
   return (
-    <Card>
+    <SECard className="flex flex-col gap-6">
       <CardHeader className="text-center">
         <CardTitle className="font-serif text-xl sm:text-2xl">
           Welcome{firstName ? `, ${firstName}` : ''}!
@@ -379,7 +376,7 @@ function IntentStep({
           </div>
         </button>
       </CardContent>
-    </Card>
+    </SECard>
   );
 }
 
@@ -422,7 +419,7 @@ function ProfileStep({
   const [editingAddress, setEditingAddress] = useState(!addressFilled);
 
   return (
-    <Card>
+    <SECard className="flex flex-col gap-6">
       <CardHeader>
         <CardTitle className="font-serif text-lg sm:text-xl">
           Your Details
@@ -557,7 +554,7 @@ function ProfileStep({
           </form>
         </Form>
       </CardContent>
-    </Card>
+    </SECard>
   );
 }
 
@@ -695,10 +692,10 @@ function DogStep({
   // After adding dogs, show success + options
   if (dogsAdded > 0 && !showForm) {
     return (
-      <Card>
+      <SECard className="flex flex-col gap-6">
         <CardHeader className="text-center">
-          <div className="mx-auto mb-2 flex size-12 items-center justify-center rounded-full bg-emerald-100">
-            <Dog className="size-6 text-emerald-700" />
+          <div className="mx-auto mb-2 flex size-12 items-center justify-center rounded-full bg-se-fresh-soft">
+            <Dog className="size-6 text-se-fresh-deep" />
           </div>
           <CardTitle className="font-serif text-lg sm:text-xl">
             {dogsAdded === 1 ? 'Dog added!' : `${dogsAdded} dogs added!`}
@@ -724,12 +721,12 @@ function DogStep({
             <ArrowRight className="size-4" />
           </Button>
         </CardContent>
-      </Card>
+      </SECard>
     );
   }
 
   return (
-    <Card>
+    <SECard className="flex flex-col gap-6">
       <CardHeader>
         <CardTitle className="font-serif text-lg sm:text-xl">
           Add Your First Dog
@@ -1156,7 +1153,7 @@ function DogStep({
           Skip for now
         </button>
       </CardContent>
-    </Card>
+    </SECard>
   );
 }
 
@@ -1169,7 +1166,7 @@ function ClubStep({
   onComplete: () => void;
 }) {
   return (
-    <Card>
+    <SECard className="flex flex-col gap-6">
       <CardHeader>
         <CardTitle className="font-serif text-lg sm:text-xl">
           Register Your Club
@@ -1186,7 +1183,7 @@ function ClubStep({
           tall
         />
       </CardContent>
-    </Card>
+    </SECard>
   );
 }
 
@@ -1218,7 +1215,7 @@ function SuccessStep({
   const showRunMessage = intent === 'run' || intent === 'both';
 
   return (
-    <Card>
+    <SECard className="flex flex-col gap-6">
       <CardHeader className="text-center">
         <div className="mx-auto mb-2 flex size-14 items-center justify-center rounded-full bg-primary/10">
           <PartyPopper className="size-7 text-primary" />
@@ -1269,6 +1266,6 @@ function SuccessStep({
           <ArrowRight className="size-4" />
         </Button>
       </CardContent>
-    </Card>
+    </SECard>
   );
 }

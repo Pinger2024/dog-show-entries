@@ -1,3 +1,6 @@
+import { SE_H } from '@/components/show-experience/tokens';
+import { cn } from '@/lib/utils';
+
 export const metadata = {
   title: 'Terms of Service - Remi',
   description: 'Terms and conditions for using Remi.',
@@ -6,7 +9,7 @@ export const metadata = {
 export default function TermsPage() {
   return (
     <div className="mx-auto max-w-3xl px-4 py-8 sm:py-12 sm:px-6">
-      <h1 className="font-serif text-3xl font-extrabold tracking-tight sm:text-4xl">
+      <h1 className={cn(SE_H, 'text-3xl sm:text-4xl')}>
         Terms of Service
       </h1>
       <p className="mt-2 text-sm text-muted-foreground">

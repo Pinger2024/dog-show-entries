@@ -15,7 +15,10 @@ import {
   Users,
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { cn } from '@/lib/utils';
 import { trpc } from '@/lib/trpc';
+import { SECard, Eyebrow } from '@/components/show-experience/kit';
+import { SE_H } from '@/components/show-experience/tokens';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import {
@@ -176,7 +179,7 @@ export default function ShowManagementLayout({
                 <ArrowLeft className="size-4" />
               </Link>
             </Button>
-            <h1 className="truncate text-lg font-bold tracking-tight sm:text-2xl">
+            <h1 className={cn(SE_H, 'truncate text-lg tracking-tight sm:text-2xl')}>
               {show.name}
             </h1>
             <EditShowNameDialog showId={show.id} currentName={show.name} />
@@ -266,15 +269,15 @@ export default function ShowManagementLayout({
       {/* Admin test data tools — only visible to admins */}
       {isAdmin && (
         <>
-          <div className="flex flex-col gap-2 rounded-lg border border-dashed border-orange-300 bg-orange-50 p-3 dark:border-orange-700 dark:bg-orange-950/30 sm:flex-row sm:items-center">
+          <div className="flex flex-col gap-2 rounded-lg border border-dashed border-se-honey-line bg-se-honey-soft p-3 sm:flex-row sm:items-center">
             <div className="flex items-center gap-2">
-              <Database className="size-4 text-orange-600 dark:text-orange-400 shrink-0" />
-              <span className="text-xs font-medium text-orange-700 dark:text-orange-300">Admin Tools</span>
+              <Database className="size-4 text-se-honey-deep shrink-0" />
+              <span className="text-xs font-medium text-se-honey-deep">Admin Tools</span>
             </div>
             {(populateMutation.isPending || clearMutation.isPending) ? (
               <div className="flex items-center gap-2 sm:ml-auto">
-                <Loader2 className="size-4 animate-spin text-orange-600" />
-                <span className="text-xs text-orange-700 dark:text-orange-300">
+                <Loader2 className="size-4 animate-spin text-se-honey-deep" />
+                <span className="text-xs text-se-honey-deep">
                   {populateMutation.isPending ? 'Generating test data... this takes about a minute' : 'Clearing data...'}
                 </span>
               </div>
@@ -337,7 +340,7 @@ export default function ShowManagementLayout({
                     catalogue numbers, RKC registration numbers, realistic Scottish addresses,
                     sponsors, sundry items, and full show configuration.
                   </p>
-                  <p className="text-sm font-medium text-orange-600">
+                  <p className="text-sm font-medium text-se-honey-deep">
                     Existing entries will be kept. Use &quot;Clear Data&quot; first if you want a fresh start.
                   </p>
                 </div>
@@ -411,46 +414,46 @@ export default function ShowManagementLayout({
 
       {/* Stats */}
       {entryStats && entryStats.totalEntries > 0 && (
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-          <div className="rounded-lg border bg-card p-3">
-            <div className="flex items-center gap-1.5 text-muted-foreground">
+        <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-4">
+          <SECard className="p-3.5">
+            <div className="flex items-center gap-1.5 text-se-ink3">
               <ClipboardList className="size-3.5" />
-              <span className="text-xs font-medium uppercase tracking-wider">Entries</span>
+              <Eyebrow>Entries</Eyebrow>
             </div>
-            <p className="mt-1 text-lg font-bold">{entryStats.totalEntries}</p>
-            <p className="text-[11px] text-muted-foreground">
-              {entryStats.confirmed > 0 && <span className="text-emerald-600">{entryStats.confirmed} confirmed</span>}
-              {entryStats.pending > 0 && <span>{entryStats.confirmed > 0 ? ' · ' : ''}<span className="text-amber-600">{entryStats.pending} pending</span></span>}
+            <p className={cn(SE_H, 'mt-1.5 text-[22px] leading-none tabular-nums text-se-ink')}>{entryStats.totalEntries}</p>
+            <p className="mt-1 text-[11px] text-se-ink3">
+              {entryStats.confirmed > 0 && <span className="text-se-fresh-deep">{entryStats.confirmed} confirmed</span>}
+              {entryStats.pending > 0 && <span>{entryStats.confirmed > 0 ? ' · ' : ''}<span className="text-se-honey-deep">{entryStats.pending} pending</span></span>}
             </p>
-          </div>
-          <div className="rounded-lg border bg-card p-3">
-            <div className="flex items-center gap-1.5 text-muted-foreground">
+          </SECard>
+          <SECard className="p-3.5">
+            <div className="flex items-center gap-1.5 text-se-ink3">
               <PoundSterling className="size-3.5" />
-              <span className="text-xs font-medium uppercase tracking-wider">Revenue</span>
+              <Eyebrow>Revenue</Eyebrow>
             </div>
-            <p className="mt-1 text-lg font-bold text-emerald-700">
+            <p className={cn(SE_H, 'mt-1.5 text-[22px] leading-none tabular-nums text-se-fresh-deep')}>
               {formatCompactRevenue(entryStats.totalRevenue)}
             </p>
-            <p className="text-[11px] text-muted-foreground">{entryStats.paidOrders} paid</p>
-          </div>
-          <div className="rounded-lg border bg-card p-3">
-            <div className="flex items-center gap-1.5 text-muted-foreground">
+            <p className="mt-1 text-[11px] text-se-ink3">{entryStats.paidOrders} paid</p>
+          </SECard>
+          <SECard className="p-3.5">
+            <div className="flex items-center gap-1.5 text-se-ink3">
               <Users className="size-3.5" />
-              <span className="text-xs font-medium uppercase tracking-wider">Exhibitors</span>
+              <Eyebrow>Exhibitors</Eyebrow>
             </div>
-            <p className="mt-1 text-lg font-bold">{entryStats.uniqueExhibitors}</p>
-            <p className="text-[11px] text-muted-foreground">unique</p>
-          </div>
-          <div className="rounded-lg border bg-card p-3">
-            <div className="flex items-center gap-1.5 text-muted-foreground">
+            <p className={cn(SE_H, 'mt-1.5 text-[22px] leading-none tabular-nums text-se-ink')}>{entryStats.uniqueExhibitors}</p>
+            <p className="mt-1 text-[11px] text-se-ink3">unique</p>
+          </SECard>
+          <SECard className="p-3.5">
+            <div className="flex items-center gap-1.5 text-se-ink3">
               <Clock className="size-3.5" />
-              <span className="text-xs font-medium uppercase tracking-wider">Latest</span>
+              <Eyebrow>Latest</Eyebrow>
             </div>
-            <p className="mt-1 text-lg font-bold">
+            <p className={cn(SE_H, 'mt-1.5 truncate text-[22px] leading-none text-se-ink')}>
               {entryStats.lastEntryAt ? formatRelativeTime(new Date(entryStats.lastEntryAt)) : '—'}
             </p>
-            <p className="text-[11px] text-muted-foreground">most recent</p>
-          </div>
+            <p className="mt-1 text-[11px] text-se-ink3">most recent</p>
+          </SECard>
         </div>
       )}
 

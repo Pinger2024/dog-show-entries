@@ -3,28 +3,25 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { useSession } from 'next-auth/react';
-import { format, differenceInDays } from 'date-fns';
-import { formatDateRange, formatCurrency } from '@/lib/date-utils';
+import { format, parseISO, differenceInDays } from 'date-fns';
+import { cn } from '@/lib/utils';
+import { formatCurrency } from '@/lib/date-utils';
 import { PUBLIC_SHOW_STATUSES } from '@/lib/public-show-statuses';
-import { showTypeLabels } from '@/lib/show-types';
+import { showTypeLabels, displayShowTypeLabel } from '@/lib/show-types';
 import {
-  CalendarDays,
   MapPin,
   Search,
   Loader2,
-  Ticket,
-  ArrowRight,
-  Dog,
-  X,
   Navigation,
   Locate,
   ChevronDown,
   Sparkles,
+  Clock,
+  Dog,
+  X,
 } from 'lucide-react';
 import { trpc } from '@/lib/trpc/client';
 import { Input } from '@/components/ui/input';
-import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
 import { EmptyState } from '@/components/ui/empty-state';
 import {
   Select,
@@ -33,6 +30,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { Chip, Pulse, SEButton, SECard, SecLabel } from '@/components/show-experience/kit';
+import { SE_H } from '@/components/show-experience/tokens';
 
 /* ─── Debounce hook ────────────────────────────────── */
 
@@ -52,6 +51,7 @@ type ShowListItem = {
   slug: string | null;
   name: string;
   showType: string;
+  showRuleset?: string | null;
   status: string;
   startDate: string;
   endDate: string;
@@ -59,17 +59,8 @@ type ShowListItem = {
   entryCloseDate: string | Date | null;
   organisation: { name: string } | null;
   venue: { name: string } | null;
-};
-
-/* ─── Show type config ──────────────────────────────── */
-
-const showTypeMeta: Record<string, { accent: string; bg: string; ring: string }> = {
-  companion:    { accent: 'bg-emerald-500', bg: 'bg-emerald-50 text-emerald-700', ring: 'ring-emerald-200' },
-  primary:      { accent: 'bg-sky-500',     bg: 'bg-sky-50 text-sky-700',         ring: 'ring-sky-200' },
-  limited:      { accent: 'bg-amber-500',   bg: 'bg-amber-50 text-amber-700',     ring: 'ring-amber-200' },
-  open:         { accent: 'bg-violet-500',   bg: 'bg-violet-50 text-violet-700',   ring: 'ring-violet-200' },
-  premier_open: { accent: 'bg-rose-500',     bg: 'bg-rose-50 text-rose-700',       ring: 'ring-rose-200' },
-  championship: { accent: 'bg-indigo-600',   bg: 'bg-indigo-50 text-indigo-700',   ring: 'ring-indigo-200' },
+  // Not selected by the `nearby` query (near-me results simply omit a fee).
+  firstEntryFee?: number | null;
 };
 
 const statusLabels: Record<string, string> = {
@@ -81,8 +72,6 @@ const statusLabels: Record<string, string> = {
   completed: 'Completed',
   cancelled: 'Cancelled',
 };
-
-
 
 const radiusOptions = [
   { value: 25, label: '25 miles' },
@@ -99,34 +88,55 @@ function isEntryCloseDatePast(date: string | Date | null) {
   return d.getTime() < Date.now();
 }
 
-/* ─── Closing countdown ─────────────────────────────── */
+// True once a show's date has passed. Compared by calendar day so a show
+// happening *today* still reads as upcoming, not "recently held" (green
+// review 2026-07-13: an entries_closed show whose date had passed but wasn't
+// yet marked completed was mislabelled "Show day approaching").
+function isShowDatePast(startDate: string | Date | null) {
+  if (!startDate) return false;
+  const d = typeof startDate === 'string' ? new Date(startDate) : startDate;
+  const day = new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  return day < today;
+}
 
-function ClosingCountdown({ date }: { date: string | Date | null }) {
-  if (!date) return null;
-  const d = typeof date === 'string' ? new Date(date) : date;
-  const days = differenceInDays(d, new Date());
+/* ─── Status pill ────────────────────────────────────
+ * Same rules the old ClosingCountdown/badge combo used, consolidated
+ * into one place so the card only needs one tone + label. */
 
-  if (days < 0)
-    return (
-      <span className="text-xs font-medium text-destructive/80">Closed</span>
-    );
-  if (days === 0)
-    return (
-      <span className="animate-pulse text-xs font-semibold text-destructive">
-        Closing today!
-      </span>
-    );
-  if (days <= 7)
-    return (
-      <span className="text-xs font-semibold text-amber-600">
-        {days}d left to enter
-      </span>
-    );
-  return (
-    <span className="text-xs text-muted-foreground">
-      Closes {format(d, 'dd MMM')}
-    </span>
-  );
+type StatusPillTone = 'fresh' | 'honey' | 'light';
+
+function getStatusPill(show: ShowListItem): {
+  tone: StatusPillTone;
+  label: string;
+  showClock?: boolean;
+  showPulse?: boolean;
+} {
+  const closePassed = isEntryCloseDatePast(show.entryCloseDate);
+
+  if (show.status === 'entries_open' && !closePassed) {
+    if (show.entryCloseDate) {
+      const closeDate =
+        typeof show.entryCloseDate === 'string' ? new Date(show.entryCloseDate) : show.entryCloseDate;
+      const days = differenceInDays(closeDate, new Date());
+      if (days <= 0) return { tone: 'honey', label: 'Closes today!', showClock: true };
+      if (days <= 7) return { tone: 'honey', label: `Closes in ${days}d`, showClock: true };
+    }
+    return { tone: 'fresh', label: 'Entries open', showPulse: true };
+  }
+
+  if (show.status === 'entries_open' && closePassed) {
+    return { tone: 'light', label: 'Entries Closed' };
+  }
+
+  if (show.status === 'published' && show.entriesOpenDate) {
+    const openDate =
+      typeof show.entriesOpenDate === 'string' ? new Date(show.entriesOpenDate) : show.entriesOpenDate;
+    return { tone: 'light', label: `Opens ${format(openDate, 'd MMM')}` };
+  }
+
+  return { tone: 'light', label: statusLabels[show.status] ?? show.status };
 }
 
 /* ─── Active filter pills ───────────────────────────── */
@@ -154,42 +164,54 @@ function FilterPills({
   if (!hasFilters) return null;
 
   return (
-    <div className="mb-5 flex flex-wrap items-center gap-2">
-      <span className="text-xs font-medium text-muted-foreground">Active filters:</span>
+    <div className="mb-4 flex flex-wrap items-center gap-2">
+      <span className="text-xs font-medium text-se-ink3">Active filters:</span>
       {search && (
         <button
+          type="button"
           onClick={onClearSearch}
-          className="inline-flex items-center gap-1 rounded-full bg-secondary px-2.5 py-1.5 min-h-[2.75rem] text-xs font-medium text-secondary-foreground transition-colors hover:bg-secondary/80"
+          className="inline-flex min-h-[2.75rem] items-center"
         >
-          &ldquo;{search}&rdquo;
-          <X className="size-3" />
+          <Chip tone="light" className="gap-1.5">
+            &ldquo;{search}&rdquo;
+            <X className="size-3" />
+          </Chip>
         </button>
       )}
       {showType !== 'all' && (
         <button
+          type="button"
           onClick={onClearShowType}
-          className="inline-flex items-center gap-1 rounded-full bg-secondary px-2.5 py-1.5 min-h-[2.75rem] text-xs font-medium text-secondary-foreground transition-colors hover:bg-secondary/80"
+          className="inline-flex min-h-[2.75rem] items-center"
         >
-          {showTypeLabels[showType]}
-          <X className="size-3" />
+          <Chip tone="light" className="gap-1.5">
+            {showTypeLabels[showType]}
+            <X className="size-3" />
+          </Chip>
         </button>
       )}
       {status !== 'all' && (
         <button
+          type="button"
           onClick={onClearStatus}
-          className="inline-flex items-center gap-1 rounded-full bg-secondary px-2.5 py-1.5 min-h-[2.75rem] text-xs font-medium text-secondary-foreground transition-colors hover:bg-secondary/80"
+          className="inline-flex min-h-[2.75rem] items-center"
         >
-          {statusLabels[status]}
-          <X className="size-3" />
+          <Chip tone="light" className="gap-1.5">
+            {statusLabels[status]}
+            <X className="size-3" />
+          </Chip>
         </button>
       )}
       {breedName && (
         <button
+          type="button"
           onClick={onClearBreed}
-          className="inline-flex items-center gap-1 rounded-full bg-secondary px-2.5 py-1.5 min-h-[2.75rem] text-xs font-medium text-secondary-foreground transition-colors hover:bg-secondary/80"
+          className="inline-flex min-h-[2.75rem] items-center"
         >
-          {breedName}
-          <X className="size-3" />
+          <Chip tone="light" className="gap-1.5">
+            {breedName}
+            <X className="size-3" />
+          </Chip>
         </button>
       )}
     </div>
@@ -245,15 +267,17 @@ function NearMeControls({
   const { data: breeds } = trpc.breeds.list.useQuery();
 
   return (
-    <div className="mb-4 rounded-xl border border-primary/20 bg-primary/5 p-3 sm:p-4">
+    <div className="mb-4 rounded-[14px] border border-se-fresh-line bg-se-fresh-soft p-3 sm:p-4">
       <div className="mb-3 flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <Navigation className="size-4 text-primary" />
-          <span className="text-sm font-semibold text-foreground">Near Me</span>
+          <Navigation className="size-4 text-se-fresh-deep" />
+          <span className="text-sm font-semibold text-se-ink">Near Me</span>
         </div>
         <button
+          type="button"
           onClick={onDisable}
-          className="text-xs text-muted-foreground hover:text-foreground"
+          aria-label="Close Near Me"
+          className="flex size-8 items-center justify-center rounded-full text-se-ink3 transition-colors hover:bg-se-surface hover:text-se-ink"
         >
           <X className="size-4" />
         </button>
@@ -262,8 +286,9 @@ function NearMeControls({
       {/* Location input */}
       {!location && (
         <div className="space-y-3">
-          <Button
-            variant="outline"
+          <SEButton
+            type="button"
+            variant="ghost"
             size="sm"
             onClick={onUseMyLocation}
             disabled={isLocating}
@@ -275,12 +300,12 @@ function NearMeControls({
               <Locate className="size-4" />
             )}
             {isLocating ? 'Locating...' : 'Use my location'}
-          </Button>
+          </SEButton>
 
           <div className="flex items-center gap-2">
-            <div className="h-px flex-1 bg-border" />
-            <span className="text-xs text-muted-foreground">or</span>
-            <div className="h-px flex-1 bg-border" />
+            <div className="h-px flex-1 bg-se-line2" />
+            <span className="text-xs text-se-ink3">or</span>
+            <div className="h-px flex-1 bg-se-line2" />
           </div>
 
           <div className="flex gap-2">
@@ -291,19 +316,20 @@ function NearMeControls({
               onKeyDown={(e) => {
                 if (e.key === 'Enter') onPostcodeSubmit();
               }}
-              className="h-11 flex-1 rounded-lg border-border/60 bg-white"
+              className="h-11 flex-1 rounded-[12px] border-se-line2 bg-se-surface text-se-ink placeholder:text-se-ink3 shadow-none"
             />
-            <Button
+            <SEButton
+              type="button"
+              variant="fresh"
               size="sm"
               onClick={onPostcodeSubmit}
               disabled={!postcode.trim()}
-              className="h-11 px-4"
             >
               Search
-            </Button>
+            </SEButton>
           </div>
           {postcodeError && (
-            <p className="text-xs text-destructive">{postcodeError}</p>
+            <p className="text-xs text-red-600">{postcodeError}</p>
           )}
         </div>
       )}
@@ -315,10 +341,10 @@ function NearMeControls({
             value={radiusMiles.toString()}
             onValueChange={(v) => onRadiusChange(Number(v))}
           >
-            <SelectTrigger className="h-9 w-full rounded-lg border-border/60 bg-white shadow-sm sm:w-[140px]">
+            <SelectTrigger className="h-9 w-full rounded-[10px] border-se-line2 bg-se-surface text-se-ink shadow-none sm:w-[140px]">
               <SelectValue />
             </SelectTrigger>
-            <SelectContent>
+            <SelectContent className="border-se-line bg-se-surface text-se-ink">
               {radiusOptions.map((opt) => (
                 <SelectItem key={opt.value} value={opt.value.toString()}>
                   {opt.label}
@@ -329,10 +355,10 @@ function NearMeControls({
 
           {breeds && breeds.length > 0 && (
             <Select value={breedId} onValueChange={onBreedChange}>
-              <SelectTrigger className="h-9 w-full rounded-lg border-border/60 bg-white shadow-sm sm:w-[200px]">
+              <SelectTrigger className="h-9 w-full rounded-[10px] border-se-line2 bg-se-surface text-se-ink shadow-none sm:w-[200px]">
                 <SelectValue placeholder="Any breed" />
               </SelectTrigger>
-              <SelectContent>
+              <SelectContent className="border-se-line bg-se-surface text-se-ink">
                 <SelectItem value="all">Any breed</SelectItem>
                 {breeds.map((breed) => (
                   <SelectItem key={breed.id} value={breed.id}>
@@ -343,14 +369,15 @@ function NearMeControls({
             </Select>
           )}
 
-          <Button
+          <SEButton
+            type="button"
             variant="ghost"
             size="sm"
             onClick={onDisable}
-            className="h-9 text-xs text-muted-foreground"
+            className="text-se-ink3"
           >
             Clear location
-          </Button>
+          </SEButton>
         </div>
       )}
     </div>
@@ -555,33 +582,61 @@ export default function ShowsList() {
   const totalShows = data?.total ?? 0;
   const hasMore = data?.nextCursor != null;
 
-  /* Split into actually-accepting-entries vs others for visual grouping */
-  const openShows = filteredShows.filter((s) => s.status === 'entries_open' && !isEntryCloseDatePast(s.entryCloseDate));
-  const otherShows = filteredShows.filter((s) => s.status !== 'entries_open' || isEntryCloseDatePast(s.entryCloseDate));
+  /* Split by lifecycle for visual grouping — Mandy 2026-07-10: make it
+   * really obvious which shows are about to actually run. A single
+   * "everything else" bucket mislabelled completed shows too. */
+  // A show whose date has passed belongs in "Recently held" regardless of
+  // status — the status may still be entries_closed/in_progress if results
+  // haven't been finalised yet (green review 2026-07-13).
+  const openShows = filteredShows.filter((s) => s.status === 'entries_open' && !isEntryCloseDatePast(s.entryCloseDate) && !isShowDatePast(s.startDate));
+  const aboutToRun = filteredShows.filter(
+    (s) =>
+      !isShowDatePast(s.startDate) &&
+      (s.status === 'entries_closed' ||
+        s.status === 'in_progress' ||
+        (s.status === 'entries_open' && isEntryCloseDatePast(s.entryCloseDate))),
+  );
+  const openingSoon = filteredShows.filter((s) => s.status === 'published' && !isShowDatePast(s.startDate));
+  const recentlyHeld = filteredShows.filter((s) => s.status === 'completed' || isShowDatePast(s.startDate));
+  const visibleSectionCount = [openShows, aboutToRun, openingSoon, recentlyHeld].filter(
+    (g) => g.length > 0,
+  ).length;
 
   // Nearby shows
   const nearbyShows = nearbyData ?? [];
 
   return (
-    <>
+    <div className="mx-auto w-full max-w-3xl">
+      {/* ─── Page header ─────────────────────────── */}
+      <div className="mb-6">
+        <h1 className={cn(SE_H, 'text-balance text-[31px] leading-[1.05] text-se-ink')}>
+          Find a Show
+        </h1>
+        <p className="mt-1 max-w-lg text-[13.5px] leading-normal text-se-ink3">
+          {isNearMeMode
+            ? `${postcode.trim() || 'Your location'} · within ${radiusMiles} miles`
+            : 'Browse championship, open, and companion shows across the country. Find your next ring and enter online.'}
+        </p>
+      </div>
+
       {/* ─── Filters ─────────────────────────────── */}
-      <div className="mb-2 flex flex-col gap-2 sm:flex-row sm:gap-3">
-        <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/60" />
+      <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:gap-3">
+        <div className="relative min-w-0 flex-1">
+          <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-se-ink3" />
           <Input
             placeholder="Search shows, venues, societies..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="h-11 rounded-xl border-border/60 bg-white pl-10 shadow-sm transition-shadow focus-visible:shadow-md"
+            className="h-11 rounded-[13px] border-se-line bg-se-surface pl-10 text-se-ink placeholder:text-se-ink3 shadow-none transition-shadow focus-visible:border-se-fresh focus-visible:ring-se-fresh/25"
             disabled={isNearMeMode}
           />
         </div>
-        <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:gap-3">
+        <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:gap-2">
           <Select value={showType} onValueChange={setShowType} disabled={isNearMeMode}>
-            <SelectTrigger className="h-11 w-full rounded-xl border-border/60 bg-white shadow-sm sm:w-[170px]">
+            <SelectTrigger className="h-11 w-full rounded-[13px] border-se-line bg-se-surface text-se-ink shadow-none sm:w-[160px]">
               <SelectValue placeholder="Show Type" />
             </SelectTrigger>
-            <SelectContent>
+            <SelectContent className="border-se-line bg-se-surface text-se-ink">
               <SelectItem value="all">All Types</SelectItem>
               {Object.entries(showTypeLabels).map(([value, label]) => (
                 <SelectItem key={value} value={value}>
@@ -591,10 +646,10 @@ export default function ShowsList() {
             </SelectContent>
           </Select>
           <Select value={status} onValueChange={setStatus} disabled={isNearMeMode}>
-            <SelectTrigger className="h-11 w-full rounded-xl border-border/60 bg-white shadow-sm sm:w-[170px]">
+            <SelectTrigger className="h-11 w-full rounded-[13px] border-se-line bg-se-surface text-se-ink shadow-none sm:w-[160px]">
               <SelectValue placeholder="Status" />
             </SelectTrigger>
-            <SelectContent>
+            <SelectContent className="border-se-line bg-se-surface text-se-ink">
               <SelectItem value="all">All Statuses</SelectItem>
               {PUBLIC_SHOW_STATUSES.map((value) => (
                 <SelectItem key={value} value={value}>
@@ -604,10 +659,10 @@ export default function ShowsList() {
             </SelectContent>
           </Select>
           <Select value={breedId} onValueChange={setBreedId} disabled={isNearMeMode}>
-            <SelectTrigger className="h-11 w-full rounded-xl border-border/60 bg-white shadow-sm sm:w-[200px]">
+            <SelectTrigger className="h-11 w-full rounded-[13px] border-se-line bg-se-surface text-se-ink shadow-none sm:w-[190px]">
               <SelectValue placeholder="Breed" />
             </SelectTrigger>
-            <SelectContent>
+            <SelectContent className="border-se-line bg-se-surface text-se-ink">
               <SelectItem value="all">All Breeds</SelectItem>
               {breeds?.map((breed) => (
                 <SelectItem key={breed.id} value={breed.id}>
@@ -618,24 +673,22 @@ export default function ShowsList() {
           </Select>
 
           {/* Near Me toggle button */}
-          <Button
-            variant={nearMeActive ? 'default' : 'outline'}
+          <SEButton
+            type="button"
+            variant={nearMeActive ? 'fresh' : 'ghost'}
+            size="sm"
             onClick={nearMeActive ? handleDisableNearMe : handleEnableNearMe}
-            className={`h-11 gap-2 rounded-xl shadow-sm ${
-              nearMeActive
-                ? 'bg-primary text-primary-foreground'
-                : 'border-border/60 bg-white'
-            }`}
+            className="gap-2 rounded-[13px]"
           >
             <Navigation className="size-4" />
             <span className="hidden sm:inline">Near Me</span>
-          </Button>
+          </SEButton>
         </div>
       </div>
 
       {/* Clear filters */}
       {(search || showType !== 'all' || status !== 'all' || breedId !== 'all') && !nearMeActive && (
-        <div className="mb-2 flex items-center gap-2">
+        <div className="mb-3 flex items-center gap-2">
           <button
             type="button"
             onClick={() => {
@@ -644,7 +697,7 @@ export default function ShowsList() {
               setStatus('all');
               setBreedId('all');
             }}
-            className="flex items-center gap-1 rounded-full border border-dashed px-2.5 py-1 text-xs text-muted-foreground transition-colors hover:border-primary hover:text-primary"
+            className="flex items-center gap-1 rounded-full border border-dashed border-se-line2 px-2.5 py-1 text-xs text-se-ink3 transition-colors hover:border-se-fresh hover:text-se-fresh-deep"
           >
             <X className="size-3" />
             Clear all filters
@@ -685,31 +738,36 @@ export default function ShowsList() {
 
       {/* ─── Auto breed filter banner ──────────── */}
       {isAutoBreedActive && !isNearMeMode && (
-        <div className="mb-4 flex items-start gap-3 rounded-xl border border-primary/20 bg-primary/5 px-3 py-3 sm:items-center sm:px-4">
-          <Sparkles className="mt-0.5 size-4 shrink-0 text-primary sm:mt-0" />
-          <div className="min-w-0 flex-1">
-            <p className="text-sm font-medium text-foreground">
-              Showing shows for your breeds
-            </p>
-            <p className="mt-0.5 text-xs text-muted-foreground">
-              {userBreedNames.join(', ')}
-            </p>
+        <SECard className="mb-4 flex flex-col gap-3 border-se-fresh-line bg-se-fresh-soft p-3 sm:flex-row sm:items-center sm:p-4">
+          <div className="flex min-w-0 items-start gap-3 sm:flex-1 sm:items-center">
+            <Sparkles className="mt-0.5 size-4 shrink-0 text-se-fresh-deep sm:mt-0" />
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-medium text-se-ink">
+                Showing shows for your breeds
+              </p>
+              <p className="mt-0.5 text-xs text-se-ink3">
+                {userBreedNames.join(', ')}
+              </p>
+            </div>
           </div>
-          <button
+          <SEButton
+            type="button"
+            variant="ghost"
+            size="sm"
             onClick={() => setAutoBreedFilter(false)}
-            className="inline-flex shrink-0 items-center gap-1 rounded-lg border border-border/60 bg-white px-3 py-1.5 text-xs font-medium text-foreground shadow-sm transition-colors hover:bg-accent min-h-[2.75rem] sm:min-h-0"
+            className="shrink-0"
           >
             Show all
-          </button>
-        </div>
+          </SEButton>
+        </SECard>
       )}
 
       {/* ─── Loading ─────────────────────────────── */}
       {currentLoading ? (
         <div className="flex min-h-[45vh] items-center justify-center">
           <div className="flex flex-col items-center gap-3">
-            <Loader2 className="size-8 animate-spin text-primary/40" />
-            <p className="text-sm text-muted-foreground">
+            <Loader2 className="size-8 animate-spin text-se-fresh" />
+            <p className="text-sm text-se-ink3">
               {isNearMeMode ? 'Finding shows near you...' : 'Loading shows...'}
             </p>
           </div>
@@ -725,15 +783,16 @@ export default function ShowsList() {
           />
         ) : (
           <>
-            <p className="mb-6 text-sm text-muted-foreground">
+            <p className="mb-4 text-sm text-se-ink3">
               {nearbyShows.length} show{nearbyShows.length !== 1 ? 's' : ''} within {radiusMiles} miles
             </p>
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4 lg:grid-cols-3">
+            <div className="flex flex-col gap-3">
               {nearbyShows.map((show) => (
                 <ShowCard
                   key={show.id}
                   show={{
                     id: show.id,
+                    slug: null,
                     name: show.name,
                     showType: show.showType,
                     status: show.status,
@@ -765,47 +824,57 @@ export default function ShowsList() {
       ) : (
         <>
           {/* ─── Results count ───────────────────── */}
-          <p className="mb-6 text-sm text-muted-foreground">
+          <p className="mb-6 text-sm text-se-ink3">
             {totalShows > filteredShows.length
               ? `Showing ${filteredShows.length} of ${totalShows} show${totalShows !== 1 ? 's' : ''}`
               : `${filteredShows.length} show${filteredShows.length !== 1 ? 's' : ''}`}
             {openShows.length > 0 && (
               <span className="ml-1">
-                · <span className="font-medium text-emerald-600">{openShows.length} accepting entries</span>
+                · <span className="font-medium text-se-fresh-deep">{openShows.length} accepting entries</span>
               </span>
             )}
           </p>
 
-          {/* ─── Entries open section ────────────── */}
+          {/* ─── Lifecycle sections (labels only when there's more than
+                 one section on screen) ────────────── */}
           {openShows.length > 0 && (
-            <div className="mb-10">
-              <div className="mb-4 flex items-center gap-2">
-                <div className="size-2 rounded-full bg-emerald-500" />
-                <h2 className="text-sm font-semibold uppercase tracking-wider text-foreground/70">
-                  Accepting Entries
-                </h2>
+            <div className="mb-8">
+              {visibleSectionCount > 1 && <SecLabel>Accepting Entries</SecLabel>}
+              <div className="flex flex-col gap-3">
+                {openShows.map((show, idx) => (
+                  <ShowCard key={show.id} show={show} featured={idx === 0} />
+                ))}
               </div>
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4 lg:grid-cols-3">
-                {openShows.map((show) => (
+            </div>
+          )}
+
+          {aboutToRun.length > 0 && (
+            <div className="mb-8">
+              {visibleSectionCount > 1 && <SecLabel>Show day approaching</SecLabel>}
+              <div className="flex flex-col gap-3">
+                {aboutToRun.map((show) => (
                   <ShowCard key={show.id} show={show} />
                 ))}
               </div>
             </div>
           )}
 
-          {/* ─── Other shows section ─────────────── */}
-          {otherShows.length > 0 && (
+          {openingSoon.length > 0 && (
+            <div className="mb-8">
+              {visibleSectionCount > 1 && <SecLabel>Entries opening soon</SecLabel>}
+              <div className="flex flex-col gap-3">
+                {openingSoon.map((show) => (
+                  <ShowCard key={show.id} show={show} />
+                ))}
+              </div>
+            </div>
+          )}
+
+          {recentlyHeld.length > 0 && (
             <div>
-              {openShows.length > 0 && (
-                <div className="mb-4 flex items-center gap-2">
-                  <div className="size-2 rounded-full bg-muted-foreground/30" />
-                  <h2 className="text-sm font-semibold uppercase tracking-wider text-foreground/70">
-                    Coming Soon
-                  </h2>
-                </div>
-              )}
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4 lg:grid-cols-3">
-                {otherShows.map((show) => (
+              {visibleSectionCount > 1 && <SecLabel>Recently held</SecLabel>}
+              <div className="flex flex-col gap-3">
+                {recentlyHeld.map((show) => (
                   <ShowCard key={show.id} show={show} />
                 ))}
               </div>
@@ -814,13 +883,13 @@ export default function ShowsList() {
 
           {/* ─── Load More ─────────────────────────── */}
           {hasMore && (
-            <div className="mt-10 flex justify-center">
-              <Button
-                variant="outline"
-                size="lg"
+            <div className="mt-8 flex justify-center">
+              <SEButton
+                type="button"
+                variant="ghost"
                 onClick={handleLoadMore}
                 disabled={isLoadingMore}
-                className="h-12 gap-2 rounded-xl px-8"
+                className="gap-2"
               >
                 {isLoadingMore ? (
                   <Loader2 className="size-4 animate-spin" />
@@ -828,124 +897,108 @@ export default function ShowsList() {
                   <ChevronDown className="size-4" />
                 )}
                 {isLoadingMore ? 'Loading...' : `Show More (${totalShows - filteredShows.length} remaining)`}
-              </Button>
+              </SEButton>
             </div>
           )}
         </>
       )}
-    </>
+    </div>
   );
 }
 
 /* ─── Show Card ─────────────────────────────────────── */
 
-function ShowCard({ show, distance }: { show: ShowListItem; distance?: number }) {
-  const meta = showTypeMeta[show.showType];
-  // Entries are only "open" if the status says so AND the close date hasn't passed
-  const isOpen = show.status === 'entries_open' && !isEntryCloseDatePast(show.entryCloseDate);
+function ShowCard({
+  show,
+  distance,
+  featured,
+}: {
+  show: ShowListItem;
+  distance?: number;
+  featured?: boolean;
+}) {
+  const pill = getStatusPill(show);
+  const start = parseISO(show.startDate);
+  const dayNum = format(start, 'd');
+  const monthShort = format(start, 'MMM').toUpperCase();
 
   return (
     <Link href={`/shows/${show.slug ?? show.id}`} className="group block">
-      <div className="relative flex h-full flex-col overflow-hidden rounded-xl border border-border/60 bg-white shadow-sm transition-all duration-200 hover:border-border hover:shadow-md">
-        {/* Colored top accent bar */}
-        <div className={`h-1 w-full ${meta?.accent ?? 'bg-gray-300'}`} />
-
-        <div className="flex flex-1 flex-col p-3 sm:p-4 lg:p-5">
-          {/* Header: type badge + status */}
-          <div className="mb-3 flex items-center justify-between gap-2">
-            <Badge
-              variant="secondary"
-              className={`text-[11px] font-semibold uppercase tracking-wide ${meta?.bg ?? ''}`}
-            >
-              {showTypeLabels[show.showType] ?? show.showType}
-            </Badge>
-            {isOpen && (
-              <ClosingCountdown date={show.entryCloseDate} />
+      <SECard
+        // Desktop hover lift (POLISH #2): kit.tsx's SECard `interactive`
+        // prop landed (translateY(-1px) + deeper shadow, motion-safe-gated)
+        // — using it here instead of inlining the same classes.
+        interactive
+        className={cn('flex gap-[13px] p-3.5', featured && 'border-se-fresh-line')}
+      >
+        {/* Date tile */}
+        <div
+          className={cn(
+            'flex w-[58px] shrink-0 flex-col items-center self-start rounded-xl py-2.5',
+            featured ? 'bg-se-fresh-soft' : 'bg-se-paper2'
+          )}
+        >
+          <span
+            className={cn(
+              'text-2xl font-bold leading-[0.95]',
+              featured ? 'text-se-fresh-deep' : 'text-se-ink'
             )}
-          </div>
+          >
+            {dayNum}
+          </span>
+          <span className="mt-0.5 text-[10.5px] font-bold uppercase tracking-[0.1em] text-se-ink3">
+            {monthShort}
+          </span>
+        </div>
 
-          {/* Host club — primary anchor so it's unmistakable who's running the show */}
+        {/* Content */}
+        <div className="min-w-0 flex-1">
           {show.organisation && (
-            <h3 className="line-clamp-2 text-[15px] font-bold leading-tight tracking-tight text-foreground transition-colors group-hover:text-primary sm:text-base">
+            <h3 className="truncate text-[17px] font-bold leading-[1.1] tracking-[-0.015em] text-se-ink transition-colors group-hover:text-se-green">
               {show.organisation.name}
             </h3>
           )}
-
-          {/* Show name — lifted to a readable foreground size so it's clearly
-              visible, but kept below the bold host-club name above it
-              (Michael, 2026-06-25). */}
-          <p className={`line-clamp-2 text-sm font-semibold leading-snug text-foreground/90 sm:text-[15px] ${show.organisation ? 'mt-0.5' : ''}`}>
-            {show.name}
+          <p className={cn('truncate text-[12.5px] text-se-ink3', show.organisation && 'mt-0.5')}>
+            {show.name} · {displayShowTypeLabel(show.showType, show.showRuleset)}
           </p>
 
-          {/* Spacer pushes date/venue to bottom */}
-          <div className="mt-auto pt-4">
-            <div className="space-y-1.5 border-t border-dashed border-border/60 pt-3">
-              <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                <CalendarDays className="size-3.5 shrink-0 text-muted-foreground/60" />
-                <span>{formatDateRange(show.startDate, show.endDate)}</span>
-              </div>
-              {show.venue && (
-                <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
-                  <div className="flex items-center gap-2 min-w-0">
-                    <MapPin className="size-3.5 shrink-0 text-muted-foreground/60" />
-                    <span className="truncate">{show.venue.name}</span>
-                  </div>
-                  {distance != null && (
-                    <span className="shrink-0 inline-flex items-center gap-1 rounded-full bg-primary/10 px-2 py-0.5 text-[11px] font-medium text-primary">
-                      <Navigation className="size-3" />
-                      {distance} mi
-                    </span>
-                  )}
-                </div>
+          <div className="mt-2.5 flex flex-wrap items-center gap-2">
+            <span
+              className={cn(
+                'inline-flex h-6 items-center gap-[5px] rounded-full px-[9px] text-[11.5px] font-semibold',
+                pill.tone === 'honey' && 'bg-se-honey-soft text-se-honey-deep',
+                pill.tone === 'fresh' && 'bg-se-fresh-soft text-se-fresh-deep',
+                pill.tone === 'light' &&
+                  'bg-se-surface text-se-ink2 shadow-[inset_0_0_0_1px_var(--color-se-line)]'
               )}
-              {/* Show distance even if no venue name (shouldn't happen for nearby, but safety) */}
-              {distance != null && !show.venue && (
-                <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                  <Navigation className="size-3.5 shrink-0 text-primary/60" />
-                  <span className="font-medium text-primary">{distance} miles away</span>
-                </div>
-              )}
-            </div>
-          </div>
+            >
+              {pill.showPulse && <Pulse />}
+              {pill.showClock && <Clock className="size-3" />}
+              {pill.label}
+            </span>
 
-          {/* Entry fee */}
-          {show.firstEntryFee != null && show.firstEntryFee > 0 && (
-            <p className="mt-2 text-xs font-medium text-muted-foreground">
-              From {formatCurrency(show.firstEntryFee)} per entry
-            </p>
-          )}
+            {show.venue && (
+              <span className="inline-flex min-w-0 items-center gap-[3px] text-xs text-se-ink2">
+                <MapPin className="size-3 shrink-0 text-se-ink2" />
+                <span className="truncate">{show.venue.name}</span>
+              </span>
+            )}
 
-          {/* Footer action indicator */}
-          <div className="mt-4">
-            {isOpen ? (
-              <div className="flex items-center justify-between">
-                <span className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm shadow-emerald-600/20">
-                  <Ticket className="size-3" />
-                  Enter Now
-                </span>
-                <ArrowRight className="size-4 text-muted-foreground/40 transition-transform duration-200 group-hover:translate-x-0.5 group-hover:text-primary" />
-              </div>
-            ) : (
-              <div className="flex items-center justify-between">
-                <div className="flex flex-col gap-1">
-                  <Badge variant="outline" className="w-fit text-[11px] font-medium">
-                    {show.status === 'entries_open' && isEntryCloseDatePast(show.entryCloseDate)
-                      ? 'Entries Closed'
-                      : (statusLabels[show.status] ?? show.status)}
-                  </Badge>
-                  {show.status === 'published' && show.entriesOpenDate && (
-                    <span className="text-[11px] text-muted-foreground">
-                      Entries open {format(new Date(show.entriesOpenDate), 'd MMM yyyy')}
-                    </span>
-                  )}
-                </div>
-                <ArrowRight className="size-4 text-muted-foreground/30 transition-transform duration-200 group-hover:translate-x-0.5 group-hover:text-primary" />
-              </div>
+            {distance != null && (
+              <span className="inline-flex shrink-0 items-center gap-1 text-xs font-medium text-se-fresh-deep">
+                <Navigation className="size-3" />
+                {distance} {show.venue ? 'mi' : 'miles away'}
+              </span>
+            )}
+
+            {show.firstEntryFee != null && show.firstEntryFee > 0 && (
+              <span className="ml-auto shrink-0 whitespace-nowrap text-[12.5px] text-se-ink2">
+                from <b className="text-[15px] font-bold tracking-[-0.015em] text-se-fresh-deep">{formatCurrency(show.firstEntryFee)}</b>
+              </span>
             )}
           </div>
         </div>
-      </div>
+      </SECard>
     </Link>
   );
 }

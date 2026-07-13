@@ -16,6 +16,8 @@ import { join } from 'node:path';
 import { db } from '@/server/db';
 import { shows, entries, showSponsors } from '@/server/db/schema';
 import { isUuid } from '@/lib/slugify';
+import { HANKEN_GROTESK_FACES } from '@/lib/hanken-faces';
+import { BRAND } from '@/lib/brand';
 
 const SHOW_TYPE_LABELS: Record<string, string> = {
   companion: 'Companion Show',
@@ -62,26 +64,71 @@ export interface ShareImageData {
 export type ShareImageFont = {
   name: string;
   data: ArrayBuffer;
-  weight: 400 | 600 | 700;
+  weight: 400 | 500 | 600 | 700 | 800;
+  style?: 'normal' | 'italic';
 };
+
+/**
+ * Show Experience green re-skin palette — verbatim from the design source
+ * (research/design-reference/green-live.original.jsx, token object `G`).
+ * Shared here so every share-image route (OG cards, portrait, story) draws
+ * from one definition instead of five copy-pasted hex maps.
+ *
+ * Sourced from the canonical BRAND palette (src/lib/brand.ts) where the two
+ * overlap, plus a couple of extras BRAND doesn't carry: `surface` (plain
+ * white) and `freshLine` (a design-token hex), and `creamDim` (an rgba
+ * derived from `cream`, needed here because satori/CSS-in-JS can't do
+ * `color-mix`/alpha-on-var()). Several keys below (surface, ink/ink2/ink3,
+ * freshDeep/freshSoft/freshLine, honeyDeep/honeySoft, line/line2, paper2)
+ * are currently unused by any share-image route — kept as a deliberate
+ * verbatim mirror of the full design-token set (reserved for future
+ * variants) rather than trimmed to only what's referenced today.
+ */
+export const SHARE_GREEN = {
+  ...BRAND,
+  surface: '#ffffff',
+  freshLine: '#c3e2cb',
+  creamDim: 'rgba(243,236,220,0.66)',
+} as const;
 
 /**
  * Read TTF files from public/fonts. Synchronous + node fs because the
  * `new URL('../../...', import.meta.url)` pattern silently breaks under
  * Next 15's prod bundler — that's the bug commit 707c160 fixed for the
  * OG image. Same fix applies here.
+ *
+ * Faces are Hanken Grotesk (the Show Experience green design's "friendly"
+ * fontset — extrabold display headings, tight -0.015em tracking). Satori
+ * can't use next/font, so these are static TTFs in public/fonts, acquired
+ * from the google-webfonts-helper mirror. The previous Libre Baskerville /
+ * Inter pairing is fully retired from share images — those TTF files stay
+ * in public/fonts for unrelated PDF consumers (catalogue, judges book,
+ * prize cards, etc.) but nothing here references them any more.
+ *
+ * Face list comes from the shared HANKEN_GROTESK_FACES manifest (also
+ * consumed by pdf-fonts.ts's Font.register) so the two font-loading paths
+ * can't drift. Buffers are read once per process and cached module-level —
+ * every share-image request otherwise re-reads all 7 TTFs from disk.
  */
-export function loadShareImageFonts(): ShareImageFont[] {
+let cache: ShareImageFont[] | null = null;
+
+function buildShareImageFonts(): ShareImageFont[] {
   const fontsDir = join(process.cwd(), 'public', 'fonts');
   const readFont = (name: string): ArrayBuffer => {
     const buf = readFileSync(join(fontsDir, name));
     return buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength) as ArrayBuffer;
   };
-  return [
-    { name: 'Libre Baskerville', data: readFont('libre-baskerville-bold.ttf'), weight: 700 },
-    { name: 'Inter', data: readFont('inter-regular.ttf'), weight: 400 },
-    { name: 'Inter', data: readFont('inter-semibold.ttf'), weight: 600 },
-  ];
+  return HANKEN_GROTESK_FACES.map((face) => ({
+    name: 'Hanken Grotesk',
+    data: readFont(face.file),
+    weight: face.weight,
+    ...(face.style ? { style: face.style } : {}),
+  }));
+}
+
+export function loadShareImageFonts(): ShareImageFont[] {
+  cache ??= buildShareImageFonts();
+  return cache;
 }
 
 async function fetchShow(idOrSlug: string) {
@@ -124,16 +171,22 @@ function deriveStatus(
   hoursToClose: number,
   closeDateShort: string | null
 ): StatusBadge {
+  // Colours from the green design system: fresh = act now, honey = urgency,
+  // translucent cream = neutral/informational, solid green = wrapped up.
   if (status === 'entries_open') {
     if (hoursToClose <= 72 && closeDateShort) {
-      return { text: `Closing ${closeDateShort}`, bg: '#DC2626', color: '#FAFAF8' };
+      return { text: `Closing ${closeDateShort}`, bg: SHARE_GREEN.honey, color: '#3a2606' };
     }
-    return { text: 'Entries Open', bg: '#059669', color: '#FAFAF8' };
+    return { text: 'Entries Open', bg: SHARE_GREEN.fresh, color: '#0e2c19' };
   }
-  if (status === 'entries_closed') return { text: 'Entries Closed', bg: '#57534E', color: '#FAFAF8' };
-  if (status === 'in_progress') return { text: 'Live Today', bg: '#059669', color: '#FAFAF8' };
-  if (status === 'completed') return { text: 'Results Published', bg: '#059669', color: '#FAFAF8' };
-  if (status === 'published') return { text: 'Coming Soon', bg: '#2563EB', color: '#FAFAF8' };
+  if (status === 'entries_closed') {
+    return { text: 'Entries Closed', bg: 'rgba(243,236,220,0.14)', color: SHARE_GREEN.cream };
+  }
+  if (status === 'in_progress') return { text: 'Live Today', bg: SHARE_GREEN.fresh, color: '#0e2c19' };
+  if (status === 'completed') return { text: 'Results Published', bg: SHARE_GREEN.green, color: SHARE_GREEN.cream };
+  if (status === 'published') {
+    return { text: 'Coming Soon', bg: 'rgba(243,236,220,0.14)', color: SHARE_GREEN.cream };
+  }
   return null;
 }
 

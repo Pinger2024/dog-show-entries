@@ -18,6 +18,8 @@ import { Badge } from '@/components/ui/badge';
 import { Header } from '@/components/layout/header';
 import { Footer } from '@/components/layout/footer';
 import { AnimateIn } from '@/components/animate-in';
+import { SE_H } from '@/components/show-experience/tokens';
+import { cn } from '@/lib/utils';
 
 const steps = [
   {
@@ -141,7 +143,7 @@ export default async function HomePage() {
           {/* Warm background decoration */}
           <div className="pointer-events-none absolute inset-0 -z-10">
             <div className="absolute -top-40 right-0 h-[600px] w-[600px] rounded-full bg-primary/[0.04] blur-3xl" />
-            <div className="absolute -bottom-40 left-0 h-[500px] w-[500px] rounded-full bg-gold/[0.06] blur-3xl" />
+            <div className="absolute -bottom-40 left-0 h-[500px] w-[500px] rounded-full bg-se-honey/[0.06] blur-3xl" />
           </div>
 
           <div className="mx-auto max-w-7xl px-3 py-16 sm:px-4 sm:py-24 lg:px-6 lg:py-40">
@@ -150,13 +152,13 @@ export default async function HomePage() {
                 <CheckCircle2 className="size-3.5 sm:size-4" />
                 RKC-Licensed Shows — Now Open for Entry
               </div>
-              <h1 className="animate-fade-in-up font-serif text-3xl font-bold leading-[1.15] tracking-tight sm:text-4xl lg:text-5xl">
+              <h1 className={cn(SE_H, 'animate-fade-in-up text-3xl leading-[1.15] sm:text-4xl lg:text-5xl')}>
                 Enter Dog Shows{' '}
                 <span className="text-primary">
                   with Confidence
                 </span>
               </h1>
-              <p className="gold-rule-center mx-auto mt-4 sm:mt-6 max-w-2xl animate-fade-in-up text-sm sm:text-lg leading-relaxed text-muted-foreground [animation-delay:100ms] lg:text-xl">
+              <p className="after:mx-auto after:mt-3 after:block after:h-0.5 after:w-12 after:bg-se-honey after:content-[''] mx-auto mt-4 sm:mt-6 max-w-2xl animate-fade-in-up text-sm sm:text-lg leading-relaxed text-muted-foreground [animation-delay:100ms] lg:text-xl">
                 Find upcoming RKC-licensed shows, enter all your dogs in one
                 place, and manage your entries from home or ringside. Built
                 mobile-first with UK show secretaries.
@@ -213,7 +215,7 @@ export default async function HomePage() {
         <section>
           <div className="mx-auto max-w-7xl px-3 py-16 sm:px-4 sm:py-24 lg:px-6">
             <AnimateIn className="mx-auto max-w-2xl text-center">
-              <h2 className="gold-rule-center font-serif text-2xl font-bold tracking-tight sm:text-3xl lg:text-4xl">
+              <h2 className={cn(SE_H, "after:mx-auto after:mt-3 after:block after:h-0.5 after:w-12 after:bg-se-honey after:content-[''] font-serif text-2xl sm:text-3xl lg:text-4xl")}>
                 Three Steps to Your Next Entry
               </h2>
               <p className="mt-3 sm:mt-5 text-sm sm:text-lg text-muted-foreground">
@@ -228,12 +230,12 @@ export default async function HomePage() {
                     <div className="absolute left-1/2 top-10 hidden h-px w-full bg-border sm:block" />
                   )}
                   <div className="relative mx-auto mb-4 sm:mb-6 flex size-16 sm:size-20 items-center justify-center rounded-2xl bg-primary text-primary-foreground shadow-lg shadow-primary/20">
-                    <span className="absolute -right-1.5 -top-1.5 flex size-6 sm:size-7 items-center justify-center rounded-full bg-gold text-xs font-bold text-gold-foreground shadow">
+                    <span className="absolute -right-1.5 -top-1.5 flex size-6 sm:size-7 items-center justify-center rounded-full bg-se-honey text-xs font-bold text-se-honey-ink shadow">
                       {i + 1}
                     </span>
                     <step.icon className="size-6 sm:size-8" strokeWidth={1.5} />
                   </div>
-                  <h3 className="font-serif text-lg sm:text-xl font-bold">{step.title}</h3>
+                  <h3 className={cn(SE_H, 'font-serif text-lg sm:text-xl')}>{step.title}</h3>
                   <p className="mt-2 text-sm sm:text-base leading-relaxed text-muted-foreground">
                     {step.description}
                   </p>
@@ -247,7 +249,7 @@ export default async function HomePage() {
         <section className="border-t bg-card">
           <div className="mx-auto max-w-7xl px-3 py-16 sm:px-4 sm:py-24 lg:px-6">
             <AnimateIn className="mx-auto max-w-2xl text-center">
-              <h2 className="gold-rule-center font-serif text-2xl font-bold tracking-tight sm:text-3xl lg:text-4xl">
+              <h2 className={cn(SE_H, "after:mx-auto after:mt-3 after:block after:h-0.5 after:w-12 after:bg-se-honey after:content-[''] font-serif text-2xl sm:text-3xl lg:text-4xl")}>
                 Built for the Show Ring
               </h2>
               <p className="mt-3 sm:mt-5 text-sm sm:text-lg text-muted-foreground">
@@ -262,7 +264,7 @@ export default async function HomePage() {
                     <div className="mb-3 sm:mb-5 flex size-10 sm:size-12 items-center justify-center rounded-xl bg-primary/10 text-primary transition-colors group-hover:bg-primary group-hover:text-primary-foreground">
                       <feature.icon className="size-5 sm:size-6" strokeWidth={1.5} />
                     </div>
-                    <h3 className="font-serif text-base sm:text-lg font-bold">{feature.title}</h3>
+                    <h3 className={cn(SE_H, 'font-serif text-base sm:text-lg')}>{feature.title}</h3>
                     <p className="mt-2 text-sm sm:text-base leading-relaxed text-muted-foreground">
                       {feature.description}
                     </p>
@@ -282,11 +284,11 @@ export default async function HomePage() {
                   <div className="flex-1">
                     <Badge
                       variant="secondary"
-                      className="mb-3 sm:mb-4 border-gold/30 bg-gold/10 text-gold"
+                      className="mb-3 sm:mb-4 border-se-honey/30 bg-se-honey/10 text-se-honey-deep"
                     >
                       For Show Secretaries
                     </Badge>
-                    <h3 className="font-serif text-xl font-bold tracking-tight sm:text-2xl lg:text-3xl">
+                    <h3 className={cn(SE_H, 'font-serif text-xl sm:text-2xl lg:text-3xl')}>
                       Run Your Show with Remi
                     </h3>
                     <p className="mt-3 sm:mt-4 text-sm sm:text-base leading-relaxed text-muted-foreground">
@@ -332,10 +334,10 @@ export default async function HomePage() {
               <div className="relative overflow-hidden rounded-2xl bg-primary px-4 py-14 text-center shadow-xl shadow-primary/15 sm:px-16 sm:py-20">
                 <div className="pointer-events-none absolute inset-0 -z-0">
                   <div className="absolute -right-20 -top-20 size-72 rounded-full bg-white/10 blur-3xl" />
-                  <div className="absolute -bottom-20 -left-20 size-72 rounded-full bg-gold/15 blur-3xl" />
+                  <div className="absolute -bottom-20 -left-20 size-72 rounded-full bg-se-honey/15 blur-3xl" />
                 </div>
                 <div className="relative z-10">
-                  <h2 className="font-serif text-2xl font-bold tracking-tight text-primary-foreground sm:text-3xl lg:text-4xl">
+                  <h2 className={cn(SE_H, 'font-serif text-2xl text-primary-foreground sm:text-3xl lg:text-4xl')}>
                     Ready to Enter Your Next Show?
                   </h2>
                   <p className="mx-auto mt-3 sm:mt-5 max-w-xl text-sm sm:text-lg leading-relaxed text-primary-foreground/80">

@@ -10,6 +10,7 @@ import { authenticatePdfRequest, makePdfResponse } from '@/lib/pdf-utils';
 import { ensureCatalogueNumbers } from '@/server/services/catalogue-numbering';
 import { buildClassLabelMap } from '@/lib/class-labels';
 import { buildBestAwards } from '@/lib/best-awards';
+import { stripUnembeddedBase14Fonts } from '@/lib/pdf-pad';
 
 export type JudgesBookClass = {
   classLabel: string;
@@ -187,7 +188,10 @@ export async function GET(
 
   try {
     const pdfDocument = React.createElement(JudgesBook, { show: showInfo, classes: bookClasses });
-    const buffer = await renderToBuffer(pdfDocument);
+    const rawBuffer = await renderToBuffer(pdfDocument);
+    // Strip react-pdf's unembedded base-14 phantom font refs (Helvetica etc.)
+    // so the branded cover + working pages pass print preflight.
+    const buffer = Buffer.from(await stripUnembeddedBase14Fonts(rawBuffer));
     const judgeSuffix = filterJudgeName ? `-${sanitizeFilename(filterJudgeName)}` : '';
     const filename = `${sanitizeFilename(show.name)}-Judges-Book${judgeSuffix}.pdf`;
     const isPreview = request.nextUrl.searchParams.has('preview');

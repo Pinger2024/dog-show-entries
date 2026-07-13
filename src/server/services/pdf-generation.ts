@@ -32,6 +32,7 @@ import { getDockingStatementFromScheduleData } from '@/lib/rkc-compliance';
 import type { RegionalFeeConfig } from '@/server/db/schema/shows';
 import { buildClassLabelMap, isSpecialAwardClass, buildCatalogueClassDefinitions } from '@/lib/class-labels';
 import { buildScheduleJudges, aggregateJudgeAssignments } from '@/lib/schedule-judges';
+import { stripUnembeddedBase14Fonts } from '@/lib/pdf-pad';
 
 // ── Catalogue PDF ──
 
@@ -355,7 +356,14 @@ export async function generateCataloguePdf(
 
   const Component = formatComponents[effectiveFormat];
   const pdfDocument = React.createElement(Component, { show: showInfo, entries: catalogueEntries });
-  return Buffer.from(await renderToBuffer(pdfDocument));
+  const rawBuffer = await renderToBuffer(pdfDocument);
+  // Strip react-pdf's unembedded base-14 phantom font refs (Helvetica etc.)
+  // before this goes to print. The /api/catalogue route does this via
+  // padPdfToMultiple for the standard/by-class booklet formats; this print-
+  // pipeline function (used for direct Mixam submission via
+  // generateAndUploadForPrint) had no equivalent step, so it went to print
+  // with an unembedded font reference.
+  return Buffer.from(await stripUnembeddedBase14Fonts(rawBuffer));
 }
 
 // ── Prize Cards PDF ──
@@ -737,7 +745,7 @@ export async function generateSchedulePdf(showId: string): Promise<Buffer> {
 
   // Same fit fallback as the HTTP schedule route — re-render at compact
   // density instead of shipping an orphaned extra page.
-  return renderScheduleWithFit(
+  const rawBuffer = await renderScheduleWithFit(
     ScheduleComponent as React.ComponentType<Record<string, unknown>>,
     {
       show: showInfo,
@@ -750,6 +758,10 @@ export async function generateSchedulePdf(showId: string): Promise<Buffer> {
     },
     designedSchedulePageCount(showInfo.showRuleset ?? 'rkc', adverts),
   );
+  // Strip react-pdf's unembedded base-14 phantom font refs (Helvetica etc.)
+  // before this goes to print — mirrors the /api/schedule route so both
+  // schedule render paths pass the same print-preflight bar.
+  return Buffer.from(await stripUnembeddedBase14Fonts(rawBuffer));
 }
 
 // ── Ring Board PDF ──

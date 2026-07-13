@@ -57,24 +57,24 @@ export function DiscountsSection({ showId, multiDog, onMultiDogChange }: Props) 
   const multiDogEnabled = !!multiDog.threshold;
 
   return (
-    <div className="rounded-lg border border-emerald-200 bg-emerald-50/60 dark:border-emerald-900 dark:bg-emerald-950/20">
+    <div className="rounded-lg border border-se-fresh-line bg-se-fresh-soft">
       <button
         type="button"
         onClick={() => setExpanded((v) => !v)}
-        className="flex w-full items-center justify-between gap-2 px-4 py-3 text-left transition-colors hover:bg-emerald-100/40 dark:hover:bg-emerald-950/30"
+        className="flex w-full items-center justify-between gap-2 px-4 py-3 text-left transition-colors hover:bg-se-fresh-soft"
       >
         <div>
-          <p className="text-sm font-semibold text-emerald-900 dark:text-emerald-100">
+          <p className="text-sm font-semibold text-se-fresh-deep">
             Advanced discounts
           </p>
-          <p className="text-xs text-emerald-800/70 dark:text-emerald-200/70">
+          <p className="text-xs text-se-fresh-deep/70">
             Optional — members rates, multi-dog packages
           </p>
         </div>
         {expanded ? (
-          <ChevronDown className="size-4 text-emerald-700 dark:text-emerald-300" />
+          <ChevronDown className="size-4 text-se-fresh-deep" />
         ) : (
-          <ChevronRight className="size-4 text-emerald-700 dark:text-emerald-300" />
+          <ChevronRight className="size-4 text-se-fresh-deep" />
         )}
       </button>
 

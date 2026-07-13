@@ -9,6 +9,7 @@ import { scrapeKcDog, searchKcDogs, fetchKcDogProfile } from '@/server/services/
 import { isCcType, isRccType } from '@/lib/placements';
 import { effectiveCcType } from '@/lib/effective-achievement-type';
 import { isAgeEligibleOnShowDay, todayInLondon } from '@/lib/date-utils';
+import { pickRecommendedAgeClass, type AgeClassOption } from '@/lib/class-recommendation';
 
 /**
  * Recommend the best class for a dog based on age eligibility first,
@@ -16,16 +17,23 @@ import { isAgeEligibleOnShowDay, todayInLondon } from '@/lib/date-utils';
  * when the dog is still within an age bracket.
  * If availableClassNames is provided, only suggest from classes in the show schedule.
  */
+/** Age context for the class recommendation — shared by the helper's
+ *  parameter and the call-site local so the shape lives in one place. */
+type RecommendationAgeInfo = {
+  ageMonths: number;
+  dob: string;
+  showDate: string;
+  /** Dog's coat when known — a Long Coat class is only recommended for a
+   *  known long-coat dog (Mandy 2026-07-12). */
+  dogCoat?: 'stock' | 'long_stock' | null;
+  availableAgeClasses: AgeClassOption[];
+};
+
 function getClassRecommendation(
   firsts: number,
   hasCC: boolean,
   availableClassNames?: string[],
-  ageInfo?: {
-    ageMonths: number;
-    dob: string;
-    showDate: string;
-    availableAgeClasses: { name: string; minMonths: number | null; maxMonths: number | null }[];
-  },
+  ageInfo?: RecommendationAgeInfo,
 ): {
   eligible: string[];
   suggested: string | null;
@@ -37,10 +45,8 @@ function getClassRecommendation(
       isAgeEligibleOnShowDay(ageInfo.dob, ageInfo.showDate, cls.minMonths, cls.maxMonths),
     );
 
-    if (eligibleAgeClasses.length > 0) {
-      // Suggest the most specific age class (smallest age range)
-      const bestAgeClass = eligibleAgeClasses[0];
-
+    const bestAgeClass = pickRecommendedAgeClass(eligibleAgeClasses, ageInfo.dogCoat);
+    if (bestAgeClass) {
       // Still compute achievement eligibility for the full eligible list
       const achievementEligible = getAchievementEligible(firsts, hasCC, availableClassNames);
 
@@ -101,6 +107,48 @@ function getAchievementEligible(
       )
     : allEligible;
 }
+
+/** SV health/working-title fields — single source shared by the
+ *  `upsertSvProfile` mutation and the `/api/dog-autosave` route, so the two
+ *  write paths can't drift (2026-07-11). */
+export const svProfileInputSchema = z.object({
+        breedSurveyClass: z.string().nullable().optional(),
+        breedSurveyYear: z.number().int().min(1900).max(2100).nullable().optional(),
+        breedSurveyor: z.string().nullable().optional(),
+        // Amanda 2026-05-19: BVA + ANKC added as recognised hip / elbow
+        // grading bodies; "other" already supported with hipScoreOther /
+        // elbowScoreOther free-text fields.
+        hipGrade: z.enum(['not_required', 'normal', 'fast_normal', 'noch_zugelassen', 'bva', 'ankc', 'other']).nullable().optional(),
+        hipScore: z.string().nullable().optional(),
+        hipScoreOther: z.string().nullable().optional(),
+        elbowGrade: z.enum(['not_required', 'normal', 'fast_normal', 'noch_zugelassen', 'bva', 'ankc', 'other']).nullable().optional(),
+        elbowScore: z.string().nullable().optional(),
+        elbowScoreOther: z.string().nullable().optional(),
+        haemophiliaClear: z.enum(['not_required', 'yes', 'no', 'not_tested']).nullable().optional(),
+        dmTest: z.enum(['not_required', 'clear', 'carrier', 'affected', 'not_tested']).nullable().optional(),
+        koerung: z.enum(['none', 'current_year', 'lebenzeit']).nullable().optional(),
+        dna: z.enum(['recorded', 'proven']).nullable().optional(),
+        workingTitle: z.string().nullable().optional(),
+});
+
+/** The dog-form sections that autosave in edit mode (pedigree, breeder
+ *  location, microchip, sire/dam registration). Kept here beside `update`'s
+ *  input so the field shapes stay in one file — the `/api/dog-autosave`
+ *  route imports this rather than retyping it. */
+export const dogAutosaveFieldsSchema = z.object({
+  sireName: z.string().nullable().optional(),
+  damName: z.string().nullable().optional(),
+  breederName: z.string().nullable().optional(),
+  breederCountry: z.string().nullable().optional(),
+  breederCity: z.string().nullable().optional(),
+  breederPostcode: z.string().nullable().optional(),
+  microchipNumber: z.string().nullable().optional(),
+  coatType: z.enum(['stock', 'long_stock']).nullable().optional(),
+  sireRegistrationBody: z.enum(['kc', 'sv', 'ikc', 'other']).nullable().optional(),
+  sireRegistrationNumber: z.string().nullable().optional(),
+  damRegistrationBody: z.enum(['kc', 'sv', 'ikc', 'other']).nullable().optional(),
+  damRegistrationNumber: z.string().nullable().optional(),
+});
 
 export const dogsRouter = createTRPCRouter({
   // ── Public dog profile ──────────────────────────────────
@@ -776,7 +824,7 @@ export const dogsRouter = createTRPCRouter({
 
       // Get achievement class names actually in this show's schedule
       let availableClassNames: string[] | undefined;
-      let ageInfo: { ageMonths: number; dob: string; showDate: string; availableAgeClasses: { name: string; minMonths: number | null; maxMonths: number | null }[] } | undefined;
+      let ageInfo: RecommendationAgeInfo | undefined;
 
       if (input.showId) {
         const showAchievementClasses = await ctx.db
@@ -795,7 +843,7 @@ export const dogsRouter = createTRPCRouter({
         const [dog, show] = await Promise.all([
           ctx.db.query.dogs.findFirst({
             where: eq(dogs.id, input.dogId),
-            columns: { dateOfBirth: true },
+            columns: { dateOfBirth: true, coatType: true },
           }),
           ctx.db.query.shows.findFirst({
             where: eq(shows.id, input.showId),
@@ -831,6 +879,7 @@ export const dogsRouter = createTRPCRouter({
               ageMonths,
               dob: dog.dateOfBirth,
               showDate: show.startDate,
+              dogCoat: dog.coatType ?? null,
               availableAgeClasses: showAgeClasses.map((c) => ({
                 name: c.name,
                 minMonths: c.minMonths,
@@ -1418,28 +1467,7 @@ export const dogsRouter = createTRPCRouter({
     }),
 
   upsertSvProfile: protectedProcedure
-    .input(
-      z.object({
-        dogId: z.string().uuid(),
-        breedSurveyClass: z.string().nullable().optional(),
-        breedSurveyYear: z.number().int().min(1900).max(2100).nullable().optional(),
-        breedSurveyor: z.string().nullable().optional(),
-        // Amanda 2026-05-19: BVA + ANKC added as recognised hip / elbow
-        // grading bodies; "other" already supported with hipScoreOther /
-        // elbowScoreOther free-text fields.
-        hipGrade: z.enum(['not_required', 'normal', 'fast_normal', 'noch_zugelassen', 'bva', 'ankc', 'other']).nullable().optional(),
-        hipScore: z.string().nullable().optional(),
-        hipScoreOther: z.string().nullable().optional(),
-        elbowGrade: z.enum(['not_required', 'normal', 'fast_normal', 'noch_zugelassen', 'bva', 'ankc', 'other']).nullable().optional(),
-        elbowScore: z.string().nullable().optional(),
-        elbowScoreOther: z.string().nullable().optional(),
-        haemophiliaClear: z.enum(['not_required', 'yes', 'no', 'not_tested']).nullable().optional(),
-        dmTest: z.enum(['not_required', 'clear', 'carrier', 'affected', 'not_tested']).nullable().optional(),
-        koerung: z.enum(['none', 'current_year', 'lebenzeit']).nullable().optional(),
-        dna: z.enum(['recorded', 'proven']).nullable().optional(),
-        workingTitle: z.string().nullable().optional(),
-      })
-    )
+    .input(svProfileInputSchema.extend({ dogId: z.string().uuid() }))
     .mutation(async ({ ctx, input }) => {
       const dog = await ctx.db.query.dogs.findFirst({
         where: and(eq(dogs.id, input.dogId), isNull(dogs.deletedAt)),

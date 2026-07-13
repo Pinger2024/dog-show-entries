@@ -228,7 +228,7 @@ const s = StyleSheet.create({
     marginBottom: 14,
   },
   sectionBandText: {
-    fontFamily: 'LibreBaskerville',
+    fontFamily: 'HankenGrotesk',
     fontSize: 11,
     fontWeight: 'bold',
     color: C.textOnPrimary,

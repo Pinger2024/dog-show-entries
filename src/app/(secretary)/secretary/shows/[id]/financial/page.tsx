@@ -1,22 +1,17 @@
 'use client';
 
 import { Fragment, useState, useMemo } from 'react';
+import type { LucideIcon } from 'lucide-react';
 import { Download, Loader2, RotateCcw, BookOpen, ShoppingBag } from 'lucide-react';
 import { toast } from 'sonner';
 import { trpc } from '@/lib/trpc';
 import { formatCurrency } from '@/lib/date-utils';
-import { formatDogName } from '@/lib/utils';
+import { cn, formatDogName } from '@/lib/utils';
 import { formatSvClassName } from '@/lib/class-labels';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card';
-import { StatCard } from '@/components/ui/stat-card';
+import { SECard, Eyebrow } from '@/components/show-experience/kit';
+import { SE_H } from '@/components/show-experience/tokens';
 import { Badge } from '@/components/ui/badge';
 import {
   Table,
@@ -41,6 +36,57 @@ import type { RouterOutputs } from '@/server/trpc/router';
 
 type RefundableOrder = RouterOutputs['secretary']['getRefundableOrders'][number];
 type RefundableEntry = RefundableOrder['entries'][number];
+
+/* ─── Financial stat tile — kit stat-tile pattern (Eyebrow + SE_H value,
+ * tabular-nums), same recipe as the show overview's entry stats. ───── */
+
+function FinancialStat({
+  label,
+  value,
+  subtext,
+}: {
+  label: string;
+  value: React.ReactNode;
+  subtext?: React.ReactNode;
+}) {
+  return (
+    <SECard className="p-3.5">
+      <Eyebrow>{label}</Eyebrow>
+      <p className={cn(SE_H, 'mt-1.5 text-[20px] leading-none tabular-nums text-se-ink sm:text-[22px]')}>
+        {value}
+      </p>
+      {subtext && <p className="mt-1.5 truncate text-[11px] text-se-ink3">{subtext}</p>}
+    </SECard>
+  );
+}
+
+/* ─── Section — SECard wrapper with a hairline header, matching the
+ * public fee table's card language. Breakdown tables live in the body. ── */
+
+function FinancialSection({
+  title,
+  description,
+  icon: Icon,
+  children,
+}: {
+  title: string;
+  description?: React.ReactNode;
+  icon?: LucideIcon;
+  children: React.ReactNode;
+}) {
+  return (
+    <SECard>
+      <div className="border-b border-se-line px-4 py-4 sm:px-6">
+        <p className={cn(SE_H, 'flex items-center gap-2 text-base text-se-ink')}>
+          {Icon && <Icon className="size-4 text-se-fresh-deep" />}
+          {title}
+        </p>
+        {description && <p className="mt-1 text-sm text-se-ink3">{description}</p>}
+      </div>
+      <div className="overflow-x-auto p-4 sm:p-6">{children}</div>
+    </SECard>
+  );
+}
 
 export default function FinancialPage() {
   const showId = useShowId();
@@ -194,24 +240,24 @@ export default function FinancialPage() {
 
   return (
     <div className="space-y-6">
-      {/* Summary cards — paid only, sundries included, net of refunds */}
-      <div className="grid gap-4 grid-cols-2 sm:grid-cols-4">
-        <StatCard
+      {/* Summary tiles — paid only, sundries included, net of refunds */}
+      <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-4">
+        <FinancialStat
           label="Total Income"
-          value={<span className="text-green-600 dark:text-green-400">{formatCurrency(stats?.clubReceivablePence ?? 0)}</span>}
+          value={<span className="text-se-fresh-deep">{formatCurrency(stats?.clubReceivablePence ?? 0)}</span>}
           subtext={`${entryBreakdownText} + sundries`}
         />
-        <StatCard
+        <FinancialStat
           label="Entry Fees"
           value={formatCurrency(stats?.paidEntryFeesPence ?? 0)}
           subtext={entryBreakdownText}
         />
-        <StatCard
+        <FinancialStat
           label="Awaiting Payment"
-          value={<span className="text-amber-600 dark:text-amber-400">{formatCurrency(stats?.pendingClubReceivablePence ?? 0)}</span>}
+          value={<span className="text-se-honey-deep">{formatCurrency(stats?.pendingClubReceivablePence ?? 0)}</span>}
           subtext={`${stats?.pendingEntries ?? 0} started checkout`}
         />
-        <StatCard
+        <FinancialStat
           label="Catalogues ordered"
           value={(stats?.paidPrintedCatalogueCount ?? 0) + (stats?.paidOnlineCatalogueCount ?? 0)}
           subtext={`${stats?.paidPrintedCatalogueCount ?? 0} printed · ${stats?.paidOnlineCatalogueCount ?? 0} online`}
@@ -228,16 +274,10 @@ export default function FinancialPage() {
 
       {/* Per-class breakdown by sex */}
       {classBreakdown.combined.length > 0 && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Entries by Class</CardTitle>
-            <CardDescription>
-              Every entry in the catalogue, by class — including any paid
-              directly to the club and Not For Competition. The total ties to
-              your catalogue count.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="overflow-x-auto">
+        <FinancialSection
+          title="Entries by Class"
+          description="Every entry in the catalogue, by class — including any paid directly to the club and Not For Competition. The total ties to your catalogue count."
+        >
             <Table>
               <TableHeader>
                 <TableRow>
@@ -355,20 +395,15 @@ export default function FinancialPage() {
                 </TableRow>
               </TableBody>
             </Table>
-          </CardContent>
-        </Card>
+        </FinancialSection>
       )}
 
       {/* Per-breed breakdown with classes (only for all-breed / group shows) */}
       {breedBreakdown.length > 0 && show?.showScope !== 'single_breed' && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Entries by Breed &amp; Class</CardTitle>
-            <CardDescription>
-              Breakdown of entries and revenue per breed, with class detail
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="overflow-x-auto">
+        <FinancialSection
+          title="Entries by Breed & Class"
+          description="Breakdown of entries and revenue per breed, with class detail"
+        >
             <Table>
               <TableHeader>
                 <TableRow>
@@ -405,23 +440,16 @@ export default function FinancialPage() {
                 </TableRow>
               </TableBody>
             </Table>
-          </CardContent>
-        </Card>
+        </FinancialSection>
       )}
 
       {/* Sundry items revenue */}
       {sundryReport && sundryReport.length > 0 && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <ShoppingBag className="size-5" />
-              Sundry Items Revenue
-            </CardTitle>
-            <CardDescription>
-              Add-on items purchased alongside entries (paid orders only)
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="overflow-x-auto">
+        <FinancialSection
+          title="Sundry Items Revenue"
+          description="Add-on items purchased alongside entries (paid orders only)"
+          icon={ShoppingBag}
+        >
             <Table>
               <TableHeader>
                 <TableRow>
@@ -449,16 +477,11 @@ export default function FinancialPage() {
                 </TableRow>
               </TableBody>
             </Table>
-          </CardContent>
-        </Card>
+        </FinancialSection>
       )}
 
       {/* Breakdown by entry type — paid orders only */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Breakdown by Entry Type</CardTitle>
-        </CardHeader>
-        <CardContent className="overflow-x-auto">
+      <FinancialSection title="Breakdown by Entry Type">
           <Table>
             <TableHeader>
               <TableRow>
@@ -497,16 +520,10 @@ export default function FinancialPage() {
               </TableRow>
             </TableBody>
           </Table>
-        </CardContent>
-      </Card>
+      </FinancialSection>
 
       {/* Payment status breakdown — all entries from paid orders only */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Entry Status Breakdown</CardTitle>
-          <CardDescription>Entries on paid orders only</CardDescription>
-        </CardHeader>
-        <CardContent className="overflow-x-auto">
+      <FinancialSection title="Entry Status Breakdown" description="Entries on paid orders only">
           <Table>
             <TableHeader>
               <TableRow>
@@ -535,36 +552,28 @@ export default function FinancialPage() {
               })}
             </TableBody>
           </Table>
-        </CardContent>
-      </Card>
+      </FinancialSection>
 
       {/* Catalogue requests — split by printed vs online */}
       {((catalogueOrders?.printed?.length ?? 0) + (catalogueOrders?.online?.length ?? 0)) > 0 && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <BookOpen className="size-5" />
-              Catalogue Orders
-            </CardTitle>
-            <CardDescription>
-              Exhibitors who ordered a catalogue (from sundry items)
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
+        <FinancialSection
+          title="Catalogue Orders"
+          description="Exhibitors who ordered a catalogue (from sundry items)"
+          icon={BookOpen}
+        >
+          <div className="space-y-4">
             {([
               { label: 'Printed', orders: catalogueOrders?.printed ?? [] },
               { label: 'Online', orders: catalogueOrders?.online ?? [] },
             ] as const).filter((g) => g.orders.length > 0).map((g) => (
               <div key={g.label}>
-                <h4 className="mb-2 text-sm font-semibold uppercase tracking-wider text-muted-foreground">
-                  {g.label} ({g.orders.length})
-                </h4>
-                <div className="space-y-1">
+                <Eyebrow className="mb-2 block">{g.label} ({g.orders.length})</Eyebrow>
+                <div className="divide-y divide-se-line">
                   {g.orders.map((order, idx) => (
-                    <div key={`${g.label}-${idx}`} className="flex items-center justify-between gap-3 rounded-lg border p-3">
+                    <div key={`${g.label}-${idx}`} className="flex items-center justify-between gap-3 py-2.5">
                       <div className="min-w-0 flex-1">
-                        <p className="font-medium truncate">{order.name}</p>
-                        <p className="text-xs text-muted-foreground truncate">{order.email}</p>
+                        <p className="truncate font-medium text-se-ink">{order.name}</p>
+                        <p className="truncate text-xs text-se-ink3">{order.email}</p>
                       </div>
                       {order.quantity > 1 && (
                         <Badge variant="outline">&times;{order.quantity}</Badge>
@@ -574,26 +583,19 @@ export default function FinancialPage() {
                 </div>
               </div>
             ))}
-          </CardContent>
-        </Card>
+          </div>
+        </FinancialSection>
       )}
 
       {/* Orders & Refunds — one card per paid order, full line-item view */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <RotateCcw className="size-5" />
-            Orders &amp; Refunds
-          </CardTitle>
-          <CardDescription>
-            Each paid order shows every line the exhibitor was charged for.
-            &ldquo;Refund entire order&rdquo; returns everything to the exhibitor
-            and cancels all entries on the order.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
+      <FinancialSection
+        title="Orders & Refunds"
+        description={<>Each paid order shows every line the exhibitor was charged for. &ldquo;Refund entire order&rdquo; returns everything to the exhibitor and cancels all entries on the order.</>}
+        icon={RotateCcw}
+      >
+        <div className="space-y-4">
           {(refundableOrders?.length ?? 0) === 0 ? (
-            <p className="py-6 text-center text-sm text-muted-foreground">
+            <p className="py-6 text-center text-sm text-se-ink3">
               No paid orders yet.
             </p>
           ) : (
@@ -609,8 +611,8 @@ export default function FinancialPage() {
               />
             ))
           )}
-        </CardContent>
-      </Card>
+        </div>
+      </FinancialSection>
 
       {/* Full-order refund confirmation */}
       <Dialog
@@ -776,14 +778,14 @@ function OrderRefundCard({
   );
 
   return (
-    <div className="rounded-lg border p-4 space-y-3">
+    <SECard className="space-y-3 border-se-line bg-se-paper2/30 p-4">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2">
         <div className="min-w-0">
-          <p className="font-semibold truncate">
+          <p className={cn(SE_H, 'truncate text-sm text-se-ink')}>
             {order.exhibitor?.name ?? 'Unknown exhibitor'}
           </p>
-          <p className="text-xs text-muted-foreground truncate">
+          <p className="text-xs text-se-ink3 truncate">
             {order.exhibitor?.email}
           </p>
         </div>
@@ -863,8 +865,8 @@ function OrderRefundCard({
       </div>
 
       {/* Totals + actions */}
-      <div className="border-t pt-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-        <div className="text-sm text-muted-foreground">
+      <div className="flex flex-col gap-2 border-t border-se-line pt-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="text-sm text-se-ink3">
           {refunded > 0 && (
             <span>
               Refunded: {formatCurrency(refunded)} of {formatCurrency(paid)}
@@ -892,6 +894,6 @@ function OrderRefundCard({
           </Button>
         )}
       </div>
-    </div>
+    </SECard>
   );
 }

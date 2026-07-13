@@ -7,12 +7,12 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import {
-  Card,
   CardContent,
   CardFooter,
   CardHeader,
   CardTitle,
 } from '@/components/ui/card';
+import { SECard, Wordmark } from '@/components/show-experience/kit';
 
 export default function ForgotPasswordPage() {
   const [email, setEmail] = useState('');
@@ -38,8 +38,8 @@ export default function ForgotPasswordPage() {
 
   if (sent) {
     return (
-      <div className="flex min-h-screen items-center justify-center px-3 sm:px-4">
-        <Card className="w-full max-w-sm">
+      <div className="flex min-h-screen items-center justify-center bg-se-paper px-3 sm:px-4">
+        <SECard className="flex w-full max-w-sm flex-col gap-6">
           <CardHeader className="text-center">
             <div className="mx-auto mb-3 flex size-12 items-center justify-center rounded-full bg-primary/10">
               <Mail className="size-6 text-primary" />
@@ -58,21 +58,21 @@ export default function ForgotPasswordPage() {
               Back to sign in
             </Link>
           </CardFooter>
-        </Card>
+        </SECard>
       </div>
     );
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center px-3 sm:px-4">
+    <div className="flex min-h-screen items-center justify-center bg-se-paper px-3 sm:px-4">
       <div className="w-full max-w-sm space-y-4 sm:space-y-5">
         <div className="text-center">
-          <Link href="/" className="font-serif text-2xl sm:text-3xl font-bold tracking-tight text-primary">
-            Remi
+          <Link href="/" className="inline-flex justify-center">
+            <Wordmark size={26} />
           </Link>
         </div>
 
-        <Card>
+        <SECard className="flex flex-col gap-6">
           <CardHeader className="text-center">
             <CardTitle className="font-serif text-lg sm:text-xl">Forgot your password?</CardTitle>
             <p className="mt-2 text-sm sm:text-[0.9375rem] text-muted-foreground">
@@ -105,7 +105,7 @@ export default function ForgotPasswordPage() {
               Back to sign in
             </Link>
           </CardFooter>
-        </Card>
+        </SECard>
       </div>
     </div>
   );

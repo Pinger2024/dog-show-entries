@@ -21,6 +21,8 @@ import { Badge } from '@/components/ui/badge';
 import { Header } from '@/components/layout/header';
 import { Footer } from '@/components/layout/footer';
 import { AnimateIn } from '@/components/animate-in';
+import { SE_H } from '@/components/show-experience/tokens';
+import { cn } from '@/lib/utils';
 
 export const metadata: Metadata = {
   title: 'Run Your Show with Remi — For Show Secretaries',
@@ -148,7 +150,7 @@ export default function ForSecretariesPage() {
         <section className="relative overflow-hidden">
           <div className="pointer-events-none absolute inset-0 -z-10">
             <div className="absolute -top-40 right-0 h-[600px] w-[600px] rounded-full bg-primary/[0.05] blur-3xl" />
-            <div className="absolute -bottom-40 left-0 h-[500px] w-[500px] rounded-full bg-gold/[0.07] blur-3xl" />
+            <div className="absolute -bottom-40 left-0 h-[500px] w-[500px] rounded-full bg-se-honey/[0.07] blur-3xl" />
           </div>
 
           <div className="mx-auto max-w-7xl px-3 py-14 sm:px-4 sm:py-20 lg:px-6 lg:py-28">
@@ -156,15 +158,15 @@ export default function ForSecretariesPage() {
               <div>
                 <Badge
                   variant="secondary"
-                  className="mb-5 border-gold/30 bg-gold/10 text-gold"
+                  className="mb-5 border-se-honey/30 bg-se-honey/10 text-se-honey-deep"
                 >
                   For Show Secretaries
                 </Badge>
-                <h1 className="font-serif text-3xl font-bold leading-[1.1] tracking-tight sm:text-4xl lg:text-5xl">
+                <h1 className={cn(SE_H, 'text-3xl leading-[1.1] sm:text-4xl lg:text-5xl')}>
                   Run a show without{' '}
                   <span className="text-primary">losing a Saturday.</span>
                 </h1>
-                <p className="gold-rule mt-5 max-w-xl text-base leading-relaxed text-muted-foreground sm:text-lg">
+                <p className="after:mt-3 after:block after:h-0.5 after:w-12 after:bg-se-honey after:content-[''] mt-5 max-w-xl text-base leading-relaxed text-muted-foreground sm:text-lg">
                   A modern, mobile-first show platform for UK clubs. Online
                   entries, automatic catalogues, and card payments at Stripe
                   cost — no platform markup on top.
@@ -286,9 +288,9 @@ export default function ForSecretariesPage() {
               </AnimateIn>
 
               <AnimateIn delay={120}>
-                <div className="relative overflow-hidden rounded-3xl border bg-gradient-to-br from-primary/5 via-card to-gold/5 p-6 shadow-xl shadow-primary/5 sm:p-10">
+                <div className="relative overflow-hidden rounded-3xl border bg-gradient-to-br from-primary/5 via-card to-se-honey/5 p-6 shadow-xl shadow-primary/5 sm:p-10">
                   <div className="flex items-center gap-3">
-                    <Sparkles className="size-5 text-gold" />
+                    <Sparkles className="size-5 text-se-honey-deep" />
                     <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
                       Live timer
                     </p>
@@ -315,7 +317,7 @@ export default function ForSecretariesPage() {
         <section className="border-t bg-card">
           <div className="mx-auto max-w-7xl px-3 py-16 sm:px-4 sm:py-24 lg:px-6">
             <AnimateIn className="mx-auto max-w-2xl text-center">
-              <h2 className="gold-rule-center font-serif text-2xl font-bold tracking-tight sm:text-3xl lg:text-4xl">
+              <h2 className="after:mx-auto after:mt-3 after:block after:h-0.5 after:w-12 after:bg-se-honey after:content-[''] font-serif text-2xl font-bold tracking-tight sm:text-3xl lg:text-4xl">
                 Schedule. Catalogue. Print. Automatic.
               </h2>
               <p className="mt-4 text-sm text-muted-foreground sm:text-base">
@@ -421,7 +423,7 @@ export default function ForSecretariesPage() {
             <AnimateIn className="mx-auto max-w-2xl text-center">
               <Badge
                 variant="secondary"
-                className="mb-4 border-gold/30 bg-gold/10 text-gold"
+                className="mb-4 border-se-honey/30 bg-se-honey/10 text-se-honey-deep"
               >
                 <PoundSterling className="mr-1 size-3.5" />
                 A package to suit your show
@@ -492,7 +494,7 @@ export default function ForSecretariesPage() {
         <section className="border-t bg-card">
           <div className="mx-auto max-w-7xl px-3 py-16 sm:px-4 sm:py-24 lg:px-6">
             <AnimateIn className="mx-auto max-w-3xl text-center">
-              <Users className="mx-auto mb-4 size-8 text-gold" strokeWidth={1.5} />
+              <Users className="mx-auto mb-4 size-8 text-se-honey-deep" strokeWidth={1.5} />
               <h2 className="font-serif text-2xl font-bold tracking-tight sm:text-3xl">
                 Designed with working secretaries.
               </h2>
@@ -555,7 +557,7 @@ export default function ForSecretariesPage() {
               <div className="relative overflow-hidden rounded-3xl bg-primary px-4 py-14 text-center shadow-xl shadow-primary/15 sm:px-16 sm:py-20">
                 <div className="pointer-events-none absolute inset-0">
                   <div className="absolute -right-20 -top-20 size-72 rounded-full bg-white/10 blur-3xl" />
-                  <div className="absolute -bottom-20 -left-20 size-72 rounded-full bg-gold/15 blur-3xl" />
+                  <div className="absolute -bottom-20 -left-20 size-72 rounded-full bg-se-honey/15 blur-3xl" />
                 </div>
                 <div className="relative z-10">
                   <h2 className="font-serif text-2xl font-bold tracking-tight text-primary-foreground sm:text-3xl lg:text-4xl">

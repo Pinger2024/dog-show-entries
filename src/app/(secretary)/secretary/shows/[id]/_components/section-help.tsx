@@ -116,11 +116,11 @@ function HelpPanel({
         </>
       )}
       {content.benefit && (
-        <div className="mt-3 rounded-md border border-amber-300/40 bg-amber-50 px-3 py-2 dark:border-amber-700/40 dark:bg-amber-950/30">
-          <p className="text-xs font-semibold uppercase tracking-wide text-amber-900 dark:text-amber-300">
+        <div className="mt-3 rounded-md border border-se-honey-line bg-se-honey-soft px-3 py-2">
+          <p className="text-xs font-semibold uppercase tracking-wide text-se-honey-ink">
             The good bit
           </p>
-          <p className="mt-1 text-xs leading-relaxed text-amber-900/90 dark:text-amber-200/90">
+          <p className="mt-1 text-xs leading-relaxed text-se-honey-ink/90">
             {content.benefit}
           </p>
         </div>

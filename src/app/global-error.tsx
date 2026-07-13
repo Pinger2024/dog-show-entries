@@ -129,7 +129,7 @@ export default function GlobalError({
               textAlign: 'center',
             }}
           >
-            <h1 style={{ fontSize: '3rem', fontWeight: 700, color: '#2D5F3F', margin: 0 }}>
+            <h1 style={{ fontSize: '3rem', fontWeight: 700, color: '#2f6b43', margin: 0 }}>
               Remi
             </h1>
             <p style={{ fontSize: '1.125rem', marginTop: '1rem', color: '#333' }}>
@@ -155,7 +155,7 @@ export default function GlobalError({
             textAlign: 'center',
           }}
         >
-          <h1 style={{ fontSize: '3rem', fontWeight: 700, color: '#2D5F3F', margin: 0 }}>
+          <h1 style={{ fontSize: '3rem', fontWeight: 700, color: '#2f6b43', margin: 0 }}>
             Remi
           </h1>
           <p style={{ fontSize: '1.125rem', marginTop: '1rem', color: '#333' }}>
@@ -170,7 +170,7 @@ export default function GlobalError({
               onClick={reset}
               style={{
                 padding: '0.75rem 1.5rem',
-                background: '#2D5F3F',
+                background: '#2f6b43',
                 color: '#fff',
                 border: 'none',
                 borderRadius: '0.5rem',

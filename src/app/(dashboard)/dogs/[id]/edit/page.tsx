@@ -4,6 +4,8 @@ import { use, useState, useEffect } from 'react';
 import Link from 'next/link';
 import { ChevronLeft, Dog, Loader2 } from 'lucide-react';
 import { trpc } from '@/lib/trpc';
+import { cn } from '@/lib/utils';
+import { SE_H } from '@/components/show-experience/tokens';
 import { Button } from '@/components/ui/button';
 import { DogForm } from '@/components/dogs/dog-form';
 import { DogSvHealthCard } from '@/components/dogs/dog-sv-health-card';
@@ -30,6 +32,7 @@ export default function EditDogPage({
     { id: returnShowId! },
     { enabled: !!returnShowId },
   );
+  const isRegional = returnShow?.showRuleset === 'wusv';
 
   if (isLoading) {
     return (
@@ -73,7 +76,7 @@ export default function EditDogPage({
             </Link>
           </Button>
         )}
-        <h1 className="font-serif text-2xl font-bold tracking-tight sm:text-3xl">
+        <h1 className={cn(SE_H, 'text-2xl sm:text-3xl')}>
           Edit Dog
         </h1>
         <p className="mt-1 text-muted-foreground">
@@ -88,6 +91,7 @@ export default function EditDogPage({
           mode="edit"
           dogId={id}
           returnTo={returnTo ?? undefined}
+          isRegional={isRegional}
           svSection={
             /german\s+shepherd/i.test(dog.breed?.name ?? '') ? (
               <DogSvHealthCard dogId={id} isOwner={true} sex={dog.sex} />

@@ -1,10 +1,9 @@
 import { ImageResponse } from 'next/og';
 import { eq, and, isNull, sql } from 'drizzle-orm';
-import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
 import { db } from '@/server/db';
 import { shows, entries, showSponsors } from '@/server/db/schema';
 import { isUuid } from '@/lib/slugify';
+import { loadShareImageFonts, SHARE_GREEN as G, type ShareImageFont } from '@/lib/share-image-data';
 
 export const runtime = 'nodejs';
 export const alt = 'Preview card for a dog show listing on Remi';
@@ -21,11 +20,30 @@ const SHOW_TYPE_LABELS: Record<string, string> = {
   championship: 'Championship Show',
 };
 
-/** Simple fallback image — just the show name on a dark background */
-function fallbackImage(
-  showName: string,
-  fonts: { name: string; data: ArrayBuffer; weight: 400 | 600 | 700 }[]
-) {
+const BG_GRADIENT = `linear-gradient(172deg, ${G.deep}, ${G.deepest})`;
+const HEAD = { fontFamily: 'Hanken Grotesk', fontWeight: 800, letterSpacing: '-0.015em' } as const;
+
+/** Fresh-green radial glow, top-right — the design system's signature hero accent. */
+function GlowAccent() {
+  return (
+    <div
+      style={{
+        display: 'flex',
+        position: 'absolute',
+        right: -140,
+        top: -110,
+        width: 420,
+        height: 420,
+        borderRadius: 999,
+        background: `radial-gradient(circle, ${G.fresh}, transparent 68%)`,
+        opacity: 0.28,
+      }}
+    />
+  );
+}
+
+/** Simple fallback image — just the show name on the deep-pine gradient */
+function fallbackImage(showName: string, fonts: ShareImageFont[]) {
   return new ImageResponse(
     (
       <div
@@ -36,49 +54,38 @@ function fallbackImage(
           justifyContent: 'center',
           width: '100%',
           height: '100%',
-          backgroundColor: '#1C1917',
+          background: BG_GRADIENT,
           padding: '60px',
+          position: 'relative',
+          overflow: 'hidden',
         }}
       >
-        {/* Top gold line */}
+        <GlowAccent />
         <div
           style={{
             display: 'flex',
-            position: 'absolute',
-            top: 0,
-            left: 0,
-            right: 0,
-            height: 3,
-            background: 'linear-gradient(90deg, #92702A, #C9A84C, #92702A)',
-          }}
-        />
-        <div
-          style={{
-            display: 'flex',
-            fontFamily: 'Libre Baskerville',
-            fontWeight: 700,
+            ...HEAD,
             fontSize: showName.length > 40 ? 34 : showName.length > 28 ? 40 : 48,
-            color: '#FAFAF8',
+            color: G.cream,
             textAlign: 'center',
             lineHeight: 1.2,
+            position: 'relative',
           }}
         >
           {showName}
         </div>
-        {/* Bottom bar */}
+        {/* Remi wordmark */}
         <div
           style={{
             display: 'flex',
             position: 'absolute',
-            bottom: 24,
-            fontFamily: 'Libre Baskerville',
-            fontWeight: 700,
-            fontSize: 18,
-            color: '#C9A84C',
-            letterSpacing: '0.08em',
+            bottom: 28,
+            alignItems: 'center',
+            gap: 7,
           }}
         >
-          REMI
+          <div style={{ display: 'flex', width: 8, height: 8, borderRadius: 99, backgroundColor: G.fresh }} />
+          <div style={{ display: 'flex', ...HEAD, fontSize: 19, color: G.cream }}>Remi</div>
         </div>
       </div>
     ),
@@ -96,23 +103,9 @@ export default async function OGImage({
 }) {
   const { id } = await params;
 
-  // Load fonts first — node fs on the project root is reliable across dev and prod
-  // (the `new URL('../../../../../public/fonts/...', import.meta.url)` pattern silently
-  // fails under Next 15's prod bundler, dropping us into the "Remi Show Manager"
-  // fallback on every social share).
-  let baskervilleBold: ArrayBuffer;
-  let interRegular: ArrayBuffer;
-  let interSemibold: ArrayBuffer;
-
+  let fonts: ShareImageFont[];
   try {
-    const fontsDir = join(process.cwd(), 'public', 'fonts');
-    const readFont = (name: string): ArrayBuffer => {
-      const buf = readFileSync(join(fontsDir, name));
-      return buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength) as ArrayBuffer;
-    };
-    baskervilleBold = readFont('libre-baskerville-bold.ttf');
-    interRegular = readFont('inter-regular.ttf');
-    interSemibold = readFont('inter-semibold.ttf');
+    fonts = loadShareImageFonts();
   } catch (err) {
     console.error('OG image: font loading failed:', err);
     // Return a minimal image with default fonts
@@ -125,8 +118,8 @@ export default async function OGImage({
             justifyContent: 'center',
             width: '100%',
             height: '100%',
-            backgroundColor: '#1C1917',
-            color: '#FAFAF8',
+            background: BG_GRADIENT,
+            color: G.cream,
             fontSize: 32,
           }}
         >
@@ -136,12 +129,6 @@ export default async function OGImage({
       { ...size }
     );
   }
-
-  const allFonts = [
-    { name: 'Libre Baskerville', data: baskervilleBold, weight: 700 as const },
-    { name: 'Inter', data: interRegular, weight: 400 as const },
-    { name: 'Inter', data: interSemibold, weight: 600 as const },
-  ];
 
   // Wrap the entire data-dependent section in try/catch
   // so DB timeouts, image fetch failures, etc. produce a usable fallback
@@ -167,9 +154,9 @@ export default async function OGImage({
               justifyContent: 'center',
               width: '100%',
               height: '100%',
-              backgroundColor: '#1C1917',
-              color: '#FAFAF8',
-              fontFamily: 'Libre Baskerville',
+              background: BG_GRADIENT,
+              color: G.cream,
+              ...HEAD,
               fontSize: 32,
             }}
           >
@@ -178,9 +165,7 @@ export default async function OGImage({
         ),
         {
           ...size,
-          fonts: [
-            { name: 'Libre Baskerville', data: baskervilleBold, weight: 700 },
-          ],
+          fonts: fonts.filter((f) => f.weight === 800),
         }
       );
     }
@@ -253,7 +238,8 @@ export default async function OGImage({
       show.judgeAssignments?.map((ja) => ja.judge?.name).filter(Boolean) as string[]
     )];
 
-    // Lifecycle-aware status badge
+    // Lifecycle-aware status badge — fresh = act now, honey = urgency,
+    // translucent cream = neutral, solid green = wrapped up.
     const closeDateMs = show.entryCloseDate ? new Date(show.entryCloseDate).getTime() : null;
     const hoursToClose = closeDateMs ? (closeDateMs - Date.now()) / 3600000 : Infinity;
     const closeDate = show.entryCloseDate
@@ -262,28 +248,34 @@ export default async function OGImage({
 
     let badgeText = '';
     let badgeBg = '';
-    const badgeColor = '#FAFAF8';
+    let badgeColor: string = G.cream;
 
     if (show.status === 'entries_open') {
       if (hoursToClose <= 72) {
         badgeText = `Closing ${closeDate}`;
-        badgeBg = '#DC2626'; // red
+        badgeBg = G.honey;
+        badgeColor = '#3a2606';
       } else {
         badgeText = 'Entries Open';
-        badgeBg = '#059669'; // green
+        badgeBg = G.fresh;
+        badgeColor = '#0e2c19';
       }
     } else if (show.status === 'entries_closed') {
       badgeText = 'Entries Closed';
-      badgeBg = '#57534E'; // grey
+      badgeBg = 'rgba(243,236,220,0.14)';
+      badgeColor = G.cream;
     } else if (show.status === 'in_progress') {
       badgeText = 'Live Today';
-      badgeBg = '#059669'; // emerald
+      badgeBg = G.fresh;
+      badgeColor = '#0e2c19';
     } else if (show.status === 'completed') {
       badgeText = 'Results Published';
-      badgeBg = '#059669';
+      badgeBg = G.green;
+      badgeColor = G.cream;
     } else if (show.status === 'published') {
       badgeText = 'Coming Soon';
-      badgeBg = '#2563EB'; // blue
+      badgeBg = 'rgba(243,236,220,0.14)';
+      badgeColor = G.cream;
     }
 
     const orgKcReg = (show.organisation as { kcRegNumber?: string | null } | null | undefined)?.kcRegNumber;
@@ -298,12 +290,12 @@ export default async function OGImage({
             flexDirection: 'column',
             width: '100%',
             height: '100%',
-            backgroundColor: '#fbf7ef',
+            background: BG_GRADIENT,
             position: 'relative',
             overflow: 'hidden',
           }}
         >
-          {/* Banner image background (if present) — faded into the cream */}
+          {/* Banner image background (if present), scrimmed dark so cream type stays legible */}
           {bannerData && (
             <img
               src={`data:image/jpeg;base64,${Buffer.from(bannerData).toString('base64')}`}
@@ -314,50 +306,27 @@ export default async function OGImage({
                 width: '100%',
                 height: '100%',
                 objectFit: 'cover',
-                opacity: 0.08,
+                opacity: 0.26,
+              }}
+            />
+          )}
+          {bannerData && (
+            <div
+              style={{
+                display: 'flex',
+                position: 'absolute',
+                top: 0,
+                left: 0,
+                right: 0,
+                bottom: 0,
+                background: `linear-gradient(172deg, rgba(32,69,44,0.88) 0%, rgba(21,46,29,0.94) 100%)`,
               }}
             />
           )}
 
-          {/* Warm amber radial highlight */}
-          <div
-            style={{
-              display: 'flex',
-              position: 'absolute',
-              top: 0,
-              left: 0,
-              right: 0,
-              bottom: 0,
-              background:
-                'radial-gradient(ellipse at 50% 0%, rgba(217, 119, 6, 0.10) 0%, transparent 55%)',
-            }}
-          />
+          <GlowAccent />
 
-          {/* Top + bottom gold hairlines */}
-          <div
-            style={{
-              display: 'flex',
-              position: 'absolute',
-              top: 0,
-              left: 0,
-              right: 0,
-              height: 2,
-              background: 'linear-gradient(90deg, transparent, #C9A84C, transparent)',
-            }}
-          />
-          <div
-            style={{
-              display: 'flex',
-              position: 'absolute',
-              bottom: 52,
-              left: 0,
-              right: 0,
-              height: 1,
-              background: 'linear-gradient(90deg, transparent, rgba(201,168,76,0.4), transparent)',
-            }}
-          />
-
-          {/* Main content — centred heritage layout */}
+          {/* Main content — centred layout */}
           <div
             style={{
               display: 'flex',
@@ -366,7 +335,7 @@ export default async function OGImage({
               justifyContent: 'flex-start',
               width: '100%',
               flex: 1,
-              padding: '36px 60px 24px',
+              padding: '34px 60px 20px',
               position: 'relative',
             }}
           >
@@ -374,10 +343,10 @@ export default async function OGImage({
             <div
               style={{
                 display: 'flex',
-                fontFamily: 'Inter',
-                fontWeight: 600,
+                fontFamily: 'Hanken Grotesk',
+                fontWeight: 700,
                 fontSize: 11,
-                color: '#92702A',
+                color: G.fresh,
                 letterSpacing: '0.4em',
                 textTransform: 'uppercase',
               }}
@@ -390,31 +359,30 @@ export default async function OGImage({
               style={{
                 display: 'flex',
                 marginTop: 18,
-                width: 120,
-                height: 120,
-                borderRadius: 60,
-                backgroundColor: '#ffffff',
+                width: 112,
+                height: 112,
+                borderRadius: 56,
+                backgroundColor: G.cream,
                 alignItems: 'center',
                 justifyContent: 'center',
-                border: '3px solid #C9A84C',
-                boxShadow: '0 4px 16px rgba(201, 168, 76, 0.25)',
+                border: `3px solid ${G.fresh}`,
+                boxShadow: '0 10px 24px -10px rgba(0,0,0,0.5)',
               }}
             >
               {clubLogoData ? (
                 <img
                   src={`data:image/png;base64,${Buffer.from(clubLogoData).toString('base64')}`}
-                  width={96}
-                  height={96}
-                  style={{ objectFit: 'contain', borderRadius: 48 }}
+                  width={90}
+                  height={90}
+                  style={{ objectFit: 'contain', borderRadius: 45 }}
                 />
               ) : (
                 <div
                   style={{
                     display: 'flex',
-                    fontFamily: 'Libre Baskerville',
-                    fontWeight: 700,
-                    fontSize: 42,
-                    color: '#92702A',
+                    ...HEAD,
+                    fontSize: 38,
+                    color: G.deep,
                   }}
                 >
                   {show.organisation?.name.split(/\s+/).map((w) => w[0]).slice(0, 2).join('').toUpperCase() ?? '◆'}
@@ -428,10 +396,10 @@ export default async function OGImage({
                 style={{
                   display: 'flex',
                   marginTop: 16,
-                  fontFamily: 'Libre Baskerville',
+                  fontFamily: 'Hanken Grotesk',
                   fontWeight: 700,
                   fontSize: clubNameSize,
-                  color: '#292524',
+                  color: G.cream,
                   letterSpacing: '0.08em',
                   textTransform: 'uppercase',
                   textAlign: 'center',
@@ -448,10 +416,10 @@ export default async function OGImage({
                 style={{
                   display: 'flex',
                   marginTop: 6,
-                  fontFamily: 'Inter',
-                  fontWeight: 400,
+                  fontFamily: 'Hanken Grotesk',
+                  fontWeight: 500,
                   fontSize: 11,
-                  color: '#78716C',
+                  color: G.creamDim,
                   letterSpacing: '0.04em',
                 }}
               >
@@ -459,49 +427,20 @@ export default async function OGImage({
               </div>
             )}
 
-            {/* Ornamental "presents" divider */}
-            <div
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 14,
-                marginTop: 16,
-              }}
-            >
-              <div style={{ display: 'flex', width: 60, height: 1, backgroundColor: 'rgba(201,168,76,0.5)' }} />
-              <div style={{ display: 'flex', width: 7, height: 7, backgroundColor: '#C9A84C', transform: 'rotate(45deg)' }} />
-              <div
-                style={{
-                  display: 'flex',
-                  fontFamily: 'Libre Baskerville',
-                  fontWeight: 700,
-                  fontStyle: 'italic',
-                  fontSize: 11,
-                  color: '#92702A',
-                  letterSpacing: '0.35em',
-                  textTransform: 'uppercase',
-                }}
-              >
-                Presents
-              </div>
-              <div style={{ display: 'flex', width: 7, height: 7, backgroundColor: '#C9A84C', transform: 'rotate(45deg)' }} />
-              <div style={{ display: 'flex', width: 60, height: 1, backgroundColor: 'rgba(201,168,76,0.5)' }} />
-            </div>
-
             {/* Show type chip */}
             <div
               style={{
                 display: 'flex',
-                marginTop: 14,
-                fontFamily: 'Inter',
+                marginTop: 18,
+                fontFamily: 'Hanken Grotesk',
                 fontWeight: 600,
-                fontSize: 11,
-                color: '#92702A',
-                backgroundColor: 'rgba(201,168,76,0.14)',
-                border: '1px solid rgba(201,168,76,0.5)',
+                fontSize: 12,
+                color: G.cream,
+                backgroundColor: 'rgba(243,236,220,0.14)',
+                boxShadow: 'inset 0 0 0 1px rgba(243,236,220,0.25)',
                 borderRadius: 999,
-                padding: '4px 14px',
-                letterSpacing: '0.25em',
+                padding: '5px 15px',
+                letterSpacing: '0.2em',
                 textTransform: 'uppercase',
               }}
             >
@@ -512,11 +451,10 @@ export default async function OGImage({
             <div
               style={{
                 display: 'flex',
-                marginTop: 12,
-                fontFamily: 'Libre Baskerville',
-                fontWeight: 700,
+                marginTop: 14,
+                ...HEAD,
                 fontSize: showNameSize,
-                color: '#1C1917',
+                color: G.cream,
                 lineHeight: 1.05,
                 textAlign: 'center',
                 maxWidth: 1000,
@@ -532,16 +470,16 @@ export default async function OGImage({
                 marginTop: 14,
                 alignItems: 'baseline',
                 gap: 14,
-                fontFamily: 'Inter',
+                fontFamily: 'Hanken Grotesk',
                 fontWeight: 400,
                 fontSize: 16,
-                color: '#57534E',
+                color: G.creamDim,
               }}
             >
               <span style={{ display: 'flex' }}>{showDate}</span>
               {show.venue && (
                 <>
-                  <span style={{ display: 'flex', color: '#C9A84C' }}>·</span>
+                  <span style={{ display: 'flex', color: G.fresh }}>·</span>
                   <span style={{ display: 'flex' }}>{show.venue.name}</span>
                 </>
               )}
@@ -551,9 +489,9 @@ export default async function OGImage({
             <div
               style={{
                 display: 'flex',
-                marginTop: 16,
+                marginTop: 18,
                 alignItems: 'center',
-                gap: 16,
+                gap: 12,
                 flexWrap: 'wrap',
                 justifyContent: 'center',
               }}
@@ -562,11 +500,11 @@ export default async function OGImage({
                 <div
                   style={{
                     display: 'flex',
-                    fontFamily: 'Libre Baskerville',
-                    fontWeight: 700,
+                    fontFamily: 'Hanken Grotesk',
+                    fontWeight: 600,
                     fontStyle: 'italic',
                     fontSize: 14,
-                    color: '#57534E',
+                    color: G.creamDim,
                   }}
                 >
                   Judged by {judges.slice(0, 3).join(' & ')}
@@ -576,10 +514,10 @@ export default async function OGImage({
                 <div
                   style={{
                     display: 'flex',
-                    fontFamily: 'Inter',
+                    fontFamily: 'Hanken Grotesk',
                     fontWeight: 600,
                     fontSize: 13,
-                    color: '#92702A',
+                    color: G.fresh,
                   }}
                 >
                   {entryCount} {entryCount === 1 ? 'entry' : 'entries'}
@@ -589,12 +527,12 @@ export default async function OGImage({
                 <div
                   style={{
                     display: 'flex',
-                    fontFamily: 'Inter',
+                    fontFamily: 'Hanken Grotesk',
                     fontWeight: 600,
                     fontSize: 12,
                     color: badgeColor,
                     backgroundColor: badgeBg,
-                    padding: '5px 12px',
+                    padding: '6px 14px',
                     borderRadius: 20,
                     textTransform: 'uppercase',
                     letterSpacing: '0.08em',
@@ -605,7 +543,7 @@ export default async function OGImage({
               )}
             </div>
 
-            {/* Title sponsor attribution (small, at the bottom of the content area) */}
+            {/* Title sponsor attribution (small, at the top-right corner) */}
             {sponsorLogoData && titleSponsor && (
               <div
                 style={{
@@ -620,10 +558,10 @@ export default async function OGImage({
                 <div
                   style={{
                     display: 'flex',
-                    fontFamily: 'Inter',
-                    fontWeight: 400,
+                    fontFamily: 'Hanken Grotesk',
+                    fontWeight: 500,
                     fontSize: 10,
-                    color: '#92702A',
+                    color: G.creamDim,
                     textTransform: 'uppercase',
                     letterSpacing: '0.1em',
                   }}
@@ -640,7 +578,7 @@ export default async function OGImage({
             )}
           </div>
 
-          {/* Bottom bar — cream with Remi mark + domain */}
+          {/* Bottom bar — Remi mark + domain */}
           <div
             style={{
               display: 'flex',
@@ -648,27 +586,26 @@ export default async function OGImage({
               padding: '0 56px',
               alignItems: 'center',
               justifyContent: 'space-between',
-              backgroundColor: '#fbf7ef',
+              position: 'relative',
+              borderTop: '1px solid rgba(243,236,220,0.12)',
             }}
           >
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <div
                 style={{
                   display: 'flex',
                   width: 7,
                   height: 7,
-                  backgroundColor: '#C9A84C',
-                  transform: 'rotate(45deg)',
+                  borderRadius: 99,
+                  backgroundColor: G.fresh,
                 }}
               />
               <div
                 style={{
                   display: 'flex',
-                  fontFamily: 'Libre Baskerville',
-                  fontWeight: 700,
-                  fontSize: 18,
-                  color: '#15803D',
-                  letterSpacing: '0.02em',
+                  ...HEAD,
+                  fontSize: 17,
+                  color: G.cream,
                 }}
               >
                 Remi
@@ -677,10 +614,10 @@ export default async function OGImage({
             <div
               style={{
                 display: 'flex',
-                fontFamily: 'Inter',
+                fontFamily: 'Hanken Grotesk',
                 fontWeight: 400,
                 fontSize: 13,
-                color: '#78716C',
+                color: G.creamDim,
                 letterSpacing: '0.04em',
               }}
             >
@@ -691,7 +628,7 @@ export default async function OGImage({
       ),
       {
         ...size,
-        fonts: allFonts,
+        fonts,
       }
     );
   } catch (err) {
@@ -710,6 +647,6 @@ export default async function OGImage({
       // Even the name lookup failed — use generic text
     }
 
-    return fallbackImage(showName, allFonts);
+    return fallbackImage(showName, fonts);
   }
 }

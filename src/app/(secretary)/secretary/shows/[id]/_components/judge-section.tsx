@@ -854,9 +854,9 @@ export function JudgesSection({ showId }: { showId: string }) {
             return (
               <div className="rounded-lg border bg-muted/30 p-4 space-y-3 text-sm">
                 <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Email preview</p>
-                <div className="rounded-md bg-[#2D5F3F] px-4 py-3 text-center">
-                  <p className="font-semibold text-white">Judging Appointment Offer</p>
-                  <p className="text-xs text-white/70">from {orgName}</p>
+                <div className="rounded-md bg-[#20452c] px-4 py-3 text-center">
+                  <p className="font-semibold text-[#f3ecdc]">Judging Appointment Offer</p>
+                  <p className="text-xs text-[#f3ecdc]/70">from {orgName}</p>
                 </div>
                 <p className="text-muted-foreground">Dear {judge?.name ?? 'Judge'},</p>
                 <p className="text-muted-foreground">On behalf of {orgName}, I have much pleasure in inviting you to judge at our forthcoming show...</p>
@@ -901,7 +901,7 @@ export function JudgesSection({ showId }: { showId: string }) {
                   </div>
                 )}
                 <div className="col-span-2 flex justify-center gap-4 pt-1">
-                  <span className="rounded-md bg-[#2D5F3F] px-4 py-1.5 text-xs font-medium text-white">Accept Appointment</span>
+                  <span className="rounded-md bg-[#2f6b43] px-4 py-1.5 text-xs font-medium text-[#f3ecdc]">Accept Appointment</span>
                   <span className="text-xs text-muted-foreground underline">Decline</span>
                 </div>
               </div>

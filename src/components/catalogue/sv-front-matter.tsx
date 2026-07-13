@@ -20,6 +20,7 @@
 import { Page, Text, View } from '@react-pdf/renderer';
 import { TonalWash } from '@/components/sv-pdf/cover-atoms';
 import { SV, ss, SV_FONTS } from '@/components/schedule/shared/sv-styles';
+import { Numero } from '@/components/schedule/shared/numero';
 import type { CatalogueShowInfo, ShowClassInfo } from './catalogue-types';
 import { SV_AGE_ORDER } from '@/lib/class-labels';
 
@@ -39,7 +40,7 @@ function Topper({ num, subject }: { num: number; subject: string }) {
   return (
     <>
       <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline' }}>
-        <Text style={ss.eyebrow}>№ {String(num).padStart(2, '0')}</Text>
+        <Text style={ss.eyebrow}><Numero /> {String(num).padStart(2, '0')}</Text>
         <Text style={ss.eyebrow}>{subject}</Text>
       </View>
       <View style={[ss.ruleThin, { marginTop: 4 }]} />

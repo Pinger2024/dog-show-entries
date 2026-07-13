@@ -72,7 +72,7 @@ export function JudgeConfirmationAction({ showId, entityId, entityName }: Action
       )}
 
       {contract.stage === 'confirmed' && (
-        <p className="text-xs text-green-600 flex items-center gap-1">
+        <p className="text-xs text-se-fresh-deep flex items-center gap-1">
           <Check className="size-3" />
           Confirmation sent {contract.confirmedAt ? new Date(contract.confirmedAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : ''}
         </p>

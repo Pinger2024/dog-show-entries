@@ -592,7 +592,7 @@ function BreedAssignmentDialog({
                       checked={allChecked}
                       ref={(el) => { if (el) el.indeterminate = someChecked && !allChecked; }}
                       onChange={() => toggleBreedAllDays(breed.id)}
-                      className="size-4 rounded border-gray-300"
+                      className="size-4 rounded border-input"
                     />
                     <span className="text-sm font-medium">{breed.name}</span>
                     {isMultiDay && (
@@ -613,7 +613,7 @@ function BreedAssignmentDialog({
                               type="checkbox"
                               checked={checked}
                               onChange={() => toggleBreedDate(breed.id, date)}
-                              className="size-4 rounded border-gray-300"
+                              className="size-4 rounded border-input"
                             />
                             <span className="text-xs text-muted-foreground">
                               {new Date(date + 'T00:00:00').toLocaleDateString('en-GB', {

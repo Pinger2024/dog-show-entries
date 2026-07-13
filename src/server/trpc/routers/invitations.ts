@@ -11,6 +11,7 @@ import {
 import { invitations, users, organisations, memberships } from '@/server/db/schema';
 import { generateToken, getBaseUrl, assignRole } from '@/server/lib/utils';
 import { verifyOrgAccess } from '@/server/trpc/verify-org-access';
+import { BRAND } from '@/lib/brand';
 
 const resend = process.env.RESEND_API_KEY
   ? new Resend(process.env.RESEND_API_KEY)
@@ -83,18 +84,18 @@ export const invitationsRouter = createTRPCRouter({
             replyTo: 'feedback@remishowmanager.co.uk',
             subject: `You've been made a ${roleName} on Remi`,
             html: `
-              <div style="font-family: Georgia, serif; max-width: 560px; margin: 0 auto;">
-                <h1 style="font-size: 24px; color: #2D5F3F;">Remi</h1>
+              <div style="font-family: 'Hanken Grotesk', -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 560px; margin: 0 auto; background-color: ${BRAND.paper}; padding: 28px 24px; color: ${BRAND.ink}; border: 1px solid ${BRAND.line}; border-radius: 14px;">
+                <h1 style="margin: 0 0 16px; font-size: 22px; font-weight: 800; letter-spacing: -0.015em; color: ${BRAND.green};">Remi<span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:${BRAND.fresh};margin-left:3px;"></span></h1>
                 <p>Hi${existingUser.name ? ` ${existingUser.name}` : ''},</p>
                 <p><strong>${ctx.session.user.name}</strong> has upgraded your Remi account to <strong>${roleName}</strong>.</p>
-                ${input.message ? `<p style="padding: 12px 16px; background: #f9fafb; border-radius: 8px; border-left: 3px solid #2D5F3F;"><em>"${input.message}"</em></p>` : ''}
+                ${input.message ? `<p style="padding: 12px 16px; background: ${BRAND.paper}; border-radius: 8px; border-left: 3px solid ${BRAND.green};"><em>"${input.message}"</em></p>` : ''}
                 <p>You now have access to secretary features including show management, entry management, and catalogue generation. Your new role will be active the next time you sign in.</p>
                 <p style="margin: 24px 0;">
-                  <a href="${dashboardUrl}" style="display: inline-block; background: #2D5F3F; color: white; padding: 12px 24px; border-radius: 8px; text-decoration: none; font-weight: 600;">
+                  <a href="${dashboardUrl}" style="display: inline-block; background: ${BRAND.green}; color: ${BRAND.cream}; padding: 12px 24px; border-radius: 13px; text-decoration: none; font-weight: 700;">
                     Go to Dashboard
                   </a>
                 </p>
-                <p style="color: #6b7280; font-size: 14px;">
+                <p style="color: ${BRAND.ink2}; font-size: 14px;">
                   If you have any questions, just reply to this email.
                 </p>
               </div>
@@ -136,18 +137,18 @@ export const invitationsRouter = createTRPCRouter({
           replyTo: 'feedback@remishowmanager.co.uk',
           subject: `You've been added as a ${roleName} on Remi`,
           html: `
-            <div style="font-family: Georgia, serif; max-width: 560px; margin: 0 auto;">
-              <h1 style="font-size: 24px; color: #2D5F3F;">Remi</h1>
+            <div style="font-family: 'Hanken Grotesk', -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 560px; margin: 0 auto; background-color: ${BRAND.paper}; padding: 28px 24px; color: ${BRAND.ink}; border: 1px solid ${BRAND.line}; border-radius: 14px;">
+              <h1 style="margin: 0 0 16px; font-size: 22px; font-weight: 800; letter-spacing: -0.015em; color: ${BRAND.green};">Remi<span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:${BRAND.fresh};margin-left:3px;"></span></h1>
               <p>Hi,</p>
               <p><strong>${ctx.session.user.name}</strong> has added you as a <strong>${roleName}</strong> on Remi.</p>
-              ${input.message ? `<p style="padding: 12px 16px; background: #f9fafb; border-radius: 8px; border-left: 3px solid #2D5F3F;"><em>"${input.message}"</em></p>` : ''}
+              ${input.message ? `<p style="padding: 12px 16px; background: ${BRAND.paper}; border-radius: 8px; border-left: 3px solid ${BRAND.green};"><em>"${input.message}"</em></p>` : ''}
               <p>Remi is a dog show entry management platform used by exhibitors and show committees across the UK. Sign up to get started.</p>
               <p style="margin: 24px 0;">
-                <a href="${acceptUrl}" style="display: inline-block; background: #2D5F3F; color: white; padding: 12px 24px; border-radius: 8px; text-decoration: none; font-weight: 600;">
+                <a href="${acceptUrl}" style="display: inline-block; background: ${BRAND.green}; color: ${BRAND.cream}; padding: 12px 24px; border-radius: 13px; text-decoration: none; font-weight: 700;">
                   Get Started
                 </a>
               </p>
-              <p style="color: #6b7280; font-size: 14px;">
+              <p style="color: ${BRAND.ink2}; font-size: 14px;">
                 This link expires in 14 days. If you didn't expect this email, you can safely ignore it.
               </p>
             </div>

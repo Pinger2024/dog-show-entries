@@ -6,6 +6,7 @@ import { ownerHeading, uppercaseName, formatOwnerKC } from './catalogue-utils';
 import { buildBestAwards } from '@/lib/best-awards';
 import { MastheadBand, TonalWash, ClubCrestSlot } from '@/components/sv-pdf/cover-atoms';
 import { ss, SV, SV_FONTS } from '@/components/schedule/shared/sv-styles';
+import { Numero } from '@/components/schedule/shared/numero';
 
 const SHOW_TYPE_LABELS: Record<string, string> = {
   championship: 'Championship Show',
@@ -697,7 +698,9 @@ function SvCoverPage({ show, classCount }: { show: CatalogueShowInfo; classCount
         <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline' }}>
           <Text style={[ss.eyebrow, { maxWidth: '60%' }]}>{show.name}</Text>
           {show.kcLicenceNo ? (
-            <Text style={[ss.eyebrow, { color: SV.ink3 }]}>№ {show.kcLicenceNo}</Text>
+            <Text style={[ss.eyebrow, { color: SV.ink3 }]}>
+              <Numero /> {show.kcLicenceNo}
+            </Text>
           ) : null}
         </View>
 

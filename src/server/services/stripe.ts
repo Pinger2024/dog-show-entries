@@ -55,12 +55,11 @@ export async function cancelPaymentIntent(paymentIntentId: string): Promise<void
  * 1.5% card fee eats a bigger share of higher-value orders; at £20 the
  * club still nets ~£18.50, at £100 they still net ~£98.
  *
- * @param subtotalPence club-collected entry + sundry subtotal in pence
- * @returns platform fee in pence (always a whole integer)
+ * The implementation lives in `@/lib/fee-calc` (client-safe) so the checkout
+ * preview and the server charge share one source of truth. Re-exported here
+ * for the existing server call sites (orders/entries routers).
  */
-export function calculatePlatformFee(subtotalPence: number): number {
-  return 100 + Math.round(subtotalPence * 0.01);
-}
+export { calculatePlatformFee } from '@/lib/fee-calc';
 
 /**
  * Entry-payment PaymentIntent using Stripe Connect destination charges.

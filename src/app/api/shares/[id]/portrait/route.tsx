@@ -6,22 +6,27 @@
  * trying to deep-link into apps that fight us, give users a beautifully
  * rendered downloadable image they can save and post natively.
  *
- * Brand-matched to the OG card (heritage cream + gold), but reflowed for
- * portrait — the show name takes most of the vertical real estate, the
- * date and venue come next, status badge anchors the bottom. Designed
- * to be legible at thumbnail size in a fast-scrolling feed.
+ * Brand-matched to the OG card — the Show Experience green system: a
+ * deep-pine gradient, a soft fresh radial glow, cream Hanken-extrabold
+ * display type with tight tracking, honey accents for urgency, fresh
+ * accents for status. Reflowed for portrait — the show name takes most
+ * of the vertical real estate, the date and venue come next, status
+ * badge anchors the bottom. Designed to be legible at thumbnail size in
+ * a fast-scrolling feed.
  *
  * Cache strategy: Cache-Control: public, max-age=300, stale-while-revalidate=86400.
  * Show data changes (entries close, status flips) so we don't hard-cache,
  * but five-minute caching on the CDN absorbs share-button bursts.
  */
 import { ImageResponse } from 'next/og';
-import { loadShareImageData, loadShareImageFonts } from '@/lib/share-image-data';
+import { loadShareImageData, loadShareImageFonts, SHARE_GREEN as G } from '@/lib/share-image-data';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 const SIZE = { width: 1080, height: 1350 } as const;
+const BG_GRADIENT = `linear-gradient(172deg, ${G.deep}, ${G.deepest})`;
+const HEAD = { fontFamily: 'Hanken Grotesk', fontWeight: 800, letterSpacing: '-0.015em' } as const;
 
 export async function GET(
   _request: Request,
@@ -48,16 +53,16 @@ export async function GET(
             justifyContent: 'center',
             width: '100%',
             height: '100%',
-            backgroundColor: '#1C1917',
-            color: '#FAFAF8',
-            fontFamily: 'Libre Baskerville',
+            background: BG_GRADIENT,
+            color: G.cream,
+            ...HEAD,
             fontSize: 56,
           }}
         >
           Show not found
         </div>
       ),
-      { ...SIZE, fonts: fonts.filter((f) => f.name === 'Libre Baskerville') }
+      { ...SIZE, fonts: fonts.filter((f) => f.weight === 800) }
     );
   }
 
@@ -109,11 +114,11 @@ export async function GET(
           flexDirection: 'column',
           width: '100%',
           height: '100%',
-          backgroundColor: '#fbf7ef',
+          background: BG_GRADIENT,
           position: 'relative',
         }}
       >
-        {/* Subtle banner-image background, faded to a wash */}
+        {/* Subtle banner-image background, faded into the gradient */}
         {bannerData && (
           <img
             src={`data:image/jpeg;base64,${Buffer.from(bannerData).toString('base64')}`}
@@ -123,43 +128,23 @@ export async function GET(
               width: '100%',
               height: '100%',
               objectFit: 'cover',
-              opacity: 0.07,
+              opacity: 0.16,
             }}
           />
         )}
 
-        {/* Warm amber radial highlight from the top */}
+        {/* Fresh-green radial glow */}
         <div
           style={{
             display: 'flex',
             position: 'absolute',
-            inset: 0,
-            background:
-              'radial-gradient(ellipse at 50% 0%, rgba(217, 119, 6, 0.12) 0%, transparent 55%)',
-          }}
-        />
-
-        {/* Top + bottom gold hairlines */}
-        <div
-          style={{
-            display: 'flex',
-            position: 'absolute',
-            top: 0,
-            left: 0,
-            right: 0,
-            height: 4,
-            background: 'linear-gradient(90deg, transparent, #C9A84C, transparent)',
-          }}
-        />
-        <div
-          style={{
-            display: 'flex',
-            position: 'absolute',
-            bottom: 0,
-            left: 0,
-            right: 0,
-            height: 4,
-            background: 'linear-gradient(90deg, transparent, #C9A84C, transparent)',
+            right: -160,
+            top: -130,
+            width: 520,
+            height: 520,
+            borderRadius: 999,
+            background: `radial-gradient(circle, ${G.fresh}, transparent 68%)`,
+            opacity: 0.28,
           }}
         />
 
@@ -188,10 +173,10 @@ export async function GET(
             <div
               style={{
                 display: 'flex',
-                fontFamily: 'Inter',
-                fontWeight: 600,
+                fontFamily: 'Hanken Grotesk',
+                fontWeight: 700,
                 fontSize: 18,
-                color: '#92702A',
+                color: G.fresh,
                 letterSpacing: '0.4em',
                 textTransform: 'uppercase',
               }}
@@ -207,11 +192,11 @@ export async function GET(
                 width: 160,
                 height: 160,
                 borderRadius: 80,
-                backgroundColor: '#ffffff',
+                backgroundColor: G.cream,
                 alignItems: 'center',
                 justifyContent: 'center',
-                border: '4px solid #C9A84C',
-                boxShadow: '0 6px 22px rgba(201, 168, 76, 0.28)',
+                border: `4px solid ${G.fresh}`,
+                boxShadow: '0 8px 26px rgba(0,0,0,0.35)',
               }}
             >
               {clubLogoData ? (
@@ -225,10 +210,9 @@ export async function GET(
                 <div
                   style={{
                     display: 'flex',
-                    fontFamily: 'Libre Baskerville',
-                    fontWeight: 700,
+                    ...HEAD,
                     fontSize: 60,
-                    color: '#92702A',
+                    color: G.deep,
                   }}
                 >
                   {clubInitials}
@@ -240,10 +224,10 @@ export async function GET(
               style={{
                 display: 'flex',
                 marginTop: 22,
-                fontFamily: 'Inter',
-                fontWeight: 600,
+                fontFamily: 'Hanken Grotesk',
+                fontWeight: 700,
                 fontSize: clubNameSize,
-                color: '#44403C',
+                color: G.cream,
                 letterSpacing: '0.04em',
                 textTransform: 'uppercase',
                 textAlign: 'center',
@@ -257,13 +241,11 @@ export async function GET(
               style={{
                 display: 'flex',
                 marginTop: 28,
-                fontFamily: 'Libre Baskerville',
-                fontWeight: 700,
+                ...HEAD,
                 fontSize: nameSize,
-                color: '#1C1917',
+                color: G.cream,
                 lineHeight: 1.08,
                 textAlign: 'center',
-                letterSpacing: '-0.01em',
               }}
             >
               {show.name}
@@ -274,10 +256,10 @@ export async function GET(
               style={{
                 display: 'flex',
                 marginTop: 18,
-                fontFamily: 'Inter',
+                fontFamily: 'Hanken Grotesk',
                 fontWeight: 400,
                 fontSize: 28,
-                color: '#78716C',
+                color: G.creamDim,
                 fontStyle: 'italic',
               }}
             >
@@ -295,13 +277,13 @@ export async function GET(
               gap: 18,
             }}
           >
-            {/* Gold divider */}
+            {/* Fresh divider */}
             <div
               style={{
                 display: 'flex',
                 width: 220,
                 height: 1,
-                background: 'linear-gradient(90deg, transparent, #C9A84C, transparent)',
+                background: `linear-gradient(90deg, transparent, ${G.fresh}, transparent)`,
                 marginBottom: 12,
               }}
             />
@@ -309,10 +291,9 @@ export async function GET(
             <div
               style={{
                 display: 'flex',
-                fontFamily: 'Libre Baskerville',
-                fontWeight: 700,
+                ...HEAD,
                 fontSize: 44,
-                color: '#1C1917',
+                color: G.cream,
                 textAlign: 'center',
               }}
             >
@@ -323,10 +304,10 @@ export async function GET(
               <div
                 style={{
                   display: 'flex',
-                  fontFamily: 'Inter',
+                  fontFamily: 'Hanken Grotesk',
                   fontWeight: 400,
                   fontSize: 28,
-                  color: '#57534E',
+                  color: G.creamDim,
                   textAlign: 'center',
                 }}
               >
@@ -346,10 +327,10 @@ export async function GET(
                 <div
                   style={{
                     display: 'flex',
-                    fontFamily: 'Inter',
+                    fontFamily: 'Hanken Grotesk',
                     fontWeight: 600,
                     fontSize: 14,
-                    color: '#92702A',
+                    color: G.honey,
                     letterSpacing: '0.32em',
                     textTransform: 'uppercase',
                     marginBottom: 6,
@@ -360,10 +341,10 @@ export async function GET(
                 <div
                   style={{
                     display: 'flex',
-                    fontFamily: 'Inter',
+                    fontFamily: 'Hanken Grotesk',
                     fontWeight: 400,
                     fontSize: 22,
-                    color: '#44403C',
+                    color: G.creamDim,
                     textAlign: 'center',
                     maxWidth: 880,
                   }}
@@ -395,7 +376,7 @@ export async function GET(
                   paddingBottom: 12,
                   borderRadius: 999,
                   backgroundColor: status.bg,
-                  fontFamily: 'Inter',
+                  fontFamily: 'Hanken Grotesk',
                   fontWeight: 600,
                   fontSize: 22,
                   color: status.color,
@@ -420,10 +401,10 @@ export async function GET(
                 <div
                   style={{
                     display: 'flex',
-                    fontFamily: 'Inter',
+                    fontFamily: 'Hanken Grotesk',
                     fontWeight: 400,
                     fontSize: 13,
-                    color: '#92702A',
+                    color: G.creamDim,
                     letterSpacing: '0.32em',
                     textTransform: 'uppercase',
                     fontStyle: 'italic',
@@ -443,10 +424,9 @@ export async function GET(
                   <div
                     style={{
                       display: 'flex',
-                      fontFamily: 'Libre Baskerville',
-                      fontWeight: 700,
+                      ...HEAD,
                       fontSize: 26,
-                      color: '#1C1917',
+                      color: G.cream,
                     }}
                   >
                     {titleSponsor.sponsor.name}
@@ -458,11 +438,10 @@ export async function GET(
             <div
               style={{
                 display: 'flex',
-                fontFamily: 'Libre Baskerville',
-                fontWeight: 700,
+                ...HEAD,
                 fontSize: 24,
-                color: '#1C1917',
-                letterSpacing: '0.04em',
+                color: G.cream,
+                letterSpacing: '0.02em',
               }}
             >
               Enter online · remishowmanager.co.uk
@@ -471,15 +450,18 @@ export async function GET(
             <div
               style={{
                 display: 'flex',
-                marginTop: 8,
-                fontFamily: 'Inter',
-                fontWeight: 600,
+                marginTop: 10,
+                alignItems: 'center',
+                gap: 7,
+                fontFamily: 'Hanken Grotesk',
+                fontWeight: 700,
                 fontSize: 14,
-                color: '#92702A',
-                letterSpacing: '0.42em',
+                color: G.fresh,
+                letterSpacing: '0.32em',
                 textTransform: 'uppercase',
               }}
             >
+              <div style={{ display: 'flex', width: 8, height: 8, borderRadius: 99, backgroundColor: G.fresh }} />
               Remi
             </div>
           </div>

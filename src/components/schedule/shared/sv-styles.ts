@@ -13,6 +13,12 @@ import { StyleSheet, Font } from '@react-pdf/renderer';
 // Side-effect: registers Libre Baskerville + Inter + Times via the existing
 // schedule font setup. Imported for the side-effect only.
 import './styles';
+// Side-effect: registers the HankenGrotesk family used by `eyebrow` /
+// `panelInkEyebrow` below (Show Experience green rebrand, 2026-07-10).
+// Confirmed safe as a 4th family in the SV/WUSV documents specifically —
+// see src/lib/pdf-fonts.ts for the fuller story (it is NOT safe in the
+// RKC catalogue/schedule/Judge's Book, which don't use it).
+import '@/lib/pdf-fonts';
 
 // Hyphenation off — the design relies on rags rather than mid-word breaks
 // for headlines, and turning it off prevents accidental "Reg-ional" splits.
@@ -64,9 +70,14 @@ export const ss = StyleSheet.create({
     paddingRight: PAGE_PADDING_SIDE,
   },
   // Eyebrow — uppercase, letter-spaced mono-feel label. Used for №-prefixes,
-  // section sub-labels, JH band header, etc.
+  // page toppers/folio (running header/footer), section sub-labels, JH band
+  // header, etc. This is the one SV text role that's a page header/footer
+  // rather than body copy, so it's the one place the Show Experience green
+  // rebrand's Hanken Grotesk face is used in the SV documents — the rest of
+  // the SV "Sieger Editorial" body (Times/Inter per SV_FONTS above) is
+  // deliberately left untouched.
   eyebrow: {
-    fontFamily: SV_FONTS.sans,
+    fontFamily: 'HankenGrotesk',
     fontSize: 7.5,
     color: SV.ink3,
     textTransform: 'uppercase',
@@ -174,11 +185,11 @@ export const ss = StyleSheet.create({
   },
   panelInkEyebrow: {
     color: SV.accentSoft,
-    fontFamily: SV_FONTS.sans,
+    fontFamily: 'HankenGrotesk',
     fontSize: 7.5,
     textTransform: 'uppercase',
     letterSpacing: 1.4,
-    fontWeight: 'bold',
+    fontWeight: 700,
     marginBottom: 4,
   },
   panelInkBody: {

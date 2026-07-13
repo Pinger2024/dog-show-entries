@@ -36,10 +36,12 @@ import {
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { trpc } from '@/lib/trpc/client';
+import { cn } from '@/lib/utils';
 import { getPlacementLabel, placementColors } from '@/lib/placements';
 import { OnboardingChecklist } from '@/components/dashboard/onboarding-checklist';
 import { SecretaryCTA } from '@/components/dashboard/secretary-cta';
 import { RolePickerBanner } from '@/components/dashboard/role-picker-banner';
+import { SE_H } from '@/components/show-experience/tokens';
 import { StewardShowBanner } from '@/components/dashboard/steward-show-banner';
 
 function getTimeGreeting(): string {
@@ -72,8 +74,8 @@ export default function DashboardPage() {
       {isLoading ? (
         <div className="flex min-h-[60vh] flex-col items-center justify-center gap-3">
           <div className="relative">
-            <div className="absolute inset-0 animate-ping rounded-full bg-amber-400/20" />
-            <Loader2 className="relative size-8 animate-spin text-amber-600" />
+            <div className="absolute inset-0 animate-ping rounded-full bg-primary/20" />
+            <Loader2 className="relative size-8 animate-spin text-primary" />
           </div>
           <p className="text-sm text-muted-foreground">Loading your dashboard...</p>
         </div>
@@ -114,8 +116,8 @@ export default function DashboardPage() {
             <section>
               <SectionHeader
                 icon={Sparkles}
-                iconBg="bg-emerald-100"
-                iconColor="text-emerald-700"
+                iconBg="bg-se-fresh-soft"
+                iconColor="text-se-fresh-deep"
                 title="Shows for your breeds"
                 subtitle="Accepting entries now"
                 href="/browse"
@@ -152,8 +154,8 @@ export default function DashboardPage() {
             <section>
               <SectionHeader
                 icon={Trophy}
-                iconBg="bg-amber-100"
-                iconColor="text-amber-700"
+                iconBg="bg-se-honey-soft"
+                iconColor="text-se-honey-deep"
                 title="Recent Results"
                 subtitle="Last 60 days"
               />
@@ -170,8 +172,8 @@ export default function DashboardPage() {
             <section>
               <SectionHeader
                 icon={Crown}
-                iconBg="bg-amber-100"
-                iconColor="text-amber-700"
+                iconBg="bg-se-honey-soft"
+                iconColor="text-se-honey-deep"
                 title="Championship Journey"
                 subtitle="Road to Champion"
               />
@@ -206,15 +208,15 @@ export default function DashboardPage() {
           {/* ─── Dog Profile Nudge ─── */}
           {data.ccProgress.length > 0 && data.ccProgress.some((d) => !d.photoUrl) && (
             <Link href="/dogs" className="block">
-              <div className="flex items-center gap-3 rounded-2xl border border-amber-200/60 bg-gradient-to-r from-amber-50/80 to-transparent px-4 py-3 transition-all active:scale-[0.99]">
-                <div className="flex size-9 items-center justify-center rounded-full bg-amber-100">
-                  <Star className="size-4 text-amber-600" />
+              <div className="flex items-center gap-3 rounded-2xl border border-se-honey/60 bg-gradient-to-r from-se-honey-soft/80 to-transparent px-4 py-3 transition-all active:scale-[0.99]">
+                <div className="flex size-9 items-center justify-center rounded-full bg-se-honey-soft">
+                  <Star className="size-4 text-se-honey-deep" />
                 </div>
                 <div className="min-w-0 flex-1">
-                  <p className="text-sm font-medium text-amber-900">Complete your dog profiles</p>
-                  <p className="text-xs text-amber-700/70">Add photos to make your dogs stand out in entries and catalogues</p>
+                  <p className="text-sm font-medium text-se-honey-ink">Complete your dog profiles</p>
+                  <p className="text-xs text-se-honey-deep/70">Add photos to make your dogs stand out in entries and catalogues</p>
                 </div>
-                <ChevronRight className="size-4 shrink-0 text-amber-400" />
+                <ChevronRight className="size-4 shrink-0 text-se-honey" />
               </div>
             </Link>
           )}
@@ -224,8 +226,8 @@ export default function DashboardPage() {
             <section>
               <SectionHeader
                 icon={Sparkles}
-                iconBg="bg-emerald-100"
-                iconColor="text-emerald-700"
+                iconBg="bg-se-fresh-soft"
+                iconColor="text-se-fresh-deep"
                 title="Recommended Shows"
                 subtitle="Matching your breeds"
                 href="/browse"
@@ -291,31 +293,31 @@ function EmptyDashboard() {
   return (
     <div className="space-y-8">
       {/* Hero welcome */}
-      <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-amber-50 via-orange-50/80 to-amber-100/50 px-5 py-10 text-center">
+      <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-se-honey-soft via-se-cream/80 to-se-honey-soft/50 px-5 py-10 text-center">
         {/* Decorative circles */}
         <div className="pointer-events-none absolute inset-0">
-          <div className="absolute -right-12 -top-12 size-40 rounded-full bg-amber-200/30 blur-2xl" />
-          <div className="absolute -bottom-8 -left-8 size-32 rounded-full bg-orange-200/30 blur-2xl" />
-          <div className="absolute right-1/4 top-1/3 size-24 rounded-full bg-amber-300/20 blur-xl" />
+          <div className="absolute -right-12 -top-12 size-40 rounded-full bg-se-honey-line/40 blur-2xl" />
+          <div className="absolute -bottom-8 -left-8 size-32 rounded-full bg-se-cream/60 blur-2xl" />
+          <div className="absolute right-1/4 top-1/3 size-24 rounded-full bg-se-honey/20 blur-xl" />
         </div>
         <div className="relative">
-          <div className="mx-auto mb-5 flex size-20 items-center justify-center rounded-2xl bg-white/80 shadow-sm backdrop-blur-sm">
-            <Dog className="size-10 text-amber-700" />
+          <div className="mx-auto mb-5 flex size-20 items-center justify-center rounded-2xl bg-se-surface/80 shadow-sm backdrop-blur-sm">
+            <Dog className="size-10 text-se-honey-deep" />
           </div>
-          <h1 className="font-serif text-2xl font-bold tracking-tight text-amber-950">
+          <h1 className={cn(SE_H, 'text-2xl text-se-ink')}>
             Welcome to Remi
           </h1>
-          <p className="mx-auto mt-2.5 max-w-sm text-sm leading-relaxed text-amber-800/70">
+          <p className="mx-auto mt-2.5 max-w-sm text-sm leading-relaxed text-se-ink2/70">
             Your dog show companion. Add your first dog to get started with entries, results tracking, and championship progress.
           </p>
           <div className="mt-7 flex flex-col gap-2.5 sm:flex-row sm:justify-center">
-            <Button size="lg" className="min-h-[2.75rem] gap-2 rounded-xl bg-amber-700 shadow-md hover:bg-amber-800" asChild>
+            <Button size="lg" className="min-h-[2.75rem] gap-2 rounded-xl shadow-md" asChild>
               <Link href="/dogs/new">
                 <Plus className="size-4" />
                 Add Your First Dog
               </Link>
             </Button>
-            <Button variant="outline" size="lg" className="min-h-[2.75rem] gap-2 rounded-xl border-amber-300 bg-white/60 text-amber-900 hover:bg-white/80" asChild>
+            <Button variant="outline" size="lg" className="min-h-[2.75rem] gap-2 rounded-xl border-se-honey-line bg-se-surface/60 text-se-honey-ink hover:bg-se-surface/80" asChild>
               <Link href="/browse">
                 <CalendarDays className="size-4" />
                 View all shows
@@ -327,9 +329,9 @@ function EmptyDashboard() {
 
       {/* Feature hints */}
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-        <div className="flex gap-3.5 rounded-2xl border border-border/40 bg-white/80 p-4 shadow-sm">
-          <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-emerald-100">
-            <Ticket className="size-5 text-emerald-700" />
+        <div className="flex gap-3.5 rounded-2xl border border-border/40 bg-se-surface/80 p-4 shadow-sm">
+          <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-se-fresh-soft">
+            <Ticket className="size-5 text-se-fresh-deep" />
           </div>
           <div>
             <p className="font-serif text-sm font-semibold">Enter shows online</p>
@@ -338,9 +340,9 @@ function EmptyDashboard() {
             </p>
           </div>
         </div>
-        <div className="flex gap-3.5 rounded-2xl border border-border/40 bg-white/80 p-4 shadow-sm">
-          <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-amber-100">
-            <Trophy className="size-5 text-amber-700" />
+        <div className="flex gap-3.5 rounded-2xl border border-border/40 bg-se-surface/80 p-4 shadow-sm">
+          <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-se-honey-soft">
+            <Trophy className="size-5 text-se-honey-deep" />
           </div>
           <div>
             <p className="font-serif text-sm font-semibold">Track your results</p>
@@ -372,11 +374,11 @@ function NextShowHero({
 
   return (
     <Link href={`/entries/${show.entryId}`} className="block">
-      <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-amber-600 via-amber-700 to-orange-800 px-5 py-5 text-white shadow-lg shadow-amber-900/20 transition-all active:scale-[0.99] sm:py-6">
+      <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-se-deep to-se-deepest px-5 py-5 text-se-cream shadow-lg shadow-se-deepest/30 transition-all active:scale-[0.99] sm:py-6">
         {/* Background decoration */}
         <div className="pointer-events-none absolute inset-0">
           <div className="absolute -right-8 -top-8 size-32 rounded-full bg-white/[0.07] blur-xl" />
-          <div className="absolute -bottom-6 -left-6 size-24 rounded-full bg-amber-400/20 blur-lg" />
+          <div className="absolute -bottom-6 -left-6 size-24 rounded-full bg-se-honey/20 blur-lg" />
           {isToday && (
             <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_0%,rgba(255,255,255,0.1),transparent_60%)]" />
           )}
@@ -384,17 +386,17 @@ function NextShowHero({
 
         <div className="relative">
           {/* Greeting + label */}
-          <p className="text-xs font-medium uppercase tracking-widest text-amber-200/80">
+          <p className="text-xs font-medium uppercase tracking-widest text-se-cream/70">
             {getTimeGreeting()}, {firstName}
           </p>
 
           {/* Show name */}
-          <h1 className="mt-2 font-serif text-xl font-bold leading-tight tracking-tight sm:text-2xl">
+          <h1 className={cn(SE_H, 'mt-2 text-xl leading-tight sm:text-2xl')}>
             {show.showName}
           </h1>
 
           {/* Show details */}
-          <div className="mt-2.5 flex flex-wrap items-center gap-x-3 gap-y-1.5 text-sm text-amber-100/80">
+          <div className="mt-2.5 flex flex-wrap items-center gap-x-3 gap-y-1.5 text-sm text-se-cream/80">
             <span className="flex items-center gap-1.5">
               <CalendarDays className="size-3.5" />
               {format(toDate(show.showDate), 'EEE d MMM yyyy')}
@@ -408,10 +410,10 @@ function NextShowHero({
           </div>
 
           {/* Dog + classes */}
-          <div className="mt-2 flex items-center gap-1.5 text-sm text-amber-100/70">
+          <div className="mt-2 flex items-center gap-1.5 text-sm text-se-cream/70">
             <Dog className="size-3.5 shrink-0" />
-            <span className="font-medium text-amber-100/90">{show.dogName}</span>
-            <span className="text-amber-200/40">&middot;</span>
+            <span className="font-medium text-se-cream/90">{show.dogName}</span>
+            <span className="text-se-cream/40">&middot;</span>
             <span className="truncate">
               {show.classes.map((c: { className: string; classNumber: number | null }) =>
                 c.classNumber ? `${c.classNumber}. ${c.className}` : c.className
@@ -423,14 +425,14 @@ function NextShowHero({
           <div className="mt-4 inline-flex items-center gap-2 rounded-2xl bg-white/15 px-4 py-2 backdrop-blur-sm">
             <span className="font-serif text-2xl font-bold tabular-nums sm:text-3xl">
               {isToday ? (
-                <Flame className="inline-block size-6 text-amber-300" />
+                <Flame className="inline-block size-6 text-se-honey" />
               ) : (
                 days
               )}
             </span>
             <div className="text-left">
               <p className="text-xs font-semibold leading-tight text-white/90">{countdownText}</p>
-              <p className="text-xs text-amber-200/70">{subText}</p>
+              <p className="text-xs text-se-cream/70">{subText}</p>
             </div>
           </div>
         </div>
@@ -443,28 +445,28 @@ function NextShowHero({
 
 function FindShowsHero({ firstName, hasRecommended }: { firstName: string; hasRecommended: boolean }) {
   return (
-    <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-slate-800 via-slate-900 to-slate-950 px-5 py-6 text-white shadow-lg">
+    <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-se-deep to-se-deepest px-5 py-6 text-se-cream shadow-lg">
       {/* Background decoration */}
       <div className="pointer-events-none absolute inset-0">
-        <div className="absolute -right-10 -top-10 size-36 rounded-full bg-amber-500/10 blur-2xl" />
-        <div className="absolute -bottom-6 -left-6 size-24 rounded-full bg-violet-500/10 blur-xl" />
+        <div className="absolute -right-10 -top-10 size-36 rounded-full bg-se-honey/10 blur-2xl" />
+        <div className="absolute -bottom-6 -left-6 size-24 rounded-full bg-se-fresh/10 blur-xl" />
       </div>
 
       <div className="relative">
-        <p className="text-xs font-medium uppercase tracking-widest text-slate-400">
+        <p className="text-xs font-medium uppercase tracking-widest text-se-cream/70">
           {getTimeGreeting()}, {firstName}
         </p>
-        <h1 className="mt-2 font-serif text-xl font-bold tracking-tight sm:text-2xl">
+        <h1 className={cn(SE_H, 'mt-2 text-xl sm:text-2xl')}>
           {hasRecommended ? 'Ready for the ring?' : 'Find your next show'}
         </h1>
-        <p className="mt-1.5 text-sm text-slate-300/80">
+        <p className="mt-1.5 text-sm text-se-cream/80">
           {hasRecommended
             ? 'We found shows matching your breeds. Take a look below.'
             : 'Browse upcoming championship and open shows near you.'}
         </p>
         <Button
           size="lg"
-          className="mt-4 min-h-[2.75rem] gap-2 rounded-xl bg-amber-600 text-white shadow-md hover:bg-amber-500"
+          className="mt-4 min-h-[2.75rem] gap-2 rounded-xl bg-se-fresh text-[#0e2c19] shadow-md hover:bg-se-fresh/90"
           asChild
         >
           <Link href="/browse">
@@ -502,7 +504,7 @@ function DogCardsStrip({ dogs }: {
           <Link
             key={dog.dogId}
             href={`/dogs/${dog.dogId}`}
-            className="flex min-w-[8rem] shrink-0 flex-col items-center rounded-2xl border border-border/40 bg-white/80 px-4 py-4 shadow-sm transition-all active:scale-[0.97] active:bg-accent/30"
+            className="flex min-w-[8rem] shrink-0 flex-col items-center rounded-2xl border border-border/40 bg-se-surface/80 px-4 py-4 shadow-sm transition-all active:scale-[0.97] active:bg-accent/30"
           >
             {/* Avatar */}
             {dog.photoUrl ? (
@@ -511,20 +513,20 @@ function DogCardsStrip({ dogs }: {
                 alt=""
                 className={`size-16 rounded-full object-cover shadow-sm ${
                   dog.isChampion
-                    ? 'ring-2 ring-amber-400 ring-offset-2'
+                    ? 'ring-2 ring-se-honey ring-offset-2'
                     : 'ring-1 ring-border/40'
                 }`}
               />
             ) : (
-              <div className={`flex size-16 items-center justify-center rounded-full bg-gradient-to-br from-slate-100 to-slate-200 shadow-sm ${
-                dog.isChampion ? 'ring-2 ring-amber-400 ring-offset-2' : 'ring-1 ring-border/40'
+              <div className={`flex size-16 items-center justify-center rounded-full bg-muted shadow-sm ${
+                dog.isChampion ? 'ring-2 ring-se-honey ring-offset-2' : 'ring-1 ring-border/40'
               }`}>
-                <Dog className="size-7 text-slate-400" />
+                <Dog className="size-7 text-muted-foreground" />
               </div>
             )}
             {/* Name */}
             <p className="mt-2.5 max-w-[7rem] truncate text-center font-serif text-xs font-semibold">
-              {dog.isChampion && <span className="text-amber-600">Ch </span>}
+              {dog.isChampion && <span className="text-se-honey-deep">Ch </span>}
               {dog.dogName}
             </p>
             {/* Breed */}
@@ -535,9 +537,9 @@ function DogCardsStrip({ dogs }: {
             )}
             {/* Quick stat */}
             {dog.ccCount > 0 && (
-              <div className="mt-2 flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5">
-                <Crown className="size-2.5 text-amber-700" />
-                <span className="text-xs font-semibold text-amber-800">
+              <div className="mt-2 flex items-center gap-1 rounded-full bg-se-honey-soft px-2 py-0.5">
+                <Crown className="size-2.5 text-se-honey-deep" />
+                <span className="text-xs font-semibold text-se-honey-ink">
                   {dog.ccCount} CC{dog.ccCount !== 1 ? 's' : ''}
                 </span>
               </div>
@@ -674,14 +676,14 @@ function ResultCard({ result }: { result: { dogId: string | null; dogName: strin
   }
 
   return (
-    <div className="rounded-2xl border border-border/40 bg-white/80 p-4 shadow-sm">
+    <div className="rounded-2xl border border-border/40 bg-se-surface/80 p-4 shadow-sm">
       <div className="flex items-start gap-3">
         {/* Dog photo */}
         {result.dogPhotoUrl ? (
           <img src={result.dogPhotoUrl} alt="" className="size-11 shrink-0 rounded-full object-cover ring-1 ring-border/40" />
         ) : (
-          <div className="flex size-11 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-slate-100 to-slate-200">
-            <Dog className="size-5 text-slate-400" />
+          <div className="flex size-11 shrink-0 items-center justify-center rounded-full bg-muted">
+            <Dog className="size-5 text-muted-foreground" />
           </div>
         )}
         <div className="min-w-0 flex-1">
@@ -699,7 +701,7 @@ function ResultCard({ result }: { result: { dogId: string | null; dogName: strin
                 )}
                 <span className="text-muted-foreground">{p.className}</span>
                 {p.specialAward && (
-                  <Badge variant="secondary" className="rounded-md text-xs bg-amber-50 text-amber-700">
+                  <Badge variant="secondary" className="rounded-md text-xs bg-se-honey-soft text-se-honey-deep">
                     <Award className="mr-0.5 size-2.5" />
                     {p.specialAward}
                   </Badge>
@@ -717,28 +719,28 @@ function ResultCard({ result }: { result: { dogId: string | null; dogName: strin
 
 function CCResultCard({ result }: { result: { dogId: string | null; dogName: string | null; dogPhotoUrl: string | null; showName: string; showDate: string; placements: { className: string; placement: number | null; specialAward: string | null }[] } }) {
   return (
-    <div className="cc-shimmer relative overflow-hidden rounded-2xl border-2 border-amber-300/60 bg-gradient-to-br from-amber-50 via-yellow-50/50 to-amber-50/30 p-4 shadow-md shadow-amber-200/30">
+    <div className="cc-shimmer relative overflow-hidden rounded-2xl border-2 border-se-honey/60 bg-gradient-to-br from-se-honey-soft via-se-cream/50 to-se-honey-soft/30 p-4 shadow-md shadow-se-honey/20">
       {/* Gold shimmer overlay — animated via globals.css */}
-      <div className="cc-shimmer-bar pointer-events-none absolute inset-0 bg-gradient-to-r from-transparent via-amber-200/20 to-transparent" />
+      <div className="cc-shimmer-bar pointer-events-none absolute inset-0 bg-gradient-to-r from-transparent via-se-honey-line/30 to-transparent" />
 
       <div className="relative flex items-start gap-3">
         {/* Dog photo with gold ring */}
         {result.dogPhotoUrl ? (
-          <img src={result.dogPhotoUrl} alt="" className="size-12 shrink-0 rounded-full object-cover ring-2 ring-amber-400 ring-offset-2" />
+          <img src={result.dogPhotoUrl} alt="" className="size-12 shrink-0 rounded-full object-cover ring-2 ring-se-honey ring-offset-2" />
         ) : (
-          <div className="flex size-12 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-amber-100 to-amber-200 ring-2 ring-amber-400 ring-offset-2">
-            <Dog className="size-6 text-amber-700" />
+          <div className="flex size-12 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-se-honey-soft to-se-honey-line ring-2 ring-se-honey ring-offset-2">
+            <Dog className="size-6 text-se-honey-deep" />
           </div>
         )}
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
-            <p className="font-serif text-sm font-bold text-amber-900">{result.dogName ?? 'Unknown'}</p>
-            <div className="flex items-center gap-1 rounded-full bg-amber-500 px-2.5 py-0.5 text-white shadow-sm">
+            <p className="font-serif text-sm font-bold text-se-honey-ink">{result.dogName ?? 'Unknown'}</p>
+            <div className="flex items-center gap-1 rounded-full bg-se-honey px-2.5 py-0.5 text-white shadow-sm">
               <Crown className="size-3" />
               <span className="text-xs font-bold tracking-wide">CC</span>
             </div>
           </div>
-          <p className="mt-0.5 text-xs text-amber-700/70">
+          <p className="mt-0.5 text-xs text-se-honey-deep/70">
             {result.showName} &middot; {format(toDate(result.showDate), 'd MMM')}
           </p>
           <div className="mt-2 flex flex-wrap gap-1.5">
@@ -749,9 +751,9 @@ function CCResultCard({ result }: { result: { dogId: string | null; dogName: str
                     {getPlacementLabel(p.placement)}
                   </Badge>
                 )}
-                <span className="text-amber-800/60">{p.className}</span>
+                <span className="text-se-honey-ink/60">{p.className}</span>
                 {p.specialAward && (
-                  <Badge className="rounded-md border-amber-300 bg-amber-100 text-xs text-amber-800">
+                  <Badge className="rounded-md border-se-honey-line bg-se-honey-soft text-xs text-se-honey-ink">
                     <Award className="mr-0.5 size-2.5" />
                     {p.specialAward}
                   </Badge>
@@ -778,7 +780,7 @@ function CCProgressCard({ dog }: { dog: { dogId: string; dogName: string; breedN
 
   return (
     <Link href={`/dogs/${dog.dogId}`} className="block">
-      <div className="rounded-2xl border border-border/40 bg-white/80 p-4 shadow-sm transition-all active:scale-[0.99]">
+      <div className="rounded-2xl border border-border/40 bg-se-surface/80 p-4 shadow-sm transition-all active:scale-[0.99]">
         <div className="flex items-center gap-3">
           {/* Dog photo */}
           {dog.photoUrl ? (
@@ -787,20 +789,20 @@ function CCProgressCard({ dog }: { dog: { dogId: string; dogName: string; breedN
               alt=""
               className={`size-12 shrink-0 rounded-full object-cover ${
                 dog.isChampion
-                  ? 'ring-2 ring-amber-400 ring-offset-2'
+                  ? 'ring-2 ring-se-honey ring-offset-2'
                   : 'ring-1 ring-border/40'
               }`}
             />
           ) : (
-            <div className={`flex size-12 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-slate-100 to-slate-200 ${
-              dog.isChampion ? 'ring-2 ring-amber-400 ring-offset-2' : 'ring-1 ring-border/40'
+            <div className={`flex size-12 shrink-0 items-center justify-center rounded-full bg-muted ${
+              dog.isChampion ? 'ring-2 ring-se-honey ring-offset-2' : 'ring-1 ring-border/40'
             }`}>
-              <Dog className="size-6 text-slate-400" />
+              <Dog className="size-6 text-muted-foreground" />
             </div>
           )}
           <div className="min-w-0 flex-1">
             <p className="font-serif text-sm font-semibold">
-              {dog.isChampion && <span className="text-amber-600">Ch </span>}
+              {dog.isChampion && <span className="text-se-honey-deep">Ch </span>}
               {dog.dogName}
             </p>
             {dog.breedName && (
@@ -812,11 +814,11 @@ function CCProgressCard({ dog }: { dog: { dogId: string; dogName: string; breedN
 
         {/* Champion celebration */}
         {dog.isChampion ? (
-          <div className="mt-3 flex items-center gap-2 rounded-xl bg-gradient-to-r from-amber-100/80 to-amber-50/50 px-3 py-2.5">
-            <Sparkles className="size-4 text-amber-600" />
+          <div className="mt-3 flex items-center gap-2 rounded-xl bg-gradient-to-r from-se-honey-soft/80 to-se-honey-soft/50 px-3 py-2.5">
+            <Sparkles className="size-4 text-se-honey-deep" />
             <div>
-              <p className="text-xs font-semibold text-amber-800">Champion</p>
-              <p className="text-xs text-amber-700/70">
+              <p className="text-xs font-semibold text-se-honey-ink">Champion</p>
+              <p className="text-xs text-se-honey-deep/70">
                 {dog.ccCount} CC{dog.ccCount !== 1 ? 's' : ''} &middot; {dog.rccCount} RCC{dog.rccCount !== 1 ? 's' : ''}
               </p>
             </div>
@@ -832,17 +834,17 @@ function CCProgressCard({ dog }: { dog: { dogId: string; dogName: string; breedN
                     <div
                       className={`flex size-10 items-center justify-center rounded-full border-2 transition-all ${
                         isFilled
-                          ? 'border-amber-400 bg-gradient-to-br from-amber-400 to-amber-500 shadow-md shadow-amber-300/30'
-                          : 'border-dashed border-slate-300 bg-slate-50'
+                          ? 'border-se-honey bg-gradient-to-br from-se-honey to-se-honey-deep shadow-md shadow-se-honey/30'
+                          : 'border-dashed border-border bg-muted'
                       }`}
                     >
                       {isFilled ? (
                         <Crown className="size-4 text-white" />
                       ) : (
-                        <span className="text-xs font-medium text-slate-400">{slot + 1}</span>
+                        <span className="text-xs font-medium text-muted-foreground">{slot + 1}</span>
                       )}
                     </div>
-                    <span className={`text-[9px] font-medium ${isFilled ? 'text-amber-700' : 'text-slate-400'}`}>
+                    <span className={`text-[9px] font-medium ${isFilled ? 'text-se-honey-deep' : 'text-muted-foreground'}`}>
                       CC {slot + 1}
                     </span>
                   </div>
@@ -911,15 +913,15 @@ function RecommendedShowCard({ show }: { show: { showId: string; showName: strin
 
   return (
     <Link href={`/shows/${show.showSlug ?? show.showId}`}>
-      <div className="rounded-2xl border border-border/40 bg-white/80 p-4 shadow-sm transition-all active:scale-[0.99]">
+      <div className="rounded-2xl border border-border/40 bg-se-surface/80 p-4 shadow-sm transition-all active:scale-[0.99]">
         <div className="flex items-start gap-3">
           <div className={`flex size-10 shrink-0 items-center justify-center rounded-xl ${
-            isUrgent ? 'bg-red-100' : 'bg-emerald-100'
+            isUrgent ? 'bg-red-100' : 'bg-se-fresh-soft'
           }`}>
             {isUrgent ? (
               <Clock className="size-4 text-red-600" />
             ) : (
-              <CalendarDays className="size-4 text-emerald-700" />
+              <CalendarDays className="size-4 text-se-fresh-deep" />
             )}
           </div>
           <div className="min-w-0 flex-1">
@@ -933,7 +935,7 @@ function RecommendedShowCard({ show }: { show: { showId: string; showName: strin
               {show.breedNames.map((b) => (
                 <span
                   key={b}
-                  className="inline-flex items-center gap-1 rounded-md bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-700"
+                  className="inline-flex items-center gap-1 rounded-md bg-se-fresh-soft px-2 py-0.5 text-xs font-medium text-se-fresh-deep"
                 >
                   <Star className="size-2.5" />
                   {b}
@@ -946,7 +948,7 @@ function RecommendedShowCard({ show }: { show: { showId: string; showName: strin
               <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${
                 isUrgent
                   ? 'bg-red-100 text-red-700'
-                  : 'bg-amber-100 text-amber-700'
+                  : 'bg-se-honey-soft text-se-honey-deep'
               }`}>
                 {daysToClose === 0 ? 'Closes today' : `${daysToClose}d left`}
               </span>

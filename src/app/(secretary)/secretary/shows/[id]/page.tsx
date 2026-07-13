@@ -27,13 +27,6 @@ import { cn } from '@/lib/utils';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import {
   Select,
@@ -61,6 +54,8 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { uploadImage } from '@/lib/upload';
+import { SECard, SecLabel, Eyebrow } from '@/components/show-experience/kit';
+import { SE_H } from '@/components/show-experience/tokens';
 import { formatDate } from './_lib/show-utils';
 import { useShowId } from './_lib/show-context';
 import { PhaseActionPanel } from './_components/phase-action-panel';
@@ -114,139 +109,142 @@ export default function OverviewPage() {
       <PhaseActionPanel />
 
       {/* Show Details — compact "boarding pass" style */}
-      <Card className="overflow-hidden rounded-2xl shadow-sm">
-        {/* Hero strip — key info at a glance */}
-        <div className="border-b bg-gradient-to-br from-primary/[0.04] to-transparent px-4 py-4 sm:px-6">
-          <div className="flex items-start justify-between gap-3">
-            <div className="min-w-0 flex-1 space-y-2.5">
-              {/* Date — the most important thing */}
-              <div className="flex items-center gap-2.5">
-                <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary/10">
-                  <CalendarDays className="size-4 text-primary" />
+      <div>
+        <SecLabel>Show Details</SecLabel>
+        <SECard className="overflow-hidden">
+          {/* Hero strip — key info at a glance */}
+          <div className="border-b border-se-line bg-se-fresh-soft/30 px-4 py-4 sm:px-6">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0 flex-1 space-y-2.5">
+                {/* Date — the most important thing */}
+                <div className="flex items-center gap-2.5">
+                  <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-se-fresh-soft">
+                    <CalendarDays className="size-4 text-se-fresh-deep" />
+                  </div>
+                  <div className="min-w-0">
+                    <Eyebrow>Date</Eyebrow>
+                    <p className={cn(SE_H, 'truncate text-sm text-se-ink')}>{dateDisplay}</p>
+                  </div>
                 </div>
-                <div className="min-w-0">
-                  <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Date</p>
-                  <p className="truncate font-serif text-sm font-semibold tracking-tight">{dateDisplay}</p>
+
+                {/* Venue */}
+                <div className="flex items-center gap-2.5">
+                  <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-se-fresh-soft">
+                    <MapPin className="size-4 text-se-fresh-deep" />
+                  </div>
+                  <div className="min-w-0">
+                    <Eyebrow>Venue</Eyebrow>
+                    <p className="truncate text-sm font-medium text-se-ink">
+                      {venueDisplay}
+                      {show.venue?.postcode && (
+                        <span className="ml-1 text-xs text-se-ink3">({show.venue.postcode})</span>
+                      )}
+                    </p>
+                  </div>
                 </div>
               </div>
 
-              {/* Venue */}
-              <div className="flex items-center gap-2.5">
-                <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary/10">
-                  <MapPin className="size-4 text-primary" />
-                </div>
-                <div className="min-w-0">
-                  <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Venue</p>
-                  <p className="truncate text-sm font-medium">
-                    {venueDisplay}
-                    {show.venue?.postcode && (
-                      <span className="ml-1 text-xs text-muted-foreground">({show.venue.postcode})</span>
+              {/* Edit button */}
+              <EditShowDetailsDialog show={show} showId={showId} />
+            </div>
+
+            {/* Type / Scope / Structure badges — dense horizontal row */}
+            <div className="mt-3 flex flex-wrap gap-1.5">
+              <Badge variant="secondary" className="text-[11px] font-medium">
+                {displayShowTypeLabel(show.showType, show.showRuleset)}
+              </Badge>
+              <Badge variant="outline" className="text-[11px] font-medium capitalize">
+                {show.showScope.replace('_', ' ')}
+              </Badge>
+              {show.classSexArrangement && (
+                <Badge variant="outline" className="text-[11px] font-medium">
+                  {show.classSexArrangement === 'separate_sex' ? 'Separate Dog & Bitch' : 'Combined'}
+                </Badge>
+              )}
+              {show.showOpenTime && (
+                <Badge variant="outline" className="text-[11px] font-medium">
+                  <Clock className="mr-0.5 size-3" />
+                  Opens {show.showOpenTime}
+                </Badge>
+              )}
+            </div>
+          </div>
+
+          {/* Quick-reference row — close dates side by side */}
+          {(show.entryCloseDate || show.postalCloseDate) && (
+            <div className="grid grid-cols-2 divide-x divide-se-line border-b border-se-line text-center">
+              <div className="px-3 py-2.5">
+                <Eyebrow>Entries Close</Eyebrow>
+                <p className="mt-0.5 text-xs font-semibold text-se-ink">{formatDate(show.entryCloseDate)}</p>
+              </div>
+              <div className="px-3 py-2.5">
+                <Eyebrow>Postal Close</Eyebrow>
+                <p className="mt-0.5 text-xs font-semibold text-se-ink">{formatDate(show.postalCloseDate)}</p>
+              </div>
+            </div>
+          )}
+
+          {/* Expandable secondary details */}
+          {hasSecondaryDetails && (
+            <div>
+              <button
+                type="button"
+                onClick={() => setDetailsExpanded((v) => !v)}
+                className="flex w-full items-center justify-between px-4 py-2.5 text-xs font-medium text-se-ink3 transition-colors hover:bg-se-paper2/50 hover:text-se-ink sm:px-6"
+              >
+                <span>{detailsExpanded ? 'Hide details' : 'More details'}</span>
+                <ChevronDown
+                  className={`size-3.5 transition-transform duration-200 ${detailsExpanded ? 'rotate-180' : ''}`}
+                />
+              </button>
+
+              {detailsExpanded && (
+                <div className="animate-in slide-in-from-top-1 fade-in border-t border-se-line px-4 pb-4 pt-3 sm:px-6">
+                  <dl className="grid grid-cols-2 gap-x-4 gap-y-3 text-sm">
+                    {/* Secretary info */}
+                    {show.secretaryName && (
+                      <div className="min-w-0">
+                        <dt className="flex items-center gap-1">
+                          <Users className="size-3 text-se-ink3" /> <Eyebrow>Secretary</Eyebrow>
+                        </dt>
+                        <dd className="mt-0.5 truncate font-medium text-se-ink">{show.secretaryName}</dd>
+                      </div>
                     )}
-                  </p>
+                    {show.secretaryEmail && (
+                      <div className="min-w-0">
+                        <dt className="flex items-center gap-1">
+                          <Mail className="size-3 text-se-ink3" /> <Eyebrow>Email</Eyebrow>
+                        </dt>
+                        <dd className="mt-0.5 truncate text-xs text-se-ink">{show.secretaryEmail}</dd>
+                      </div>
+                    )}
+
+                    {/* Judges */}
+                    {uniqueJudges.length > 0 && (
+                      <div className="col-span-2 min-w-0">
+                        <dt className="flex items-center gap-1">
+                          <Gavel className="size-3 text-se-ink3" /> <Eyebrow>{uniqueJudges.length === 1 ? 'Judge' : 'Judges'}</Eyebrow>
+                        </dt>
+                        <dd className="mt-0.5 font-medium text-se-ink">{uniqueJudges.join(', ')}</dd>
+                      </div>
+                    )}
+
+                    {/* Description */}
+                    {show.description && (
+                      <div className="col-span-2 min-w-0">
+                        <dt><Eyebrow>Description</Eyebrow></dt>
+                        <dd className="mt-1 whitespace-pre-wrap text-xs leading-relaxed text-se-ink3">
+                          {show.description}
+                        </dd>
+                      </div>
+                    )}
+                  </dl>
                 </div>
-              </div>
+              )}
             </div>
-
-            {/* Edit button */}
-            <EditShowDetailsDialog show={show} showId={showId} />
-          </div>
-
-          {/* Type / Scope / Structure badges — dense horizontal row */}
-          <div className="mt-3 flex flex-wrap gap-1.5">
-            <Badge variant="secondary" className="text-[11px] font-medium">
-              {displayShowTypeLabel(show.showType, show.showRuleset)}
-            </Badge>
-            <Badge variant="outline" className="text-[11px] font-medium capitalize">
-              {show.showScope.replace('_', ' ')}
-            </Badge>
-            {show.classSexArrangement && (
-              <Badge variant="outline" className="text-[11px] font-medium">
-                {show.classSexArrangement === 'separate_sex' ? 'Separate Dog & Bitch' : 'Combined'}
-              </Badge>
-            )}
-            {show.showOpenTime && (
-              <Badge variant="outline" className="text-[11px] font-medium">
-                <Clock className="mr-0.5 size-3" />
-                Opens {show.showOpenTime}
-              </Badge>
-            )}
-          </div>
-        </div>
-
-        {/* Quick-reference row — close dates side by side */}
-        {(show.entryCloseDate || show.postalCloseDate) && (
-          <div className="grid grid-cols-2 divide-x border-b text-center">
-            <div className="px-3 py-2.5">
-              <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Entries Close</p>
-              <p className="mt-0.5 text-xs font-semibold">{formatDate(show.entryCloseDate)}</p>
-            </div>
-            <div className="px-3 py-2.5">
-              <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Postal Close</p>
-              <p className="mt-0.5 text-xs font-semibold">{formatDate(show.postalCloseDate)}</p>
-            </div>
-          </div>
-        )}
-
-        {/* Expandable secondary details */}
-        {hasSecondaryDetails && (
-          <div>
-            <button
-              type="button"
-              onClick={() => setDetailsExpanded((v) => !v)}
-              className="flex w-full items-center justify-between px-4 py-2.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground sm:px-6"
-            >
-              <span>{detailsExpanded ? 'Hide details' : 'More details'}</span>
-              <ChevronDown
-                className={`size-3.5 transition-transform duration-200 ${detailsExpanded ? 'rotate-180' : ''}`}
-              />
-            </button>
-
-            {detailsExpanded && (
-              <div className="animate-in slide-in-from-top-1 fade-in border-t px-4 pb-4 pt-3 sm:px-6">
-                <dl className="grid grid-cols-2 gap-x-4 gap-y-3 text-sm">
-                  {/* Secretary info */}
-                  {show.secretaryName && (
-                    <div className="min-w-0">
-                      <dt className="flex items-center gap-1 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
-                        <Users className="size-3" /> Secretary
-                      </dt>
-                      <dd className="mt-0.5 truncate font-medium">{show.secretaryName}</dd>
-                    </div>
-                  )}
-                  {show.secretaryEmail && (
-                    <div className="min-w-0">
-                      <dt className="flex items-center gap-1 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
-                        <Mail className="size-3" /> Email
-                      </dt>
-                      <dd className="mt-0.5 truncate text-xs">{show.secretaryEmail}</dd>
-                    </div>
-                  )}
-
-                  {/* Judges */}
-                  {uniqueJudges.length > 0 && (
-                    <div className="col-span-2 min-w-0">
-                      <dt className="flex items-center gap-1 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
-                        <Gavel className="size-3" /> {uniqueJudges.length === 1 ? 'Judge' : 'Judges'}
-                      </dt>
-                      <dd className="mt-0.5 font-medium">{uniqueJudges.join(', ')}</dd>
-                    </div>
-                  )}
-
-                  {/* Description */}
-                  {show.description && (
-                    <div className="col-span-2 min-w-0">
-                      <dt className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Description</dt>
-                      <dd className="mt-1 whitespace-pre-wrap text-xs leading-relaxed text-muted-foreground">
-                        {show.description}
-                      </dd>
-                    </div>
-                  )}
-                </dl>
-              </div>
-            )}
-          </div>
-        )}
-      </Card>
+          )}
+        </SECard>
+      </div>
 
       {/* Venue image upload */}
       {show.venue && (
@@ -259,23 +257,29 @@ export default function OverviewPage() {
       )}
 
       {/* Class management */}
-      <ClassManager showId={showId} showType={show.showType} showScope={show.showScope} showRuleset={show.showRuleset} classes={show.showClasses ?? []} />
+      <div>
+        <SecLabel>Classes</SecLabel>
+        <div className="space-y-6">
+          <ClassManager showId={showId} showType={show.showType} showScope={show.showScope} showRuleset={show.showRuleset} classes={show.showClasses ?? []} />
 
-      {/* Add classes — prominent when empty, folded into ClassManager when classes exist */}
-      {(show.showClasses?.length ?? 0) === 0 && (
-        <>
-          <BulkClassCreator showId={showId} />
-          <AddIndividualClass showId={showId} />
-        </>
-      )}
+          {/* Add classes — prominent when empty, folded into ClassManager when classes exist */}
+          {(show.showClasses?.length ?? 0) === 0 && (
+            <>
+              <BulkClassCreator showId={showId} />
+              <AddIndividualClass showId={showId} />
+            </>
+          )}
 
-      {/* Variety class quick-add for multi-breed shows */}
-      {show.showScope === 'general' && (
-        <VarietyClassQuickAdd showId={showId} />
-      )}
+          {/* Variety class quick-add for multi-breed shows */}
+          {show.showScope === 'general' && (
+            <VarietyClassQuickAdd showId={showId} />
+          )}
+        </div>
+      </div>
 
       {/* Sundry items management */}
       <div id="sundry-items">
+        <SecLabel>Sundry Items</SecLabel>
         <SundryItemManager showId={showId} />
       </div>
 
@@ -333,17 +337,18 @@ function VenueImageUpload({
   }
 
   return (
-    <Card>
-      <CardHeader className="pb-3">
-        <CardTitle className="flex items-center gap-2 font-serif text-base">
-          <MapPin className="size-4 text-primary" />
-          Venue Photo — {venueName}
-        </CardTitle>
-        <CardDescription className="text-xs">
-          Shows on the public page in the venue section. Landscape images work best.
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
+    <div>
+      <SecLabel>Venue Photo</SecLabel>
+      <SECard className="p-4 sm:p-5">
+        <div className="mb-3 flex items-center gap-2">
+          <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-se-fresh-soft">
+            <MapPin className="size-4 text-se-fresh-deep" />
+          </div>
+          <div className="min-w-0">
+            <p className={cn(SE_H, 'truncate text-sm text-se-ink')}>{venueName}</p>
+            <p className="text-xs text-se-ink3">Shows on the public page. Landscape images work best.</p>
+          </div>
+        </div>
         <div
           className={cn(
             'group relative flex cursor-pointer items-center justify-center overflow-hidden rounded-lg border-2 border-dashed transition-all duration-200',
@@ -421,8 +426,8 @@ function VenueImageUpload({
             </Button>
           </div>
         )}
-      </CardContent>
-    </Card>
+      </SECard>
+    </div>
   );
 }
 
@@ -723,9 +728,9 @@ function EditShowDetailsDialog({
             </div>
             {isWusv ? (
               <>
-                <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm dark:border-amber-900/40 dark:bg-amber-950/30">
-                  <p className="font-medium text-amber-900 dark:text-amber-200">Show Format: Regional</p>
-                  <p className="mt-1 text-xs text-amber-900/80 dark:text-amber-200/80">
+                <div className="rounded-lg border border-se-honey-line bg-se-honey-soft p-3 text-sm">
+                  <p className="font-medium text-se-honey-ink">Show Format: Regional</p>
+                  <p className="mt-1 text-xs text-se-honey-ink/80">
                     WUSV / SV ruleset — single breed (German Shepherd Dog), separate Dog &amp; Bitch classes,
                     coat type split. These are fixed for Regional shows and aren&apos;t editable here.
                   </p>
@@ -1091,16 +1096,16 @@ function DeleteShowSection({ showId, showName }: { showId: string; showName: str
 
   return (
     <>
-    <Card className="border-destructive/50">
-      <CardHeader>
-        <CardTitle className="text-destructive">Danger Zone</CardTitle>
-        <CardDescription>
+    <div>
+      <SecLabel>Danger Zone</SecLabel>
+      <SECard className="border-destructive/30 bg-destructive/5 p-4 sm:p-5">
+        <p className={cn(SE_H, 'text-sm text-destructive')}>Delete this show</p>
+        <p className="mt-1 text-xs text-se-ink3">
           Permanently delete this show and all associated classes. This action cannot be undone.
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
+        </p>
         <Button
           variant="destructive"
+          className="mt-3 min-h-[2.75rem]"
           onClick={() => setConfirmOpen(true)}
           disabled={deleteMutation.isPending}
         >
@@ -1110,8 +1115,8 @@ function DeleteShowSection({ showId, showName }: { showId: string; showName: str
           <Trash2 className="size-4" />
           Delete Show
         </Button>
-      </CardContent>
-    </Card>
+      </SECard>
+    </div>
 
     <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
       <AlertDialogContent>

@@ -20,6 +20,7 @@ import { toast } from 'sonner';
 import { trpc } from '@/lib/trpc';
 import { useShowId } from '../../_lib/show-context';
 import { formatCurrency } from '@/lib/date-utils';
+import { cn } from '@/lib/utils';
 import { CANCELLABLE_STATUSES, formatOrderRef } from '@/lib/print-products';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -29,6 +30,7 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card';
+import { SE_H } from '@/components/show-experience/tokens';
 
 const STATUS_STEPS = [
   { key: 'draft', label: 'Created', icon: Clock },
@@ -128,7 +130,7 @@ export default function PrintOrderDetailPage({
               Back to Print Shop
             </Link>
           </Button>
-          <h2 className="mt-1 font-serif text-lg font-semibold">
+          <h2 className={cn(SE_H, 'mt-1 font-serif text-lg')}>
             Order #{formatOrderRef(order.id)}
           </h2>
           <p className="text-sm text-muted-foreground">

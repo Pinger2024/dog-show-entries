@@ -1,13 +1,24 @@
 import { Document, Page, View, Text, Image, StyleSheet } from '@react-pdf/renderer';
 import { readFileSync } from 'fs';
 import path from 'path';
+// Side-effect: registers the HankenGrotesk family used throughout this
+// document. Imported from a single shared module (not registered inline
+// here) — see src/lib/pdf-fonts.ts for why duplicate registration of the
+// same family from multiple modules is unsafe (it corrupted font tag
+// allocation elsewhere in the print pipeline, 2026-07-10).
+import '@/lib/pdf-fonts';
 
 /**
  * Remi-branded secretary reports (Mandy 2026-06-19 — wants the catalogue order
  * and class breakdown as tidy printable PDFs for the pack she sends to the show
- * secretary, not just CSV). Uses the built-in Helvetica so it renders anywhere
- * without font registration. Remi logo is inlined as a data URI so the server
+ * secretary, not just CSV). Remi logo is inlined as a data URI so the server
  * render never has to fetch it.
+ *
+ * Show Experience green rebrand (2026-07-10): previously rendered in the
+ * react-pdf built-in "Helvetica" standard font. That's NOT embeddable —
+ * react-pdf maps it to a phantom base-14 face that print preflight rejects
+ * (see the catalogue's font-embedding history). Switched to the registered
+ * Hanken Grotesk face throughout so every glyph in this document is embedded.
  */
 const remiLogo: string | null = (() => {
   try {
@@ -19,31 +30,31 @@ const remiLogo: string | null = (() => {
 })();
 
 const C = {
-  ink: '#1a1a1a',
+  ink: '#1b241d',
   mid: '#52525b',
   rule: '#d4d4d8',
-  band: '#0d5c3d',
-  bandText: '#ffffff',
+  band: '#20452c',
+  bandText: '#f3ecdc',
   zebra: '#f4f4f5',
 };
 
 const s = StyleSheet.create({
-  page: { paddingTop: 28, paddingBottom: 36, paddingHorizontal: 34, fontFamily: 'Helvetica', fontSize: 9, color: C.ink },
+  page: { paddingTop: 28, paddingBottom: 36, paddingHorizontal: 34, fontFamily: 'HankenGrotesk', fontSize: 9, color: C.ink },
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 14 },
   org: { fontSize: 9, color: C.mid, marginBottom: 2 },
-  showName: { fontSize: 15, fontFamily: 'Helvetica-Bold', marginBottom: 4 },
-  title: { fontSize: 11, fontFamily: 'Helvetica-Bold', color: C.band },
+  showName: { fontSize: 15, fontWeight: 800, marginBottom: 4 },
+  title: { fontSize: 11, fontWeight: 700, color: C.band },
   meta: { fontSize: 8, color: C.mid, marginTop: 3 },
   logo: { width: 96, objectFit: 'contain' },
   // Table
   thead: { flexDirection: 'row', backgroundColor: C.band, paddingVertical: 4, paddingHorizontal: 4 },
-  th: { color: C.bandText, fontFamily: 'Helvetica-Bold', fontSize: 8, paddingRight: 6 },
+  th: { color: C.bandText, fontWeight: 700, fontSize: 8, paddingRight: 6 },
   row: { flexDirection: 'row', paddingVertical: 3.5, paddingHorizontal: 4, borderBottomWidth: 0.5, borderBottomColor: C.rule },
   rowAlt: { backgroundColor: C.zebra },
   cell: { fontSize: 8.5, paddingRight: 6 },
   cellMuted: { fontSize: 7.5, color: C.mid },
   totalRow: { flexDirection: 'row', paddingVertical: 5, paddingHorizontal: 4, borderTopWidth: 1, borderTopColor: C.band, marginTop: 2 },
-  totalText: { fontFamily: 'Helvetica-Bold', fontSize: 9 },
+  totalText: { fontWeight: 700, fontSize: 9 },
   footer: { position: 'absolute', bottom: 16, left: 34, right: 34, textAlign: 'center', fontSize: 7, color: C.mid },
 });
 

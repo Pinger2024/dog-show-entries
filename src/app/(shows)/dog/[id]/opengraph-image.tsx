@@ -1,7 +1,8 @@
 import { ImageResponse } from 'next/og';
 import { eq, and, isNull } from 'drizzle-orm';
 import { db } from '@/server/db';
-import { dogs, dogPhotos, entries, entryClasses } from '@/server/db/schema';
+import { dogs, dogPhotos, entries } from '@/server/db/schema';
+import { loadShareImageFonts, SHARE_GREEN as G } from '@/lib/share-image-data';
 
 export const runtime = 'nodejs';
 export const contentType = 'image/png';
@@ -19,6 +20,9 @@ const TITLE_LABELS: Record<string, string> = {
   wt_ch: 'WT Ch.',
 };
 
+const BG_GRADIENT = `linear-gradient(172deg, ${G.deep}, ${G.deepest})`;
+const HEAD = { fontFamily: 'Hanken Grotesk', fontWeight: 800, letterSpacing: '-0.015em' } as const;
+
 export default async function OGImage({
   params,
 }: {
@@ -26,18 +30,10 @@ export default async function OGImage({
 }) {
   const { id } = await params;
 
-  // Load fonts from local files
-  const [baskervilleBold, interRegular, interSemibold] = await Promise.all([
-    fetch(new URL('../../../../../public/fonts/libre-baskerville-bold.ttf', import.meta.url)).then(
-      (r) => r.arrayBuffer()
-    ),
-    fetch(new URL('../../../../../public/fonts/inter-regular.ttf', import.meta.url)).then(
-      (r) => r.arrayBuffer()
-    ),
-    fetch(new URL('../../../../../public/fonts/inter-semibold.ttf', import.meta.url)).then(
-      (r) => r.arrayBuffer()
-    ),
-  ]);
+  // Load fonts from disk — node fs on the project root is reliable across dev
+  // and prod (the `fetch(new URL(..., import.meta.url))` pattern silently
+  // breaks under Next 15's prod bundler, dropping the OG image to defaults).
+  const fonts = loadShareImageFonts();
 
   // Fetch dog data directly from DB (server-side)
   const dog = await db?.query.dogs.findFirst({
@@ -58,9 +54,9 @@ export default async function OGImage({
             justifyContent: 'center',
             width: '100%',
             height: '100%',
-            backgroundColor: '#292524',
-            color: '#FAFAF8',
-            fontFamily: 'Libre Baskerville',
+            background: BG_GRADIENT,
+            color: G.cream,
+            ...HEAD,
             fontSize: 32,
           }}
         >
@@ -69,9 +65,7 @@ export default async function OGImage({
       ),
       {
         ...size,
-        fonts: [
-          { name: 'Libre Baskerville', data: baskervilleBold, weight: 700 },
-        ],
+        fonts: fonts.filter((f) => f.weight === 800),
       }
     );
   }
@@ -145,35 +139,23 @@ export default async function OGImage({
           display: 'flex',
           width: '100%',
           height: '100%',
-          backgroundColor: '#1C1917',
+          background: BG_GRADIENT,
           position: 'relative',
           overflow: 'hidden',
         }}
       >
-        {/* Subtle texture overlay */}
+        {/* Fresh-green radial glow */}
         <div
           style={{
             display: 'flex',
             position: 'absolute',
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            background:
-              'radial-gradient(ellipse at 30% 50%, rgba(180,130,80,0.06) 0%, transparent 70%)',
-          }}
-        />
-
-        {/* Top gold accent line */}
-        <div
-          style={{
-            display: 'flex',
-            position: 'absolute',
-            top: 0,
-            left: 0,
-            right: 0,
-            height: 3,
-            background: 'linear-gradient(90deg, #92702A, #C9A84C, #92702A)',
+            left: -120,
+            top: -100,
+            width: 380,
+            height: 380,
+            borderRadius: 999,
+            background: `radial-gradient(circle, ${G.fresh}, transparent 68%)`,
+            opacity: 0.24,
           }}
         />
 
@@ -186,6 +168,7 @@ export default async function OGImage({
             padding: '40px 56px',
             gap: 48,
             alignItems: 'center',
+            position: 'relative',
           }}
         >
           {/* Photo column */}
@@ -195,11 +178,11 @@ export default async function OGImage({
               flexShrink: 0,
               width: 320,
               height: 400,
-              borderRadius: 8,
+              borderRadius: 14,
               overflow: 'hidden',
-              border: '2px solid rgba(201, 168, 76, 0.3)',
+              border: `2px solid ${G.fresh}`,
               position: 'relative',
-              backgroundColor: '#292524',
+              backgroundColor: G.deepest,
             }}
           >
             {photoData ? (
@@ -217,7 +200,7 @@ export default async function OGImage({
                   height: '100%',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  backgroundColor: '#292524',
+                  backgroundColor: G.deepest,
                 }}
               >
                 <svg
@@ -225,7 +208,7 @@ export default async function OGImage({
                   height="64"
                   viewBox="0 0 24 24"
                   fill="none"
-                  stroke="rgba(201, 168, 76, 0.3)"
+                  stroke="rgba(91, 181, 121, 0.4)"
                   strokeWidth="1.5"
                   strokeLinecap="round"
                   strokeLinejoin="round"
@@ -259,12 +242,10 @@ export default async function OGImage({
               <div
                 style={{
                   display: 'flex',
-                  fontFamily: 'Libre Baskerville',
-                  fontWeight: 700,
+                  ...HEAD,
                   fontSize: displayName.length > 35 ? 30 : displayName.length > 25 ? 34 : 38,
-                  color: '#FAFAF8',
+                  color: G.cream,
                   lineHeight: 1.2,
-                  letterSpacing: '0.01em',
                 }}
               >
                 {displayName}
@@ -273,10 +254,10 @@ export default async function OGImage({
                 <div
                   style={{
                     display: 'flex',
-                    fontFamily: 'Inter',
+                    fontFamily: 'Hanken Grotesk',
                     fontWeight: 400,
                     fontSize: 18,
-                    color: '#A8A29E',
+                    color: G.creamDim,
                     letterSpacing: '0.04em',
                     textTransform: 'uppercase',
                   }}
@@ -300,16 +281,16 @@ export default async function OGImage({
                   display: 'flex',
                   flex: 1,
                   height: 1,
-                  backgroundColor: 'rgba(201, 168, 76, 0.25)',
+                  backgroundColor: 'rgba(243,236,220,0.18)',
                 }}
               />
               <div
                 style={{
                   display: 'flex',
-                  width: 8,
-                  height: 8,
-                  backgroundColor: '#C9A84C',
-                  transform: 'rotate(45deg)',
+                  width: 7,
+                  height: 7,
+                  borderRadius: 99,
+                  backgroundColor: G.fresh,
                 }}
               />
               <div
@@ -317,7 +298,7 @@ export default async function OGImage({
                   display: 'flex',
                   flex: 1,
                   height: 1,
-                  backgroundColor: 'rgba(201, 168, 76, 0.25)',
+                  backgroundColor: 'rgba(243,236,220,0.18)',
                 }}
               />
             </div>
@@ -327,10 +308,10 @@ export default async function OGImage({
               <div
                 style={{
                   display: 'flex',
-                  fontFamily: 'Inter',
+                  fontFamily: 'Hanken Grotesk',
                   fontWeight: 600,
                   fontSize: 20,
-                  color: '#C9A84C',
+                  color: G.honey,
                   letterSpacing: '0.02em',
                 }}
               >
@@ -342,10 +323,10 @@ export default async function OGImage({
               <div
                 style={{
                   display: 'flex',
-                  fontFamily: 'Inter',
+                  fontFamily: 'Hanken Grotesk',
                   fontWeight: 400,
                   fontSize: 15,
-                  color: '#78716C',
+                  color: 'rgba(243,236,220,0.5)',
                   letterSpacing: '0.03em',
                   textTransform: 'uppercase',
                 }}
@@ -366,11 +347,10 @@ export default async function OGImage({
             left: 0,
             right: 0,
             height: 52,
-            borderTop: '1px solid rgba(201, 168, 76, 0.15)',
+            borderTop: '1px solid rgba(243,236,220,0.12)',
             padding: '0 56px',
             alignItems: 'center',
             justifyContent: 'space-between',
-            backgroundColor: 'rgba(28, 25, 23, 0.95)',
           }}
         >
           {/* Remi branding */}
@@ -384,32 +364,30 @@ export default async function OGImage({
             <div
               style={{
                 display: 'flex',
-                width: 6,
-                height: 6,
-                backgroundColor: '#C9A84C',
-                transform: 'rotate(45deg)',
+                width: 7,
+                height: 7,
+                borderRadius: 99,
+                backgroundColor: G.fresh,
               }}
             />
             <div
               style={{
                 display: 'flex',
-                fontFamily: 'Libre Baskerville',
-                fontWeight: 700,
+                ...HEAD,
                 fontSize: 16,
-                color: '#C9A84C',
-                letterSpacing: '0.08em',
+                color: G.cream,
               }}
             >
-              REMI
+              Remi
             </div>
           </div>
           <div
             style={{
               display: 'flex',
-              fontFamily: 'Inter',
+              fontFamily: 'Hanken Grotesk',
               fontWeight: 400,
               fontSize: 13,
-              color: '#78716C',
+              color: G.creamDim,
               letterSpacing: '0.04em',
             }}
           >
@@ -420,11 +398,7 @@ export default async function OGImage({
     ),
     {
       ...size,
-      fonts: [
-        { name: 'Libre Baskerville', data: baskervilleBold, weight: 700 },
-        { name: 'Inter', data: interRegular, weight: 400 },
-        { name: 'Inter', data: interSemibold, weight: 600 },
-      ],
+      fonts,
     }
   );
 }

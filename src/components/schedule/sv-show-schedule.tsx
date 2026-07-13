@@ -37,6 +37,7 @@ import { groupSvClasses, type SvNumberedClass } from './shared/sv-classification
 import { buildRegionalFeeDisplay, buildRegionalSpecialClassFees } from '@/lib/regional-fee-calc';
 import type { RegionalFeeConfig } from '@/server/db/schema/shows';
 import { ss, SV, SV_FONTS } from './shared/sv-styles';
+import { Numero } from './shared/numero';
 import { AdvertPage, selectAdverts } from './shared/advert-page';
 import {
   SV_CLASS_DEFINITIONS,
@@ -205,7 +206,7 @@ function Topper({ num, subject }: { num: number; subject: string }) {
   return (
     <>
       <View style={ss.topper}>
-        <Text style={ss.eyebrow}>№ {pad2(num)}</Text>
+        <Text style={ss.eyebrow}><Numero /> {pad2(num)}</Text>
         <Text style={ss.eyebrow}>{subject}</Text>
       </View>
       <View style={[ss.ruleThin, { marginTop: 4 }]} />
@@ -261,7 +262,9 @@ function SvCover({
             {show.name}
           </Text>
           {show.kcLicenceNo ? (
-            <Text style={[ss.eyebrow, { color: SV.ink3 }]}>№ {show.kcLicenceNo}</Text>
+            <Text style={[ss.eyebrow, { color: SV.ink3 }]}>
+              <Numero /> {show.kcLicenceNo}
+            </Text>
           ) : null}
         </View>
 

@@ -47,13 +47,15 @@ import { getPlacementLabel, placementColors } from '@/lib/placements';
 import { DogTimeline } from '@/components/dog-timeline';
 import { ChampionshipProgress } from '@/components/championship-progress';
 import { showTypeLabels } from '@/lib/show-types';
+import { SE_H } from '@/components/show-experience/tokens';
+import { cn } from '@/lib/utils';
 
 /* ─── Constants ────────────────────────────────────────────────── */
 
 const showTypeColors: Record<string, string> = {
-  companion: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+  companion: 'bg-se-fresh-soft text-se-fresh-deep border-se-fresh-line',
   primary: 'bg-sky-50 text-sky-700 border-sky-200',
-  limited: 'bg-amber-50 text-amber-700 border-amber-200',
+  limited: 'bg-se-honey-soft text-se-honey-deep border-se-honey-line',
   open: 'bg-violet-50 text-violet-700 border-violet-200',
   premier_open: 'bg-rose-50 text-rose-700 border-rose-200',
   championship: 'bg-indigo-50 text-indigo-700 border-indigo-200',
@@ -162,9 +164,9 @@ function getTitlePrefix(titles: { title: string }[]): string {
 function Ornament() {
   return (
     <div className="flex items-center justify-center gap-3 py-5">
-      <div className="h-px w-10 bg-stone-300 sm:w-14" />
-      <div className="size-1.5 rotate-45 border border-stone-400" />
-      <div className="h-px w-10 bg-stone-300 sm:w-14" />
+      <div className="h-px w-10 bg-border sm:w-14" />
+      <div className="size-1.5 rotate-45 border border-border" />
+      <div className="h-px w-10 bg-border sm:w-14" />
     </div>
   );
 }
@@ -172,11 +174,11 @@ function Ornament() {
 function SectionHeading({ children }: { children: React.ReactNode }) {
   return (
     <div className="flex items-center gap-4 pb-5 pt-2">
-      <div className="h-px flex-1 bg-stone-200" />
-      <h2 className="font-serif text-[0.6875rem] font-normal uppercase tracking-[0.25em] text-stone-400">
+      <div className="h-px flex-1 bg-border" />
+      <h2 className="font-serif text-[0.6875rem] font-normal uppercase tracking-[0.25em] text-muted-foreground">
         {children}
       </h2>
-      <div className="h-px flex-1 bg-stone-200" />
+      <div className="h-px flex-1 bg-border" />
     </div>
   );
 }
@@ -189,11 +191,11 @@ function DetailRow({
   value: React.ReactNode;
 }) {
   return (
-    <div className="flex items-baseline justify-between gap-3 border-b border-stone-100 py-2 last:border-0">
-      <span className="text-[0.8125rem] uppercase tracking-wide text-stone-400">
+    <div className="flex items-baseline justify-between gap-3 border-b border-border py-2 last:border-0">
+      <span className="text-[0.8125rem] uppercase tracking-wide text-muted-foreground">
         {label}
       </span>
-      <span className="text-right font-serif text-[0.9375rem] font-normal text-stone-800">
+      <span className="text-right font-serif text-[0.9375rem] font-normal text-foreground">
         {value}
       </span>
     </div>
@@ -211,10 +213,10 @@ function StatBlock({
 }) {
   return (
     <div className="text-center">
-      <p className={`font-serif text-2xl font-bold sm:text-3xl ${accent ?? 'text-stone-800'}`}>
+      <p className={`font-serif text-2xl font-bold sm:text-3xl ${accent ?? 'text-foreground'}`}>
         {value}
       </p>
-      <p className="mt-0.5 text-[0.6875rem] uppercase tracking-[0.15em] text-stone-400">
+      <p className="mt-0.5 text-[0.6875rem] uppercase tracking-[0.15em] text-muted-foreground">
         {label}
       </p>
     </div>
@@ -257,21 +259,21 @@ export function DogProfileClient({ id }: { id: string }) {
 
   if (isLoading) {
     return (
-      <div className="flex min-h-[60vh] items-center justify-center bg-[#FAFAF8]">
-        <Loader2 className="size-6 animate-spin text-stone-300" />
+      <div className="flex min-h-[60vh] items-center justify-center bg-background">
+        <Loader2 className="size-6 animate-spin text-muted-foreground/50" />
       </div>
     );
   }
 
   if (!data) {
     return (
-      <div className="flex min-h-[60vh] flex-col items-center justify-center gap-4 bg-[#FAFAF8] text-center">
-        <Dog className="size-10 text-stone-300" />
+      <div className="flex min-h-[60vh] flex-col items-center justify-center gap-4 bg-background text-center">
+        <Dog className="size-10 text-muted-foreground/50" />
         <div>
-          <p className="font-serif text-lg text-stone-600">Dog not found</p>
+          <p className="font-serif text-lg text-muted-foreground">Dog not found</p>
           <Link
             href="/dogs"
-            className="mt-2 inline-block text-sm text-stone-400 underline decoration-stone-300 hover:text-stone-600"
+            className="mt-2 inline-block text-sm text-muted-foreground underline decoration-muted-foreground/50 hover:text-foreground"
           >
             Back to my dogs
           </Link>
@@ -308,7 +310,7 @@ export function DogProfileClient({ id }: { id: string }) {
     });
 
   return (
-    <div className="min-h-screen bg-[#FAFAF8]">
+    <div className="min-h-screen bg-background">
       {/* ─── Navigation bar ─── */}
       <div className="mx-auto flex max-w-2xl items-center justify-between px-5 pb-2 pt-5 sm:px-8 sm:pt-8">
         <button
@@ -317,7 +319,7 @@ export function DogProfileClient({ id }: { id: string }) {
               ? window.history.back()
               : (window.location.href = '/dogs')
           }
-          className="inline-flex items-center gap-1.5 text-[0.8125rem] text-stone-400 transition-colors hover:text-stone-700"
+          className="inline-flex items-center gap-1.5 text-[0.8125rem] text-muted-foreground transition-colors hover:text-foreground"
         >
           <ArrowLeft className="size-3.5" />
           Back
@@ -326,7 +328,7 @@ export function DogProfileClient({ id }: { id: string }) {
           {canEdit && (
             <Link
               href={`/dogs/${id}`}
-              className="inline-flex items-center gap-1.5 rounded-full border border-stone-200 bg-white px-3 py-1.5 text-[0.8125rem] text-stone-500 transition-all hover:border-stone-300 hover:text-stone-700"
+              className="inline-flex items-center gap-1.5 rounded-full border border-border bg-card px-3 py-1.5 text-[0.8125rem] text-muted-foreground transition-all hover:border-muted-foreground/30 hover:text-foreground"
             >
               <Settings className="size-3.5" />
               Edit
@@ -334,10 +336,10 @@ export function DogProfileClient({ id }: { id: string }) {
           )}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <button className="inline-flex items-center gap-1.5 rounded-full border border-stone-200 bg-white px-3 py-1.5 text-[0.8125rem] text-stone-500 transition-all hover:border-stone-300 hover:text-stone-700">
+              <button className="inline-flex items-center gap-1.5 rounded-full border border-border bg-card px-3 py-1.5 text-[0.8125rem] text-muted-foreground transition-all hover:border-muted-foreground/30 hover:text-foreground">
                 {copied ? (
                   <>
-                    <Check className="size-3.5 text-emerald-500" />
+                    <Check className="size-3.5 text-se-fresh-deep" />
                     Copied
                   </>
                 ) : (
@@ -406,7 +408,7 @@ export function DogProfileClient({ id }: { id: string }) {
               })()}
               <DropdownMenuItem onClick={handleCopyLink}>
                 {copied ? (
-                  <Check className="mr-2 size-4 text-emerald-500" />
+                  <Check className="mr-2 size-4 text-se-fresh-deep" />
                 ) : (
                   <ExternalLink className="mr-2 size-4" />
                 )}
@@ -423,8 +425,8 @@ export function DogProfileClient({ id }: { id: string }) {
         <div className="flex justify-center pt-4">
           {primaryPhoto ? (
             <div
-              className="relative aspect-[4/5] w-full max-w-xs cursor-pointer overflow-hidden rounded-sm shadow-lg shadow-stone-200/80 sm:max-w-sm"
-              style={primaryPhoto.fitMode === 'contain' ? { backgroundColor: '#f5f5f4' } : undefined}
+              className="relative aspect-[4/5] w-full max-w-xs cursor-pointer overflow-hidden rounded-sm shadow-lg shadow-border/80 sm:max-w-sm"
+              style={primaryPhoto.fitMode === 'contain' ? { backgroundColor: '#f6f4ec' } : undefined}
               onClick={() => setLightboxUrl(primaryPhoto.url)}
             >
               <Image
@@ -444,16 +446,16 @@ export function DogProfileClient({ id }: { id: string }) {
           ) : canEdit ? (
             <Link
               href={`/dogs/${id}#photos`}
-              className="group flex aspect-[4/5] w-full max-w-xs flex-col items-center justify-center gap-3 rounded-sm border-2 border-dashed border-stone-200 bg-stone-50 transition-colors hover:border-stone-300 hover:bg-stone-100 sm:max-w-sm"
+              className="group flex aspect-[4/5] w-full max-w-xs flex-col items-center justify-center gap-3 rounded-sm border-2 border-dashed border-border bg-muted/50 transition-colors hover:border-muted-foreground/30 hover:bg-muted sm:max-w-sm"
             >
-              <Camera className="size-10 text-stone-300 transition-colors group-hover:text-stone-400" />
-              <span className="text-sm font-medium text-stone-400 transition-colors group-hover:text-stone-500">
+              <Camera className="size-10 text-muted-foreground/50 transition-colors group-hover:text-muted-foreground" />
+              <span className="text-sm font-medium text-muted-foreground transition-colors group-hover:text-foreground">
                 Add a profile photo
               </span>
             </Link>
           ) : (
-            <div className="flex aspect-[4/5] w-full max-w-xs items-center justify-center rounded-sm bg-stone-100 sm:max-w-sm">
-              <Dog className="size-16 text-stone-200" />
+            <div className="flex aspect-[4/5] w-full max-w-xs items-center justify-center rounded-sm bg-muted sm:max-w-sm">
+              <Dog className="size-16 text-muted-foreground/40" />
             </div>
           )}
         </div>
@@ -463,24 +465,24 @@ export function DogProfileClient({ id }: { id: string }) {
         {/* Name and breed */}
         <div className="text-center">
           {titlePrefix && (
-            <p className="mb-1 font-serif text-sm italic tracking-wide text-amber-700/80 sm:text-base">
+            <p className="mb-1 font-serif text-sm italic tracking-wide text-se-honey-deep/80 sm:text-base">
               {titlePrefix}
             </p>
           )}
-          <h1 className="font-serif text-2xl font-bold leading-tight tracking-tight text-stone-900 sm:text-3xl md:text-4xl">
+          <h1 className={cn(SE_H, 'font-serif text-2xl leading-tight text-foreground sm:text-3xl md:text-4xl')}>
             {dog.registeredName}
           </h1>
-          <p className="mt-2 text-[0.9375rem] text-stone-400">
+          <p className="mt-2 text-[0.9375rem] text-muted-foreground">
             {dog.breed?.name ?? 'Unknown breed'}
             {dog.breed?.group && (
-              <span className="text-stone-300"> &middot; </span>
+              <span className="text-muted-foreground/50"> &middot; </span>
             )}
             {dog.breed?.group && (
-              <span className="text-stone-400">{dog.breed.group.name}</span>
+              <span className="text-muted-foreground">{dog.breed.group.name}</span>
             )}
           </p>
           {dog.bio && (
-            <p className="mx-auto mt-4 max-w-md font-serif text-[0.9375rem] italic leading-relaxed text-stone-500">
+            <p className="mx-auto mt-4 max-w-md font-serif text-[0.9375rem] italic leading-relaxed text-muted-foreground">
               &ldquo;{dog.bio}&rdquo;
             </p>
           )}
@@ -492,11 +494,11 @@ export function DogProfileClient({ id }: { id: string }) {
             {titles.map((title) => (
               <span
                 key={title.id}
-                className="inline-flex items-center gap-1.5 rounded-sm border border-amber-200/60 bg-amber-50/50 px-3 py-1 font-serif text-sm text-amber-800"
+                className="inline-flex items-center gap-1.5 rounded-sm border border-se-honey-line/60 bg-se-honey-soft/50 px-3 py-1 font-serif text-sm text-se-honey-deep"
               >
                 {titleLabels[title.title] ?? title.title}
                 {title.dateAwarded && (
-                  <span className="text-xs text-amber-500">
+                  <span className="text-xs text-se-honey-deep/70">
                     {format(parseISO(title.dateAwarded), 'yyyy')}
                   </span>
                 )}
@@ -516,20 +518,20 @@ export function DogProfileClient({ id }: { id: string }) {
               disabled={toggleFollow.isPending}
               className={`inline-flex items-center gap-1.5 rounded-full border px-4 py-1.5 text-[0.8125rem] font-medium transition-all ${
                 followData?.following
-                  ? 'border-stone-300 bg-stone-100 text-stone-600'
-                  : 'border-stone-200 bg-white text-stone-500 hover:border-stone-300 hover:text-stone-700'
+                  ? 'border-muted-foreground/30 bg-muted text-foreground'
+                  : 'border-border bg-card text-muted-foreground hover:border-muted-foreground/30 hover:text-foreground'
               }`}
             >
               <Heart
                 className={`size-3.5 ${
-                  followData?.following ? 'fill-stone-500 text-stone-500' : ''
+                  followData?.following ? 'fill-muted-foreground text-muted-foreground' : ''
                 }`}
               />
               {followData?.following ? 'Following' : 'Follow'}
             </button>
           )}
           {(followerCount?.count ?? 0) > 0 && (
-            <span className="text-xs text-stone-400">
+            <span className="text-xs text-muted-foreground">
               {followerCount!.count} follower{followerCount!.count !== 1 ? 's' : ''}
             </span>
           )}
@@ -541,8 +543,8 @@ export function DogProfileClient({ id }: { id: string }) {
             onClick={() => setActiveTab('profile')}
             className={`inline-flex items-center gap-1.5 rounded-sm px-4 py-2 text-[0.8125rem] font-medium transition-colors ${
               activeTab === 'profile'
-                ? 'bg-stone-100 text-stone-800'
-                : 'text-stone-400 hover:text-stone-600'
+                ? 'bg-muted text-foreground'
+                : 'text-muted-foreground hover:text-foreground'
             }`}
           >
             <BookOpen className="size-3.5" />
@@ -552,8 +554,8 @@ export function DogProfileClient({ id }: { id: string }) {
             onClick={() => setActiveTab('timeline')}
             className={`inline-flex items-center gap-1.5 rounded-sm px-4 py-2 text-[0.8125rem] font-medium transition-colors ${
               activeTab === 'timeline'
-                ? 'bg-stone-100 text-stone-800'
-                : 'text-stone-400 hover:text-stone-600'
+                ? 'bg-muted text-foreground'
+                : 'text-muted-foreground hover:text-foreground'
             }`}
           >
             <Clock className="size-3.5" />
@@ -585,17 +587,17 @@ export function DogProfileClient({ id }: { id: string }) {
             <SectionHeading>Career</SectionHeading>
             <div className="flex items-start justify-center gap-4 sm:gap-8">
               <StatBlock value={stats.totalShows} label="Shows" />
-              <div className="mt-2 h-8 w-px bg-stone-200" />
+              <div className="mt-2 h-8 w-px bg-border" />
               <StatBlock value={stats.totalClasses} label="Classes" />
-              <div className="mt-2 h-8 w-px bg-stone-200" />
-              <StatBlock value={stats.firsts} label="1sts" accent="text-amber-600" />
-              <div className="mt-2 h-8 w-px bg-stone-200" />
-              <StatBlock value={stats.seconds} label="2nds" accent="text-stone-500" />
-              <div className="mt-2 h-8 w-px bg-stone-200" />
-              <StatBlock value={stats.thirds} label="3rds" accent="text-amber-700/70" />
+              <div className="mt-2 h-8 w-px bg-border" />
+              <StatBlock value={stats.firsts} label="1sts" accent="text-se-honey-deep" />
+              <div className="mt-2 h-8 w-px bg-border" />
+              <StatBlock value={stats.seconds} label="2nds" accent="text-muted-foreground" />
+              <div className="mt-2 h-8 w-px bg-border" />
+              <StatBlock value={stats.thirds} label="3rds" accent="text-se-honey-deep/70" />
               {stats.specialAwards > 0 && (
                 <>
-                  <div className="mt-2 h-8 w-px bg-stone-200" />
+                  <div className="mt-2 h-8 w-px bg-border" />
                   <StatBlock value={stats.specialAwards} label="Awards" accent="text-violet-600" />
                 </>
               )}
@@ -622,7 +624,7 @@ export function DogProfileClient({ id }: { id: string }) {
               {galleryPhotos.map((photo) => (
                 <div
                   key={photo.id}
-                  className="group relative aspect-[4/3] cursor-pointer overflow-hidden rounded-sm bg-stone-100"
+                  className="group relative aspect-[4/3] cursor-pointer overflow-hidden rounded-sm bg-muted"
                   onClick={() => setLightboxUrl(photo.url)}
                 >
                   <Image
@@ -654,26 +656,26 @@ export function DogProfileClient({ id }: { id: string }) {
           <SectionHeading>Show Record</SectionHeading>
           {showHistory.length === 0 ? (
             <div className="py-10 text-center">
-              <Trophy className="mx-auto size-8 text-stone-200" />
-              <p className="mt-3 font-serif text-sm italic text-stone-400">
+              <Trophy className="mx-auto size-8 text-muted-foreground/40" />
+              <p className="mt-3 font-serif text-sm italic text-muted-foreground">
                 No show results recorded yet
               </p>
             </div>
           ) : (
-            <div className="relative ml-3 border-l border-stone-200 sm:ml-4">
+            <div className="relative ml-3 border-l border-border sm:ml-4">
               {showHistory.map((show, showIdx) => (
                 <div key={`${show.showId}-${showIdx}`} className="relative pb-8 pl-6 last:pb-0 sm:pl-8">
                   {/* Timeline dot */}
-                  <div className="absolute -left-[4.5px] top-[3px] size-[9px] rounded-full border-2 border-stone-300 bg-[#FAFAF8]" />
+                  <div className="absolute -left-[4.5px] top-[3px] size-[9px] rounded-full border-2 border-muted-foreground/30 bg-background" />
 
                   {/* Show header */}
                   <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
                     <Link
                       href={`/shows/${show.showSlug ?? show.showId}/results`}
-                      className="group inline-flex items-baseline gap-1 font-serif text-base font-bold text-stone-800 hover:text-stone-600"
+                      className="group inline-flex items-baseline gap-1 font-serif text-base font-bold text-foreground hover:text-muted-foreground"
                     >
                       {show.showName}
-                      <ExternalLink className="mb-px size-3 text-stone-300 transition-colors group-hover:text-stone-500" />
+                      <ExternalLink className="mb-px size-3 text-muted-foreground/50 transition-colors group-hover:text-muted-foreground" />
                     </Link>
                     <Badge
                       variant="outline"
@@ -682,7 +684,7 @@ export function DogProfileClient({ id }: { id: string }) {
                       {showTypeLabels[show.showType] ?? show.showType}
                     </Badge>
                   </div>
-                  <p className="mt-0.5 text-xs text-stone-400">
+                  <p className="mt-0.5 text-xs text-muted-foreground">
                     {format(parseISO(show.showDate), 'EEEE d MMMM yyyy')}
                   </p>
 
@@ -692,11 +694,11 @@ export function DogProfileClient({ id }: { id: string }) {
                       <div key={clsIdx}>
                         <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[0.9375rem]">
                           {cls.classNumber != null && (
-                            <span className="font-mono text-xs text-stone-400">
+                            <span className="font-mono text-xs text-muted-foreground">
                               {cls.classNumber}.
                             </span>
                           )}
-                          <span className="font-medium text-stone-700">
+                          <span className="font-medium text-foreground">
                             {cls.className}
                           </span>
                           {cls.placement && (
@@ -708,14 +710,14 @@ export function DogProfileClient({ id }: { id: string }) {
                             </Badge>
                           )}
                           {cls.specialAward && (
-                            <span className="inline-flex items-center gap-0.5 rounded-sm bg-amber-50 px-1.5 py-0.5 text-xs font-medium text-amber-700 ring-1 ring-inset ring-amber-200/50">
+                            <span className="inline-flex items-center gap-0.5 rounded-sm bg-se-honey-soft px-1.5 py-0.5 text-xs font-medium text-se-honey-deep ring-1 ring-inset ring-se-honey-line/50">
                               <Award className="size-2.5" />
                               {cls.specialAward}
                             </span>
                           )}
                         </div>
                         {cls.critiqueText && (
-                          <blockquote className="mt-1.5 border-l-2 border-stone-200 pl-3 font-serif text-[0.8125rem] italic leading-relaxed text-stone-500">
+                          <blockquote className="mt-1.5 border-l-2 border-border pl-3 font-serif text-[0.8125rem] italic leading-relaxed text-muted-foreground">
                             &ldquo;{cls.critiqueText}&rdquo;
                           </blockquote>
                         )}
@@ -759,26 +761,26 @@ export function DogProfileClient({ id }: { id: string }) {
                       key={achievement.id}
                       className={`flex items-start gap-3 rounded-sm border px-3 py-2.5 sm:px-4 ${
                         isPrestigious
-                          ? 'border-amber-200/60 bg-amber-50/30'
-                          : 'border-stone-100 bg-white'
+                          ? 'border-se-honey-line/60 bg-se-honey-soft/30'
+                          : 'border-border bg-card'
                       }`}
                     >
                       <div
                         className={`mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-full ${
-                          isPrestigious ? 'bg-amber-100' : 'bg-stone-100'
+                          isPrestigious ? 'bg-se-honey-soft' : 'bg-muted'
                         }`}
                       >
                         {isPrestigious ? (
-                          <Star className="size-3.5 text-amber-600" />
+                          <Star className="size-3.5 text-se-honey-deep" />
                         ) : (
-                          <Award className="size-3.5 text-stone-400" />
+                          <Award className="size-3.5 text-muted-foreground" />
                         )}
                       </div>
                       <div className="min-w-0 flex-1">
-                        <p className="font-serif text-[0.9375rem] font-bold text-stone-800">
+                        <p className="font-serif text-[0.9375rem] font-bold text-foreground">
                           {label}
                         </p>
-                        <p className="text-xs text-stone-400">
+                        <p className="text-xs text-muted-foreground">
                           {format(parseISO(achievement.date), 'd MMMM yyyy')}
                           {showName && (
                             <span> &middot; {showName}</span>
@@ -797,7 +799,7 @@ export function DogProfileClient({ id }: { id: string }) {
 
         {/* ─── Footer branding ─── */}
         <div className="mt-16 flex justify-center">
-          <p className="text-[0.6875rem] uppercase tracking-[0.3em] text-stone-300">
+          <p className="text-[0.6875rem] uppercase tracking-[0.3em] text-muted-foreground/50">
             Remi Show Manager
           </p>
         </div>

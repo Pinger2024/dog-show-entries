@@ -21,6 +21,8 @@ import { getPlacementLabel, placementColors, achievementLabels } from '@/lib/pla
 import { computeSvClassRatings } from '@/lib/sv-grading';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { SE_H } from '@/components/show-experience/tokens';
+import { cn } from '@/lib/utils';
 
 function slugify(text: string) {
   return text.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
@@ -209,12 +211,12 @@ export default function LiveResultsPage({
           <div className="mt-4">
             <div className="flex flex-wrap items-center gap-2">
               {isPublished && (
-                <Badge className="bg-green-600 text-xs">
+                <Badge className="bg-primary text-xs">
                   Published Results
                 </Badge>
               )}
               {isLive && !isPublished && (
-                <Badge className="bg-green-600 text-xs">
+                <Badge className="bg-primary text-xs">
                   <span className="relative mr-1.5 flex size-2">
                     <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-white opacity-75" />
                     <span className="relative inline-flex size-2 rounded-full bg-white" />
@@ -230,7 +232,7 @@ export default function LiveResultsPage({
               )}
             </div>
 
-            <h1 className="mt-2 font-serif text-2xl font-bold tracking-tight sm:text-3xl">
+            <h1 className={cn(SE_H, 'mt-2 text-2xl sm:text-3xl')}>
               {show.name} — Results
             </h1>
 
@@ -292,17 +294,17 @@ export default function LiveResultsPage({
           <div className="space-y-8">
             {/* SV/WUSV regional top awards — the only 4 (no BoB/CC/BIS) */}
             {svAwards.length > 0 && (
-              <div id="top-awards" className="rounded-lg border border-amber-200 bg-gradient-to-b from-amber-50/80 to-amber-50/30 p-4 sm:p-5">
+              <div id="top-awards" className="rounded-lg border border-se-honey-line bg-se-honey-soft p-4 sm:p-5">
                 <div className="mb-3 flex items-center gap-2">
-                  <Trophy className="size-5 text-amber-600" />
-                  <h2 className="font-serif text-lg font-semibold text-amber-900">
+                  <Trophy className="size-5 text-se-honey-deep" />
+                  <h2 className="font-serif text-lg font-semibold text-se-honey-deep">
                     Top Awards
                   </h2>
                 </div>
                 <div className="space-y-2">
                   {svAwards.map((a) => (
                     <div key={a.id} className="flex flex-wrap items-center gap-1.5 sm:gap-3">
-                      <Badge className="w-auto sm:w-52 justify-center bg-amber-100 text-amber-800 border-amber-300 text-xs font-semibold whitespace-nowrap">
+                      <Badge className="w-auto sm:w-52 justify-center bg-se-honey-soft text-se-honey-deep border-se-honey-line text-xs font-semibold whitespace-nowrap">
                         {achievementLabels[a.type] ?? a.type}
                       </Badge>
                       {a.dog ? (
@@ -323,11 +325,11 @@ export default function LiveResultsPage({
 
             {/* Show-level awards (BIS/RBIS/BPS) */}
             {showAwards.length > 0 && (
-              <div id="show-awards" className="rounded-lg border border-amber-200 bg-gradient-to-b from-amber-50/80 to-amber-50/30 p-4 sm:p-5">
+              <div id="show-awards" className="rounded-lg border border-se-honey-line bg-se-honey-soft p-4 sm:p-5">
                 <div className="mb-3 flex items-center justify-between">
                   <div className="flex items-center gap-2">
-                    <Trophy className="size-5 text-amber-600" />
-                    <h2 className="font-serif text-lg font-semibold text-amber-900">
+                    <Trophy className="size-5 text-se-honey-deep" />
+                    <h2 className="font-serif text-lg font-semibold text-se-honey-deep">
                       Show Awards
                     </h2>
                   </div>
@@ -341,7 +343,7 @@ export default function LiveResultsPage({
                 <div className="space-y-2">
                   {showAwards.map((a) => (
                     <div key={a.id} className="flex flex-wrap items-center gap-1.5 sm:gap-3">
-                      <Badge className="w-auto sm:w-44 justify-center bg-amber-100 text-amber-800 border-amber-300 text-xs font-semibold whitespace-nowrap">
+                      <Badge className="w-auto sm:w-44 justify-center bg-se-honey-soft text-se-honey-deep border-se-honey-line text-xs font-semibold whitespace-nowrap">
                         {achievementLabels[a.type] ?? a.type}
                       </Badge>
                       {a.dog ? (
@@ -406,7 +408,7 @@ export default function LiveResultsPage({
                     <div className="mb-4 flex flex-wrap gap-x-4 gap-y-1.5">
                       {breedAwardsForGroup.map((a) => (
                         <div key={a.id} className="flex items-center gap-1.5 text-sm">
-                          <Award className="size-4 text-amber-500" />
+                          <Award className="size-4 text-se-honey-deep" />
                           <span className="text-xs font-medium text-muted-foreground">
                             {achievementLabels[a.type] ?? a.type}:
                           </span>
@@ -434,7 +436,7 @@ export default function LiveResultsPage({
                       <div
                         key={cls.classId}
                         id={`class-${cls.classId}`}
-                        className="rounded-lg border bg-white p-4"
+                        className="rounded-lg border bg-card p-4"
                       >
                         <div className="mb-3 flex items-center gap-2">
                           {cls.classNumber != null && (
@@ -501,7 +503,7 @@ export default function LiveResultsPage({
                                 {result.specialAward && (
                                   <Badge
                                     variant="secondary"
-                                    className="shrink-0 text-xs bg-amber-50 text-amber-700"
+                                    className="shrink-0 text-xs bg-se-honey-soft text-se-honey-deep"
                                   >
                                     <Award className="mr-0.5 size-3" />
                                     {result.specialAward}
@@ -518,7 +520,7 @@ export default function LiveResultsPage({
                                 </div>
                               )}
                               {result.critiqueText && (
-                                <div className="ml-[4.75rem] mt-1.5 rounded-lg border-l-2 border-gold/30 bg-muted/50 px-3 py-2">
+                                <div className="ml-[4.75rem] mt-1.5 rounded-lg border-l-2 border-se-honey/30 bg-muted/50 px-3 py-2">
                                   <p className="text-sm italic leading-relaxed text-muted-foreground">
                                     &ldquo;{result.critiqueText}&rdquo;
                                   </p>

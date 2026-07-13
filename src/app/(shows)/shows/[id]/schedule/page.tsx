@@ -22,6 +22,8 @@ import { buildClassLabelMap, isSpecialAwardClass } from '@/lib/class-labels';
 import { sortOfficers } from '@/components/schedule/shared/officers';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { SE_H } from '@/components/show-experience/tokens';
+import { cn } from '@/lib/utils';
 import type { ScheduleData } from '@/server/db/schema/shows';
 
 const showScopeLabels: Record<string, string> = {
@@ -207,7 +209,7 @@ export default function SchedulePage({
             </Badge>
           )}
         </div>
-        <h1 className="font-serif text-2xl font-bold tracking-tight sm:text-3xl">
+        <h1 className={cn(SE_H, 'text-2xl sm:text-3xl')}>
           {show.name}
         </h1>
         <p className="mt-1 text-muted-foreground">

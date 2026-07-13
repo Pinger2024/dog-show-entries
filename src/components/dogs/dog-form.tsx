@@ -2,13 +2,15 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-import { useForm, useFieldArray } from 'react-hook-form';
+import { useForm, useFieldArray, useWatch, type Control } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { format, parse, isValid } from 'date-fns';
 import { CalendarIcon, Check, ChevronsUpDown, Loader2, Plus, Trash2, Award, Search, UserPlus } from 'lucide-react';
 import { toast } from 'sonner';
 import { trpc } from '@/lib/trpc';
+import { useBeaconAutosave } from '@/lib/use-beacon-autosave';
+import { blank } from '@/lib/sv-entry-readiness';
 import { cn, getTitleDisplay } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -116,6 +118,104 @@ const TITLE_OPTIONS = [
   { value: 'wt_ch', label: 'WT.Ch. — Working Trial Champion' },
 ] as const;
 
+/** Label suffix: a "Required" tag when a field is mandatory for the show the
+ *  exhibitor is entering (regional/SV), else the usual "(opt.)". Mandy
+ *  2026-07-12: regional fields shouldn't read "optional" — for these shows
+ *  they aren't. */
+function FieldTag({ required }: { required: boolean }) {
+  return required ? (
+    <span className="font-normal text-destructive">Required</span>
+  ) : (
+    <span className="font-normal text-muted-foreground">(opt.)</span>
+  );
+}
+
+/** Static reassurance line for the autosaved cards (edit mode). The live
+ *  saving/saved/error status renders once, via DogFormAutosaveBridge. */
+function AutosaveHint() {
+  return (
+    <span className="mt-1 block text-xs text-muted-foreground">
+      Saves automatically as you type.
+    </span>
+  );
+}
+
+/** The dog-form sections that autosave in edit mode. Must match
+ *  dogAutosaveFieldsSchema (server side) — field order matters below. */
+const AUTOSAVE_FIELDS = [
+  'sireName',
+  'damName',
+  'breederName',
+  'breederCountry',
+  'breederCity',
+  'breederPostcode',
+  'microchipNumber',
+  'coatType',
+  'sireRegistrationBody',
+  'sireRegistrationNumber',
+  'damRegistrationBody',
+  'damRegistrationNumber',
+] as const;
+
+/** Isolates the autosave subscription so typing only re-renders THIS tiny
+ *  component, not the whole 1500-line form — react-hook-form's inputs stay
+ *  uncontrolled (the point of RHF). Renders the live status line shown
+ *  above the submit button. */
+function DogFormAutosaveBridge({
+  control,
+  dogId,
+}: {
+  control: Control<DogFormValues>;
+  dogId: string;
+}) {
+  const [
+    sireName, damName, breederName, breederCountry, breederCity,
+    breederPostcode, microchipNumber, coatType, sireRegistrationBody,
+    sireRegistrationNumber, damRegistrationBody, damRegistrationNumber,
+  ] = useWatch({ control, name: AUTOSAVE_FIELDS }) as Array<string | undefined>;
+
+  // hydrated is unconditionally true: the edit page only mounts the form
+  // AFTER the dog has loaded, so it is born with server values, never
+  // blank defaults.
+  const status = useBeaconAutosave({
+    url: `/api/dog-autosave/${dogId}`,
+    enabled: true,
+    hydrated: true,
+    payload: {
+      dog: {
+        sireName: sireName ?? '',
+        damName: damName ?? '',
+        breederName: breederName ?? '',
+        breederCountry: breederCountry ?? '',
+        breederCity: breederCity ?? '',
+        breederPostcode: breederPostcode ?? '',
+        microchipNumber: microchipNumber ?? '',
+        coatType: coatType ?? null,
+        sireRegistrationBody: sireRegistrationBody ?? null,
+        sireRegistrationNumber: sireRegistrationNumber ?? '',
+        damRegistrationBody: damRegistrationBody ?? null,
+        damRegistrationNumber: damRegistrationNumber ?? '',
+      },
+    },
+  });
+
+  return (
+    <p className="flex items-center gap-1.5 text-xs text-muted-foreground" aria-live="polite">
+      {status === 'saving' ? (
+        'Saving your changes…'
+      ) : status === 'saved' ? (
+        <span className="text-green-700 dark:text-green-500">Saved ✓</span>
+      ) : status === 'error' ? (
+        <span className="text-destructive">
+          Some details couldn&apos;t save — check your connection, then press Save Dog Details.
+        </span>
+      ) : (
+        'Pedigree, breeder and registration details save automatically.'
+      )}
+    </p>
+  );
+}
+
 interface DogFormProps {
   mode: 'create' | 'edit';
   defaultValues?: Partial<DogFormValues>;
@@ -129,9 +229,13 @@ interface DogFormProps {
    *  entry to fill in mandatory info — send them straight back to that show's
    *  entry instead of the dog profile (Mandy 2026-06-26). Internal paths only. */
   returnTo?: string;
+  /** True when the dog is being added/edited for an SV/WUSV regional show —
+   *  flips the catalogue-mandatory fields from "(opt.)" to Required and adds
+   *  a guiding banner (Mandy 2026-07-12). */
+  isRegional?: boolean;
 }
 
-export function DogForm({ mode, defaultValues, dogId, svSection, returnTo }: DogFormProps) {
+export function DogForm({ mode, defaultValues, dogId, svSection, returnTo, isRegional = false }: DogFormProps) {
   const safeReturnTo = returnTo && returnTo.startsWith('/shows/') ? returnTo : null;
   const router = useRouter();
   const [breedOpen, setBreedOpen] = useState(false);
@@ -239,6 +343,7 @@ export function DogForm({ mode, defaultValues, dogId, svSection, returnTo }: Dog
 
   function applyKcResult(data: typeof kcResults[number]) {
     const sv = { shouldValidate: true, shouldDirty: true } as const;
+    setLookupApplied(true);
 
     if (data.registeredName) form.setValue('registeredName', data.registeredName, sv);
     if (data.sex) form.setValue('sex', data.sex as 'dog' | 'bitch', sv);
@@ -314,6 +419,7 @@ export function DogForm({ mode, defaultValues, dogId, svSection, returnTo }: Dog
 
   function applyRemiResult(data: typeof remiResults[number]) {
     const sv = { shouldValidate: true, shouldDirty: true } as const;
+    setLookupApplied(true);
 
     if (data.registeredName) form.setValue('registeredName', data.registeredName, sv);
     if (data.kcRegNumber) form.setValue('kcRegNumber', data.kcRegNumber, sv);
@@ -433,6 +539,20 @@ export function DogForm({ mode, defaultValues, dogId, svSection, returnTo }: Dog
   const selectedBreedName = breeds?.find((b) => b.id === watchedBreedId)?.name ?? '';
   const isGsd = /german\s+shepherd/i.test(selectedBreedName);
 
+  // The RKC lookup can only find RKC-registered dogs — hide it when the
+  // registration body says otherwise (regional flows pre-tick SV), when the
+  // saved dog already has its registration number, or once a lookup result
+  // has just been applied (nothing left to look up; Mandy 2026-07-11:
+  // exhibitors clicked it and got confused). Autosave lives in
+  // DogFormAutosaveBridge so keystrokes don't re-render this form.
+  const watchedRegBody = form.watch('registrationBody');
+  const savedRegNumber = mode === 'edit' ? (defaultValues?.kcRegNumber ?? '').trim() : '';
+  const [lookupApplied, setLookupApplied] = useState(false);
+  const showKcLookup =
+    (watchedRegBody == null || watchedRegBody === 'kc') &&
+    !savedRegNumber &&
+    !lookupApplied;
+
   function onSubmit(data: DogFormValues) {
     if (mode === 'create') {
       if (!data.owners || data.owners.length === 0) {
@@ -462,6 +582,37 @@ export function DogForm({ mode, defaultValues, dogId, svSection, returnTo }: Dog
         toast.error('Please add the sire, dam and breeder — they appear in the catalogue');
         return;
       }
+      // Regional (SV/WUSV) shows need the full catalogue/pedigree set, or the
+      // entry gate blocks the entry later. This is the always-required subset
+      // of svMissingRequirements (sv-entry-readiness.ts) that maps to a single
+      // form field — sire/dam NAMES + breeder name are already required for
+      // every create above. Reuses the gate's blank() predicate; keep the two
+      // in step if the required set ever changes (Mandy 2026-07-12).
+      if (isRegional) {
+        const regionalRequired: Array<{
+          name: 'kcRegNumber' | 'coatType' | 'breederCity' | 'breederPostcode' | 'sireRegistrationNumber' | 'damRegistrationNumber';
+          value: string | null | undefined;
+          message: string;
+        }> = [
+          { name: 'kcRegNumber', value: data.kcRegNumber, message: "Your dog's registration number is required for regional shows" },
+          { name: 'coatType', value: data.coatType, message: 'Coat type is required for regional shows' },
+          { name: 'breederCity', value: data.breederCity, message: 'Breeder town/city is required for regional shows' },
+          { name: 'breederPostcode', value: data.breederPostcode, message: 'Breeder postcode is required for regional shows' },
+          { name: 'sireRegistrationNumber', value: data.sireRegistrationNumber, message: "The sire's registration number is required for regional shows" },
+          { name: 'damRegistrationNumber', value: data.damRegistrationNumber, message: "The dam's registration number is required for regional shows" },
+        ];
+        let regionalMissing = false;
+        for (const f of regionalRequired) {
+          if (blank(f.value)) {
+            form.setError(f.name, { type: 'manual', message: f.message });
+            regionalMissing = true;
+          }
+        }
+        if (regionalMissing) {
+          toast.error('Please complete the fields marked Required for regional shows');
+          return;
+        }
+      }
       createDog.mutate(data);
     } else if (dogId) {
       const { owners: _owners, ...dogFields } = data;
@@ -483,6 +634,19 @@ export function DogForm({ mode, defaultValues, dogId, svSection, returnTo }: Dog
   return (
     <Form {...form}>
       <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+        {isRegional && (
+          <div className="rounded-lg border border-amber-300/70 bg-amber-50 p-4 dark:border-amber-900/50 dark:bg-amber-950/30">
+            <p className="text-sm font-medium text-amber-900 dark:text-amber-200">
+              You&apos;re adding a dog for a regional show
+            </p>
+            <p className="mt-1 text-sm text-amber-800/90 dark:text-amber-200/80">
+              Regional (SV / WUSV) entries need a little more detail than a normal
+              show. The fields marked <span className="font-semibold">Required</span>{' '}
+              must be completed — they print in the show catalogue and we need them
+              to accept your entry.
+            </p>
+          </div>
+        )}
         {/* Registration Details */}
         <Card>
           <CardHeader>
@@ -502,7 +666,7 @@ export function DogForm({ mode, defaultValues, dogId, svSection, returnTo }: Dog
               control={form.control}
               name="kcRegNumber"
               render={({ field }) => {
-                const body = form.watch('registrationBody');
+                const body = watchedRegBody;
                 const labelByBody: Record<string, { label: string; placeholder: string; helper: string }> = {
                   kc: {
                     label: 'Dog Registration Number',
@@ -572,7 +736,9 @@ export function DogForm({ mode, defaultValues, dogId, svSection, returnTo }: Dog
               )}
             />
 
-            {/* RKC Lookup Button */}
+            {/* RKC Lookup Button — hidden for non-RKC dogs and for dogs
+                whose registration number is already saved. */}
+            {showKcLookup && (
             <div className="rounded-lg border border-dashed border-primary/30 bg-primary/5 p-4">
               <div className="flex items-start gap-3">
                 <Search className="mt-0.5 size-5 shrink-0 text-primary" />
@@ -645,19 +811,19 @@ export function DogForm({ mode, defaultValues, dogId, svSection, returnTo }: Dog
                       than create a new entry. */}
                   {remiResults.length > 0 && (
                     <div className="mt-3 space-y-2">
-                      <p className="text-sm font-medium text-emerald-700">
+                      <p className="text-sm font-medium text-se-fresh-deep">
                         Found in Remi — tap to fill in the details
                       </p>
                       <div className="space-y-1">
                         {remiResults.map((dog) => (
                           <div
                             key={dog.id}
-                            className="rounded-md border border-emerald-200 bg-emerald-50"
+                            className="rounded-md border border-se-fresh-line bg-se-fresh-soft"
                           >
                             <button
                               type="button"
                               onClick={() => applyRemiResult(dog)}
-                              className="flex w-full flex-col gap-0.5 px-3 py-2.5 text-left text-sm transition-colors hover:bg-emerald-100 sm:flex-row sm:items-center sm:justify-between sm:gap-2 sm:py-2"
+                              className="flex w-full flex-col gap-0.5 px-3 py-2.5 text-left text-sm transition-colors hover:bg-se-fresh-line sm:flex-row sm:items-center sm:justify-between sm:gap-2 sm:py-2"
                             >
                               <div className="min-w-0">
                                 <span className="font-medium">{dog.registeredName}</span>
@@ -672,7 +838,7 @@ export function DogForm({ mode, defaultValues, dogId, svSection, returnTo }: Dog
                             </button>
                             <a
                               href={`/dogs/${dog.id}`}
-                              className="block border-t border-emerald-200 px-3 py-1.5 text-center text-xs text-emerald-700 hover:bg-emerald-100"
+                              className="block border-t border-se-fresh-line px-3 py-1.5 text-center text-xs text-se-fresh-deep hover:bg-se-fresh-line"
                             >
                               Go to existing profile →
                             </a>
@@ -702,7 +868,7 @@ export function DogForm({ mode, defaultValues, dogId, svSection, returnTo }: Dog
                         {kcResults.length} dogs found — select the correct one:
                       </p>
                       {kcResults.length >= 12 && (
-                        <p className="text-xs text-amber-600">
+                        <p className="text-xs text-se-honey-deep">
                           Showing first 12 results only. Try a more specific search
                           (e.g. the full registered name) if your dog isn&apos;t listed.
                         </p>
@@ -733,6 +899,7 @@ export function DogForm({ mode, defaultValues, dogId, svSection, returnTo }: Dog
                 </div>
               </div>
             </div>
+            )}
           </CardContent>
         </Card>
 
@@ -921,8 +1088,8 @@ export function DogForm({ mode, defaultValues, dogId, svSection, returnTo }: Dog
           <CardHeader>
             <CardTitle>Pedigree</CardTitle>
             <CardDescription>
-              Your dog&apos;s lineage details. These are often required for show
-              entries.
+              Your dog&apos;s lineage — sire, dam and breeder. {isGsd && 'The sire\u2019s and dam\u2019s registration numbers sit with their names below. '}These print in the show catalogue.
+              {mode === 'edit' && <AutosaveHint />}
             </CardDescription>
             {kcProfileLookup.isPending && (
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -949,6 +1116,51 @@ export function DogForm({ mode, defaultValues, dogId, svSection, returnTo }: Dog
               )}
             />
 
+            {/* Sire's registration sits with the sire's name so the pedigree
+                reads as one block, not names here / numbers lower down (Mandy
+                2026-07-12). GSD-only — RKC dogs keep the simpler pedigree. */}
+            {isGsd && (
+              <div className="grid gap-3 sm:grid-cols-2">
+                <FormField
+                  control={form.control}
+                  name="sireRegistrationBody"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Sire Registration Body <span className="text-muted-foreground font-normal">(opt.)</span></FormLabel>
+                      <Select onValueChange={(v) => field.onChange(v === 'none' ? undefined : v)} value={field.value ?? 'none'}>
+                        <FormControl>
+                          <SelectTrigger className="w-full">
+                            <SelectValue placeholder="Select body" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          <SelectItem value="none">— Not specified —</SelectItem>
+                          <SelectItem value="kc">RKC</SelectItem>
+                          <SelectItem value="sv">SV</SelectItem>
+                          <SelectItem value="ikc">IKC</SelectItem>
+                          <SelectItem value="other">Other</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="sireRegistrationNumber"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Sire Registration Number <FieldTag required={isRegional} /></FormLabel>
+                      <FormControl>
+                        <Input placeholder="e.g. SZ 2355001" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+            )}
+
             <FormField
               control={form.control}
               name="damName"
@@ -965,6 +1177,48 @@ export function DogForm({ mode, defaultValues, dogId, svSection, returnTo }: Dog
                 </FormItem>
               )}
             />
+
+            {isGsd && (
+              <div className="grid gap-3 sm:grid-cols-2">
+                <FormField
+                  control={form.control}
+                  name="damRegistrationBody"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Dam Registration Body <span className="text-muted-foreground font-normal">(opt.)</span></FormLabel>
+                      <Select onValueChange={(v) => field.onChange(v === 'none' ? undefined : v)} value={field.value ?? 'none'}>
+                        <FormControl>
+                          <SelectTrigger className="w-full">
+                            <SelectValue placeholder="Select body" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          <SelectItem value="none">— Not specified —</SelectItem>
+                          <SelectItem value="kc">RKC</SelectItem>
+                          <SelectItem value="sv">SV</SelectItem>
+                          <SelectItem value="ikc">IKC</SelectItem>
+                          <SelectItem value="other">Other</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="damRegistrationNumber"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Dam Registration Number <FieldTag required={isRegional} /></FormLabel>
+                      <FormControl>
+                        <Input placeholder="e.g. SZ 2344555" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+            )}
 
             <FormField
               control={form.control}
@@ -1006,7 +1260,7 @@ export function DogForm({ mode, defaultValues, dogId, svSection, returnTo }: Dog
                 name="breederCity"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Breeder City <span className="text-muted-foreground font-normal">(opt.)</span></FormLabel>
+                    <FormLabel>Breeder Town / City <FieldTag required={isRegional} /></FormLabel>
                     <FormControl>
                       <Input placeholder="e.g. Augsburg" {...field} />
                     </FormControl>
@@ -1019,7 +1273,7 @@ export function DogForm({ mode, defaultValues, dogId, svSection, returnTo }: Dog
                 name="breederPostcode"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Breeder Postcode <span className="text-muted-foreground font-normal">(opt.)</span></FormLabel>
+                    <FormLabel>Breeder Postcode <FieldTag required={isRegional} /></FormLabel>
                     <FormControl>
                       <Input placeholder="e.g. 86150" {...field} />
                     </FormControl>
@@ -1034,16 +1288,20 @@ export function DogForm({ mode, defaultValues, dogId, svSection, returnTo }: Dog
         {/* German Shepherd / SV Details — only relevant for GSDs.
             Hidden entirely for any other breed (Amanda 2026-05-21). */}
         {isGsd && (
-        <Card className="border-amber-200/60 dark:border-amber-900/40">
+        <Card className="border-se-honey/60">
           <CardHeader>
             <CardTitle>German Shepherd — SV / WUSV Details</CardTitle>
             <CardDescription className="space-y-1">
               <span className="block">
-                The fields in this section are <span className="font-semibold text-foreground">required for SV Regional shows and the British Sieger</span> — these events are governed by the GSDL-BRG / WUSV, not the Royal Kennel Club.
+                Your German Shepherd&apos;s SV details — coat type, microchip and
+                registration body. <span className="font-semibold text-foreground">Coat type is required for SV Regional shows and the British Sieger</span> (governed by the GSDL-BRG / WUSV, not the Royal Kennel Club).
               </span>
               <span className="block text-xs">
-                For RKC shows the section is optional. The dog&apos;s registration number can be entered either at the top of the form or below — both feed the same field.
+                Your dog&apos;s own registration number is at the top of the form,
+                with the registered name; the sire&apos;s and dam&apos;s are in the
+                Pedigree section above.
               </span>
+              {mode === 'edit' && <AutosaveHint />}
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-3 sm:space-y-4">
@@ -1077,7 +1335,7 @@ export function DogForm({ mode, defaultValues, dogId, svSection, returnTo }: Dog
                 name="coatType"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Coat Type <span className="text-muted-foreground font-normal">(optional)</span></FormLabel>
+                    <FormLabel>Coat Type <FieldTag required={isRegional} /></FormLabel>
                     <Select onValueChange={(v) => field.onChange(v === 'none' ? undefined : v)} value={field.value ?? 'none'}>
                       <FormControl>
                         <SelectTrigger className="w-full">
@@ -1109,86 +1367,6 @@ export function DogForm({ mode, defaultValues, dogId, svSection, returnTo }: Dog
                 </FormItem>
               )}
             />
-
-            <div className="grid gap-3 sm:grid-cols-2">
-              <FormField
-                control={form.control}
-                name="sireRegistrationBody"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Sire Registration Body <span className="text-muted-foreground font-normal">(opt.)</span></FormLabel>
-                    <Select onValueChange={(v) => field.onChange(v === 'none' ? undefined : v)} value={field.value ?? 'none'}>
-                      <FormControl>
-                        <SelectTrigger className="w-full">
-                          <SelectValue placeholder="Select body" />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        <SelectItem value="none">— Not specified —</SelectItem>
-                        <SelectItem value="kc">RKC</SelectItem>
-                        <SelectItem value="sv">SV</SelectItem>
-                        <SelectItem value="ikc">IKC</SelectItem>
-                        <SelectItem value="other">Other</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name="sireRegistrationNumber"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Sire Registration Number <span className="text-muted-foreground font-normal">(opt.)</span></FormLabel>
-                    <FormControl>
-                      <Input placeholder="e.g. SZ 2355001" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            </div>
-
-            <div className="grid gap-3 sm:grid-cols-2">
-              <FormField
-                control={form.control}
-                name="damRegistrationBody"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Dam Registration Body <span className="text-muted-foreground font-normal">(opt.)</span></FormLabel>
-                    <Select onValueChange={(v) => field.onChange(v === 'none' ? undefined : v)} value={field.value ?? 'none'}>
-                      <FormControl>
-                        <SelectTrigger className="w-full">
-                          <SelectValue placeholder="Select body" />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        <SelectItem value="none">— Not specified —</SelectItem>
-                        <SelectItem value="kc">RKC</SelectItem>
-                        <SelectItem value="sv">SV</SelectItem>
-                        <SelectItem value="ikc">IKC</SelectItem>
-                        <SelectItem value="other">Other</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name="damRegistrationNumber"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Dam Registration Number <span className="text-muted-foreground font-normal">(opt.)</span></FormLabel>
-                    <FormControl>
-                      <Input placeholder="e.g. SZ 2344555" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            </div>
           </CardContent>
         </Card>
         )}
@@ -1233,10 +1411,13 @@ export function DogForm({ mode, defaultValues, dogId, svSection, returnTo }: Dog
           <CardHeader>
             <CardTitle>Owners</CardTitle>
             <CardDescription>
-              <strong>Owner 1 should be you.</strong> If the dog is jointly
-              owned with a partner, family member or co-breeder, tap{' '}
-              <em>Add New Owner</em> below to add each joint owner — every
-              name will appear together on the RKC catalogue. Up to 4 owners.
+              {/* Mandy 2026-07-11: copy must name the button that actually
+                  exists — it said "Add New Owner" while the button reads
+                  "Add Joint Owner". */}
+              <strong>You&apos;re already saved as Owner 1.</strong> If the dog
+              is jointly owned with a partner, family member or co-breeder,
+              tap <em>Add Joint Owner</em> below — every name will appear
+              together on the show catalogue. Up to 4 owners.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -1426,7 +1607,7 @@ export function DogForm({ mode, defaultValues, dogId, svSection, returnTo }: Dog
 
             {ownerFields.length === 0 && (
               <p className="text-sm text-muted-foreground">
-                No owners added yet. Click &quot;Add New Owner&quot; to add one.
+                No owners added yet. Tap &quot;Add Joint Owner&quot; to add one.
               </p>
             )}
           </CardContent>
@@ -1482,14 +1663,12 @@ export function DogForm({ mode, defaultValues, dogId, svSection, returnTo }: Dog
           </Card>
         )}
 
-        {/* Submit. Note for SV/GSD dogs: the SV Health card above has its
-            own "Save Health Data" button — both need to be clicked to
-            persist their respective data. (Amanda 2026-05-21: she lost
-            health data because she only clicked one of the two buttons.) */}
-        {isGsd && mode === 'edit' && (
-          <p className="text-xs text-amber-700 dark:text-amber-400">
-            Don&apos;t forget — the SV Health card above has its own <span className="font-semibold">Save Health Data</span> button. Click that one too to save the health/Koerung/breed survey fields.
-          </p>
+        {/* Submit. The SV Health card and the pedigree/breeder/registration
+            sections save themselves in edit mode (DogFormAutosaveBridge +
+            useBeaconAutosave) — the old second "Save Health Data" button and
+            its warning banner are gone (Mandy 2026-07-11). */}
+        {mode === 'edit' && dogId && (
+          <DogFormAutosaveBridge control={form.control} dogId={dogId} />
         )}
         <div className="flex flex-col gap-2 sm:flex-row sm:gap-3">
           <Button type="submit" disabled={isPending} size="lg" className="w-full sm:w-auto">

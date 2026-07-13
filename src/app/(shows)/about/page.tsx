@@ -20,6 +20,8 @@ import {
   CalendarClock,
 } from 'lucide-react';
 import { AnimateIn } from '@/components/animate-in';
+import { SE_H } from '@/components/show-experience/tokens';
+import { cn } from '@/lib/utils';
 
 export const metadata = {
   title: 'About Remi — Modern Dog Show Management',
@@ -40,7 +42,7 @@ const FEATURES = [
     title: 'Secure Instant Payments',
     description:
       'Pay your entry fees securely through Stripe. You get an instant email confirmation, and your entry is locked in immediately — no cheques, no delays.',
-    colour: 'bg-green-50 text-green-600',
+    colour: 'bg-se-fresh-soft text-se-fresh-deep',
   },
   {
     icon: Radio,
@@ -54,7 +56,7 @@ const FEATURES = [
     title: 'Automatic Catalogues',
     description:
       'Professional print-ready catalogues generated in seconds — standard, by-class, alphabetical, and absentee formats. Complete with RKC registration numbers, pedigree details, and proper breed group ordering.',
-    colour: 'bg-amber-50 text-amber-600',
+    colour: 'bg-se-honey-soft text-se-honey-deep',
   },
   {
     icon: LayoutDashboard,
@@ -110,13 +112,13 @@ export default function AboutPage() {
               </div>
             </AnimateIn>
             <AnimateIn delay={100}>
-              <h1 className="font-serif text-4xl font-bold tracking-tight sm:text-5xl lg:text-6xl">
+              <h1 className={cn(SE_H, 'text-4xl sm:text-5xl lg:text-6xl')}>
                 The future of{' '}
                 <span className="text-primary">dog show management</span>
               </h1>
             </AnimateIn>
             <AnimateIn delay={200}>
-              <p className="gold-rule-center mx-auto mt-6 max-w-2xl text-lg leading-relaxed text-muted-foreground sm:text-xl">
+              <p className="after:mx-auto after:mt-3 after:block after:h-0.5 after:w-12 after:bg-se-honey after:content-[''] mx-auto mt-6 max-w-2xl text-lg leading-relaxed text-muted-foreground sm:text-xl">
                 Remi is a modern entry-management platform built by people
                 who run RKC shows themselves. Online entries, secure payments,
                 live results, and automatic catalogues — everything exhibitors
@@ -171,7 +173,7 @@ export default function AboutPage() {
       <section className="border-b">
         <div className="mx-auto max-w-7xl px-4 py-16 sm:px-6 sm:py-24 lg:px-8">
           <AnimateIn className="mx-auto max-w-2xl text-center">
-            <h2 className="gold-rule-center font-serif text-2xl font-bold tracking-tight sm:text-3xl lg:text-4xl">
+            <h2 className="after:mx-auto after:mt-3 after:block after:h-0.5 after:w-12 after:bg-se-honey after:content-[''] font-serif text-2xl font-bold tracking-tight sm:text-3xl lg:text-4xl">
               Everything you need, nothing you don&apos;t
             </h2>
             <p className="mt-5 text-lg text-muted-foreground">
@@ -222,7 +224,7 @@ export default function AboutPage() {
                 <ul className="mt-6 space-y-3">
                   {EXHIBITOR_BENEFITS.map((benefit) => (
                     <li key={benefit} className="flex items-start gap-3 text-sm">
-                      <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-green-600" />
+                      <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-se-fresh-deep" />
                       <span>{benefit}</span>
                     </li>
                   ))}
@@ -233,7 +235,7 @@ export default function AboutPage() {
             {/* Secretaries */}
             <AnimateIn delay={120}>
               <div className="rounded-2xl border bg-background p-8 sm:p-10">
-                <div className="mb-5 inline-flex items-center gap-2 rounded-full bg-amber-50 px-4 py-1.5 text-sm font-medium text-amber-700">
+                <div className="mb-5 inline-flex items-center gap-2 rounded-full bg-se-honey-soft px-4 py-1.5 text-sm font-medium text-se-honey-deep">
                   <Users className="size-4" />
                   For Show Secretaries
                 </div>
@@ -248,7 +250,7 @@ export default function AboutPage() {
                 <ul className="mt-6 space-y-3">
                   {SECRETARY_BENEFITS.map((benefit) => (
                     <li key={benefit} className="flex items-start gap-3 text-sm">
-                      <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-green-600" />
+                      <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-se-fresh-deep" />
                       <span>{benefit}</span>
                     </li>
                   ))}
@@ -263,7 +265,7 @@ export default function AboutPage() {
       <section id="who-we-are" className="border-b">
         <div className="mx-auto max-w-7xl px-4 py-16 sm:px-6 sm:py-24 lg:px-8">
           <AnimateIn className="mx-auto max-w-2xl text-center">
-            <h2 className="gold-rule-center font-serif text-2xl font-bold tracking-tight sm:text-3xl lg:text-4xl">
+            <h2 className="after:mx-auto after:mt-3 after:block after:h-0.5 after:w-12 after:bg-se-honey after:content-[''] font-serif text-2xl font-bold tracking-tight sm:text-3xl lg:text-4xl">
               Who we are
             </h2>
             <p className="mt-5 text-lg text-muted-foreground">
@@ -276,7 +278,7 @@ export default function AboutPage() {
             {/* Amanda */}
             <AnimateIn>
               <div className="h-full rounded-2xl border bg-card p-8 sm:p-10">
-                <div className="mb-5 inline-flex items-center gap-2 rounded-full bg-amber-50 px-4 py-1.5 text-sm font-medium text-amber-700">
+                <div className="mb-5 inline-flex items-center gap-2 rounded-full bg-se-honey-soft px-4 py-1.5 text-sm font-medium text-se-honey-deep">
                   <Award className="size-4" />
                   Co-founder &mdash; Industry
                 </div>
@@ -307,7 +309,7 @@ export default function AboutPage() {
                       key={credential}
                       className="flex items-start gap-3 text-sm"
                     >
-                      <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-amber-600" />
+                      <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-se-honey-deep" />
                       <span>{credential}</span>
                     </li>
                   ))}
@@ -364,7 +366,7 @@ export default function AboutPage() {
       <section id="your-money" className="border-b bg-card">
         <div className="mx-auto max-w-7xl px-4 py-16 sm:px-6 sm:py-24 lg:px-8">
           <AnimateIn className="mx-auto max-w-2xl text-center">
-            <h2 className="gold-rule-center font-serif text-2xl font-bold tracking-tight sm:text-3xl lg:text-4xl">
+            <h2 className="after:mx-auto after:mt-3 after:block after:h-0.5 after:w-12 after:bg-se-honey after:content-[''] font-serif text-2xl font-bold tracking-tight sm:text-3xl lg:text-4xl">
               Where your money is held
             </h2>
             <p className="mt-5 text-lg text-muted-foreground">
@@ -377,7 +379,7 @@ export default function AboutPage() {
           <div className="mx-auto mt-14 grid max-w-5xl gap-6 sm:grid-cols-3">
             <AnimateIn>
               <div className="h-full rounded-2xl border bg-background p-7">
-                <div className="mb-4 inline-flex rounded-xl bg-emerald-50 p-3 text-emerald-700">
+                <div className="mb-4 inline-flex rounded-xl bg-se-fresh-soft p-3 text-se-fresh-deep">
                   <Lock className="size-6" />
                 </div>
                 <h3 className="font-serif text-lg font-bold">
@@ -414,7 +416,7 @@ export default function AboutPage() {
 
             <AnimateIn delay={240}>
               <div className="h-full rounded-2xl border bg-background p-7">
-                <div className="mb-4 inline-flex rounded-xl bg-amber-50 p-3 text-amber-700">
+                <div className="mb-4 inline-flex rounded-xl bg-se-honey-soft p-3 text-se-honey-deep">
                   <CalendarClock className="size-6" />
                 </div>
                 <h3 className="font-serif text-lg font-bold">

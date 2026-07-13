@@ -155,8 +155,8 @@ export default function EntriesPage() {
         <div>
           <PageTitle>My Entries</PageTitle>
           <PageDescription className="mt-1 flex flex-wrap gap-x-2 gap-y-0.5 text-sm">
-            {confirmedCount > 0 && <span className="font-medium text-emerald-600">{confirmedCount} confirmed</span>}
-            {pendingCount > 0 && <span className="font-medium text-amber-600">{pendingCount} pending</span>}
+            {confirmedCount > 0 && <span className="font-medium text-se-fresh-deep">{confirmedCount} confirmed</span>}
+            {pendingCount > 0 && <span className="font-medium text-se-honey-deep">{pendingCount} pending</span>}
             {withdrawnCount > 0 && <span>{withdrawnCount} withdrawn</span>}
             {totalFees > 0 && <span className="font-medium text-foreground">{formatCurrency(totalFees)} total</span>}
           </PageDescription>
@@ -167,14 +167,14 @@ export default function EntriesPage() {
           paid for. Shown as a gentle prompt, NOT a real entry row
           (Amanda 2026-05-28). */}
       {unfinished.length > 0 && (
-        <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 sm:p-5">
+        <div className="rounded-xl border border-se-honey-line bg-se-honey-soft p-4 sm:p-5">
           <div className="flex items-start gap-3">
-            <CalendarDays className="mt-0.5 size-5 shrink-0 text-amber-600" />
+            <CalendarDays className="mt-0.5 size-5 shrink-0 text-se-honey-deep" />
             <div className="min-w-0 flex-1">
-              <p className="font-semibold text-amber-900">
+              <p className="font-semibold text-se-honey-ink">
                 {unfinished.length === 1 ? 'You have an entry to finish' : 'You have entries to finish'}
               </p>
-              <p className="mt-1 text-sm text-amber-800">
+              <p className="mt-1 text-sm text-se-honey-deep">
                 {unfinished.length === 1
                   ? "You started entering but didn't complete payment, so it's not booked in yet."
                   : "You started these entries but didn't complete payment, so they're not booked in yet."}
@@ -183,13 +183,13 @@ export default function EntriesPage() {
                 {unfinished.map((u) => (
                   <div
                     key={u.id}
-                    className="flex flex-col gap-2 rounded-lg border border-amber-200 bg-white p-3 sm:flex-row sm:items-center sm:justify-between"
+                    className="flex flex-col gap-2 rounded-lg border border-se-honey-line bg-se-surface p-3 sm:flex-row sm:items-center sm:justify-between"
                   >
                     <div className="min-w-0">
                       <p className="truncate text-sm font-medium text-foreground">{u.dogName}</p>
                       <p className="truncate text-xs text-muted-foreground">{u.showName}</p>
                     </div>
-                    <Button asChild size="sm" className="min-h-[2.75rem] shrink-0 bg-amber-600 hover:bg-amber-700">
+                    <Button asChild size="sm" className="min-h-[2.75rem] shrink-0 bg-se-honey text-se-honey-ink hover:bg-se-honey-deep hover:text-white">
                       <Link href={`/shows/${u.showSlug}/enter`}>Finish entry</Link>
                     </Button>
                   </div>
@@ -237,7 +237,7 @@ export default function EntriesPage() {
       {upcoming.length > 0 && (
         <section>
           <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold uppercase tracking-wider text-muted-foreground">
-            <div className="size-2 rounded-full bg-emerald-500" />
+            <div className="size-2 rounded-full bg-se-fresh" />
             Upcoming ({upcoming.reduce((sum, g) => sum + g.entries.length, 0)} entries)
           </h2>
           <div className="space-y-4">
@@ -315,10 +315,10 @@ function ShowGroupCard({ group, isPast, catalogueMap }: { group: ShowGroup; isPa
 
       {/* Catalogue link */}
       {catalogue && (
-        <div className="border-t bg-emerald-50 px-3 py-2.5 dark:bg-emerald-900/20 sm:px-4">
+        <div className="border-t bg-se-fresh-soft px-3 py-2.5 sm:px-4">
           <Link
             href={`/shows/${catalogue.showSlug ?? group.showId}/catalogue`}
-            className="flex items-center gap-2 text-sm font-medium text-emerald-700 dark:text-emerald-400"
+            className="flex items-center gap-2 text-sm font-medium text-se-fresh-deep"
           >
             <BookOpen className="size-4" />
             {catalogue.isAvailable ? 'View Online Catalogue' : 'Catalogue — available soon'}

@@ -4,6 +4,8 @@ import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { ChevronLeft, Loader2 } from 'lucide-react';
 import { trpc } from '@/lib/trpc';
+import { cn } from '@/lib/utils';
+import { SE_H } from '@/components/show-experience/tokens';
 import { Button } from '@/components/ui/button';
 import { DogForm } from '@/components/dogs/dog-form';
 
@@ -53,7 +55,7 @@ export default function NewDogPage() {
             </Link>
           </Button>
         )}
-        <h1 className="font-serif text-2xl font-bold tracking-tight sm:text-3xl">
+        <h1 className={cn(SE_H, 'text-2xl sm:text-3xl')}>
           Add a Dog
         </h1>
         <p className="mt-1 text-muted-foreground">
@@ -67,6 +69,7 @@ export default function NewDogPage() {
         <DogForm
           mode="create"
           returnTo={returnTo ?? undefined}
+          isRegional={isRegional}
           defaultValues={isRegional ? { registrationBody: 'sv' } : undefined}
         />
       </div>

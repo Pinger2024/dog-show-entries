@@ -22,12 +22,12 @@ import { StatCard } from '@/components/ui/stat-card';
 import { cn } from '@/lib/utils';
 
 const STATUS_META: Record<string, { label: string; className: string }> = {
-  draft: { label: 'Draft', className: 'bg-gray-100 text-gray-700' },
+  draft: { label: 'Draft', className: 'bg-se-paper2 text-se-ink3' },
   published: { label: 'Published', className: 'bg-blue-100 text-blue-700' },
-  entries_open: { label: 'Entries open', className: 'bg-emerald-100 text-emerald-700' },
-  entries_closed: { label: 'Entries closed', className: 'bg-amber-100 text-amber-700' },
+  entries_open: { label: 'Entries open', className: 'bg-se-fresh-soft text-se-fresh-deep' },
+  entries_closed: { label: 'Entries closed', className: 'bg-se-honey-soft text-se-honey-deep' },
   in_progress: { label: 'Live', className: 'bg-primary/15 text-primary' },
-  completed: { label: 'Completed', className: 'bg-gray-200 text-gray-700' },
+  completed: { label: 'Completed', className: 'bg-se-paper2 text-se-ink3' },
   cancelled: { label: 'Cancelled', className: 'bg-red-100 text-red-700' },
 };
 
@@ -140,7 +140,7 @@ export default function AdminShowsPage() {
           label="Our booking-fee income"
           value={formatCurrency(totals.income)}
           icon={TrendingUp}
-          iconColor={{ bg: 'bg-emerald-100', fg: 'text-emerald-600' }}
+          iconColor={{ bg: 'bg-se-fresh-soft', fg: 'text-se-fresh-deep' }}
         />
       </div>
 

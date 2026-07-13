@@ -243,7 +243,7 @@ function EntryReportContent({ showId }: { showId: string }) {
           <StatCard label="Total Entries" value={stats.total} />
           <StatCard
             label="Confirmed"
-            value={<span className="text-green-600 dark:text-green-400">{stats.confirmed}</span>}
+            value={<span className="text-se-fresh-deep">{stats.confirmed}</span>}
           />
           <StatCard label="Exhibitors" value={stats.uniqueExhibitors} />
           <StatCard label="Total Fees" value={formatCurrency(stats.totalRevenue)} />
@@ -498,7 +498,7 @@ function PaymentReportContent({ showId }: { showId: string }) {
         <Card>
           <CardContent className="pt-4 pb-3">
             <p className="text-xs font-medium text-muted-foreground">Total Revenue</p>
-            <p className="text-2xl font-bold text-green-600 dark:text-green-400">
+            <p className="text-2xl font-bold text-se-fresh-deep">
               {formatCurrency(data?.summary.totalRevenue ?? 0)}
             </p>
           </CardContent>
@@ -512,7 +512,7 @@ function PaymentReportContent({ showId }: { showId: string }) {
         <Card>
           <CardContent className="pt-4 pb-3">
             <p className="text-xs font-medium text-muted-foreground">Pending</p>
-            <p className="text-2xl font-bold text-amber-600 dark:text-amber-400">
+            <p className="text-2xl font-bold text-se-honey-deep">
               {data?.summary.pendingCount ?? 0}
             </p>
           </CardContent>
@@ -924,7 +924,7 @@ function AbsenteeReportContent({ showId }: { showId: string }) {
         <Card>
           <CardContent className="pt-4 pb-3">
             <p className="text-xs font-medium text-muted-foreground">Absent</p>
-            <p className="text-2xl font-bold text-amber-600 dark:text-amber-400">
+            <p className="text-2xl font-bold text-se-honey-deep">
               {absentees?.filter((e) => e.status !== 'withdrawn' && e.absent).length ?? 0}
             </p>
           </CardContent>
@@ -932,7 +932,7 @@ function AbsenteeReportContent({ showId }: { showId: string }) {
         <Card>
           <CardContent className="pt-4 pb-3">
             <p className="text-xs font-medium text-muted-foreground">Withdrawn</p>
-            <p className="text-2xl font-bold text-red-600 dark:text-red-400">
+            <p className="text-2xl font-bold text-destructive">
               {absentees?.filter((e) => e.status === 'withdrawn').length ?? 0}
             </p>
           </CardContent>
