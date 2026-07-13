@@ -3111,9 +3111,16 @@ export const secretaryRouter = createTRPCRouter({
         entryId: input.entryId,
       });
 
-      // If this refund cleared the remaining balance, the whole order is
-      // gone — cancel this entry so it drops out of the catalogue.
-      if (result.fullyRefunded) {
+      // Cancel the entry so it drops out of the catalogue AND income when:
+      //  - this refund cleared the whole order (existing behaviour), or
+      //  - a WITHDRAWN entry's full fee was just refunded. A withdrawn
+      //    exhibitor keeps their fee with the club by default; once the
+      //    secretary chooses to refund it, it's no longer "withdrawn, fee kept"
+      //    but refunded/gone, so it must leave the withdrawn count + the income
+      //    total (Mandy 2026-07-13).
+      const withdrawnFullyRefunded =
+        entry.status === 'withdrawn' && refundAmount >= entry.totalFee;
+      if (result.fullyRefunded || withdrawnFullyRefunded) {
         await ctx.db
           .update(entries)
           .set({ status: 'cancelled' })

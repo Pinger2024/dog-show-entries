@@ -284,3 +284,69 @@ describe('withdrawn entries stay out of the printed catalogue', () => {
     expect(ids).not.toContain(entryWithdrawn.id);
   });
 });
+
+// Mandy 2026-07-13: a withdrawn entry keeps its fee with the club by default
+// (income). The secretary can choose to refund it; once they do, it must leave
+// the withdrawn count AND the income total, and the £1+1% platform fee must NOT
+// be handed back (Stripe keeps its cut on refunds).
+describe('refund a withdrawn entry → cancelled, drops from income, keeps platform fee', () => {
+  async function paidShowWithWithdrawnEntry() {
+    const { user: secretary, org, breed } = await makeSecretaryWithOrgAndBreed();
+    const show = await makeShow({ organisationId: org.id, breedId: breed.id });
+    const showClass = await makeShowClass({ showId: show.id, breedId: breed.id });
+    const exhibitor = await makeUser({ role: 'exhibitor' });
+    const dog = await makeDog({ ownerId: exhibitor.id, breedId: breed.id });
+    // Charged £20 entry + £1.20 platform fee = £21.20 at Stripe.
+    const order = await makeOrder({
+      showId: show.id, exhibitorId: exhibitor.id, status: 'paid',
+      totalAmount: 2000, platformFeePence: 120,
+    });
+    const entry = await makeEntry({
+      showId: show.id, dogId: dog.id, exhibitorId: exhibitor.id,
+      orderId: order.id, status: 'withdrawn', totalFee: 2000,
+    });
+    await makeEntryClass({ entryId: entry.id, showClassId: showClass.id });
+    const payment = await makePayment({
+      orderId: order.id, stripePaymentId: 'pi_test_withdrawn_refund',
+      amount: 2120, status: 'succeeded',
+    });
+    return { secretary, show, order, entry, payment };
+  }
+
+  it('before refund: the withdrawn fee counts as club income', async () => {
+    const { secretary, show } = await paidShowWithWithdrawnEntry();
+    const stats = await createTestCaller(secretary).secretary.getShowStats({ showId: show.id });
+    expect(stats.paidEntryFeesPence).toBe(2000);
+    expect(stats.clubReceivablePence).toBe(2000);
+    const entryStats = await createTestCaller(secretary).secretary.getShowEntryStats({ showId: show.id });
+    expect(entryStats.withdrawn).toBe(1);
+  });
+
+  it('refunding it flips the entry to cancelled and zeroes club income', async () => {
+    const { secretary, show, entry } = await paidShowWithWithdrawnEntry();
+    await createTestCaller(secretary).secretary.issueRefund({ entryId: entry.id });
+
+    const refreshed = await testDb.query.entries.findFirst({ where: eq(entries.id, entry.id) });
+    expect(refreshed?.status).toBe('cancelled');
+
+    const stats = await createTestCaller(secretary).secretary.getShowStats({ showId: show.id });
+    expect(stats.clubReceivablePence).toBe(0); // fee counted then netted by the refund
+    expect(stats.refundedPence).toBe(2000);
+
+    const entryStats = await createTestCaller(secretary).secretary.getShowEntryStats({ showId: show.id });
+    expect(entryStats.withdrawn).toBe(0); // no longer inflates the withdrawn count
+  });
+
+  it('keeps the £1.20 platform fee — order stays paid (not fully refunded)', async () => {
+    const { secretary, order, entry, payment } = await paidShowWithWithdrawnEntry();
+    await createTestCaller(secretary).secretary.issueRefund({ entryId: entry.id });
+
+    // Only the £20 entry fee came back; the £1.20 platform fee is retained, so
+    // the payment is partially — not fully — refunded and the order stays 'paid'.
+    const refreshedPayment = await testDb.query.payments.findFirst({ where: eq(payments.id, payment.id) });
+    expect(refreshedPayment?.refundAmount).toBe(2000);
+    expect(refreshedPayment?.status).toBe('partially_refunded');
+    const refreshedOrder = await testDb.query.orders.findFirst({ where: eq(orders.id, order.id) });
+    expect(refreshedOrder?.status).toBe('paid');
+  });
+});

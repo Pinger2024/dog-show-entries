@@ -159,10 +159,15 @@ export default function FinancialPage() {
   const confirmedStandardCount = standardEntries.filter((e) => e.status === 'confirmed').length;
   const confirmedNfcCount = nfcEntries.filter((e) => e.status === 'confirmed').length;
   const confirmedJhCount = jhEntries.filter((e) => e.status === 'confirmed').length;
+  // Withdrawn entries keep their fee with the club (no refund), so that fee IS
+  // part of the Entry Fees / Total Income figures above. Surface it here or the
+  // amount looks bigger than the "X paid" count explains (Mandy 2026-07-13).
+  const withdrawnWithFeeCount = entries.filter((e) => e.status === 'withdrawn' && e.totalFee > 0).length;
   const entryBreakdownParts = [
     confirmedStandardCount > 0 ? `${confirmedStandardCount} paid` : null,
     confirmedNfcCount > 0 ? `${confirmedNfcCount} NFC` : null,
     confirmedJhCount > 0 ? `${confirmedJhCount} JH` : null,
+    withdrawnWithFeeCount > 0 ? `${withdrawnWithFeeCount} withdrawn (fee kept)` : null,
   ].filter(Boolean);
   const entryBreakdownText = entryBreakdownParts.length > 0
     ? entryBreakdownParts.join(' · ')
@@ -546,7 +551,15 @@ export default function FinancialPage() {
                       </Badge>
                     </TableCell>
                     <TableCell>{statusEntries.length}</TableCell>
-                    <TableCell>{formatCurrency(statusTotal)}</TableCell>
+                    <TableCell>
+                      {formatCurrency(statusTotal)}
+                      {status === 'withdrawn' && (
+                        <span className="block text-xs text-muted-foreground">kept as income</span>
+                      )}
+                      {status === 'cancelled' && (
+                        <span className="block text-xs text-muted-foreground">refunded</span>
+                      )}
+                    </TableCell>
                   </TableRow>
                 );
               })}
@@ -833,7 +846,13 @@ function OrderRefundCard({
               </div>
               <div className="flex items-center gap-2 shrink-0">
                 <span className="text-sm">{formatCurrency(entry.totalFee)}</span>
-                {!fullyRefunded && hasRefundablePayment && entry.totalFee > 0 && entry.status === 'confirmed' && (
+                {/* Refund allowed on confirmed OR withdrawn entries — a
+                    withdrawn exhibitor kept their fee with the club by default,
+                    but the secretary can choose to give it back (Mandy
+                    2026-07-13). issueRefund handles the accounting; the refund
+                    moves a withdrawn entry to cancelled so it drops out of
+                    income. */}
+                {!fullyRefunded && hasRefundablePayment && entry.totalFee > 0 && (entry.status === 'confirmed' || entry.status === 'withdrawn') && (
                   <Button
                     size="sm"
                     variant="ghost"

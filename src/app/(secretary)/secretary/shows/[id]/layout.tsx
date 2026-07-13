@@ -420,10 +420,20 @@ export default function ShowManagementLayout({
               <ClipboardList className="size-3.5" />
               <Eyebrow>Entries</Eyebrow>
             </div>
-            <p className={cn(SE_H, 'mt-1.5 text-[22px] leading-none tabular-nums text-se-ink')}>{entryStats.totalEntries}</p>
+            {/* Headline = dogs actually entered (confirmed), so it matches the
+                entries list. In-flight ("awaiting payment") and withdrawn are
+                shown separately rather than inflating the number — secretaries
+                read the big figure as "how many are entered" (Mandy 2026-07-13). */}
+            <p className={cn(SE_H, 'mt-1.5 text-[22px] leading-none tabular-nums text-se-ink')}>{entryStats.confirmed}</p>
             <p className="mt-1 text-[11px] text-se-ink3">
-              {entryStats.confirmed > 0 && <span className="text-se-fresh-deep">{entryStats.confirmed} confirmed</span>}
-              {entryStats.pending > 0 && <span>{entryStats.confirmed > 0 ? ' · ' : ''}<span className="text-se-honey-deep">{entryStats.pending} pending</span></span>}
+              {entryStats.pending === 0 && entryStats.withdrawn === 0 ? (
+                <span className="text-se-fresh-deep">confirmed</span>
+              ) : (
+                <>
+                  {entryStats.pending > 0 && <span className="text-se-honey-deep">{entryStats.pending} awaiting payment</span>}
+                  {entryStats.withdrawn > 0 && <span>{entryStats.pending > 0 ? ' · ' : ''}{entryStats.withdrawn} withdrawn</span>}
+                </>
+              )}
             </p>
           </SECard>
           <SECard className="p-3.5">
