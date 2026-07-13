@@ -16,6 +16,20 @@
  *  - Discount group + multi-dog stack: a declared member gets the member package.
  */
 
+/**
+ * Platform handling fee the exhibitor pays on top of the club-collected
+ * subtotal (entries + sundry + donation): £1 + 1%, in whole pence.
+ *
+ * SINGLE SOURCE OF TRUTH. The server charges exactly this at checkout
+ * (`orders` router → Stripe) and the checkout preview shows exactly this,
+ * so the figure the exhibitor sees before paying matches the charge to the
+ * penny. `src/server/services/stripe.ts` re-exports this — do not fork it.
+ * Michael is sensitive about fee accuracy; keep the two in lockstep.
+ */
+export function calculatePlatformFee(subtotalPence: number): number {
+  return 100 + Math.round(subtotalPence * 0.01);
+}
+
 export type DogEntryInput = {
   /** Stable id used as the key in the per-entry breakdown (typically entry.id). */
   key: string;

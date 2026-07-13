@@ -177,7 +177,7 @@ export const SEButton = React.forwardRef<HTMLButtonElement, SEButtonProps>(
           // shadow/color, a 2% press scale, and a visible focus ring. The
           // press scale is neutralized under reduced motion; color/shadow
           // transitions stay (they're not perceptible "motion").
-          'inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-[13px] font-semibold transition-[transform,box-shadow,background-color,color] duration-[120ms] ease-out active:scale-[0.98] motion-reduce:active:scale-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-se-fresh focus-visible:ring-offset-2 focus-visible:ring-offset-se-paper',
+          'inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-[13px] font-semibold transition-[transform,box-shadow,background-color,color] duration-[120ms] ease-out active:scale-[0.98] motion-reduce:active:scale-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-se-fresh focus-visible:ring-offset-2 focus-visible:ring-offset-se-paper disabled:pointer-events-none disabled:opacity-50 disabled:shadow-none',
           SE_BUTTON_VARIANTS[variant],
           SE_BUTTON_SIZES[size],
           full && 'w-full',

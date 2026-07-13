@@ -42,7 +42,7 @@ import { svAgeClassAllowed, svMissingRequirements, hasWorkingTitle } from '@/lib
 import { trpc } from '@/lib/trpc/client';
 import { formatDogName } from '@/lib/utils';
 import { readReferralSource } from '@/lib/referral-source';
-import { computeOrderFees, type DogEntryInput, type FeeContext } from '@/lib/fee-calc';
+import { computeOrderFees, calculatePlatformFee, type DogEntryInput, type FeeContext } from '@/lib/fee-calc';
 import {
   computeRegionalOrderFees,
   regionalClassFlatFee,
@@ -507,6 +507,16 @@ export default function EnterShowPage() {
     return computeOrderFees(dogEntries, feeCtx);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [show, regionalCfg, regionalMembership, regionalFirstTime, discountGroups, discountGroupId, cart.entries, allShowClasses]);
+
+  // Checkout preview totals. The club-collected subtotal is entries + add-ons +
+  // donation — the exact base the server charges the platform fee on (orders
+  // router), so the Grand Total shown here matches the Stripe charge to the
+  // penny. Free entries (subtotal 0) carry no fee and stay free.
+  const previewSubtotal =
+    (feePreview?.total ?? cart.entriesTotal) + cart.sundryTotal + donationPence;
+  const previewPlatformFee =
+    previewSubtotal === 0 ? 0 : calculatePlatformFee(previewSubtotal);
+  const previewGrandTotal = previewSubtotal + previewPlatformFee;
 
   // Sync cart sundry item prices/names with server data (handles secretary price changes)
   useEffect(() => {
@@ -2146,9 +2156,17 @@ export default function EnterShowPage() {
                   <span>{formatCurrency(donationPence)}</span>
                 </div>
               )}
+              {previewPlatformFee > 0 && (
+                <div className="flex justify-between text-sm text-se-ink3">
+                  <span>
+                    Platform fee <span className="text-xs opacity-75">(£1 + 1%)</span>
+                  </span>
+                  <span>{formatCurrency(previewPlatformFee)}</span>
+                </div>
+              )}
               <div className="flex justify-between border-t border-se-line2 pt-1.5 text-sm font-bold text-se-ink sm:text-base">
                 <span>Grand Total</span>
-                <span>{formatCurrency((feePreview?.total ?? cart.entriesTotal) + cart.sundryTotal + donationPence)}</span>
+                <span>{formatCurrency(previewGrandTotal)}</span>
               </div>
             </div>
           </div>
@@ -2238,6 +2256,16 @@ export default function EnterShowPage() {
             </div>
           )}
 
+          {/* Tell the user why the payment button is greyed out, so it never
+              reads as a dead end (green review 2026-07-13). */}
+          {(!termsAccepted || membershipNumberMissing) && (
+            <p className="text-center text-xs text-se-ink3">
+              {membershipNumberMissing
+                ? 'Enter your membership number above to continue.'
+                : 'Tick the box above to agree to the declaration, then you can continue.'}
+            </p>
+          )}
+
           <div className="flex gap-2">
             <SEButton
               variant="ghost"
@@ -2277,11 +2305,9 @@ export default function EnterShowPage() {
                 </>
               ) : (
                 <>
-                  {(() => {
-                    const previewGrand = (feePreview?.total ?? cart.entriesTotal) + cart.sundryTotal + donationPence;
-                    if (previewGrand === 0) return 'Confirm Entry — Free';
-                    return <>Proceed to Payment &middot; {formatCurrency(previewGrand)}</>;
-                  })()}
+                  {previewGrandTotal === 0
+                    ? 'Confirm Entry — Free'
+                    : <>Proceed to Payment &middot; {formatCurrency(previewGrandTotal)}</>}
                 </>
               )}
             </SEButton>

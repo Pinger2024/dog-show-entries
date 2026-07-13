@@ -88,6 +88,19 @@ function isEntryCloseDatePast(date: string | Date | null) {
   return d.getTime() < Date.now();
 }
 
+// True once a show's date has passed. Compared by calendar day so a show
+// happening *today* still reads as upcoming, not "recently held" (green
+// review 2026-07-13: an entries_closed show whose date had passed but wasn't
+// yet marked completed was mislabelled "Show day approaching").
+function isShowDatePast(startDate: string | Date | null) {
+  if (!startDate) return false;
+  const d = typeof startDate === 'string' ? new Date(startDate) : startDate;
+  const day = new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  return day < today;
+}
+
 /* ─── Status pill ────────────────────────────────────
  * Same rules the old ClosingCountdown/badge combo used, consolidated
  * into one place so the card only needs one tone + label. */
@@ -572,15 +585,19 @@ export default function ShowsList() {
   /* Split by lifecycle for visual grouping — Mandy 2026-07-10: make it
    * really obvious which shows are about to actually run. A single
    * "everything else" bucket mislabelled completed shows too. */
-  const openShows = filteredShows.filter((s) => s.status === 'entries_open' && !isEntryCloseDatePast(s.entryCloseDate));
+  // A show whose date has passed belongs in "Recently held" regardless of
+  // status — the status may still be entries_closed/in_progress if results
+  // haven't been finalised yet (green review 2026-07-13).
+  const openShows = filteredShows.filter((s) => s.status === 'entries_open' && !isEntryCloseDatePast(s.entryCloseDate) && !isShowDatePast(s.startDate));
   const aboutToRun = filteredShows.filter(
     (s) =>
-      s.status === 'entries_closed' ||
-      s.status === 'in_progress' ||
-      (s.status === 'entries_open' && isEntryCloseDatePast(s.entryCloseDate)),
+      !isShowDatePast(s.startDate) &&
+      (s.status === 'entries_closed' ||
+        s.status === 'in_progress' ||
+        (s.status === 'entries_open' && isEntryCloseDatePast(s.entryCloseDate))),
   );
-  const openingSoon = filteredShows.filter((s) => s.status === 'published');
-  const recentlyHeld = filteredShows.filter((s) => s.status === 'completed');
+  const openingSoon = filteredShows.filter((s) => s.status === 'published' && !isShowDatePast(s.startDate));
+  const recentlyHeld = filteredShows.filter((s) => s.status === 'completed' || isShowDatePast(s.startDate));
   const visibleSectionCount = [openShows, aboutToRun, openingSoon, recentlyHeld].filter(
     (g) => g.length > 0,
   ).length;

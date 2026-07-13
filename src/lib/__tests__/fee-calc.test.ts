@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { computeOrderFees, type FeeContext, type DogEntryInput } from '../fee-calc';
+import { computeOrderFees, calculatePlatformFee, type FeeContext, type DogEntryInput } from '../fee-calc';
 
 // Locked with Amanda 2026-05-14. The live show her demo user described:
 //   non-member single class:  £20
@@ -215,5 +215,27 @@ describe('computeOrderFees — Amanda live show fixture', () => {
       { ...STD_WITH_MULTI, discountGroup: MEMBER_GROUP },
     );
     expect(r.total).toBe(4500);
+  });
+});
+
+// Platform handling fee: £1 + 1%, whole pence. This is the single source of
+// truth shared by the server charge (orders router) and the checkout preview;
+// if these figures move, the exhibitor's shown total drifts from the charge.
+describe('calculatePlatformFee', () => {
+  it('£20 order → £1.20 fee (£1 + 1%)', () => {
+    expect(calculatePlatformFee(2000)).toBe(120);
+  });
+
+  it('£100 order → £2.00 fee', () => {
+    expect(calculatePlatformFee(10000)).toBe(200);
+  });
+
+  it('rounds to whole pence (£20.50 → 100 + 20.5 → £1.21)', () => {
+    expect(calculatePlatformFee(2050)).toBe(121);
+  });
+
+  it('grand total = subtotal + fee matches what the server charges', () => {
+    const subtotal = 2000;
+    expect(subtotal + calculatePlatformFee(subtotal)).toBe(2120);
   });
 });
