@@ -19,7 +19,7 @@
  * but five-minute caching on the CDN absorbs share-button bursts.
  */
 import { ImageResponse } from 'next/og';
-import { loadShareImageData, loadShareImageFonts, SHARE_GREEN as G } from '@/lib/share-image-data';
+import { toImageDataUri, loadShareImageData, loadShareImageFonts, SHARE_GREEN as G } from '@/lib/share-image-data';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -121,7 +121,7 @@ export async function GET(
         {/* Subtle banner-image background, faded into the gradient */}
         {bannerData && (
           <img
-            src={`data:image/jpeg;base64,${Buffer.from(bannerData).toString('base64')}`}
+            src={toImageDataUri(bannerData)}
             style={{
               position: 'absolute',
               inset: 0,
@@ -201,7 +201,7 @@ export async function GET(
             >
               {clubLogoData ? (
                 <img
-                  src={`data:image/png;base64,${Buffer.from(clubLogoData).toString('base64')}`}
+                  src={toImageDataUri(clubLogoData)}
                   width={132}
                   height={132}
                   style={{ objectFit: 'contain', borderRadius: 66 }}
@@ -415,7 +415,7 @@ export async function GET(
                 </div>
                 {sponsorLogoData ? (
                   <img
-                    src={`data:image/png;base64,${Buffer.from(sponsorLogoData).toString('base64')}`}
+                    src={toImageDataUri(sponsorLogoData)}
                     width={140}
                     height={48}
                     style={{ objectFit: 'contain' }}

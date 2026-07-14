@@ -2,7 +2,7 @@ import { ImageResponse } from 'next/og';
 import { eq, and, isNull } from 'drizzle-orm';
 import { db } from '@/server/db';
 import { dogs, dogPhotos, entries } from '@/server/db/schema';
-import { loadShareImageFonts, SHARE_GREEN as G } from '@/lib/share-image-data';
+import { toImageDataUri, loadShareImageFonts, SHARE_GREEN as G } from '@/lib/share-image-data';
 
 export const runtime = 'nodejs';
 export const contentType = 'image/png';
@@ -187,7 +187,7 @@ export default async function OGImage({
           >
             {photoData ? (
               <img
-                src={`data:image/jpeg;base64,${Buffer.from(photoData).toString('base64')}`}
+                src={toImageDataUri(photoData)}
                 width={320}
                 height={400}
                 style={{ objectFit: 'cover', width: '100%', height: '100%' }}

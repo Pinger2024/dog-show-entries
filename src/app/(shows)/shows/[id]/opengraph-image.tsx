@@ -3,7 +3,7 @@ import { eq, and, isNull, sql } from 'drizzle-orm';
 import { db } from '@/server/db';
 import { shows, entries, showSponsors } from '@/server/db/schema';
 import { isUuid } from '@/lib/slugify';
-import { loadShareImageFonts, SHARE_GREEN as G, type ShareImageFont } from '@/lib/share-image-data';
+import { toImageDataUri, loadShareImageFonts, SHARE_GREEN as G, type ShareImageFont } from '@/lib/share-image-data';
 
 export const runtime = 'nodejs';
 export const alt = 'Preview card for a dog show listing on Remi';
@@ -298,7 +298,7 @@ export default async function OGImage({
           {/* Banner image background (if present), scrimmed dark so cream type stays legible */}
           {bannerData && (
             <img
-              src={`data:image/jpeg;base64,${Buffer.from(bannerData).toString('base64')}`}
+              src={toImageDataUri(bannerData)}
               style={{
                 position: 'absolute',
                 top: 0,
@@ -371,7 +371,7 @@ export default async function OGImage({
             >
               {clubLogoData ? (
                 <img
-                  src={`data:image/png;base64,${Buffer.from(clubLogoData).toString('base64')}`}
+                  src={toImageDataUri(clubLogoData)}
                   width={90}
                   height={90}
                   style={{ objectFit: 'contain', borderRadius: 45 }}
@@ -569,7 +569,7 @@ export default async function OGImage({
                   In association with
                 </div>
                 <img
-                  src={`data:image/png;base64,${Buffer.from(sponsorLogoData).toString('base64')}`}
+                  src={toImageDataUri(sponsorLogoData)}
                   width={72}
                   height={32}
                   style={{ objectFit: 'contain' }}

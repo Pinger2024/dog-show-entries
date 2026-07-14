@@ -154,6 +154,10 @@ async function fetchTitleSponsor(showId: string) {
   });
 }
 
+// Re-exported for the ImageResponse routes; the implementation is pure (no
+// `server-only`) so it can be unit-tested.
+export { toImageDataUri } from './image-data-uri';
+
 /** Best-effort image fetch with a 3s timeout; returns null on any failure. */
 async function fetchAsBuffer(url: string | null | undefined): Promise<ArrayBuffer | null> {
   if (!url) return null;
