@@ -110,11 +110,13 @@ export default function EntriesPage() {
     } | null;
   }): string => {
     const name = ec.showClass?.classDefinition?.name ?? '?';
-    // SV/regional coat-split classes: a long-coat entry must read e.g.
-    // "Adult Long Stock Coat Dog", not just "Adult Dog" — the coat was being
-    // dropped (Mandy 2026-07-13). "Long Stock Coat" matches the schedules
-    // (Mandy 2026-07-15). Stock/unsplit classes stay unlabelled.
-    const coat = ec.showClass?.svCoatType === 'long_stock' ? 'Long Stock Coat ' : '';
+    // Coat-split classes: a long-coat entry must read e.g. "Adult Long Coat
+    // Dog", not just "Adult Dog" — the coat was being dropped (Mandy
+    // 2026-07-13). Wording is ruleset-specific (Mandy 2026-07-15): RKC shows
+    // say "Long Coat"; regional/SV shows say "Long Stock Coat" to match their
+    // schedules. Stock/unsplit classes stay unlabelled.
+    const coatLabel = showData?.showRuleset === 'wusv' ? 'Long Stock Coat' : 'Long Coat';
+    const coat = ec.showClass?.svCoatType === 'long_stock' ? `${coatLabel} ` : '';
     const base = `${name} ${coat}`.trim();
     const sex = ec.showClass?.sex;
     if (sex === 'dog') return `${base} Dog`;
