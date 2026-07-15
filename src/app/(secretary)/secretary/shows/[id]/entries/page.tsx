@@ -111,9 +111,10 @@ export default function EntriesPage() {
   }): string => {
     const name = ec.showClass?.classDefinition?.name ?? '?';
     // SV/regional coat-split classes: a long-coat entry must read e.g.
-    // "Adult Long Coat Dog", not just "Adult Dog" — the coat was being
-    // dropped (Mandy 2026-07-13). Stock/unsplit classes stay unlabelled.
-    const coat = ec.showClass?.svCoatType === 'long_stock' ? 'Long Coat ' : '';
+    // "Adult Long Stock Coat Dog", not just "Adult Dog" — the coat was being
+    // dropped (Mandy 2026-07-13). "Long Stock Coat" matches the schedules
+    // (Mandy 2026-07-15). Stock/unsplit classes stay unlabelled.
+    const coat = ec.showClass?.svCoatType === 'long_stock' ? 'Long Stock Coat ' : '';
     const base = `${name} ${coat}`.trim();
     const sex = ec.showClass?.sex;
     if (sex === 'dog') return `${base} Dog`;
