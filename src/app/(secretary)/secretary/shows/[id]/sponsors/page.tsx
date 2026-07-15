@@ -243,7 +243,7 @@ function SponsorDirectory({
                   <label className="cursor-pointer">
                     {uploading ? <Loader2 className="size-4 animate-spin" /> : <Upload className="size-4" />}
                     {uploading ? 'Uploading...' : 'Upload Logo'}
-                    <input type="file" accept="image/*" className="hidden" onChange={handleLogoUpload} />
+                    <input type="file" accept="image/jpeg,image/png,image/webp" className="hidden" onChange={handleLogoUpload} />
                   </label>
                 </Button>
               </div>
@@ -940,7 +940,7 @@ function SponsorshipRow({
               <input
                 ref={bannerInputRef}
                 type="file"
-                accept="image/*"
+                accept="image/jpeg,image/png,image/webp"
                 className="hidden"
                 onChange={handleBannerUpload}
               />
