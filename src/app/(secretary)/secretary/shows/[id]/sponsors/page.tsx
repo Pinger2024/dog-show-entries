@@ -1071,7 +1071,7 @@ function SponsorshipRow({
                 </button>
               )}
               <p className="mt-1.5 text-[11px] leading-snug text-muted-foreground">
-                Best size: <span className="font-medium text-foreground">1600 × 400px</span> (4:1 landscape). The banner spans the full page width in the catalogue.
+                Use a <span className="font-medium text-foreground">wide landscape banner</span> (roughly 3:1 to 4:1). Upload it as the sponsor supplied it — don&apos;t stretch or resize it. It sits full-width in the catalogue at its own shape.
               </p>
             </div>
           )}

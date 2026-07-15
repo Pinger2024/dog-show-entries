@@ -4,20 +4,19 @@ import { View, Image } from '@react-pdf/renderer';
 import { CatalogueByClass } from '@/components/catalogue/catalogue-by-class';
 import type { CatalogueEntry, CatalogueShowInfo } from '@/components/catalogue/catalogue-types';
 
-// Mandy 2026-07-15: a class-sponsor banner rendered at only ~half the page
-// width and sat centred, because the old strip was a fixed 50pt-tall box with
-// objectFit:contain — the drawn width was capped at (50 × image-aspect). The
-// fix makes the banner a FULL-WIDTH, fixed-height 4:1 strip so sponsor artwork
-// spans the catalogue. This guards against the strip regressing to the small
-// centred box. CatalogueByClass is a pure (hook-free) component, so we can call
-// it directly and walk the returned react-pdf element tree.
+// Mandy 2026-07-15: the class-sponsor banner must render FULL-WIDTH at the
+// image's OWN aspect ratio — no fixed-height box (which forced one ratio and
+// meant non-4:1 artwork got stretched or cropped) and no objectFit:cover/fill.
+// The banner box has width 100% and NO fixed height; the image is width 100%,
+// objectFit:contain (never distorts/crops), with a maxHeight cap so a
+// near-square upload can't dominate the page. This guards against regressing to
+// a fixed-height / cover strip. CatalogueByClass is a pure (hook-free)
+// component, so we can call it directly and walk the react-pdf element tree.
 
 const BANNER_URL = 'https://example.test/hundark-banner.jpg';
 
-// A5 (419.5pt) minus 22pt left + 22pt right page padding = 375.5pt content
-// width; a 4:1 strip is therefore 93.875pt tall.
-const CONTENT_WIDTH = 375.5;
-const EXPECTED_STRIP_HEIGHT = CONTENT_WIDTH / 4;
+// Height cap on the banner image (≈50mm) — see BANNER_MAX_HEIGHT in the component.
+const EXPECTED_MAX_HEIGHT = 142;
 
 function makeShow(): CatalogueShowInfo {
   return {
@@ -108,7 +107,7 @@ function findBanner(node: unknown): { boxStyle: any; imageStyle: any } | null {
 }
 
 describe('CatalogueByClass — class-sponsor banner', () => {
-  it('renders the banner as a full-width, fixed-height strip (not a shrunk centred box)', () => {
+  it('renders the banner full-width at its own aspect ratio (no fixed-height box, no distortion)', () => {
     const tree = CatalogueByClass({ show: makeShow(), entries: [makeEntry()] });
 
     const banner = findBanner(tree);
@@ -116,20 +115,16 @@ describe('CatalogueByClass — class-sponsor banner', () => {
 
     const { boxStyle, imageStyle } = banner!;
 
-    // Box spans the full content width.
+    // Box spans the full content width and does NOT impose a fixed height —
+    // the height follows the image so its aspect ratio is preserved.
     expect(boxStyle.width).toBe('100%');
+    expect(boxStyle.height).toBeUndefined();
 
-    // Box height is FIXED (a number, so the footprint is predictable and the
-    // sponsor spec is exact) and sized for a 4:1 strip — decisively taller than
-    // the old 50pt strip that caused the shrink.
-    expect(typeof boxStyle.height).toBe('number');
-    expect(boxStyle.height).toBeCloseTo(EXPECTED_STRIP_HEIGHT, 1);
-    expect(boxStyle.height).toBeGreaterThan(50);
-
-    // Image fills the strip edge-to-edge via cover (not the old contain, which
-    // letterboxed and shrank the drawn width).
+    // Image fills the width, is height-capped, and uses contain so it is never
+    // stretched (the old fixed 4:1 box forced sponsors to distort non-4:1 art)
+    // or cropped (the interim objectFit:cover chopped edges off).
     expect(imageStyle.width).toBe('100%');
-    expect(imageStyle.height).toBe('100%');
-    expect(imageStyle.objectFit).toBe('cover');
+    expect(imageStyle.maxHeight).toBe(EXPECTED_MAX_HEIGHT);
+    expect(imageStyle.objectFit).toBe('contain');
   });
 });

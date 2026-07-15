@@ -12,10 +12,14 @@ import {
 import { TonalWash } from '@/components/sv-pdf/cover-atoms';
 import { SV, SV_FONTS } from '@/components/schedule/shared/sv-styles';
 
-// Class-sponsor banner strip. Full content width (A5 419.5pt − 22pt L/R
-// padding = 375.5pt) at a fixed 4:1 ratio → 93.9pt tall (≈ 33mm). Kept as a
-// constant so the sponsor artwork spec (1600×400px / 4:1) stays in one place.
-const BANNER_STRIP_HEIGHT = 375.5 / 4;
+// Class-sponsor banner strip. Renders at the FULL content width (A5 419.5pt −
+// 22pt L/R padding = 375.5pt) at the image's own aspect ratio, capped at this
+// height (≈ 50mm) so a near-square upload can't dominate the page. Mandy
+// 2026-07-15: a fixed 4:1 box forced every sponsor's artwork to one ratio, so
+// non-4:1 banners (sponsors send 2.9:1–4:1) had to be stretched in Photoshop
+// (elongated dogs) or got cropped. objectFit:contain + no fixed height lets
+// each banner sit full-width at its true shape — nothing stretched or chopped.
+const BANNER_MAX_HEIGHT = 142;
 
 /**
  * Friendly SV hip/elbow status formatter. Returns one of:
@@ -621,29 +625,23 @@ export function CatalogueByClass({ show, entries, compact }: Props) {
                   : null;
                 if (!banner) return null;
                 return (
-                  // Full-width sponsor banner. Mandy 2026-07-15: the previous
-                  // 50pt-tall objectFit:contain strip capped the drawn width to
-                  // (50 × image-aspect), so a landscape banner rendered at only
-                  // ~half the page width and sat centred — sponsors' artwork
-                  // never spanned the catalogue. Now the banner fills the full
-                  // content width (A5 419.5pt − 22pt L/R padding = 375.5pt) in a
-                  // FIXED 4:1 strip (height 93.9pt ≈ 33mm). The height is locked
-                  // regardless of image so Mandy can hand sponsors one exact
-                  // size (1600×400px / 4:1) and every banner sits identically.
-                  // objectFit:cover fills the strip edge-to-edge; an on-spec 4:1
-                  // image shows uncropped, minor off-ratio artwork loses only a
-                  // hair. wrap={false} stops the banner splitting across a page.
+                  // Full-width sponsor banner at the image's OWN aspect ratio.
+                  // Fills the full content width (A5 419.5pt − 22pt L/R padding
+                  // = 375.5pt); height follows the image, capped at
+                  // BANNER_MAX_HEIGHT (≈50mm). objectFit:contain guarantees no
+                  // stretch and no crop — sponsors' banners come in varied
+                  // shapes (2.9:1–4:1) and each sits full-width at its true
+                  // proportions. wrap={false} stops it splitting across a page.
                   <View
                     wrap={false}
                     style={{
                       width: '100%',
-                      height: BANNER_STRIP_HEIGHT,
                       marginBottom: 5,
                     }}
                   >
                     <Image
                       src={banner}
-                      style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                      style={{ width: '100%', maxHeight: BANNER_MAX_HEIGHT, objectFit: 'contain' }}
                     />
                   </View>
                 );
