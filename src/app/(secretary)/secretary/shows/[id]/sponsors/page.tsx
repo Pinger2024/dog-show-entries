@@ -1070,6 +1070,9 @@ function SponsorshipRow({
                   {bannerUploading ? 'Uploading…' : 'Upload class banner (optional)'}
                 </button>
               )}
+              <p className="mt-1.5 text-[11px] leading-snug text-muted-foreground">
+                Best size: <span className="font-medium text-foreground">1600 × 400px</span> (4:1 landscape). The banner spans the full page width in the catalogue.
+              </p>
             </div>
           )}
         </div>
