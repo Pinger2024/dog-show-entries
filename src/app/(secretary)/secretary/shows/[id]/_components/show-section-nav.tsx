@@ -135,7 +135,7 @@ export function ShowSectionNav({ showId, isWusv = false }: { showId: string; isW
   return (
     <>
       {/* ─── Mobile: section picker button + bottom sheet ─── */}
-      <div className="md:hidden">
+      <div className="lg:hidden">
         <button
           onClick={() => setOpen(true)}
           className="flex w-full items-center gap-3 rounded-xl border bg-card px-4 py-3 text-left transition-colors active:bg-muted"
@@ -218,7 +218,7 @@ export function ShowSectionNav({ showId, isWusv = false }: { showId: string; isW
       </div>
 
       {/* ─── Desktop: vertical sidebar nav ─── */}
-      <nav className="hidden w-48 shrink-0 md:block">
+      <nav className="hidden w-48 shrink-0 lg:block">
         <div className="sticky top-24 space-y-4">
           {sectionGroups.map((group) => (
             <div key={group.label}>

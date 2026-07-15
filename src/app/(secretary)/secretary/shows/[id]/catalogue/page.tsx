@@ -237,7 +237,7 @@ export default function CataloguePage() {
         ))}
 
       {/* Stats */}
-      <div className="grid gap-4 sm:grid-cols-3">
+      <div className="grid gap-4 lg:grid-cols-3">
         <StatCard label="Catalogue Entries" value={entries.length} icon={BookOpen} />
         <StatCard label="Absentees" value={absentees?.length ?? 0} icon={ClipboardList} />
         <StatCard label="Numbers Assigned" value={hasNumbers ? 'Yes' : 'Not yet'} icon={Hash} />

@@ -83,7 +83,7 @@ export function SecretaryShell({ user, children }: SecretaryShellProps) {
   return (
     <div className="flex min-h-screen overflow-x-hidden">
       {/* Desktop Sidebar */}
-      <aside className="hidden w-64 shrink-0 border-r bg-sidebar md:flex md:flex-col sticky top-0 h-screen overflow-y-auto">
+      <aside className="hidden w-64 shrink-0 border-r bg-sidebar lg:flex lg:flex-col sticky top-0 h-screen overflow-y-auto">
         <div className="flex h-[4.5rem] items-center gap-3 border-b px-5">
           <Link href="/" className="font-serif text-[1.375rem] font-bold tracking-tight text-primary">
             Remi
@@ -143,7 +143,7 @@ export function SecretaryShell({ user, children }: SecretaryShellProps) {
 
       {/* Main content */}
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="hidden h-[4.5rem] items-center border-b px-6 md:flex">
+        <header className="hidden h-[4.5rem] items-center border-b px-6 lg:flex">
           <nav className="flex items-center gap-1.5 text-[0.9375rem] text-muted-foreground">
             <Link href="/" className="hover:text-foreground">
               Home
@@ -166,7 +166,7 @@ export function SecretaryShell({ user, children }: SecretaryShellProps) {
         </header>
 
         {/* Mobile header */}
-        <header className="flex h-16 items-center justify-between border-b px-3 sm:px-4 md:hidden">
+        <header className="flex h-16 items-center justify-between border-b px-3 sm:px-4 lg:hidden">
           <div className="flex items-center gap-2 min-w-0">
             {parentPath ? (
               <>
@@ -205,19 +205,19 @@ export function SecretaryShell({ user, children }: SecretaryShellProps) {
 
         {/* Mobile org-switch bar — visible only when user manages >1 club */}
         {showOrgSwitcher && (
-          <div className="border-b px-3 py-2 md:hidden">
+          <div className="border-b px-3 py-2 lg:hidden">
             <OrgSwitcher />
           </div>
         )}
 
         <main className="flex-1 overflow-y-auto">
-          <div className="mx-auto max-w-7xl px-2 py-4 pb-28 sm:px-4 sm:py-6 sm:pb-28 md:pb-8 lg:px-8">
+          <div className="mx-auto max-w-7xl px-2 py-4 pb-28 sm:px-4 sm:py-6 sm:pb-28 lg:pb-8 lg:px-8">
             {children}
           </div>
         </main>
 
         {/* Mobile bottom tab bar */}
-        <nav className="fixed bottom-0 left-0 right-0 z-50 flex border-t bg-background pb-[env(safe-area-inset-bottom)] md:hidden">
+        <nav className="fixed bottom-0 left-0 right-0 z-50 flex border-t bg-background pb-[env(safe-area-inset-bottom)] lg:hidden">
           {mobileNavItems.map((item) => {
             const isActive =
               pathname === item.href ||

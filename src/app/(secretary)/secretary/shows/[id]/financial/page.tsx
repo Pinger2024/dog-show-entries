@@ -241,7 +241,7 @@ export default function FinancialPage() {
   return (
     <div className="space-y-6">
       {/* Summary tiles — paid only, sundries included, net of refunds */}
-      <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-4">
+      <div className="grid grid-cols-2 gap-2.5 lg:grid-cols-4">
         <FinancialStat
           label="Total Income"
           value={<span className="text-se-fresh-deep">{formatCurrency(stats?.clubReceivablePence ?? 0)}</span>}

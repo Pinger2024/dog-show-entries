@@ -80,7 +80,7 @@ export default function ReportsPage() {
 
   return (
     <Tabs defaultValue="entries" className="space-y-4">
-      <TabsList className="grid w-full grid-cols-6">
+      <TabsList className="lg:grid lg:w-full lg:grid-cols-6">
         <TabsTrigger value="entries" className="gap-1.5 text-xs sm:text-sm">
           <FileText className="size-3.5 hidden sm:block" />
           Entries
@@ -239,7 +239,7 @@ function EntryReportContent({ showId }: { showId: string }) {
     <div className="space-y-4">
       {/* Summary stats */}
       {stats && (
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
           <StatCard label="Total Entries" value={stats.total} />
           <StatCard
             label="Confirmed"
@@ -494,7 +494,7 @@ function PaymentReportContent({ showId }: { showId: string }) {
   return (
     <div className="space-y-4">
       {/* Summary stats */}
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <Card>
           <CardContent className="pt-4 pb-3">
             <p className="text-xs font-medium text-muted-foreground">Total Revenue</p>
@@ -733,7 +733,7 @@ function CatalogueOrdersContent({ showId }: { showId: string }) {
 
   return (
     <div className="space-y-4">
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 sm:gap-3">
+      <div className="grid grid-cols-2 gap-2 lg:grid-cols-3 lg:gap-3">
         <Card>
           <CardContent className="pt-4 pb-3">
             <p className="text-xs font-medium text-muted-foreground">Total Orders</p>
@@ -914,7 +914,7 @@ function AbsenteeReportContent({ showId }: { showId: string }) {
   return (
     <div className="space-y-4">
       {/* Summary */}
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-3">
         <Card>
           <CardContent className="pt-4 pb-3">
             <p className="text-xs font-medium text-muted-foreground">Total Absentees</p>
@@ -1121,7 +1121,7 @@ function ExtrasSummaryContent({ showId }: { showId: string }) {
   return (
     <div className="space-y-4">
       {/* Top totals */}
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-3">
         <Card>
           <CardContent className="pt-4 pb-3">
             <p className="text-xs font-medium text-muted-foreground">Add-on revenue</p>

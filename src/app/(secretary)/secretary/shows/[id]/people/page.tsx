@@ -659,7 +659,7 @@ export default function PeoplePage() {
 
   return (
     <Tabs defaultValue="judges">
-      <TabsList className="grid w-full grid-cols-3">
+      <TabsList className="lg:grid lg:w-full lg:grid-cols-3">
         <TabsTrigger value="judges">Judges</TabsTrigger>
         <TabsTrigger value="rings">Rings</TabsTrigger>
         <TabsTrigger value="stewards">Stewards</TabsTrigger>

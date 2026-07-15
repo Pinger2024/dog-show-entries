@@ -84,7 +84,7 @@ export default function ShowManagementLayout({
 
   if (showLoading) {
     return (
-      <div className="space-y-4 sm:space-y-6 pb-16 md:pb-0">
+      <div className="space-y-4 sm:space-y-6 pb-16 lg:pb-0">
         <div className="h-8 w-48 animate-pulse rounded bg-muted" />
         <div className="h-64 animate-pulse rounded-xl bg-muted" />
       </div>
@@ -93,7 +93,7 @@ export default function ShowManagementLayout({
 
   if (!show) {
     return (
-      <div className="space-y-4 sm:space-y-6 pb-16 md:pb-0">
+      <div className="space-y-4 sm:space-y-6 pb-16 lg:pb-0">
         <div className="rounded-xl border bg-card p-6 text-center sm:p-8">
           <div className="text-4xl font-bold text-muted-foreground/30">?</div>
           <h2 className="mt-3 text-lg font-semibold">Show not found</h2>
@@ -169,7 +169,7 @@ export default function ShowManagementLayout({
   }
 
   return (
-    <div className="space-y-4 sm:space-y-6 pb-16 md:pb-0">
+    <div className="space-y-4 sm:space-y-6 pb-16 lg:pb-0">
       {/* Header */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
         <div className="min-w-0">
@@ -414,7 +414,7 @@ export default function ShowManagementLayout({
 
       {/* Stats */}
       {entryStats && entryStats.totalEntries > 0 && (
-        <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-4">
+        <div className="grid grid-cols-2 gap-2.5 lg:grid-cols-4">
           <SECard className="p-3.5">
             <div className="flex items-center gap-1.5 text-se-ink3">
               <ClipboardList className="size-3.5" />
@@ -458,7 +458,7 @@ export default function ShowManagementLayout({
       )}
 
       {/* Section navigation + content */}
-      <div className="md:flex md:gap-6">
+      <div className="lg:flex lg:gap-6">
         <ShowSectionNav showId={show.id} isWusv={show.showRuleset === 'wusv'} />
         <div className="min-w-0 flex-1">
           <ShowIdProvider showId={show.id}>{children}</ShowIdProvider>
