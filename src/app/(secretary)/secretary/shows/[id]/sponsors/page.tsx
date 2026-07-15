@@ -875,7 +875,7 @@ function SponsorshipRow({
   return (
     <>
       {/* Desktop: inline cells */}
-      <div ref={rowRef} className="hidden sm:contents">
+      <div ref={rowRef} className="hidden lg:contents">
         <div className="border-b border-r">
           <AutocompleteInput
             value={name}
@@ -962,7 +962,7 @@ function SponsorshipRow({
       </div>
 
       {/* Mobile: stacked fields */}
-      <div ref={mobileRowRef} className="sm:hidden">
+      <div ref={mobileRowRef} className="lg:hidden">
         <div className="flex items-start gap-2 rounded-md border bg-card p-3">
           <div className="min-w-0 flex-1 space-y-2">
             <div>
@@ -1162,7 +1162,7 @@ function NewSponsorshipRow({
     return (
       <>
         {/* Desktop: + button in the grid */}
-        <div className="hidden sm:contents">
+        <div className="hidden lg:contents">
           <div className="border-b border-r">
             <button
               type="button"
@@ -1178,7 +1178,7 @@ function NewSponsorshipRow({
           <div className="border-b" />
         </div>
         {/* Mobile: + button */}
-        <div className="sm:hidden">
+        <div className="lg:hidden">
           <button
             type="button"
             onClick={() => setIsActive(true)}
@@ -1195,7 +1195,7 @@ function NewSponsorshipRow({
   return (
     <>
       {/* Desktop: inline cells */}
-      <div ref={rowRef} className="hidden sm:contents">
+      <div ref={rowRef} className="hidden lg:contents">
         <div className="border-b border-r bg-se-honey-soft/30">
           <AutocompleteInput
             value={name}
@@ -1244,7 +1244,7 @@ function NewSponsorshipRow({
       </div>
 
       {/* Mobile: stacked fields */}
-      <div ref={mobileRowRef} className="sm:hidden">
+      <div ref={mobileRowRef} className="lg:hidden">
         <div className="flex items-start gap-2 rounded-md border border-se-honey-line bg-se-honey-soft/30 p-3">
           <div className="min-w-0 flex-1 space-y-2">
             <div>
@@ -1582,7 +1582,7 @@ function AwardSponsorshipRow({
   return (
     <>
       {/* Desktop: inline cells */}
-      <div ref={rowRef} className="hidden sm:contents">
+      <div ref={rowRef} className="hidden lg:contents">
         <div className="border-b border-r">
           <AutocompleteInput
             value={name}
@@ -1634,7 +1634,7 @@ function AwardSponsorshipRow({
       </div>
 
       {/* Mobile: stacked fields */}
-      <div ref={mobileRowRef} className="sm:hidden">
+      <div ref={mobileRowRef} className="lg:hidden">
         <div className="flex items-start gap-2 rounded-md border bg-card p-3">
           <div className="min-w-0 flex-1 space-y-2">
             <div>
@@ -1782,7 +1782,7 @@ function NewAwardSponsorshipRow({
     return (
       <>
         {/* Desktop: + button in the grid */}
-        <div className="hidden sm:contents">
+        <div className="hidden lg:contents">
           <div className="border-b border-r">
             <button
               type="button"
@@ -1798,7 +1798,7 @@ function NewAwardSponsorshipRow({
           <div className="border-b" />
         </div>
         {/* Mobile: + button */}
-        <div className="sm:hidden">
+        <div className="lg:hidden">
           <button
             type="button"
             onClick={() => setIsActive(true)}
@@ -1815,7 +1815,7 @@ function NewAwardSponsorshipRow({
   return (
     <>
       {/* Desktop: inline cells */}
-      <div ref={rowRef} className="hidden sm:contents">
+      <div ref={rowRef} className="hidden lg:contents">
         <div className="border-b border-r bg-se-honey-soft/30">
           <AutocompleteInput
             value={name}
@@ -1864,7 +1864,7 @@ function NewAwardSponsorshipRow({
       </div>
 
       {/* Mobile: stacked fields */}
-      <div ref={mobileRowRef} className="sm:hidden">
+      <div ref={mobileRowRef} className="lg:hidden">
         <div className="flex items-start gap-2 rounded-md border border-se-honey-line bg-se-honey-soft/30 p-3">
           <div className="min-w-0 flex-1 space-y-2">
             <div>
@@ -2075,7 +2075,7 @@ function ClassSponsorshipTable({
         </div>
 
         {/* Desktop: spreadsheet grid */}
-        <div className="hidden overflow-hidden rounded-md border sm:block">
+        <div className="hidden overflow-hidden rounded-md border lg:block">
           {/* Header */}
           <div className="grid grid-cols-[minmax(140px,1.2fr)_minmax(120px,1fr)_minmax(100px,0.8fr)_minmax(100px,0.8fr)_36px] border-b-2 bg-se-honey-soft/80 text-xs font-medium uppercase tracking-wider text-se-honey-ink/70">
             <div className="border-r px-2 py-2">Award</div>
@@ -2131,7 +2131,7 @@ function ClassSponsorshipTable({
         </div>
 
         {/* Mobile: card-based layout */}
-        <div className="space-y-2 sm:hidden">
+        <div className="space-y-2 lg:hidden">
           {bestAwards.map((award) => {
             const data = awardMap.get(award);
             const entries = data?.entries ?? [];
@@ -2184,7 +2184,7 @@ function ClassSponsorshipTable({
         </div>
 
         {/* Desktop: spreadsheet grid */}
-        <div className="hidden overflow-hidden rounded-md border sm:block">
+        <div className="hidden overflow-hidden rounded-md border lg:block">
           {/* Header */}
           <div className="grid grid-cols-[minmax(140px,1.2fr)_minmax(120px,1fr)_minmax(100px,0.8fr)_minmax(100px,0.8fr)_36px] border-b-2 bg-muted/60 text-xs font-medium uppercase tracking-wider text-muted-foreground">
             <div className="border-r px-2 py-2">Class / Award</div>
@@ -2239,7 +2239,7 @@ function ClassSponsorshipTable({
         </div>
 
         {/* Mobile: card-based layout */}
-        <div className="space-y-2 sm:hidden">
+        <div className="space-y-2 lg:hidden">
           {sectionClasses.map((cls) => {
             const sponsorships = cls.classSponsorships ?? [];
             const displayLabel = `#${cls.classNumber ?? '?'} ${formatSvClassName(cls.classDefinition.name, (cls as { svCoatType?: 'stock' | 'long_stock' | null }).svCoatType)}`;
