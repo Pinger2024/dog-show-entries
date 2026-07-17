@@ -23,7 +23,7 @@ import { getDockingStatementFromScheduleData } from '@/lib/rkc-compliance';
 import { buildClassLabelMap, buildCatalogueClassDefinitions } from '@/lib/class-labels';
 import { buildScheduleJudges, aggregateJudgeAssignments } from '@/lib/schedule-judges';
 import { redactWithheldOwnerAddresses } from '@/lib/catalogue-privacy';
-import { annotateAdvertOrientations } from '@/lib/advert-orientation';
+import { prepareAdvertsForRender } from '@/lib/advert-orientation';
 
 export async function GET(
   request: NextRequest,
@@ -319,7 +319,7 @@ export async function GET(
 
   // Measure each advert so landscape artwork gets a landscape page (fills it)
   // rather than a portrait page with white bands top and bottom.
-  const advertsForCatalogue = await annotateAdvertOrientations(
+  const advertsForCatalogue = await prepareAdvertsForRender(
     catalogueAdvertRows.map((ad) => ({
       id: ad.id,
       advertiserName: ad.advertiserName,

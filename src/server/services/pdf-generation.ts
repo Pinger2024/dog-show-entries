@@ -33,7 +33,7 @@ import type { RegionalFeeConfig } from '@/server/db/schema/shows';
 import { buildClassLabelMap, isSpecialAwardClass, buildCatalogueClassDefinitions } from '@/lib/class-labels';
 import { buildScheduleJudges, aggregateJudgeAssignments } from '@/lib/schedule-judges';
 import { stripUnembeddedBase14Fonts } from '@/lib/pdf-pad';
-import { annotateAdvertOrientations } from '@/lib/advert-orientation';
+import { prepareAdvertsForRender } from '@/lib/advert-orientation';
 
 // ── Catalogue PDF ──
 
@@ -262,7 +262,7 @@ export async function generateCataloguePdf(
 
   // Measure each advert so landscape artwork gets a landscape page (fills it)
   // rather than a portrait page with white bands top and bottom.
-  const advertsForCatalogue = await annotateAdvertOrientations(
+  const advertsForCatalogue = await prepareAdvertsForRender(
     catalogueAdvertRows.map((ad) => ({
       id: ad.id,
       advertiserName: ad.advertiserName,

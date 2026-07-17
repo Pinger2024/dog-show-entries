@@ -435,7 +435,7 @@ function AdvertPages({
   return (
     <>
       {matching.map((ad) => (
-        <Page key={`ad-${position}-${ad.id}`} size="A5" orientation={ad.orientation === 'landscape' ? 'landscape' : 'portrait'} style={{ padding: 0, margin: 0 }}>
+        <Page key={`ad-${position}-${ad.id}`} size="A5" style={{ padding: 0, margin: 0 }}>
           <Image src={ad.imageUrl!} style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
         </Page>
       ))}

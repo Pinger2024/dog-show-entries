@@ -1,50 +1,46 @@
 import sharp from 'sharp';
 
-export type AdvertOrientation = 'portrait' | 'landscape';
+// A landscape advert rotated 90° anticlockwise puts its top edge on the LEFT of
+// the portrait page, so the reader turns the booklet clockwise to read it — the
+// usual convention for landscape adverts in a portrait-bound programme.
+const ROTATE_LANDSCAPE_DEG = 270;
 
 /**
- * Measure a catalogue/schedule advert image and decide whether its page should
- * be portrait or landscape. Adverts render on a full A5 page; a landscape image
- * on a portrait page leaves white bands top and bottom, so we flip the page to
- * landscape when the artwork is wider than it is tall — letting it fill the page.
+ * Prepare catalogue/schedule adverts for rendering. Catalogues print as uniform
+ * A5-PORTRAIT booklets, so a LANDSCAPE advert can't sit on a landscape page
+ * (that page would be a different size and wouldn't bind). Instead we rotate the
+ * artwork 90° into a portrait-shaped image (returned as a data URI) that fills a
+ * portrait A5 page — the reader turns the booklet to view it, and every page
+ * stays the same size.
  *
- * Fetches the image and reads its dimensions via sharp (EXIF orientation
- * accounted for). Any failure (missing URL, network, unreadable image) falls
- * back to 'portrait' — the previous, safe default.
+ * Portrait/square adverts pass through untouched (their original URL is used).
+ * Any failure (no URL, network, unreadable image) falls back to the original
+ * image unchanged — the previous, safe behaviour.
  */
-export async function detectAdvertOrientation(
-  imageUrl: string | null | undefined,
-): Promise<AdvertOrientation> {
-  if (!imageUrl) return 'portrait';
-  try {
-    const res = await fetch(imageUrl);
-    if (!res.ok) return 'portrait';
-    const buf = Buffer.from(await res.arrayBuffer());
-    const meta = await sharp(buf).metadata();
-    let width = meta.width;
-    let height = meta.height;
-    if (!width || !height) return 'portrait';
-    // EXIF orientations 5–8 rotate the image 90°, swapping display dimensions.
-    if (meta.orientation && meta.orientation >= 5) {
-      [width, height] = [height, width];
-    }
-    return width > height ? 'landscape' : 'portrait';
-  } catch {
-    return 'portrait';
-  }
-}
-
-/**
- * Annotate a list of adverts with an `orientation`, measuring each image's
- * shape in parallel. Preserves every other field on each advert.
- */
-export async function annotateAdvertOrientations<T extends { imageUrl: string | null }>(
+export async function prepareAdvertsForRender<T extends { imageUrl: string | null }>(
   adverts: T[],
-): Promise<Array<T & { orientation: AdvertOrientation }>> {
-  return Promise.all(
-    adverts.map(async (ad) => ({
-      ...ad,
-      orientation: await detectAdvertOrientation(ad.imageUrl),
-    })),
-  );
+): Promise<T[]> {
+  return Promise.all(adverts.map(async (ad) => {
+    if (!ad.imageUrl) return ad;
+    try {
+      const res = await fetch(ad.imageUrl);
+      if (!res.ok) return ad;
+      const buf = Buffer.from(await res.arrayBuffer());
+      // Apply any EXIF orientation first so we measure/rotate the displayed image.
+      const oriented = await sharp(buf).rotate().toBuffer();
+      const meta = await sharp(oriented).metadata();
+      if (!meta.width || !meta.height || meta.width <= meta.height) {
+        return ad; // portrait or square — leave as-is
+      }
+      const format = meta.format === 'jpeg' ? 'jpeg' : 'png';
+      const rotated = await sharp(oriented)
+        .rotate(ROTATE_LANDSCAPE_DEG)
+        .toFormat(format)
+        .toBuffer();
+      const dataUri = `data:image/${format};base64,${rotated.toString('base64')}`;
+      return { ...ad, imageUrl: dataUri };
+    } catch {
+      return ad;
+    }
+  }));
 }

@@ -228,10 +228,10 @@ export interface CatalogueShowInfo {
     id: string;
     advertiserName: string;
     position: 'inside_front' | 'inside_back' | 'last_page';
+    /** For landscape adverts this is a rotated portrait-shaped data URI (built
+     *  by prepareAdvertsForRender) so it fills a portrait A5 page; portrait
+     *  adverts keep their original URL. */
     imageUrl: string | null;
     sortOrder: number;
-    /** Page orientation, from measuring the artwork. Landscape adverts render on
-     *  a landscape A5 page so they fill it instead of leaving white bands. */
-    orientation?: 'portrait' | 'landscape';
   }>;
 }
