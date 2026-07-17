@@ -23,6 +23,7 @@ import { getDockingStatementFromScheduleData } from '@/lib/rkc-compliance';
 import { buildClassLabelMap, buildCatalogueClassDefinitions } from '@/lib/class-labels';
 import { buildScheduleJudges, aggregateJudgeAssignments } from '@/lib/schedule-judges';
 import { redactWithheldOwnerAddresses } from '@/lib/catalogue-privacy';
+import { annotateAdvertOrientations } from '@/lib/advert-orientation';
 
 export async function GET(
   request: NextRequest,
@@ -316,6 +317,18 @@ export async function GET(
   // instead of casting to a generic record so we get field-level safety.
   const scheduleData = show.scheduleData;
 
+  // Measure each advert so landscape artwork gets a landscape page (fills it)
+  // rather than a portrait page with white bands top and bottom.
+  const advertsForCatalogue = await annotateAdvertOrientations(
+    catalogueAdvertRows.map((ad) => ({
+      id: ad.id,
+      advertiserName: ad.advertiserName,
+      position: ad.position,
+      imageUrl: ad.imageUrl,
+      sortOrder: ad.sortOrder,
+    })),
+  );
+
   const showInfo: CatalogueShowInfo = {
     name: show.name,
     showType: show.showType,
@@ -373,13 +386,7 @@ export async function GET(
     prizeMoney: scheduleData?.prizeMoney,
     country: scheduleData?.country,
     publicAdmission: scheduleData?.publicAdmission,
-    adverts: catalogueAdvertRows.map((ad) => ({
-      id: ad.id,
-      advertiserName: ad.advertiserName,
-      position: ad.position,
-      imageUrl: ad.imageUrl,
-      sortOrder: ad.sortOrder,
-    })),
+    adverts: advertsForCatalogue,
   };
 
   // Check if JSON format was explicitly requested (for data export)

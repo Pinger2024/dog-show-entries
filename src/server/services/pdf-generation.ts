@@ -33,6 +33,7 @@ import type { RegionalFeeConfig } from '@/server/db/schema/shows';
 import { buildClassLabelMap, isSpecialAwardClass, buildCatalogueClassDefinitions } from '@/lib/class-labels';
 import { buildScheduleJudges, aggregateJudgeAssignments } from '@/lib/schedule-judges';
 import { stripUnembeddedBase14Fonts } from '@/lib/pdf-pad';
+import { annotateAdvertOrientations } from '@/lib/advert-orientation';
 
 // ── Catalogue PDF ──
 
@@ -259,6 +260,18 @@ export async function generateCataloguePdf(
   // annotation in the schema, so we can read fields without casts.
   const scheduleData = show.scheduleData;
 
+  // Measure each advert so landscape artwork gets a landscape page (fills it)
+  // rather than a portrait page with white bands top and bottom.
+  const advertsForCatalogue = await annotateAdvertOrientations(
+    catalogueAdvertRows.map((ad) => ({
+      id: ad.id,
+      advertiserName: ad.advertiserName,
+      position: ad.position,
+      imageUrl: ad.imageUrl,
+      sortOrder: ad.sortOrder,
+    })),
+  );
+
   const showInfo: CatalogueShowInfo = {
     name: show.name,
     showType: show.showType,
@@ -316,13 +329,7 @@ export async function generateCataloguePdf(
     prizeMoney: scheduleData?.prizeMoney,
     country: scheduleData?.country,
     publicAdmission: scheduleData?.publicAdmission,
-    adverts: catalogueAdvertRows.map((ad) => ({
-      id: ad.id,
-      advertiserName: ad.advertiserName,
-      position: ad.position,
-      imageUrl: ad.imageUrl,
-      sortOrder: ad.sortOrder,
-    })),
+    adverts: advertsForCatalogue,
   };
 
   const isAllBreed = show.showScope !== 'single_breed';

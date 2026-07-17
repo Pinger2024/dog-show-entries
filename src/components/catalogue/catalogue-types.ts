@@ -230,5 +230,8 @@ export interface CatalogueShowInfo {
     position: 'inside_front' | 'inside_back' | 'last_page';
     imageUrl: string | null;
     sortOrder: number;
+    /** Page orientation, from measuring the artwork. Landscape adverts render on
+     *  a landscape A5 page so they fill it instead of leaving white bands. */
+    orientation?: 'portrait' | 'landscape';
   }>;
 }
