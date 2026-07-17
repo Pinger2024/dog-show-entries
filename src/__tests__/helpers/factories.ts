@@ -197,6 +197,8 @@ export async function makeEntry(opts: {
   orderId?: string;
   status?: EntryStatus;
   totalFee?: number;
+  isNfc?: boolean;
+  entryType?: 'standard' | 'junior_handler';
 }) {
   const [row] = await testDb
     .insert(entries)
@@ -207,6 +209,8 @@ export async function makeEntry(opts: {
       orderId: opts.orderId,
       status: opts.status ?? 'confirmed',
       totalFee: opts.totalFee ?? 500,
+      isNfc: opts.isNfc ?? false,
+      entryType: opts.entryType ?? 'standard',
     })
     .returning();
   return row;

@@ -29,7 +29,13 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { entryStatusConfig, downloadCsv } from '../_lib/show-utils';
+import {
+  entryStatusConfig,
+  downloadCsv,
+  formatWholePounds,
+  joinWorkings,
+  dogsEnteredParts,
+} from '../_lib/show-utils';
 import { useShowId } from '../_lib/show-context';
 import { computeClassBreakdown } from '@/lib/class-breakdown';
 import type { RouterOutputs } from '@/server/trpc/router';
@@ -88,6 +94,75 @@ function FinancialSection({
   );
 }
 
+/* ─── Reconciliation strip — the top-of-page "every number shows its
+ * workings" summary. Soft-green tinted, two lines: dogs entered = its
+ * parts, and total income = its parts. Bold "=" / "+" in fresh-deep,
+ * matching the approved mockup. ────────────────────────────────── */
+
+function ReconciliationRow({ children }: { children: React.ReactNode }) {
+  return (
+    <p className="text-[13px] leading-relaxed text-se-ink first:pt-0 [&:not(:first-child)]:mt-2.5 [&:not(:first-child)]:border-t [&:not(:first-child)]:border-se-fresh-line [&:not(:first-child)]:pt-2.5">
+      {children}
+    </p>
+  );
+}
+
+function Op({ children }: { children: React.ReactNode }) {
+  return <span className="px-0.5 font-extrabold text-se-fresh-deep">{children}</span>;
+}
+
+function ReconciliationStrip({
+  stats,
+}: {
+  stats: RouterOutputs['secretary']['getShowStats'] | undefined;
+}) {
+  if (!stats) return null;
+
+  // Same split/collapse rule as every other dogsEntered sub-line (dashboard,
+  // entries tile, banner) — just with "paid through Remi" wording and a
+  // "+"-operator join instead of " · ".
+  const dogsEnteredDisplayParts = dogsEnteredParts({
+    paid: stats.confirmedEntries,
+    notForCompetition: stats.notForCompetitionEntries,
+    otherOrderless: stats.otherOrderlessEntries,
+    paidLabel: (n) => `${n} paid through Remi`,
+    allPaidLabel: 'all paid through Remi',
+  });
+
+  const incomeParts = [
+    stats.paidThroughRemiFeesPence > 0 ? `${formatCurrency(stats.paidThroughRemiFeesPence)} entry fees` : null,
+    stats.withdrawnKeptPence > 0 ? `${formatCurrency(stats.withdrawnKeptPence)} kept from ${stats.withdrawnEntries} withdrawal${stats.withdrawnEntries === 1 ? '' : 's'}` : null,
+    stats.paidSundryRevenuePence > 0 ? `${formatCurrency(stats.paidSundryRevenuePence)} sundries` : null,
+  ].filter((p): p is string => !!p);
+
+  return (
+    <div className="rounded-[18px] border border-se-fresh-line bg-se-fresh-soft p-4 sm:p-5">
+      <ReconciliationRow>
+        <b>{stats.dogsEntered} dogs entered</b>
+        <Op>=</Op>
+        {dogsEnteredDisplayParts.map((part, i) => (
+          <span key={part}>
+            {part}
+            {i < dogsEnteredDisplayParts.length - 1 && <Op>+</Op>}
+          </span>
+        ))}
+      </ReconciliationRow>
+      {incomeParts.length > 0 && (
+        <ReconciliationRow>
+          <b>Total income {formatCurrency(stats.clubReceivablePence)}</b>
+          <Op>=</Op>
+          {incomeParts.map((part, i) => (
+            <span key={part}>
+              {part}
+              {i < incomeParts.length - 1 && <Op>+</Op>}
+            </span>
+          ))}
+        </ReconciliationRow>
+      )}
+    </div>
+  );
+}
+
 export default function FinancialPage() {
   const showId = useShowId();
   const { data: show } = trpc.shows.getById.useQuery({ id: showId });
@@ -143,36 +218,6 @@ export default function FinancialPage() {
     onError: (err) => toast.error(err.message ?? 'Failed to issue refund'),
   });
 
-  // Entry-type split comes from entryReport (paid-only). We distinguish
-  // junior-handler entries from standard because JH entries typically carry
-  // no dog and may have £0 fee, so lumping them under "Standard" is noise.
-  const nfcEntries = entries.filter((e) => e.isNfc);
-  const jhEntries = entries.filter((e) => !e.isNfc && e.entryType === 'junior_handler');
-  const standardEntries = entries.filter((e) => !e.isNfc && e.entryType !== 'junior_handler');
-
-  // Confirmed-only counts for the headline stat cards. The headline "X
-  // entries" subtext used to lump every status together, which let a
-  // single £0 NFC or JH entry hide inside the count and made secretaries
-  // suspect the entry-fee total was wrong (e.g. "10 entries × £18 ≠ £126
-  // — what's broken?"). Showing the breakdown explicitly lets the maths
-  // be sanity-checked at a glance.
-  const confirmedStandardCount = standardEntries.filter((e) => e.status === 'confirmed').length;
-  const confirmedNfcCount = nfcEntries.filter((e) => e.status === 'confirmed').length;
-  const confirmedJhCount = jhEntries.filter((e) => e.status === 'confirmed').length;
-  // Withdrawn entries keep their fee with the club (no refund), so that fee IS
-  // part of the Entry Fees / Total Income figures above. Surface it here or the
-  // amount looks bigger than the "X paid" count explains (Mandy 2026-07-13).
-  const withdrawnWithFeeCount = entries.filter((e) => e.status === 'withdrawn' && e.totalFee > 0).length;
-  const entryBreakdownParts = [
-    confirmedStandardCount > 0 ? `${confirmedStandardCount} paid` : null,
-    confirmedNfcCount > 0 ? `${confirmedNfcCount} NFC` : null,
-    confirmedJhCount > 0 ? `${confirmedJhCount} JH` : null,
-    withdrawnWithFeeCount > 0 ? `${withdrawnWithFeeCount} withdrawn (fee kept)` : null,
-  ].filter(Boolean);
-  const entryBreakdownText = entryBreakdownParts.length > 0
-    ? entryBreakdownParts.join(' · ')
-    : `${stats?.confirmedEntries ?? 0} entries`;
-
   // Per-class breakdown — buckets dogs / bitches / junior handlers /
   // mixed (non-JH classes that accept both sexes — Veteran, Brace,
   // Team, Stakes). The four buckets are exhaustive so subtotals always
@@ -181,6 +226,13 @@ export default function FinancialPage() {
     () => computeClassBreakdown(classEntryReport),
     [classEntryReport]
   );
+
+  // Total judged class-entries across the catalogue set — many dogs run
+  // more than one class. combinedTotals.entries already sums one row per
+  // class a dog runs PLUS one row per NFC dog (which has no class), so
+  // subtracting the NFC count gives the true class-entry total without a
+  // second pass over classEntryReport. Used for the "Entries by Class" footer.
+  const totalClassEntries = classBreakdown.combinedTotals.entries - classBreakdown.notForCompetitionTotals.entries;
 
   // Per-breed breakdown with nested classes (for all-breed shows)
   const breedBreakdown = useMemo(() => {
@@ -243,19 +295,34 @@ export default function FinancialPage() {
     downloadCsv(headers, rows, 'financial-report');
   }
 
+  // "Entry Fees" tile workings — "74 paid £1,687 + 1 withdrawn £26".
+  const entryFeesWorkings = joinWorkings([
+    stats && stats.confirmedEntries > 0 ? `${stats.confirmedEntries} paid ${formatWholePounds(stats.paidThroughRemiFeesPence)}` : null,
+    stats && stats.withdrawnEntries > 0 ? `${stats.withdrawnEntries} withdrawn ${formatWholePounds(stats.withdrawnKeptPence)}` : null,
+  ]);
+  // "Total Income" tile workings — "£1,687 fees + £26 kept + £90 sundries".
+  const totalIncomeWorkings = joinWorkings([
+    stats && stats.paidThroughRemiFeesPence > 0 ? `${formatWholePounds(stats.paidThroughRemiFeesPence)} fees` : null,
+    stats && stats.withdrawnKeptPence > 0 ? `${formatWholePounds(stats.withdrawnKeptPence)} kept` : null,
+    stats && stats.paidSundryRevenuePence > 0 ? `${formatWholePounds(stats.paidSundryRevenuePence)} sundries` : null,
+  ]);
+
   return (
     <div className="space-y-6">
+      {/* Reconciliation strip — the headline numbers, spelled out */}
+      <ReconciliationStrip stats={stats} />
+
       {/* Summary tiles — paid only, sundries included, net of refunds */}
       <div className="grid grid-cols-2 gap-2.5 lg:grid-cols-4">
         <FinancialStat
           label="Total Income"
           value={<span className="text-se-fresh-deep">{formatCurrency(stats?.clubReceivablePence ?? 0)}</span>}
-          subtext={`${entryBreakdownText} + sundries`}
+          subtext={totalIncomeWorkings}
         />
         <FinancialStat
           label="Entry Fees"
           value={formatCurrency(stats?.paidEntryFeesPence ?? 0)}
-          subtext={entryBreakdownText}
+          subtext={entryFeesWorkings}
         />
         <FinancialStat
           label="Awaiting Payment"
@@ -281,7 +348,7 @@ export default function FinancialPage() {
       {classBreakdown.combined.length > 0 && (
         <FinancialSection
           title="Entries by Class"
-          description="Every entry in the catalogue, by class — including any paid directly to the club and Not For Competition. The total ties to your catalogue count."
+          description="Every entry in the catalogue, by class — including any paid directly to the club and Not For Competition."
         >
             <Table>
               <TableHeader>
@@ -400,6 +467,10 @@ export default function FinancialPage() {
                 </TableRow>
               </TableBody>
             </Table>
+            <p className="mt-3 text-xs text-se-ink3">
+              {totalClassEntries} class entries across {classBreakdown.combinedTotals.entries}{' '}
+              {classBreakdown.combinedTotals.entries === 1 ? 'dog' : 'dogs'} — many dogs run more than one class.
+            </p>
         </FinancialSection>
       )}
 
@@ -485,86 +556,91 @@ export default function FinancialPage() {
         </FinancialSection>
       )}
 
-      {/* Breakdown by entry type — paid orders only */}
-      <FinancialSection title="Breakdown by Entry Type">
+      {/* All entries — replaces the old "Breakdown by Entry Type" +
+          "Entry Status Breakdown" tables, which disagreed with each other
+          (both were paid-orders-only via getEntryReport, so orderless NFC /
+          manually-added entries were invisible here even though they show
+          up on the entries list). This table reads straight off the
+          canonical stats query — the SAME population as dogsEntered
+          everywhere else — so orderless entries are finally visible. */}
+      <FinancialSection
+        title="All entries — and what each was worth"
+        description="Every entry ever made on this show, so the numbers always add up."
+      >
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Type</TableHead>
-                <TableHead>Entries</TableHead>
-                <TableHead>Total Fees</TableHead>
+                <TableHead></TableHead>
+                <TableHead className="text-right">Entries</TableHead>
+                <TableHead className="text-right">Fees</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               <TableRow>
-                <TableCell className="font-medium">Standard Entries</TableCell>
-                <TableCell>{standardEntries.length}</TableCell>
-                <TableCell>
-                  {formatCurrency(
-                    standardEntries.reduce((s, e) => s + e.totalFee, 0)
+                <TableCell className="font-medium">
+                  Paid through Remi
+                  {(stats?.confirmedJhEntries ?? 0) > 0 && (
+                    <span className="mt-1 block pl-3 text-xs font-normal text-muted-foreground">
+                      including {stats?.confirmedJhEntries} junior handler · {formatCurrency(stats?.confirmedJhFeesPence ?? 0)}
+                    </span>
                   )}
                 </TableCell>
+                <TableCell className="text-right">{stats?.confirmedEntries ?? 0}</TableCell>
+                <TableCell className="text-right">{formatCurrency(stats?.paidThroughRemiFeesPence ?? 0)}</TableCell>
               </TableRow>
-              {jhEntries.length > 0 && (
+              {(stats?.notForCompetitionEntries ?? 0) > 0 && (
                 <TableRow>
-                  <TableCell className="font-medium">Junior Handler</TableCell>
-                  <TableCell>{jhEntries.length}</TableCell>
-                  <TableCell>
-                    {formatCurrency(jhEntries.reduce((s, e) => s + e.totalFee, 0))}
+                  <TableCell className="font-medium">
+                    Not for competition
+                    <span className="mt-1 block text-xs font-normal text-muted-foreground">
+                      recorded on the entry · not paid through Remi, so not in Total income
+                    </span>
                   </TableCell>
+                  <TableCell className="text-right">{stats?.notForCompetitionEntries}</TableCell>
+                  <TableCell className="text-right">{formatCurrency(stats?.notForCompetitionFeesPence ?? 0)}</TableCell>
                 </TableRow>
               )}
-              <TableRow>
-                <TableCell className="font-medium">NFC Entries</TableCell>
-                <TableCell>{nfcEntries.length}</TableCell>
-                <TableCell>
-                  {formatCurrency(
-                    nfcEntries.reduce((s, e) => s + e.totalFee, 0)
-                  )}
-                </TableCell>
+              {(stats?.otherOrderlessEntries ?? 0) > 0 && (
+                <TableRow>
+                  <TableCell className="font-medium">
+                    Added without online payment
+                    <span className="mt-1 block text-xs font-normal text-muted-foreground">
+                      settled directly with the club, not through Remi
+                    </span>
+                  </TableCell>
+                  <TableCell className="text-right">{stats?.otherOrderlessEntries}</TableCell>
+                  <TableCell className="text-right">{formatCurrency(stats?.otherOrderlessFeesPence ?? 0)}</TableCell>
+                </TableRow>
+              )}
+              <TableRow className="bg-se-fresh-soft font-bold">
+                <TableCell>= Dogs entered</TableCell>
+                <TableCell className="text-right">{stats?.dogsEntered ?? 0}</TableCell>
+                <TableCell className="text-right">{formatCurrency(stats?.dogsEnteredFeesPence ?? 0)}</TableCell>
+              </TableRow>
+              {(stats?.withdrawnEntries ?? 0) > 0 && (
+                <TableRow>
+                  <TableCell className="font-medium">Withdrawn — fee kept</TableCell>
+                  <TableCell className="text-right">{stats?.withdrawnEntries}</TableCell>
+                  <TableCell className="text-right">{formatCurrency(stats?.withdrawnKeptPence ?? 0)}</TableCell>
+                </TableRow>
+              )}
+              {(stats?.cancelledEntries ?? 0) > 0 && (
+                <TableRow>
+                  <TableCell className="font-medium">Cancelled — refunded</TableCell>
+                  <TableCell className="text-right">{stats?.cancelledEntries}</TableCell>
+                  <TableCell className="text-right">{formatCurrency(stats?.cancelledRefundedPence ?? 0)}</TableCell>
+                </TableRow>
+              )}
+              <TableRow className="border-t-2 font-bold">
+                <TableCell>= All entries</TableCell>
+                <TableCell className="text-right">{stats?.allEntries ?? 0}</TableCell>
+                <TableCell className="text-right">{formatCurrency(stats?.allEntriesFeesPence ?? 0)}</TableCell>
               </TableRow>
             </TableBody>
           </Table>
-      </FinancialSection>
-
-      {/* Payment status breakdown — all entries from paid orders only */}
-      <FinancialSection title="Entry Status Breakdown" description="Entries on paid orders only">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Status</TableHead>
-                <TableHead>Entries</TableHead>
-                <TableHead>Amount</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {(['confirmed', 'withdrawn', 'cancelled'] as const).map((status) => {
-                const statusEntries = entries.filter((e) => e.status === status);
-                if (statusEntries.length === 0) return null;
-                const statusTotal = statusEntries.reduce((s, e) => s + e.totalFee, 0);
-                const config = entryStatusConfig[status];
-                return (
-                  <TableRow key={status}>
-                    <TableCell>
-                      <Badge variant={config?.variant ?? 'outline'}>
-                        {config?.label ?? status}
-                      </Badge>
-                    </TableCell>
-                    <TableCell>{statusEntries.length}</TableCell>
-                    <TableCell>
-                      {formatCurrency(statusTotal)}
-                      {status === 'withdrawn' && (
-                        <span className="block text-xs text-muted-foreground">kept as income</span>
-                      )}
-                      {status === 'cancelled' && (
-                        <span className="block text-xs text-muted-foreground">refunded</span>
-                      )}
-                    </TableCell>
-                  </TableRow>
-                );
-              })}
-            </TableBody>
-          </Table>
+          <p className="mt-3 text-xs text-se-ink3">
+            {stats?.dogsEntered ?? 0} {(stats?.dogsEntered ?? 0) === 1 ? 'dog appears' : 'dogs appear'} in the catalogue — withdrawn entries are not printed.
+          </p>
       </FinancialSection>
 
       {/* Catalogue requests — split by printed vs online */}

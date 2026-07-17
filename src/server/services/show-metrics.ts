@@ -76,6 +76,46 @@ export type ShowMetrics = {
   // ── Catalogue orders (paid only) ──
   paidPrintedCatalogueCount: number;
   paidOnlineCatalogueCount: number;
+
+  // ── "Dogs entered" canonical breakdown ────────────────────────
+  // The single number every screen (dashboard, banner, entries page,
+  // financial page) shows as the headline count, plus the parts it's made
+  // of — so the number always shows its workings. See
+  // project_financial_withdrawn_clarity memory for the "74/75/78" bug this
+  // fixes: three screens counting three different populations with no label.
+  //
+  //   dogsEnteredCount = confirmedEntryCount + notForCompetitionCount + otherOrderlessCount
+  //
+  // "Paid through Remi" reuses confirmedEntryCount/confirmedEntryFeesPence
+  // (status='confirmed' on a paid order) rather than broadening its filter —
+  // that field is well-tested and status should always be 'confirmed' once
+  // an order is paid. The two orderless buckets below are new: entries with
+  // no order at all (NFC dogs, or entries a secretary added that were
+  // settled directly with the club, never touching a Remi order) were
+  // previously skipped entirely by this aggregation.
+  /** Sum of entries.total_fee for confirmedEntryCount (paid + confirmed only — excludes the withdrawn fee that paidEntryFeesPence also folds in). */
+  confirmedEntryFeesPence: number;
+  /** Orderless entries (orderId IS NULL), flagged Not For Competition, status not in (withdrawn, cancelled). */
+  notForCompetitionCount: number;
+  notForCompetitionFeesPence: number;
+  /** Orderless entries, NOT flagged NFC — comp entries / manual additions never linked to a Remi order. */
+  otherOrderlessCount: number;
+  otherOrderlessFeesPence: number;
+  /** Junior Handler entries within confirmedEntryCount — for the "including N junior handler" subrow. */
+  confirmedJhEntryCount: number;
+  confirmedJhFeesPence: number;
+  /** The fee withdrawn entries keep with the club — same pence already folded into paidEntryFeesPence, split out for display. */
+  withdrawnKeptPence: number;
+  /** Alive entries with status='cancelled' on an otherwise-paid order (a per-entry partial refund). */
+  cancelledEntryCount: number;
+  /** entries.total_fee for cancelledEntryCount — the amount that was refunded off those entries. */
+  cancelledRefundedPence: number;
+  /** confirmedEntryCount + notForCompetitionCount + otherOrderlessCount — the one headline number. */
+  dogsEnteredCount: number;
+  dogsEnteredFeesPence: number;
+  /** dogsEnteredCount + withdrawnEntryCount + cancelledEntryCount — every entry ever made on the show. */
+  allEntriesCount: number;
+  allEntriesFeesPence: number;
 };
 
 // ── Pure aggregation (unit-testable without a DB) ───────────────
@@ -93,6 +133,9 @@ export type EntryRow = {
   status: 'pending' | 'confirmed' | 'withdrawn' | 'transferred' | 'cancelled';
   totalFee: number;
   deletedAt: Date | null;
+  /** Not For Competition flag — drives the orderless notForCompetition/otherOrderless split. */
+  isNfc: boolean;
+  entryType: 'standard' | 'junior_handler';
 };
 
 export type SundryLineRow = {
@@ -154,22 +197,58 @@ export function aggregateShowMetrics(data: {
   let paidEntryFeesPence = 0;
   let pendingEntryFeesPence = 0;
 
+  // "Dogs entered" split — new buckets.
+  let confirmedJhEntryCount = 0;
+  let confirmedJhFeesPence = 0;
+  let withdrawnKeptPence = 0;
+  let cancelledEntryCount = 0;
+  let cancelledRefundedPence = 0;
+  let notForCompetitionCount = 0;
+  let notForCompetitionFeesPence = 0;
+  let otherOrderlessCount = 0;
+  let otherOrderlessFeesPence = 0;
+
   for (const e of data.entries) {
     if (e.deletedAt) continue;
-    if (!e.orderId) continue;
+    if (!e.orderId) {
+      // Orderless entries never touched a Remi order — either an NFC dog
+      // (no fee collected) or an entry a secretary added and settled
+      // directly with the club. Withdrawn/cancelled shouldn't occur here
+      // in practice (both imply money moved through an order first) but
+      // are excluded defensively so dogsEntered never double-counts them.
+      if (e.status === 'withdrawn' || e.status === 'cancelled') continue;
+      if (e.isNfc) {
+        notForCompetitionCount += 1;
+        notForCompetitionFeesPence += e.totalFee;
+      } else {
+        otherOrderlessCount += 1;
+        otherOrderlessFeesPence += e.totalFee;
+      }
+      continue;
+    }
     if (paidOrderIds.has(e.orderId)) {
       if (e.status === 'confirmed') {
         confirmedEntryCount += 1;
         paidEntryFeesPence += e.totalFee;
+        if (e.entryType === 'junior_handler') {
+          confirmedJhEntryCount += 1;
+          confirmedJhFeesPence += e.totalFee;
+        }
       } else if (e.status === 'withdrawn') {
         // Exhibitor paid then pulled out without a refund — fee stays with the club.
         withdrawnEntryCount += 1;
         paidEntryFeesPence += e.totalFee;
+        withdrawnKeptPence += e.totalFee;
       } else if (e.status === 'cancelled') {
         // Per-entry partial refund on an otherwise paid order: the entry
         // was cancelled but the rest of the order still stands. The
-        // refunded amount shows up via payments.refundAmount separately.
+        // refunded amount shows up via payments.refundAmount separately
+        // (clubReceivablePence nets it out); totalFee here is the amount
+        // that was refunded off THIS entry, for the "Cancelled — refunded"
+        // reconciliation row.
         paidEntryFeesPence += e.totalFee;
+        cancelledEntryCount += 1;
+        cancelledRefundedPence += e.totalFee;
       }
     } else if (pendingOrderIds.has(e.orderId)) {
       if (e.status === 'pending') {
@@ -179,6 +258,15 @@ export function aggregateShowMetrics(data: {
       }
     }
   }
+
+  // Derived rather than tracked as its own accumulator — paidEntryFeesPence
+  // already sums confirmed + withdrawn + cancelled fees on paid orders, and
+  // the other two are tracked directly, so confirmed-only falls out for free.
+  const confirmedEntryFeesPence = paidEntryFeesPence - withdrawnKeptPence - cancelledRefundedPence;
+  const dogsEnteredCount = confirmedEntryCount + notForCompetitionCount + otherOrderlessCount;
+  const dogsEnteredFeesPence = confirmedEntryFeesPence + notForCompetitionFeesPence + otherOrderlessFeesPence;
+  const allEntriesCount = dogsEnteredCount + withdrawnEntryCount + cancelledEntryCount;
+  const allEntriesFeesPence = dogsEnteredFeesPence + withdrawnKeptPence + cancelledRefundedPence;
 
   const pendingOrderCount = livePendingOrderIds.size;
   let pendingPlatformFeePence = 0;
@@ -252,6 +340,48 @@ export function aggregateShowMetrics(data: {
     pendingPlatformFeePence,
     paidPrintedCatalogueCount,
     paidOnlineCatalogueCount,
+    confirmedEntryFeesPence,
+    confirmedJhEntryCount,
+    confirmedJhFeesPence,
+    withdrawnKeptPence,
+    cancelledEntryCount,
+    cancelledRefundedPence,
+    notForCompetitionCount,
+    notForCompetitionFeesPence,
+    otherOrderlessCount,
+    otherOrderlessFeesPence,
+    dogsEnteredCount,
+    dogsEnteredFeesPence,
+    allEntriesCount,
+    allEntriesFeesPence,
+  };
+}
+
+/**
+ * The "dogs entered" response fields shared by `secretary.getShowStats`
+ * (Financial page) and `secretary.getShowEntryStats` (dashboard cards,
+ * lifecycle banner, entries page tiles). Both procedures spread this into
+ * their return object instead of hand-writing the same ~14 fields twice —
+ * otherwise the two field lists silently fork (which is exactly the kind
+ * of drift this redesign exists to eliminate).
+ */
+export function shapeDogsEnteredFields(metrics: ShowMetrics) {
+  return {
+    dogsEntered: metrics.dogsEnteredCount,
+    dogsEnteredFeesPence: metrics.dogsEnteredFeesPence,
+    paidThroughRemiFeesPence: metrics.confirmedEntryFeesPence,
+    notForCompetitionEntries: metrics.notForCompetitionCount,
+    notForCompetitionFeesPence: metrics.notForCompetitionFeesPence,
+    otherOrderlessEntries: metrics.otherOrderlessCount,
+    otherOrderlessFeesPence: metrics.otherOrderlessFeesPence,
+    confirmedJhEntries: metrics.confirmedJhEntryCount,
+    confirmedJhFeesPence: metrics.confirmedJhFeesPence,
+    withdrawnKeptPence: metrics.withdrawnKeptPence,
+    cancelledEntries: metrics.cancelledEntryCount,
+    cancelledRefundedPence: metrics.cancelledRefundedPence,
+    allEntries: metrics.allEntriesCount,
+    allEntriesFeesPence: metrics.allEntriesFeesPence,
+    sundriesPence: metrics.paidSundryRevenuePence,
   };
 }
 
@@ -298,11 +428,15 @@ export async function computeShowsMetrics(
     .from(orders)
     .where(inArray(orders.showId, showIds));
 
-  if (orderRows.length === 0) return result;
-
   const orderIds = orderRows.map((o) => o.id);
   const orderToShow = new Map(orderRows.map((o) => [o.id, o.showId]));
 
+  // Entries are fetched unconditionally — a show can have "dogs entered"
+  // (NFC / manually-added, orderless entries) with ZERO orders at all, so
+  // bailing out early when orderRows is empty (the old behaviour) silently
+  // zeroed dogsEntered for exactly the shows this redesign exists to fix.
+  // Sundries/payments are keyed off orderId, so those two stay skipped
+  // when there are no orders to join against.
   const [entryRows, sundryRows, paymentRows] = await Promise.all([
     db
       .select({
@@ -312,31 +446,37 @@ export async function computeShowsMetrics(
         status: entries.status,
         totalFee: entries.totalFee,
         deletedAt: entries.deletedAt,
+        isNfc: entries.isNfc,
+        entryType: entries.entryType,
       })
       .from(entries)
       .where(and(inArray(entries.showId, showIds), isNull(entries.deletedAt))),
-    db
-      .select({
-        orderId: orderSundryItems.orderId,
-        itemName: sundryItems.name,
-        quantity: orderSundryItems.quantity,
-        unitPrice: orderSundryItems.unitPrice,
-      })
-      .from(orderSundryItems)
-      .innerJoin(sundryItems, eq(orderSundryItems.sundryItemId, sundryItems.id))
-      .where(inArray(orderSundryItems.orderId, orderIds)),
-    db
-      .select({
-        orderId: payments.orderId,
-        refundAmount: payments.refundAmount,
-      })
-      .from(payments)
-      .where(
-        and(
-          inArray(payments.orderId, orderIds),
-          sql`${payments.refundAmount} IS NOT NULL`
-        )
-      ),
+    orderIds.length === 0
+      ? Promise.resolve([])
+      : db
+          .select({
+            orderId: orderSundryItems.orderId,
+            itemName: sundryItems.name,
+            quantity: orderSundryItems.quantity,
+            unitPrice: orderSundryItems.unitPrice,
+          })
+          .from(orderSundryItems)
+          .innerJoin(sundryItems, eq(orderSundryItems.sundryItemId, sundryItems.id))
+          .where(inArray(orderSundryItems.orderId, orderIds)),
+    orderIds.length === 0
+      ? Promise.resolve([])
+      : db
+          .select({
+            orderId: payments.orderId,
+            refundAmount: payments.refundAmount,
+          })
+          .from(payments)
+          .where(
+            and(
+              inArray(payments.orderId, orderIds),
+              sql`${payments.refundAmount} IS NOT NULL`
+            )
+          ),
   ]);
 
   // Bucket rows by showId

@@ -51,7 +51,13 @@ import { ShowIdProvider } from './_lib/show-context';
 import { ShowSectionNav } from './_components/show-section-nav';
 import { LifecycleBanner } from './_components/lifecycle-banner';
 import { EditShowNameDialog } from './_components/edit-show-name-dialog';
-import { formatRelativeTime, formatCompactRevenue } from './_lib/show-utils';
+import {
+  formatRelativeTime,
+  formatCompactRevenue,
+  formatWholePounds,
+  joinWorkings,
+  formatDogsEnteredParts,
+} from './_lib/show-utils';
 
 export default function ShowManagementLayout({
   children,
@@ -413,28 +419,32 @@ export default function ShowManagementLayout({
       )}
 
       {/* Stats */}
-      {entryStats && entryStats.totalEntries > 0 && (
+      {entryStats && entryStats.dogsEntered > 0 && (
         <div className="grid grid-cols-2 gap-2.5 lg:grid-cols-4">
           <SECard className="p-3.5">
             <div className="flex items-center gap-1.5 text-se-ink3">
               <ClipboardList className="size-3.5" />
               <Eyebrow>Entries</Eyebrow>
             </div>
-            {/* Headline = dogs actually entered (confirmed), so it matches the
-                entries list. In-flight ("awaiting payment") and withdrawn are
-                shown separately rather than inflating the number — secretaries
-                read the big figure as "how many are entered" (Mandy 2026-07-13). */}
-            <p className={cn(SE_H, 'mt-1.5 text-[22px] leading-none tabular-nums text-se-ink')}>{entryStats.confirmed}</p>
+            {/* Headline = "dogs entered" — the same canonical number the
+                entries list, banner, and Financial page all show now (was
+                "confirmed", which silently dropped orderless NFC / manually
+                added dogs and read lower than the entries list — Amanda's
+                74/75/78 report). The lines beneath show its workings. */}
+            <p className={cn(SE_H, 'mt-1.5 text-[22px] leading-none tabular-nums text-se-ink')}>{entryStats.dogsEntered}</p>
             <p className="mt-1 text-[11px] text-se-ink3">
-              {entryStats.pending === 0 && entryStats.withdrawn === 0 ? (
-                <span className="text-se-fresh-deep">confirmed</span>
-              ) : (
-                <>
-                  {entryStats.pending > 0 && <span className="text-se-honey-deep">{entryStats.pending} awaiting payment</span>}
-                  {entryStats.withdrawn > 0 && <span>{entryStats.pending > 0 ? ' · ' : ''}{entryStats.withdrawn} withdrawn</span>}
-                </>
-              )}
+              {formatDogsEnteredParts({
+                paid: entryStats.confirmed,
+                notForCompetition: entryStats.notForCompetitionEntries,
+                otherOrderless: entryStats.otherOrderlessEntries,
+              })}
             </p>
+            {entryStats.pending > 0 && (
+              <p className="mt-1 text-[11px] text-se-honey-deep">{entryStats.pending} awaiting payment</p>
+            )}
+            {entryStats.withdrawn > 0 && (
+              <p className="mt-1 text-[11px] text-se-ink3">{entryStats.withdrawn} withdrawn — fee kept</p>
+            )}
           </SECard>
           <SECard className="p-3.5">
             <div className="flex items-center gap-1.5 text-se-ink3">
@@ -444,7 +454,17 @@ export default function ShowManagementLayout({
             <p className={cn(SE_H, 'mt-1.5 text-[22px] leading-none tabular-nums text-se-fresh-deep')}>
               {formatCompactRevenue(entryStats.totalRevenue)}
             </p>
-            <p className="mt-1 text-[11px] text-se-ink3">{entryStats.paidOrders} paid</p>
+            {(() => {
+              const revenueWorkings = joinWorkings([
+                entryStats.paidThroughRemiFeesPence > 0 ? `${formatWholePounds(entryStats.paidThroughRemiFeesPence)} fees` : null,
+                entryStats.withdrawnKeptPence > 0 ? `${formatWholePounds(entryStats.withdrawnKeptPence)} kept` : null,
+                entryStats.sundriesPence > 0 ? `${formatWholePounds(entryStats.sundriesPence)} sundries` : null,
+              ]);
+              return revenueWorkings ? (
+                <p className="mt-1 truncate text-[11px] text-se-ink3">{revenueWorkings}</p>
+              ) : null;
+            })()}
+            <p className="mt-1 text-[11px] text-se-ink3">{entryStats.paidOrders} paid orders</p>
           </SECard>
           <SECard className="p-3.5">
             <div className="flex items-center gap-1.5 text-se-ink3">

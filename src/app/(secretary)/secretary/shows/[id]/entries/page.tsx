@@ -56,7 +56,7 @@ import { isGsdOnlyClass, isGsdBreed } from '@/lib/class-templates';
 import { EmptyState } from '@/components/ui/empty-state';
 import { SECard, Eyebrow } from '@/components/show-experience/kit';
 import { SE_H } from '@/components/show-experience/tokens';
-import { EntryItem, entryStatusConfig, formatDate } from '../_lib/show-utils';
+import { EntryItem, entryStatusConfig, formatDate, formatDogsEnteredParts } from '../_lib/show-utils';
 import { useShowId } from '../_lib/show-context';
 
 /* Entry status pill — same fresh/honey/light pill language as the rest of
@@ -90,6 +90,15 @@ export default function EntriesPage() {
   const { data: entriesData, isLoading: entriesLoading } = trpc.entries.getForShow.useQuery({ showId, limit: 500 });
   const entries = entriesData?.items ?? [];
   const total = entriesData?.total ?? 0;
+  // Summary tiles read the same canonical stats query the dashboard and
+  // banner use (same query key as layout.tsx's getShowEntryStats — React
+  // Query dedupes it, no extra network call) rather than filtering the
+  // client-side entries list, so this page can never disagree with the
+  // dashboard about how many dogs are entered (Amanda's 74/75/78 report).
+  const { data: entryStats } = trpc.secretary.getShowEntryStats.useQuery(
+    { showId },
+    { staleTime: 60_000 }
+  );
 
   const [search, setSearch] = useState('');
   // Default to "active" — withdrawn/cancelled entries are noise on the
@@ -188,30 +197,44 @@ export default function EntriesPage() {
     toast.success(`${entries.length} entries exported to CSV`);
   }
 
-  const confirmedCount = entries.filter((e) => e.status === 'confirmed').length;
-  const pendingCount = entries.filter((e) => e.status === 'pending').length;
-  // Total = active entries (matches the "Entries (N)" list header below).
-  // Withdrawn/cancelled are hidden by default, so counting them in Total made
-  // it read higher than the list (Mandy 2026-07-13: "3 total but 2 entered").
-  const activeCount = entries.filter(
-    (e) => e.status !== 'withdrawn' && e.status !== 'cancelled'
-  ).length;
+  const dogsEntered = entryStats?.dogsEntered ?? 0;
+  const awaitingPayment = entryStats?.pending ?? 0;
+  const withdrawnCount = entryStats?.withdrawn ?? 0;
+  const dogsEnteredSub = entryStats
+    ? formatDogsEnteredParts({
+        paid: entryStats.confirmed,
+        notForCompetition: entryStats.notForCompetitionEntries,
+        otherOrderless: entryStats.otherOrderlessEntries,
+      })
+    : '';
 
   return (
     <>
-      {/* Stat summary */}
-      <div className="mb-4 grid grid-cols-3 gap-2.5">
-        <SECard className="p-3.5">
-          <Eyebrow>Total</Eyebrow>
-          <p className={cn(SE_H, 'mt-1 text-[22px] leading-none tabular-nums text-se-ink')}>{activeCount}</p>
+      {/* Stat summary — DOGS ENTERED spans the full row on mobile (its
+          sub-line is longer than "Total"/"Confirmed" ever were), AWAITING
+          PAYMENT + WITHDRAWN sit 2-up beneath; sm and up go back to a
+          single 3-across row. */}
+      <div className="mb-4 grid grid-cols-2 gap-2.5 sm:grid-cols-3">
+        <SECard className="col-span-2 p-3.5 sm:col-span-1">
+          <Eyebrow>Dogs entered</Eyebrow>
+          <p className={cn(SE_H, 'mt-1 text-[22px] leading-none tabular-nums text-se-ink')}>{dogsEntered}</p>
+          {dogsEnteredSub && (
+            <p className="mt-1 truncate text-[11px] text-se-ink3">{dogsEnteredSub}</p>
+          )}
         </SECard>
         <SECard className="p-3.5">
-          <Eyebrow>Confirmed</Eyebrow>
-          <p className={cn(SE_H, 'mt-1 text-[22px] leading-none tabular-nums text-se-fresh-deep')}>{confirmedCount}</p>
+          <Eyebrow>Awaiting payment</Eyebrow>
+          <p className={cn(SE_H, 'mt-1 text-[22px] leading-none tabular-nums text-se-honey-deep')}>{awaitingPayment}</p>
+          <p className="mt-1 text-[11px] text-se-ink3">{awaitingPayment} started checkout</p>
         </SECard>
         <SECard className="p-3.5">
-          <Eyebrow>Pending</Eyebrow>
-          <p className={cn(SE_H, 'mt-1 text-[22px] leading-none tabular-nums text-se-honey-deep')}>{pendingCount}</p>
+          <Eyebrow>Withdrawn</Eyebrow>
+          <p className={cn(SE_H, 'mt-1 text-[22px] leading-none tabular-nums text-se-ink')}>{withdrawnCount}</p>
+          {withdrawnCount > 0 && (
+            <p className="mt-1 text-[11px] text-se-ink3">
+              fee kept · {formatCurrency(entryStats?.withdrawnKeptPence ?? 0)}
+            </p>
+          )}
         </SECard>
       </div>
 

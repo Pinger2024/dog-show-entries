@@ -95,6 +95,7 @@ factories and the test caller.
 | 67 | Record achievement manually | `secretary.recordAchievement`, `getShowAchievements` | 🟡 | ✅ | `secretary-show-mgmt.test.ts` (record); `secretary-schedule-judges.test.ts` (getShowAchievements with dog + breed embedded) |
 | 68 | View audit log of entry changes | `secretary.getAuditLog` | 🟡 | ✅ | `secretary-show-mgmt.test.ts` — shape only |
 | 69 | View financial / sundry / entry reports | `secretary.getPaymentReport`, `secretary.getEntryReport`, `secretary.getSundryItemReport` | 🟡 | ✅ | `secretary-show-mgmt.test.ts` covers entry + payment shape; sundry report covered by `sundry-report.test.ts` (paid-only aggregation + cross-org reject) |
+| 142 | "Dogs entered" canonical breakdown — one number everywhere | `secretary.getShowStats`, `secretary.getShowEntryStats` (both via `computeShowMetrics`) | 🔴 | ✅ | `show-metrics.test.ts` (unit, pure aggregation: orderless NFC/otherOrderless split, withdrawn/cancelled excluded from dogsEntered, parts always sum); `financial-clarity.test.ts` (integration: orderless entries visible, awaiting-payment excluded, getShowStats/getShowEntryStats agree) |
 | 70 | View results publication status | `secretary.getResultsPublicationStatus` | 🟡 | ✅ | `secretary-show-mgmt.test.ts` — published/locked + judge approval breakdown |
 | 71 | Publish results (whole show) | `secretary.publishResults` | 🔴 | ✅ | `publish-results.test.ts` |
 | 72 | Publish per-class results | `secretary.publishClassResults` | 🟡 | ✅ | `secretary-show-mgmt.test.ts` — only the targeted class is published |
@@ -268,7 +269,7 @@ Areas with clusters of fix commits — bias test priority here:
 | Section | Total | ✅ | 🟠 | ⬜ |
 |---|---:|---:|---:|---:|
 | Exhibitor | 32 | 30 | 2 | 0 |
-| Secretary | 46 | 41 | 6 | 0 |
+| Secretary | 47 | 42 | 6 | 0 |
 | Steward | 15 | 15 | 0 | 0 |
 | Judge | 3 | 3 | 0 | 0 |
 | Admin | 8 | 7 | 1 | 0 |
@@ -280,7 +281,7 @@ Areas with clusters of fix commits — bias test priority here:
 | File upload | 3 | 3 | 0 | 0 |
 | Soft-delete | 3 | 3 | 0 | 0 |
 | Phase / breed | 3 | 3 | 0 | 0 |
-| **TOTAL** | **141** | **136** | **5** | **0** |
+| **TOTAL** | **142** | **137** | **5** | **0** |
 
 🔴 show-day-critical journeys still uncovered: ~2.
 

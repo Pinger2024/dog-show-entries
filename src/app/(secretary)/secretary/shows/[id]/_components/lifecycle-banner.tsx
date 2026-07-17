@@ -37,6 +37,7 @@ import {
   PHASE_CONFIG,
   type ShowPhase,
 } from '../_lib/phase-utils';
+import { formatBannerBreakdown } from '../_lib/show-utils';
 
 type Show = NonNullable<RouterOutputs['shows']['getById']>;
 type EntryStats = RouterOutputs['secretary']['getShowEntryStats'];
@@ -240,8 +241,13 @@ function EntriesOpenContent({
   show: Show;
   entryStats: EntryStats | undefined;
 }) {
-  const totalEntries = entryStats?.totalEntries ?? 0;
+  // "Dogs entered" is the one canonical headline count now — the same
+  // number the entries list, the dashboard's Entries card, and the
+  // Financial page all show. No more totalEntries-vs-confirmed flip-flop
+  // (Amanda's 74/75/78 report).
+  const dogsEntered = entryStats?.dogsEntered ?? 0;
   const uniqueExhibitors = entryStats?.uniqueExhibitors ?? 0;
+  const breakdownLine = formatBannerBreakdown(entryStats);
 
   const closeInfo = show.entryCloseDate
     ? formatDeadline(show.entryCloseDate, 'Entries close')
@@ -270,9 +276,12 @@ function EntriesOpenContent({
               })}
             </p>
             <p className="text-xs text-destructive/80">
-              {totalEntries} {totalEntries === 1 ? 'entry' : 'entries'} from{' '}
+              {dogsEntered} {dogsEntered === 1 ? 'dog' : 'dogs'} entered from{' '}
               {uniqueExhibitors} {uniqueExhibitors === 1 ? 'exhibitor' : 'exhibitors'} — entries are still being accepted
             </p>
+            {breakdownLine && (
+              <p className="mt-0.5 text-xs text-destructive/60">{breakdownLine}</p>
+            )}
           </div>
         </div>
         <ConfirmCloseEntries onConfirm={() => closeEntriesMutation.mutate({ id: show.id, status: 'entries_closed' })}>
@@ -301,10 +310,13 @@ function EntriesOpenContent({
       <div className="flex flex-wrap items-center gap-2">
         <Pulse />
         <h3 className={cn(SE_H, 'text-sm text-se-ink sm:text-base')}>
-          {totalEntries} {totalEntries === 1 ? 'entry' : 'entries'} from {uniqueExhibitors}{' '}
+          {dogsEntered} {dogsEntered === 1 ? 'dog' : 'dogs'} entered from {uniqueExhibitors}{' '}
           {uniqueExhibitors === 1 ? 'exhibitor' : 'exhibitors'}
         </h3>
       </div>
+      {breakdownLine && (
+        <p className="text-xs text-se-ink3">{breakdownLine}</p>
+      )}
 
       {/* Countdown — honey band once we're inside the urgent window,
           otherwise a quiet deadline line. */}
@@ -357,7 +369,8 @@ function PreShowContent({
   show: Show;
   entryStats: EntryStats | undefined;
 }) {
-  const confirmedEntries = entryStats?.confirmed ?? entryStats?.totalEntries ?? 0;
+  const dogsEntered = entryStats?.dogsEntered ?? 0;
+  const breakdownLine = formatBannerBreakdown(entryStats);
 
   const showDayInfo = show.startDate
     ? formatDeadline(show.startDate, 'Show day')
@@ -367,9 +380,12 @@ function PreShowContent({
     <div className="space-y-3">
       <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:gap-3">
         <h3 className={cn(SE_H, 'text-sm text-se-ink sm:text-base')}>
-          Entries closed &mdash; {confirmedEntries} {confirmedEntries === 1 ? 'entry' : 'entries'} confirmed
+          Entries closed &mdash; {dogsEntered} {dogsEntered === 1 ? 'dog' : 'dogs'} entered
         </h3>
       </div>
+      {breakdownLine && (
+        <p className="text-xs text-se-ink3">{breakdownLine}</p>
+      )}
 
       {showDayInfo?.urgent ? (
         <HoneyBanner label="Show day" date={showDayInfo.text}>

@@ -65,6 +65,7 @@ import {
   computeShowMetrics,
   computeShowsMetrics,
   getPaidOrderIdsForShow,
+  shapeDogsEnteredFields,
 } from '@/server/services/show-metrics';
 
 /**
@@ -358,6 +359,13 @@ export const secretaryRouter = createTRPCRouter({
         totalClasses: Number(classCount[0]?.count ?? 0),
         // Back-compat alias — totalRevenue now means "club receivable, paid-only"
         totalRevenue: metrics.clubReceivablePence,
+
+        // ── "Dogs entered" canonical breakdown (financial-clarity redesign) ──
+        // One headline number everywhere + the parts it's made of, so the
+        // Financial page's reconciliation strip and tables always add up.
+        // Shared with getShowEntryStats via shapeDogsEnteredFields so the
+        // two field lists can't drift apart. See show-metrics.ts.
+        ...shapeDogsEnteredFields(metrics),
       };
     }),
 
@@ -1070,6 +1078,8 @@ export const secretaryRouter = createTRPCRouter({
           status: e.status,
           totalFee: e.totalFee,
           deletedAt: e.deletedAt,
+          isNfc: e.isNfc,
+          entryType: e.entryType,
         })),
         sundries: sundryLines,
         payments: paymentRefundRows,
@@ -5693,14 +5703,22 @@ export const secretaryRouter = createTRPCRouter({
         confirmed: metrics.confirmedEntryCount,
         pending: metrics.pendingEntryCount,
         withdrawn: metrics.withdrawnEntryCount,
-        // Legacy shape — we don't separately track transferred/cancelled here
-        cancelled: 0,
+        cancelled: metrics.cancelledEntryCount,
+        // Legacy shape — we don't separately track transferred here
         transferred: 0,
         // Revenue is club receivable (entries + sundries, net of refunds)
         totalRevenue: metrics.clubReceivablePence,
         paidOrders: metrics.paidOrderCount,
         uniqueExhibitors: Number(exhibitorResult[0]?.count ?? 0),
         lastEntryAt: latestEntry[0]?.createdAt ?? null,
+
+        // ── "Dogs entered" canonical breakdown (financial-clarity redesign) ──
+        // Shared with getShowStats via shapeDogsEnteredFields — both derive
+        // from the same computeShowMetrics() call AND the same field-shaping
+        // function, so the dashboard, banner, and entries page can never
+        // disagree with the Financial page, and the two field lists can't
+        // fork apart from each other over time.
+        ...shapeDogsEnteredFields(metrics),
       };
     }),
 
