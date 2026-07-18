@@ -39,6 +39,8 @@ import { differenceInMonths, differenceInWeeks, format, parseISO } from 'date-fn
 import { toast } from 'sonner';
 import { isWithinAgeRange, getAgeEligibilityDetail, handlerAgeYearsOnDate, formatCurrency } from '@/lib/date-utils';
 import { svAgeClassAllowed, svMissingRequirements, hasWorkingTitle } from '@/lib/sv-entry-readiness';
+import { SV_HEALTH_FROM_CLASSES } from '@/lib/sv-entry-validation';
+import { displayShowTypeLabel } from '@/lib/show-types';
 import { trpc } from '@/lib/trpc/client';
 import { formatDogName } from '@/lib/utils';
 import { readReferralSource } from '@/lib/referral-source';
@@ -426,6 +428,11 @@ export default function EnterShowPage() {
   const regionalMemberships = regionalCfg?.memberships ?? [
     { label: 'BRG/League member', requiresNumber: true },
   ];
+  // The class-select total shows the FULL price; membership / first-time
+  // discounts are chosen on the Review step. Flag it so the exhibitor isn't
+  // startled by a higher number here (Amanda 2026-07-18).
+  const regionalDiscountsAvailable =
+    !!regionalCfg && (regionalMemberships.length > 0 || !!regionalCfg.firstTimeEnabled);
   const donationPence = regionalCfg?.donationsEnabled
     ? Math.round((parseFloat(donationPounds) || 0) * 100)
     : 0;
@@ -1451,16 +1458,17 @@ export default function EnterShowPage() {
           return !eligibleForSelectedAgeClass;
         })();
 
-        // SV/WUSV health gate (Amanda 2026-05-21): for Yearling/Adult/Working
-        // the dog must have hip + elbow + DNA on file. Server enforces this in
-        // entries.create and orders.checkout, but we surface it here so the
-        // exhibitor doesn't reach the cart Review step before being told.
-        const SV_HEALTH_REQUIRED_CLASSES = new Set(['SV Yearling', 'Adult', 'Working']);
+        // SV/WUSV health gate: for Yearling/Adult/Working the dog must have
+        // hip + elbow + DNA on file (Junior does NOT — Amanda 2026-07-18).
+        // Server enforces this in entries.create and orders.checkout; we surface
+        // it here so the exhibitor doesn't reach the cart Review step before
+        // being told. Shares SV_HEALTH_FROM_CLASSES with the server so the two
+        // can't drift (they did — Junior was wrongly required server-side).
         const selectedSvHealthClasses = (showClasses ?? []).filter(
           (sc) =>
             selectedClassIds.includes(sc.id) &&
             sc.classDefinition &&
-            SV_HEALTH_REQUIRED_CLASSES.has(sc.classDefinition.name),
+            SV_HEALTH_FROM_CLASSES.has(sc.classDefinition.name),
         );
         const svHealthRequired =
           show?.showRuleset === 'wusv' &&
@@ -1772,6 +1780,11 @@ export default function EnterShowPage() {
                   {cart.activeEntry?.dogName ? ` · ${cart.activeEntry.dogName}` : ''}
                 </p>
                 <p key={selectedTotal} className="se-total-pop text-[26px] font-bold leading-none tracking-[-0.015em] text-se-ink">{formatCurrency(selectedTotal)}</p>
+                {regionalDiscountsAvailable && !isNfc && !isJuniorHandler && selectedTotal > 0 && (
+                  <p className="mt-1 text-[11px] leading-tight text-se-ink3">
+                    Any membership discount is applied on the next page
+                  </p>
+                )}
               </div>
               <SEButton
                 variant="fresh"
@@ -1803,7 +1816,7 @@ export default function EnterShowPage() {
               <div>
                 <p className="text-base font-bold text-se-ink">{show.name}</p>
                 {show.showType && (
-                  <Chip className="mt-1 capitalize">{show.showType.replace('_', ' ')}</Chip>
+                  <Chip className="mt-1">{displayShowTypeLabel(show.showType, show.showRuleset)}</Chip>
                 )}
               </div>
             </div>
