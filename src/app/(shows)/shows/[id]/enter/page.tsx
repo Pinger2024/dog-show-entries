@@ -1425,10 +1425,30 @@ export default function EnterShowPage() {
       {/* Step: Select Classes */}
       {cart.step === 'select_classes' && (() => {
         // Check if selected dog is under 6 months on show day
+        // Under 6 months blocks competition — UNLESS every selected class is an
+        // age class she's eligible for (e.g. Baby Puppy, 4–6mo). Mirrors the
+        // server age gate (getCompetitionAgeError) so the Review button and the
+        // RKC "too young" banner don't wrongly block a valid Baby Puppy.
+        // Amanda 2026-07-18.
         const dogUnder6Months = (() => {
           if (cart.activeEntry?.entryType !== 'standard' || !selectedDog?.dateOfBirth || !show?.startDate) return false;
-          const ageMonths = differenceInMonths(new Date(show.startDate), new Date(selectedDog.dateOfBirth));
-          return ageMonths < 6;
+          const dob = new Date(selectedDog.dateOfBirth);
+          const showDay = new Date(show.startDate);
+          if (differenceInMonths(showDay, dob) >= 6) return false;
+          const selected = (showClasses ?? []).filter((sc) => selectedClassIds.includes(sc.id));
+          const eligibleForSelectedAgeClass =
+            selected.length > 0 &&
+            selected.every((sc) => {
+              const cd = sc.classDefinition;
+              const isAgeClass =
+                (cd.type === 'age' || cd.type === 'sv_age') &&
+                (cd.minAgeMonths !== null || cd.maxAgeMonths !== null);
+              return (
+                isAgeClass &&
+                getAgeEligibilityDetail(dob, showDay, cd.minAgeMonths, cd.maxAgeMonths).eligible
+              );
+            });
+          return !eligibleForSelectedAgeClass;
         })();
 
         // SV/WUSV health gate (Amanda 2026-05-21): for Yearling/Adult/Working
