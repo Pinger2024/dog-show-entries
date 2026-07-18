@@ -715,12 +715,28 @@ export default function EnterShowPage() {
     // THIS dog's position; member / first-time discounts apply at Review.
     if (regionalCfg && !isNfc && !isJuniorHandler) {
       if (count === 0) return 0;
+      const classById = new Map((allShowClasses ?? []).map((sc) => [sc.id, sc]));
+      const flatFeeFor = (classIds: string[]) =>
+        resolveClassFlatFee(classIds[0], classById, regionalCfg.tiers);
+      // Prior PAYING dogs that consume a tier position — Baby Puppies are
+      // flat-priced and sit OUTSIDE the scale, so they never advance the
+      // position (Mandy 2026-07-18: a baby puppy only "counts" as the 4th dog).
       const priorPaying = cart.entries.filter(
         (e) =>
           e.entryType === 'standard' &&
           (e.classIds.length > 0 || e.isNfc) &&
-          e.id !== cart.activeEntryId,
+          e.id !== cart.activeEntryId &&
+          flatFeeFor(e.classIds) == null,
       ).length;
+      // Baby Puppy: charged the cheaper of its flat fee or the tier price at
+      // its notional slot (so it's flat £10 here, and free as the 4th dog) —
+      // mirrors computeRegionalOrderFees so the display matches the charge.
+      const activeFlat = flatFeeFor(selectedClassIds);
+      if (activeFlat != null) {
+        const slotIdx = Math.min(priorPaying, regionalCfg.tiers.length - 1);
+        const slotPrice = regionalCfg.tiers[slotIdx]?.standardPence ?? activeFlat;
+        return Math.min(activeFlat, slotPrice);
+      }
       const idx = Math.min(priorPaying, regionalCfg.tiers.length - 1);
       return regionalCfg.tiers[idx]?.standardPence ?? 0;
     }
@@ -741,7 +757,7 @@ export default function EnterShowPage() {
       .filter((sc) => selectedClassIds.includes(sc.id))
       .reduce((sum, sc) => sum + sc.entryFee, 0);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [showClasses, selectedClassIds, show, isNfc, isJuniorHandler, regionalCfg, cart.entries, cart.activeEntryId]);
+  }, [showClasses, allShowClasses, selectedClassIds, show, isNfc, isJuniorHandler, regionalCfg, cart.entries, cart.activeEntryId]);
 
   // Age eligibility — uses date-anchored bounds so a dog whose 1st
   // birthday IS the show day is still eligible for Puppy (Amanda
