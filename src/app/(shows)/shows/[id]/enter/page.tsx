@@ -1135,7 +1135,32 @@ export default function EnterShowPage() {
                 const ageMonths = showDate && dob ? differenceInMonths(showDate, dob) : null;
                 const ageWeeks = showDate && dob ? differenceInWeeks(showDate, dob) : null;
                 const tooYoungForAll = ageWeeks !== null && ageWeeks < 12;
-                const tooYoungForCompetition = ageMonths !== null && ageMonths < 6 && !tooYoungForAll;
+                // A sub-6-month pup isn't "NFC only" if the show runs an age
+                // class she qualifies for (e.g. Baby Puppy, 4–6 months).
+                // Amanda 2026-07-18 (North East Regional).
+                const eligibleAgeClassName =
+                  dob && showDate
+                    ? (showClasses ?? []).find((sc) => {
+                        const cd = sc.classDefinition;
+                        const restricted =
+                          (cd.type === 'age' || cd.type === 'sv_age') &&
+                          (cd.minAgeMonths !== null || cd.maxAgeMonths !== null);
+                        return (
+                          restricted &&
+                          getAgeEligibilityDetail(
+                            dob,
+                            showDate,
+                            cd.minAgeMonths,
+                            cd.maxAgeMonths,
+                          ).eligible
+                        );
+                      })?.classDefinition.name ?? null
+                    : null;
+                const tooYoungForCompetition =
+                  ageMonths !== null &&
+                  ageMonths < 6 &&
+                  !tooYoungForAll &&
+                  !eligibleAgeClassName;
 
                 return (
                   <button
@@ -1211,6 +1236,14 @@ export default function EnterShowPage() {
                           <AlertTriangle className="mt-0.5 size-3 shrink-0 text-se-honey-deep" />
                           <p className="text-xs text-se-honey-deep">
                             Under 6 months — eligible for NFC (Not For Competition) only
+                          </p>
+                        </div>
+                      )}
+                      {eligibleAgeClassName && ageMonths !== null && ageMonths < 6 && !tooYoungForAll && (
+                        <div className="mt-1.5 flex gap-1.5 items-start">
+                          <CheckCircle2 className="mt-0.5 size-3 shrink-0 text-se-fresh-deep" />
+                          <p className="text-xs text-se-fresh-deep">
+                            Eligible for {eligibleAgeClassName}
                           </p>
                         </div>
                       )}

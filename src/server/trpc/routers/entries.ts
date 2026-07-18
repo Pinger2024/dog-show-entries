@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { TRPCError } from '@trpc/server';
 import { and, or, eq, isNull, inArray, notInArray, asc, desc, sql } from 'drizzle-orm';
-import { differenceInMonths, differenceInWeeks } from 'date-fns';
+import { differenceInWeeks } from 'date-fns';
 import {
   protectedProcedure,
   secretaryProcedure,
@@ -37,6 +37,7 @@ import {
 import { executeStripeRefund } from '@/server/services/stripe-refunds';
 import { svEntryMissingRequirements, svEntryBlockedMessage } from '@/lib/sv-entry-validation';
 import { hasJudgingConflict } from '@/lib/judge-exhibitor-conflict';
+import { getCompetitionAgeError } from '@/lib/date-utils';
 
 export const entriesRouter = createTRPCRouter({
   create: protectedProcedure
@@ -128,38 +129,39 @@ export const entriesRouter = createTRPCRouter({
         }
       }
 
-      // Breed validation for individual classes (all show types)
-      {
-        const entryClasses = await ctx.db.query.showClasses.findMany({
-          where: and(
-            inArray(showClasses.id, input.classIds),
-            eq(showClasses.showId, input.showId)
-          ),
-          with: { classDefinition: true },
-        });
-        for (const sc of entryClasses) {
-          if (!sc.breedId || sc.classDefinition.type === 'junior_handler') continue;
-          if (sc.breedId !== dog.breedId) {
-            const dogName = dog.registeredName ?? 'This dog';
-            const breedName = dog.breed?.name ?? 'its breed';
-            throw new TRPCError({
-              code: 'BAD_REQUEST',
-              message: `${dogName} (${breedName}) cannot be entered in the class "${sc.classDefinition.name}" as it is restricted to a different breed.`,
-            });
-          }
+      // Breed validation for individual classes (all show types). Fetched
+      // once and reused by the age check below. (Named to avoid shadowing the
+      // `entryClasses` schema table used by the inserts further down.)
+      const entryShowClasses = await ctx.db.query.showClasses.findMany({
+        where: and(
+          inArray(showClasses.id, input.classIds),
+          eq(showClasses.showId, input.showId)
+        ),
+        with: { classDefinition: true },
+      });
+      for (const sc of entryShowClasses) {
+        if (!sc.breedId || sc.classDefinition.type === 'junior_handler') continue;
+        if (sc.breedId !== dog.breedId) {
+          const dogName = dog.registeredName ?? 'This dog';
+          const breedName = dog.breed?.name ?? 'its breed';
+          throw new TRPCError({
+            code: 'BAD_REQUEST',
+            message: `${dogName} (${breedName}) cannot be entered in the class "${sc.classDefinition.name}" as it is restricted to a different breed.`,
+          });
         }
       }
 
-      // RKC age validation: dogs must meet minimum age on show day
+      // RKC age validation: competition age is judged against the specific
+      // class(es) entered, so Baby Puppy (4–6 months) isn't caught by the
+      // general 6-month floor.
       if (dog.dateOfBirth) {
         const showDate = new Date(show.startDate);
         const dob = new Date(dog.dateOfBirth);
-        const ageMonths = differenceInMonths(showDate, dob);
-        const ageWeeks = differenceInWeeks(showDate, dob);
         const dogName = dog.registeredName ?? 'This dog';
 
         if (input.isNfc) {
           // NFC entries: minimum 12 weeks (RKC 2026 regulations)
+          const ageWeeks = differenceInWeeks(showDate, dob);
           if (ageWeeks < 12) {
             throw new TRPCError({
               code: 'BAD_REQUEST',
@@ -167,19 +169,14 @@ export const entriesRouter = createTRPCRouter({
             });
           }
         } else {
-          // Competition entries: minimum 6 months
-          if (ageMonths < 4) {
-            // Under 4 months: reject entirely
-            throw new TRPCError({
-              code: 'BAD_REQUEST',
-              message: `${dogName} will only be ${ageMonths} months old on show day. Dogs must be at least 6 months old to enter competition classes, or at least 12 weeks old for Not For Competition (NFC) entries.`,
-            });
-          } else if (ageMonths < 6) {
-            // Between 4 and 6 months: suggest NFC
-            throw new TRPCError({
-              code: 'BAD_REQUEST',
-              message: `${dogName} will only be ${ageMonths} months old on show day. Dogs must be at least 6 months old for competition classes. You can enter Not For Competition (NFC) instead.`,
-            });
+          const ageError = getCompetitionAgeError({
+            dogName,
+            dob,
+            showDate,
+            classes: entryShowClasses.map((sc) => sc.classDefinition),
+          });
+          if (ageError) {
+            throw new TRPCError({ code: 'BAD_REQUEST', message: ageError });
           }
         }
       }

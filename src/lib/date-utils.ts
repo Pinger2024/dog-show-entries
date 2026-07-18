@@ -139,6 +139,73 @@ export function getAgeEligibilityDetail(
   return { eligible: failedBound === null, failedBound };
 }
 
+/** A class the dog is being entered into, for competition age eligibility. */
+export interface EntryClassForAgeCheck {
+  name: string;
+  type: string;
+  minAgeMonths: number | null;
+  maxAgeMonths: number | null;
+}
+
+/**
+ * Age eligibility for a COMPETITION (non-NFC) entry, judged against the
+ * specific class(es) the dog is entered in.
+ *
+ * The RKC minimum to compete is six months — EXCEPT Baby Puppy, an age class
+ * "of four and less than six calendar months of age on the first day of the
+ * show". A blanket "must be at least 6 months" gate therefore wrongly blocked
+ * legitimate Baby Puppy entries and shooed them into NFC (Amanda 2026-07-18,
+ * North East Regional).
+ *
+ * Rule: age-restricted classes (type 'age' / 'sv_age' that carry their own
+ * min/max window) are judged on that window; every other competition class
+ * keeps the six-month floor. Returns a user-facing message for the first
+ * blocking class, or null when the dog is eligible for everything entered.
+ */
+export function getCompetitionAgeError(params: {
+  dogName: string;
+  dob: string | Date;
+  showDate: string | Date;
+  classes: EntryClassForAgeCheck[];
+}): string | null {
+  const { dogName, dob, showDate, classes } = params;
+  const show = typeof showDate === 'string' ? parseLocalDate(showDate) : showDate;
+  const born = typeof dob === 'string' ? parseLocalDate(dob) : dob;
+  const ageMonths = differenceInMonths(show, born);
+
+  const isAgeRestricted = (c: EntryClassForAgeCheck) =>
+    (c.type === 'age' || c.type === 'sv_age') &&
+    (c.minAgeMonths !== null || c.maxAgeMonths !== null);
+
+  // Age-restricted classes are judged on their own window (Baby Puppy 4–6mo).
+  for (const c of classes.filter(isAgeRestricted)) {
+    const { eligible, failedBound } = getAgeEligibilityDetail(
+      born,
+      show,
+      c.minAgeMonths,
+      c.maxAgeMonths,
+    );
+    if (eligible) continue;
+    if (failedBound === 'max') {
+      return `${dogName} will be ${ageMonths} months old on show day, which is too old for "${c.name}".`;
+    }
+    return `${dogName} will only be ${ageMonths} months old on show day — too young for "${c.name}". You can enter Not For Competition (NFC) instead.`;
+  }
+
+  // Every other competition class keeps the RKC six-month minimum. Also the
+  // belt-and-braces floor when no class resolved (that empty case is rejected
+  // elsewhere, but never regress to silently admitting an under-age dog).
+  const hasNonAgeClass = classes.some((c) => !isAgeRestricted(c));
+  if ((hasNonAgeClass || classes.length === 0) && ageMonths < 6) {
+    if (ageMonths < 4) {
+      return `${dogName} will only be ${ageMonths} months old on show day. Dogs must be at least 6 months old to enter competition classes, or at least 12 weeks old for Not For Competition (NFC) entries.`;
+    }
+    return `${dogName} will only be ${ageMonths} months old on show day. Dogs must be at least 6 months old for competition classes. You can enter Not For Competition (NFC) instead.`;
+  }
+
+  return null;
+}
+
 /**
  * Computes a handler's age in whole years on the show date.
  */

@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { TRPCError } from '@trpc/server';
 import { and, eq, isNull, inArray, desc, sql, asc } from 'drizzle-orm';
-import { differenceInMonths, differenceInWeeks } from 'date-fns';
+import { differenceInWeeks } from 'date-fns';
 import { protectedProcedure } from '../procedures';
 import { createTRPCRouter } from '../init';
 import { publicOrgColumns } from '../public-org-columns';
@@ -42,6 +42,7 @@ import {
 } from '@/lib/regional-fee-calc';
 import { svEntryMissingRequirements, svEntryBlockedMessage } from '@/lib/sv-entry-validation';
 import { hasJudgingConflict } from '@/lib/judge-exhibitor-conflict';
+import { getCompetitionAgeError } from '@/lib/date-utils';
 
 const cartEntrySchema = z.object({
   entryType: z.enum(['standard', 'junior_handler']).default('standard'),
@@ -235,9 +236,36 @@ export const ordersRouter = createTRPCRouter({
           }
         }
 
-        // RKC age validation: dogs must meet minimum age on show day
+        // RKC age validation: dogs must meet minimum age on show day.
+        // Competition age is judged against the specific class(es) entered, so
+        // Baby Puppy (4–6 months) isn't caught by the general 6-month floor.
         const showDate = new Date(show.startDate);
         const dogMap = new Map(userDogs.map((d) => [d.id, d]));
+
+        const ageCheckClassIds = [
+          ...new Set(input.entries.flatMap((e) => e.classIds)),
+        ];
+        const ageCheckClassRows = ageCheckClassIds.length
+          ? await ctx.db.query.showClasses.findMany({
+              where: and(
+                inArray(showClasses.id, ageCheckClassIds),
+                eq(showClasses.showId, input.showId),
+              ),
+              with: {
+                classDefinition: {
+                  columns: {
+                    name: true,
+                    type: true,
+                    minAgeMonths: true,
+                    maxAgeMonths: true,
+                  },
+                },
+              },
+            })
+          : [];
+        const ageCheckClassMap = new Map(
+          ageCheckClassRows.map((sc) => [sc.id, sc.classDefinition]),
+        );
 
         for (const entryInput of input.entries) {
           if (entryInput.entryType !== 'standard' || !entryInput.dogId) continue;
@@ -245,7 +273,6 @@ export const ordersRouter = createTRPCRouter({
           if (!dog?.dateOfBirth) continue;
 
           const dob = new Date(dog.dateOfBirth);
-          const ageMonths = differenceInMonths(showDate, dob);
           const ageWeeks = differenceInWeeks(showDate, dob);
           const dogName = dog.registeredName ?? 'This dog';
 
@@ -258,19 +285,17 @@ export const ordersRouter = createTRPCRouter({
               });
             }
           } else {
-            // Competition entries: minimum 6 months
-            if (ageMonths < 4) {
-              // Under 4 months: reject entirely
-              throw new TRPCError({
-                code: 'BAD_REQUEST',
-                message: `${dogName} will only be ${ageMonths} months old on show day. Dogs must be at least 6 months old to enter competition classes, or at least 12 weeks old for Not For Competition (NFC) entries.`,
-              });
-            } else if (ageMonths < 6) {
-              // Between 4 and 6 months: suggest NFC
-              throw new TRPCError({
-                code: 'BAD_REQUEST',
-                message: `${dogName} will only be ${ageMonths} months old on show day. Dogs must be at least 6 months old for competition classes. You can enter Not For Competition (NFC) instead.`,
-              });
+            const classes = entryInput.classIds
+              .map((cid) => ageCheckClassMap.get(cid))
+              .filter((c): c is NonNullable<typeof c> => !!c);
+            const ageError = getCompetitionAgeError({
+              dogName,
+              dob,
+              showDate,
+              classes,
+            });
+            if (ageError) {
+              throw new TRPCError({ code: 'BAD_REQUEST', message: ageError });
             }
           }
         }

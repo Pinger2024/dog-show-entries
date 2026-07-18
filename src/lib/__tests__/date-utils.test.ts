@@ -7,6 +7,7 @@ import {
   penceToPoundsString,
   isAgeEligibleOnShowDay,
   getAgeEligibilityDetail,
+  getCompetitionAgeError,
 } from '../date-utils';
 
 describe('formatCurrency', () => {
@@ -198,5 +199,114 @@ describe('getAgeEligibilityDetail', () => {
       eligible: false,
       failedBound: 'max',
     });
+  });
+});
+
+describe('getCompetitionAgeError', () => {
+  const babyPuppy = { name: 'Baby Puppy', type: 'sv_age', minAgeMonths: 4, maxAgeMonths: 6 };
+  const openClass = { name: 'Open', type: 'achievement', minAgeMonths: null, maxAgeMonths: null };
+
+  // The bug: a Baby Puppy (4–6 months) legitimately entered into her own class
+  // was blocked by the general "must be 6 months for competition" floor and
+  // shooed to NFC. Amanda 2026-07-18 — Raubahaus Xaris, born 30 Apr 2026, at
+  // the North East Regional on 5 Sept 2026 (4 months and 6 days old).
+  it('allows a 4-month-old Baby Puppy into her own class (the Xaris case)', () => {
+    expect(
+      getCompetitionAgeError({
+        dogName: 'Raubahaus Xaris',
+        dob: '2026-04-30',
+        showDate: '2026-09-05',
+        classes: [babyPuppy],
+      })
+    ).toBeNull();
+  });
+
+  it('allows a dog who turns exactly 4 months on show day into Baby Puppy', () => {
+    expect(
+      getCompetitionAgeError({
+        dogName: 'Pup',
+        dob: '2026-04-30',
+        showDate: '2026-08-30',
+        classes: [babyPuppy],
+      })
+    ).toBeNull();
+  });
+
+  it('rejects a dog one day under 4 months for Baby Puppy, suggesting NFC', () => {
+    const msg = getCompetitionAgeError({
+      dogName: 'Pup',
+      dob: '2026-04-30',
+      showDate: '2026-08-29',
+      classes: [babyPuppy],
+    });
+    expect(msg).toMatch(/too young for "Baby Puppy"/);
+    expect(msg).toMatch(/Not For Competition \(NFC\) instead/);
+  });
+
+  it('rejects a dog who has aged out of Baby Puppy (6 months + a day) as too old', () => {
+    const msg = getCompetitionAgeError({
+      dogName: 'Pup',
+      dob: '2026-04-30',
+      showDate: '2026-10-31',
+      classes: [babyPuppy],
+    });
+    expect(msg).toMatch(/too old for "Baby Puppy"/);
+  });
+
+  it('keeps the six-month floor for ordinary competition classes', () => {
+    // 5 months old → below the general floor, not an age class.
+    const msg = getCompetitionAgeError({
+      dogName: 'Pup',
+      dob: '2026-04-01',
+      showDate: '2026-09-01',
+      classes: [openClass],
+    });
+    expect(msg).toMatch(/at least 6 months old for competition classes/);
+    expect(msg).toMatch(/Not For Competition \(NFC\) instead/);
+  });
+
+  it('fully rejects an under-4-month dog entering an ordinary class', () => {
+    const msg = getCompetitionAgeError({
+      dogName: 'Pup',
+      dob: '2026-06-01',
+      showDate: '2026-09-01',
+      classes: [openClass],
+    });
+    expect(msg).toMatch(/at least 6 months old to enter competition classes/);
+  });
+
+  it('allows an adult into an ordinary competition class', () => {
+    expect(
+      getCompetitionAgeError({
+        dogName: 'Champ',
+        dob: '2022-01-01',
+        showDate: '2026-09-01',
+        classes: [openClass],
+      })
+    ).toBeNull();
+  });
+
+  it('treats an age-type class with no bounds as an ordinary class (6-month floor)', () => {
+    // Mirrors the test factories, where a Baby Puppy row may carry no min/max.
+    const boundless = { name: 'Baby Puppy', type: 'sv_age', minAgeMonths: null, maxAgeMonths: null };
+    expect(
+      getCompetitionAgeError({
+        dogName: 'Adult',
+        dob: '2022-01-01',
+        showDate: '2026-09-01',
+        classes: [boundless],
+      })
+    ).toBeNull();
+  });
+
+  it('blocks when a dog qualifies for one class but not another entered alongside it', () => {
+    // Eligible for Baby Puppy at 4 months, but Open needs six months.
+    const msg = getCompetitionAgeError({
+      dogName: 'Pup',
+      dob: '2026-04-30',
+      showDate: '2026-09-05',
+      classes: [babyPuppy, openClass],
+    });
+    expect(msg).toMatch(/at least 6 months old for competition classes/);
   });
 });
