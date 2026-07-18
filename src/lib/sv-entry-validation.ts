@@ -3,18 +3,19 @@
  *
  * A dog can't be entered at a regional show until its paperwork is complete:
  *  - EVERY dog: registration number + microchip.
- *  - Junior class and above (Junior, Yearling, Adult, Working): hip score,
- *    elbow score, and DNA recording.
+ *  - Yearling class and above (Yearling, Adult, Working): hip score, elbow
+ *    score, and DNA recording. Junior does NOT need the health triad
+ *    (Amanda 2026-07-18 — it's Yearling onwards, not Junior).
  *  - Working class: additionally a working title.
  *
  * Returns a human-readable list of what's still missing (empty array = OK).
  * Both entry paths — secretary `entries.create` and exhibitor
- * `orders.checkout` — call this so they can't drift apart.
+ * `orders.checkout` — call this so they can't drift apart. The exhibitor
+ * wizard (`enter/page.tsx`) imports this same set so client and server agree.
  */
 
-/** DB class-definition names from Junior up, where health data is required. */
+/** DB class-definition names from Yearling up, where health data is required. */
 export const SV_HEALTH_FROM_CLASSES = new Set([
-  'SV Junior',
   'SV Yearling',
   'Adult',
   'Working',

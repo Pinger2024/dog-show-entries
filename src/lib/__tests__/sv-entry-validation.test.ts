@@ -2,9 +2,10 @@ import { describe, it, expect } from 'vitest';
 import { svEntryMissingRequirements } from '../sv-entry-validation';
 
 /**
- * SV regional entry requirements (Amanda 2026-05-28):
+ * SV regional entry requirements:
  *  - every dog: registration number + microchip
- *  - Junior class and above: hip + elbow + DNA
+ *  - Yearling class and above: hip + elbow + DNA (Junior does NOT — Amanda
+ *    2026-07-18; it's Yearling onwards)
  *  - Working class: also a working title
  */
 
@@ -35,8 +36,9 @@ describe('svEntryMissingRequirements', () => {
     expect(missing).not.toContain('hip score');
   });
 
-  it('does NOT require health for Baby Puppy / Minor Puppy / Puppy', () => {
-    for (const cls of ['Baby Puppy', 'SV Minor Puppy', 'SV Puppy']) {
+  it('does NOT require health for Baby Puppy / Minor Puppy / Puppy / Junior', () => {
+    // Amanda 2026-07-18: DNA/health is Yearling onwards — Junior is exempt.
+    for (const cls of ['Baby Puppy', 'SV Minor Puppy', 'SV Puppy', 'SV Junior']) {
       const missing = svEntryMissingRequirements({
         dog: fullDog,
         svProfile: { hipGrade: null, elbowGrade: null, dna: null, workingTitle: null },
@@ -46,8 +48,8 @@ describe('svEntryMissingRequirements', () => {
     }
   });
 
-  it('requires the health triad from Junior upward', () => {
-    for (const cls of ['SV Junior', 'SV Yearling', 'Adult', 'Working']) {
+  it('requires the health triad from Yearling upward (not Junior)', () => {
+    for (const cls of ['SV Yearling', 'Adult', 'Working']) {
       const missing = svEntryMissingRequirements({
         dog: fullDog,
         svProfile: { hipGrade: null, elbowGrade: null, dna: null, workingTitle: 'IGP1' },
@@ -55,13 +57,21 @@ describe('svEntryMissingRequirements', () => {
       });
       expect(missing, cls).toEqual(expect.arrayContaining(['hip score', 'elbow score', 'DNA recording']));
     }
+    // Junior explicitly does NOT ask for DNA (the bug Paula Ingham hit).
+    const junior = svEntryMissingRequirements({
+      dog: fullDog,
+      svProfile: { hipGrade: null, elbowGrade: null, dna: null, workingTitle: null },
+      classNames: ['SV Junior'],
+    });
+    expect(junior).not.toContain('DNA recording');
+    expect(junior).toEqual([]);
   });
 
-  it("treats 'not_required' hip/elbow as missing", () => {
+  it("treats 'not_required' hip/elbow as missing (Yearling)", () => {
     const missing = svEntryMissingRequirements({
       dog: fullDog,
       svProfile: { hipGrade: 'not_required', elbowGrade: 'not_required', dna: 'recorded', workingTitle: null },
-      classNames: ['SV Junior'],
+      classNames: ['SV Yearling'],
     });
     expect(missing).toContain('hip score');
     expect(missing).toContain('elbow score');
