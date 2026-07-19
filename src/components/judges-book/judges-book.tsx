@@ -35,11 +35,23 @@ const SHOW_TYPE_LABELS: Record<string, string> = {
 
 const PLACEMENTS = ['1st', '2nd', '3rd', '4th', 'VHC'] as const;
 
+// Tear-off strip widths. Mandy 2026-07-19: the Secretary and Awards Board
+// copies must be 28mm to match the club's awards-board slots (so a torn copy
+// drops straight onto the board). The Judge's copy (kept, not boarded) can be
+// a touch wider — kept subtle so it doesn't stand out. react-pdf works in
+// points (1pt = 1/72in), so convert from mm.
+const MM_TO_PT = 2.83465;
+const STRIP_WIDTH = 28 * MM_TO_PT; // ≈79.4pt — Secretary + Awards Board
+const JUDGE_STRIP_WIDTH = 34 * MM_TO_PT; // ≈96.4pt — Judge's copy (a touch wider)
+
 const s = StyleSheet.create({
   page: {
     fontFamily: 'Times',
     fontSize: 10,
-    padding: '28 28 36 28',
+    // Zero RIGHT margin (Mandy 2026-07-19) so the tear-off strips sit flush to
+    // the paper's right edge and land on the perforations (which are measured
+    // from that edge). Top/left/bottom unchanged. (T R B L)
+    padding: '28 0 36 28',
   },
   pageHeader: {
     flexDirection: 'row',
@@ -77,11 +89,15 @@ const s = StyleSheet.create({
     flexDirection: 'row',
     flex: 1,
     borderWidth: 1,
+    // No border down the far-RIGHT edge (Mandy 2026-07-19) — the Awards Board
+    // strip runs clean to the paper's right edge where it tears off.
+    borderRightWidth: 0,
     borderColor: '#000',
   },
-  // Left notes section (~38% of page width)
+  // Left notes section — fills whatever's left after the fixed-width tear-off
+  // strips (so the strips stay a true 28mm regardless of page width).
   notesSection: {
-    width: '38%',
+    flex: 1,
     borderRightWidth: 1.5,
     borderRightColor: '#000',
   },
@@ -176,20 +192,30 @@ const s = StyleSheet.create({
     borderBottomColor: '#bbb',
     height: 1,
   },
-  // Right placements section (flex: 1 = remaining ~62%, split into 3)
+  // Right placements section — the three fixed-width tear-off strips (Judge a
+  // touch wider, Secretary + Awards Board both a true 28mm).
   placementsSection: {
-    flex: 1,
+    width: JUDGE_STRIP_WIDTH + STRIP_WIDTH * 2,
+    flexShrink: 0,
     flexDirection: 'row',
   },
-  // Each of the three tearoff columns
-  placementColumn: {
-    flex: 1,
+  // Judge's copy — a touch wider than the boarded strips (kept, not boarded).
+  placementColumnJudge: {
+    width: JUDGE_STRIP_WIDTH,
     borderRightWidth: 1,
     borderRightColor: '#000',
     borderRightStyle: 'dashed',
   },
+  // Secretary strip — a true 28mm to match the awards board.
+  placementColumn: {
+    width: STRIP_WIDTH,
+    borderRightWidth: 1,
+    borderRightColor: '#000',
+    borderRightStyle: 'dashed',
+  },
+  // Awards Board strip (last) — a true 28mm, no divider (page edge).
   placementColumnLast: {
-    flex: 1,
+    width: STRIP_WIDTH,
   },
   // Fixed-height header band so a label that wraps to two lines (e.g. "✂ Tear
   // off — Awards Board") doesn't push that column's placement rows out of line
@@ -212,6 +238,15 @@ const s = StyleSheet.create({
     textAlign: 'center',
   },
   columnClassHeader: {
+    // Fixed height so the class/breed heading occupies the SAME vertical space
+    // in every column regardless of how the text wraps (the narrower tear-off
+    // strips wrap to more lines than the wider Judge's copy). This keeps the
+    // 1st/2nd/3rd… rows — and their write lines — aligned across all three
+    // columns (Mandy 2026-07-19: "the lines at the bottom don't match up").
+    // Sized to fit a long class name (e.g. "Special Long Coat Yearling") in a
+    // 28mm strip; the smaller class-name font below keeps long names inside it.
+    height: 78,
+    overflow: 'hidden',
     borderBottomWidth: 1,
     borderBottomColor: '#000',
     padding: 5,
@@ -224,7 +259,7 @@ const s = StyleSheet.create({
     color: '#666',
   },
   columnClassName: {
-    fontSize: 10,
+    fontSize: 9,
     fontWeight: 'bold',
     textTransform: 'uppercase',
   },
@@ -310,6 +345,19 @@ const s = StyleSheet.create({
 
 // ── Best Awards page styles ──
 const bestAwardsStyles = StyleSheet.create({
+  // The sign-off page has no notes column, so its triplicate columns share the
+  // full page width evenly (unlike the per-class strips, which are a fixed
+  // 28mm). Kept full-width until Mandy tells us the BOB/BP slips also need the
+  // 28mm awards-board size.
+  column: {
+    flex: 1,
+    borderRightWidth: 1,
+    borderRightColor: '#000',
+    borderRightStyle: 'dashed',
+  },
+  columnLast: {
+    flex: 1,
+  },
   columnHeader: {
     padding: 6,
     backgroundColor: '#f4f4f4',
@@ -471,7 +519,7 @@ function BestAwardsColumn({
   copyLabel: string;
 }) {
   return (
-    <View style={isLast ? s.placementColumnLast : s.placementColumn}>
+    <View style={isLast ? bestAwardsStyles.columnLast : bestAwardsStyles.column}>
       <View style={s.copyLabelBox}><Text style={s.copyLabel}>{copyLabel}</Text></View>
       <View style={bestAwardsStyles.columnHeader}>
         <Text style={bestAwardsStyles.columnHeaderLabel}>Sign-off</Text>
@@ -505,9 +553,14 @@ function ColumnHeader({ classLabel, className, sexLabel, breedName }: ColumnHead
   );
 }
 
-function PlacementColumn(props: ColumnHeaderProps & { isLast?: boolean; copyLabel: string }) {
+function PlacementColumn(props: ColumnHeaderProps & { isLast?: boolean; wide?: boolean; copyLabel: string }) {
+  const columnStyle = props.wide
+    ? s.placementColumnJudge
+    : props.isLast
+      ? s.placementColumnLast
+      : s.placementColumn;
   return (
-    <View style={props.isLast ? s.placementColumnLast : s.placementColumn}>
+    <View style={columnStyle}>
       <View style={s.copyLabelBox}><Text style={s.copyLabel}>{props.copyLabel}</Text></View>
       <ColumnHeader {...props} />
 
@@ -630,7 +683,7 @@ export function JudgesBook({
 
               {/* Right: three tearoff placement columns */}
               <View style={s.placementsSection}>
-                <PlacementColumn {...columnProps} copyLabel="Judge's copy — keep" />
+                <PlacementColumn {...columnProps} copyLabel="Judge's copy — keep" wide />
                 <PlacementColumn {...columnProps} copyLabel="✂ Tear off — Secretary" />
                 <PlacementColumn {...columnProps} copyLabel="✂ Tear off — Awards Board" isLast />
               </View>
