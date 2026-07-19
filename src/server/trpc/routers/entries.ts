@@ -725,6 +725,7 @@ export const entriesRouter = createTRPCRouter({
           inArray(showClasses.id, input.classIds),
           eq(showClasses.showId, entry.showId)
         ),
+        with: { classDefinition: { columns: { type: true } } },
       });
 
       if (newClasses.length !== input.classIds.length) {
@@ -753,7 +754,8 @@ export const entriesRouter = createTRPCRouter({
             : 'standard';
 
         let discountGroup: FeeContext['discountGroup'] = null;
-        let siblingEntries: { id: string; entryType: string; isNfc: boolean; entryClasses: { id: string }[]; totalFee: number }[] = [
+        type SiblingClass = { id: string; showClass?: { entryFee: number; classDefinition?: { type: string } | null } | null };
+        let siblingEntries: { id: string; entryType: string; isNfc: boolean; entryClasses: SiblingClass[]; totalFee: number }[] = [
           {
             id: input.id,
             entryType: entry.entryType,
@@ -771,7 +773,12 @@ export const entriesRouter = createTRPCRouter({
             }),
             ctx.db.query.entries.findMany({
               where: and(eq(entries.orderId, orderId), isNull(entries.deletedAt)),
-              with: { entryClasses: { columns: { id: true } } },
+              with: {
+                entryClasses: {
+                  columns: { id: true },
+                  with: { showClass: { columns: { entryFee: true }, with: { classDefinition: { columns: { type: true } } } } },
+                },
+              },
             }),
           ]);
           siblingEntries = dbSiblings;
@@ -799,6 +806,15 @@ export const entriesRouter = createTRPCRouter({
           discountGroup,
         };
 
+        // Special Award Classes charge their own fee, not the tier (Mandy
+        // 2026-07-19). The edited entry's specials come from newClasses; each
+        // sibling's from its loaded show classes.
+        const specialFeesFor = (e: (typeof siblingEntries)[number]): (number | null)[] =>
+          e.id === input.id
+            ? newClasses.map((sc) => (sc.classDefinition?.type === 'special' ? sc.entryFee : null))
+            : e.entryClasses.map((ec) =>
+                ec.showClass?.classDefinition?.type === 'special' ? ec.showClass.entryFee : null,
+              );
         const dogEntries: DogEntryInput[] = siblingEntries.map((e) => ({
           key: e.id,
           kind: (e.id === input.id ? entryKind : e.entryType === 'junior_handler'
@@ -807,6 +823,7 @@ export const entriesRouter = createTRPCRouter({
               ? 'nfc'
               : 'standard'),
           classCount: e.id === input.id ? newClasses.length : e.entryClasses.length,
+          specialClassFees: specialFeesFor(e),
         }));
 
         const result = computeOrderFees(dogEntries, feeCtx);

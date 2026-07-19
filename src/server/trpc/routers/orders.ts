@@ -647,6 +647,12 @@ export const ordersRouter = createTRPCRouter({
                 ? 'nfc'
                 : 'standard',
           classCount: e.classIds.length,
+          // Special Award Classes charge their own fee, not the tier (Mandy
+          // 2026-07-19). Aligned to classIds order so perClassFees[idx] matches.
+          specialClassFees: e.classIds.map((cid) => {
+            const c = classMap.get(cid);
+            return c?.classDefinition?.type === 'special' ? c.entryFee : null;
+          }),
         }));
         const usePerClassFallback = show.firstEntryFee == null;
         const feeResult = usePerClassFallback ? null : computeOrderFees(dogEntries, feeCtx);

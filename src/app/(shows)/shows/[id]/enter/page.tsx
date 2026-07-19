@@ -498,6 +498,9 @@ export default function EnterShowPage() {
           }
         : null,
     };
+    const classTypeById = new Map(
+      (allShowClasses ?? []).map((sc) => [sc.id, sc]),
+    );
     const dogEntries: DogEntryInput[] = cart.entries
       .filter((e) => e.classIds.length > 0 || e.isNfc)
       .map((e, i) => ({
@@ -509,6 +512,12 @@ export default function EnterShowPage() {
               ? 'nfc'
               : 'standard',
         classCount: e.classIds.length,
+        // Special Award Classes charge their own fee, not the tier — mirror the
+        // server so the preview total matches the charge (Mandy 2026-07-19).
+        specialClassFees: e.classIds.map((cid) => {
+          const sc = classTypeById.get(cid);
+          return sc?.classDefinition.type === 'special' ? sc.entryFee : null;
+        }),
       }));
     if (dogEntries.length === 0) return null;
     return computeOrderFees(dogEntries, feeCtx);

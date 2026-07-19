@@ -37,6 +37,18 @@ export type DogEntryInput = {
   kind: 'standard' | 'junior_handler' | 'nfc';
   /** Number of classes entered for this dog. */
   classCount: number;
+  /**
+   * Optional per-class override for Special Award Classes, aligned to the same
+   * order the caller lists this dog's classes (so `perClassFees[i]` still lines
+   * up with the caller's `classIds[i]`). Each slot is either:
+   *   - a number → this class is a Special Award Class, charged this own fee,
+   *     OUTSIDE the first/subsequent tier and the multi-dog package; or
+   *   - null/undefined → a normal tier-priced class.
+   * When omitted entirely, every class is tier-priced (unchanged behaviour).
+   * A dog whose classes are ALL special isn't a "paying dog" — it pays only its
+   * special fees, never a first-entry fee (Mandy 2026-07-19).
+   */
+  specialClassFees?: (number | null)[];
 };
 
 export type DiscountGroupConfig = {
@@ -96,7 +108,18 @@ export function computeOrderFees(
   const firstFee = payingFirstClassFee(ctx);
   const packagePence = paidPackagePence(ctx);
 
-  const payingEntries = entries.filter((e) => e.kind === 'standard');
+  // A dog counts as a "paying dog" (toward the multi-dog package + the first/
+  // subsequent tier) only if it has at least one NORMAL (non-special) class.
+  // A dog entered only in Special Award Classes pays just those flat fees.
+  const regularClassCount = (e: DogEntryInput): number => {
+    if (e.specialClassFees == null) return e.classCount;
+    let n = 0;
+    for (let i = 0; i < e.classCount; i++) if (e.specialClassFees[i] == null) n++;
+    return n;
+  };
+  const payingEntries = entries.filter(
+    (e) => e.kind === 'standard' && regularClassCount(e) > 0,
+  );
   const payingDogCount = payingEntries.length;
   const multiDogApplied =
     packagePence != null &&
@@ -139,14 +162,26 @@ export function computeOrderFees(
       return { key: entry.key, fee, perClassFees: entry.classCount === 0 ? [] : perClassFees };
     }
 
-    // Standard paying entry
-    const firstSlot = multiDogApplied ? packageSplits[payingIdx]! : firstFee;
-    payingIdx++;
-    const extras = Math.max(entry.classCount - 1, 0);
+    // Standard entry. Special Award Classes are charged their own fee and sit
+    // OUTSIDE the tier + package; the dog's normal classes are priced first /
+    // subsequent as usual. A dog with no normal classes never pays a first fee.
+    const hasRegular = regularClassCount(entry) > 0;
+    const firstSlot = multiDogApplied && hasRegular ? packageSplits[payingIdx]! : firstFee;
+    if (hasRegular) payingIdx++;
+    let seenRegular = false;
     const perClassFees: number[] = [];
-    if (entry.classCount > 0) perClassFees.push(firstSlot);
-    for (let i = 0; i < extras; i++) perClassFees.push(subsequent);
-    const fee = firstSlot + subsequent * extras;
+    for (let i = 0; i < entry.classCount; i++) {
+      const specialFee = entry.specialClassFees?.[i];
+      if (specialFee != null) {
+        perClassFees.push(specialFee); // Special Award Class — its own fee
+      } else if (!seenRegular) {
+        seenRegular = true;
+        perClassFees.push(firstSlot); // first normal class
+      } else {
+        perClassFees.push(subsequent); // subsequent normal class
+      }
+    }
+    const fee = perClassFees.reduce((sum, f) => sum + f, 0);
     return { key: entry.key, fee, perClassFees };
   });
 

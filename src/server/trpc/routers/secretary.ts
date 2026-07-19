@@ -3280,6 +3280,7 @@ export const secretaryRouter = createTRPCRouter({
           inArray(showClasses.id, input.classIds),
           eq(showClasses.showId, input.showId)
         ),
+        with: { classDefinition: { columns: { type: true } } },
       });
 
       if (selectedClasses.length !== input.classIds.length) {
@@ -3358,7 +3359,16 @@ export const secretaryRouter = createTRPCRouter({
         show.firstEntryFee == null
           ? null
           : computeOrderFees(
-              [{ key: 'manual', kind: input.isNfc ? 'nfc' : 'standard', classCount: selectedClasses.length }],
+              [{
+                key: 'manual',
+                kind: input.isNfc ? 'nfc' : 'standard',
+                classCount: selectedClasses.length,
+                // Special Award Classes charge their own fee (Mandy 2026-07-19),
+                // aligned to selectedClasses order (perClassFees[i] matches it).
+                specialClassFees: selectedClasses.map((sc) =>
+                  sc.classDefinition?.type === 'special' ? sc.entryFee : null,
+                ),
+              }],
               feeCtx,
             );
       const perClassFees = feeResult?.perEntry[0]?.perClassFees ?? null;

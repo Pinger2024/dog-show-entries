@@ -218,6 +218,86 @@ describe('computeOrderFees — Amanda live show fixture', () => {
   });
 });
 
+describe('computeOrderFees — Special Award Classes (own fee, outside tier)', () => {
+  // Bug: Mandy 2026-07-19 — a Special Award Class (its own £3 fee) was billed
+  // the first/subsequent tier. Kathryn Morgan, a member, entered ONLY the £3
+  // special class and was charged the £18 members' first-entry fee.
+  const SPECIAL = 300; // £3
+
+  it("a dog entered ONLY in a special class pays the class's own fee, not the first fee", () => {
+    const r = computeOrderFees(
+      [{ key: 'k', kind: 'standard', classCount: 1, specialClassFees: [SPECIAL] }],
+      STD,
+    );
+    expect(r.total).toBe(SPECIAL);
+    expect(r.perEntry[0].perClassFees).toEqual([SPECIAL]);
+    expect(r.payingDogCount).toBe(0); // not a paying dog — no normal class
+  });
+
+  it('the Kathryn case: member, special class only, £3 not the £18 member first fee', () => {
+    const r = computeOrderFees(
+      [{ key: 'k', kind: 'standard', classCount: 1, specialClassFees: [SPECIAL] }],
+      { ...STD_WITH_MULTI, discountGroup: MEMBER_GROUP },
+    );
+    expect(r.total).toBe(SPECIAL);
+  });
+
+  it('normal class + special class: first fee for the normal, own fee for the special', () => {
+    // Denise/Miss G Davis: 1 normal (£20 first) + 1 special (£3), in that order.
+    const r = computeOrderFees(
+      [{ key: 'd', kind: 'standard', classCount: 2, specialClassFees: [null, SPECIAL] }],
+      STD,
+    );
+    expect(r.perEntry[0].perClassFees).toEqual([2000, SPECIAL]);
+    expect(r.total).toBe(2300);
+    expect(r.payingDogCount).toBe(1);
+  });
+
+  it('keeps perClassFees aligned when the special class comes FIRST', () => {
+    const r = computeOrderFees(
+      [{ key: 'd', kind: 'standard', classCount: 2, specialClassFees: [SPECIAL, null] }],
+      STD,
+    );
+    // special slot = £3, the normal slot is the dog's first normal class = £20
+    expect(r.perEntry[0].perClassFees).toEqual([SPECIAL, 2000]);
+    expect(r.total).toBe(2300);
+  });
+
+  it('two normal + one special: first + subsequent + own fee', () => {
+    const r = computeOrderFees(
+      [{ key: 'd', kind: 'standard', classCount: 3, specialClassFees: [null, null, SPECIAL] }],
+      STD,
+    );
+    expect(r.perEntry[0].perClassFees).toEqual([2000, 1000, SPECIAL]);
+    expect(r.total).toBe(3300);
+  });
+
+  it('special classes never count toward the multi-dog package', () => {
+    // 3 dogs each with a normal class → package £56. A 4th dog entered only in
+    // a special class must NOT tip anything or join the package — it adds £3.
+    const r = computeOrderFees(
+      [
+        dog('a'), dog('b'), dog('c'),
+        { key: 'x', kind: 'standard', classCount: 1, specialClassFees: [SPECIAL] },
+      ],
+      STD_WITH_MULTI,
+    );
+    expect(r.payingDogCount).toBe(3);
+    expect(r.multiDogApplied).toBe(true);
+    expect(r.total).toBe(5600 + SPECIAL);
+  });
+
+  it('a dog in two special classes pays both own fees, nothing else', () => {
+    const r = computeOrderFees(
+      [{ key: 'z', kind: 'standard', classCount: 2, specialClassFees: [SPECIAL, 500] }],
+      { ...STD, discountGroup: MEMBER_GROUP },
+    );
+    expect(r.perEntry[0].perClassFees).toEqual([SPECIAL, 500]);
+    expect(r.total).toBe(800);
+    expect(r.payingDogCount).toBe(0);
+  });
+});
+
 // Platform handling fee: £1 + 1%, whole pence. This is the single source of
 // truth shared by the server charge (orders router) and the checkout preview;
 // if these figures move, the exhibitor's shown total drifts from the charge.
