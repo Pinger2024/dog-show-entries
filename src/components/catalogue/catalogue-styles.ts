@@ -450,7 +450,9 @@ export const styles = StyleSheet.create({
     textTransform: 'uppercase',
     letterSpacing: 0.5,
     color: C.textLight,
-    width: 58,
+    // Wide enough that "Judging Starts" stays on one line (Mandy 2026-07-20);
+    // every value column aligns to this same edge.
+    width: 66,
   },
   coverDetailValue: {
     fontFamily: 'Inter',

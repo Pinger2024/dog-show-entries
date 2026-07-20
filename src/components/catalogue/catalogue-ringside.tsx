@@ -62,6 +62,15 @@ const s = StyleSheet.create({
     paddingVertical: 3,
     marginBottom: 5,
   },
+  sexBandJudge: {
+    fontFamily: 'Inter',
+    fontSize: 8.5,
+    fontStyle: 'italic',
+    color: C.textMedium,
+    textAlign: 'center',
+    marginTop: -3,
+    marginBottom: 6,
+  },
   // Class header row
   classHeader: {
     flexDirection: 'row',
@@ -239,9 +248,12 @@ const s = StyleSheet.create({
 });
 
 type Section = {
-  key: 'dog' | 'bitch' | 'jh';
+  key: 'dog' | 'bitch' | 'jh' | 'special';
   label: string;
   classes: ClassGroup[];
+  /** Named beneath the section band for the Special Awards / Junior Handling
+   *  competitions (their own judges, apart from the breed judge). */
+  judge?: string | null;
 };
 
 // ── Exhibitor Index ────────────────────────────────────────────
@@ -419,14 +431,20 @@ export function CatalogueRingside({ show, entries, compact }: Props) {
     }
   }
 
-  // Split into sections: Dogs, Bitches, Junior Handling
+  // Split into sections: Dogs, Bitches, Special Award Classes, Junior Handling.
+  // Special Award classes and Junior Handling each become their OWN section at
+  // the end of judging (after the breed classes), each with its judge named —
+  // matching the by-class catalogue (Mandy 2026-07-20). Special-award classes
+  // are pulled out before the sex routing so they never land in Dog/Bitch.
   const dogClasses: ClassGroup[] = [];
   const bitchClasses: ClassGroup[] = [];
+  const specialClasses: ClassGroup[] = [];
   const jhClasses: ClassGroup[] = [];
   for (const cls of allClasses) {
-    const isJh = isJuniorHandlingClass(cls.className, cls.sex);
-    if (isJh) {
+    if (isJuniorHandlingClass(cls.className, cls.sex)) {
       jhClasses.push(cls);
+    } else if (/special award/i.test(cls.className)) {
+      specialClasses.push(cls);
     } else if (cls.sex === 'dog') {
       dogClasses.push(cls);
     } else if (cls.sex === 'bitch') {
@@ -436,10 +454,23 @@ export function CatalogueRingside({ show, entries, compact }: Props) {
     }
   }
 
+  // Each competition's judge, sourced from the "role — name" display list (same
+  // parse as the by-class catalogue so the two can't drift).
+  const LABEL_SEP = ' — ';
+  const judgeForRole = (test: RegExp): string | null => {
+    for (const label of show.judgeDisplayList ?? []) {
+      const i = label.indexOf(LABEL_SEP);
+      if (i < 0) continue;
+      if (test.test(label.slice(0, i))) return label.slice(i + LABEL_SEP.length);
+    }
+    return null;
+  };
+
   const sections: Section[] = [];
   if (dogClasses.length > 0) sections.push({ key: 'dog', label: 'Dog', classes: dogClasses });
   if (bitchClasses.length > 0) sections.push({ key: 'bitch', label: 'Bitch', classes: bitchClasses });
-  if (jhClasses.length > 0) sections.push({ key: 'jh', label: 'Junior Handling', classes: jhClasses });
+  if (specialClasses.length > 0) sections.push({ key: 'special', label: 'Special Awards Classes', classes: specialClasses, judge: judgeForRole(/special award/i) });
+  if (jhClasses.length > 0) sections.push({ key: 'jh', label: 'Junior Handling', classes: jhClasses, judge: judgeForRole(/junior handl/i) });
 
   // Best Awards now render via the shared BestsWriteInPage (same as the
   // By-Class catalogue), so the old inline split-by-sex computation has been
@@ -478,9 +509,12 @@ export function CatalogueRingside({ show, entries, compact }: Props) {
           const chunkClasses = section.classes;
           return (
             <Fragment key={`section-${section.key}`}>
-              <Text style={s.sexBand} minPresenceAhead={80}>
-                {section.label}
-              </Text>
+              <View minPresenceAhead={80}>
+                <Text style={s.sexBand}>{section.label}</Text>
+                {section.judge && (
+                  <Text style={s.sexBandJudge}>Judge: {section.judge}</Text>
+                )}
+              </View>
               {chunkClasses.map((classGroup, classIdx) => {
               const sorted = sortEntries(classGroup.entries);
               const sps = classGroup.classLabel

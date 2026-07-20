@@ -924,25 +924,19 @@ export function CoverPage({ show }: FrontMatterProps) {
               <Text style={styles.coverDetailValue}>{j}</Text>
             </View>
           ))}
-          {/* Show Opens + Judging Starts share one row (two equal columns) to
-              save vertical space so the cover details don't spill onto a second
-              page (Amanda 2026-06-08). Each column is a self-contained
-              label+value flex group with an auto-width label so the longer
-              "Judging Starts" label doesn't wrap or overlap its value. */}
-          {(show.showOpenTime || show.startTime) && (
+          {/* Show Opens + Judging Starts as their own rows (label width 58 like
+              Date/Venue/Judges) so the times line up under the values above,
+              with the time in bold to stand out (Mandy 2026-07-20). */}
+          {show.showOpenTime && (
             <View style={styles.coverDetailRow}>
-              {show.showOpenTime && (
-                <View style={{ flexDirection: 'row', flex: 1, alignItems: 'baseline' }}>
-                  <Text style={[styles.coverDetailLabel, { width: 'auto', marginRight: 5 }]}>Show Opens</Text>
-                  <Text style={styles.coverDetailValue}>{formatTime(show.showOpenTime)}</Text>
-                </View>
-              )}
-              {show.startTime && (
-                <View style={{ flexDirection: 'row', flex: 1, alignItems: 'baseline' }}>
-                  <Text style={[styles.coverDetailLabel, { width: 'auto', marginRight: 5 }]}>Judging Starts</Text>
-                  <Text style={styles.coverDetailValue}>{formatTime(show.startTime)}</Text>
-                </View>
-              )}
+              <Text style={styles.coverDetailLabel}>Show Opens</Text>
+              <Text style={[styles.coverDetailValue, { fontWeight: 'bold' }]}>{formatTime(show.showOpenTime)}</Text>
+            </View>
+          )}
+          {show.startTime && (
+            <View style={styles.coverDetailRow}>
+              <Text style={styles.coverDetailLabel}>Judging Starts</Text>
+              <Text style={[styles.coverDetailValue, { fontWeight: 'bold' }]}>{formatTime(show.startTime)}</Text>
             </View>
           )}
           {show.kcLicenceNo && (
@@ -1357,16 +1351,14 @@ export function JudgesListContent({ show }: FrontMatterProps) {
           </Text>
         );
         return (
-          <View style={{ marginTop: 10 }}>
-            {/* Heading + first card kept atomic (wrap=false) so the
-                "Other Judges" subheading can never sit stranded at the
-                foot of a page with its names on the next (Mandy
-                2026-07-20). Remaining cards flow normally. */}
-            <View wrap={false}>
-              {OtherJudgesHeading}
-              {renderOtherJudge(otherJudges[0]!, 0)}
-            </View>
-            {otherJudges.slice(1).map((j, i) => renderOtherJudge(j, i + 1))}
+          <View style={{ marginTop: 10 }} wrap={false}>
+            {/* Heading + ALL cards kept together (wrap=false) so the "Other
+                Judges" list never splits across a page break — the heading +
+                first name on one page and the rest on the next looked wrong
+                (Mandy 2026-07-20). Other-judge lists are short (typically a
+                JH and a special-awards judge), so keeping them atomic is safe. */}
+            {OtherJudgesHeading}
+            {otherJudges.map((j, i) => renderOtherJudge(j, i))}
           </View>
         );
       })()}
