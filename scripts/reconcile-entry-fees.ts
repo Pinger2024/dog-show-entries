@@ -47,13 +47,15 @@ async function main() {
     // ── Check A — Special Award Classes must be charged their own fee ────────
     const specialMispriced = await sql`
       SELECT s.name AS show, u.name AS exhibitor, cd.name AS class,
-             sc.entry_fee AS should_be, ec.fee AS charged, e.id AS entry_id
+             sc.entry_fee AS should_be, ec.fee AS charged, e.id AS entry_id,
+             o.status AS order_status
       FROM entry_classes ec
       JOIN show_classes sc      ON sc.id = ec.show_class_id
       JOIN class_definitions cd ON cd.id = sc.class_definition_id
       JOIN entries e            ON e.id = ec.entry_id
       JOIN shows s              ON s.id = e.show_id
       JOIN users u             ON u.id = e.exhibitor_id
+      LEFT JOIN orders o        ON o.id = e.order_id
       WHERE cd.type = 'special'
         AND e.deleted_at IS NULL
         AND ec.fee IS DISTINCT FROM sc.entry_fee
@@ -65,10 +67,16 @@ async function main() {
       console.log('   ✓ every special class charged its own fee\n');
     } else {
       problems += specialMispriced.length;
-      console.log(`   ✗ ${specialMispriced.length} special-class row(s) mispriced:`);
+      // A paid order = real over/undercharge to reconcile; an unpaid pending
+      // order is a harmless stale row (resolves on re-checkout / cancel).
+      const paidRows = specialMispriced.filter((r) => r.order_status === 'paid');
+      console.log(
+        `   ✗ ${specialMispriced.length} special-class row(s) mispriced (${paidRows.length} on PAID orders — real money):`,
+      );
       for (const r of specialMispriced) {
+        const real = r.order_status === 'paid' ? 'REAL — paid' : `harmless — order ${r.order_status ?? 'none'}`;
         console.log(
-          `     • ${r.show} — ${r.exhibitor} — "${r.class}": charged ${money(r.charged)}, should be ${money(r.should_be)} (entry ${r.entry_id})`,
+          `     • ${r.show} — ${r.exhibitor} — "${r.class}": charged ${money(r.charged)}, should be ${money(r.should_be)}  [${real}]  (entry ${r.entry_id})`,
         );
       }
       console.log('');
