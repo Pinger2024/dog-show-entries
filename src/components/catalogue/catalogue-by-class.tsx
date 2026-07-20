@@ -1,5 +1,6 @@
+import { Fragment } from 'react';
 import { Document, Page, View, Text, Image } from '@react-pdf/renderer';
-import { styles } from './catalogue-styles';
+import { styles, C } from './catalogue-styles';
 import { CatalogueHeader } from './catalogue-header';
 import type { CatalogueEntry, CatalogueShowInfo, ClassSponsorshipInfo } from './catalogue-types';
 import { formatDobKC, titleCase, formatOwnerKC, formatRkcOwnerHeading, uppercaseName, buildSponsorLines, isJuniorHandlingClass, formatPedigreeSireDam } from './catalogue-utils';
@@ -350,6 +351,27 @@ function groupByClass(entries: CatalogueEntry[]) {
   return classes;
 }
 
+/** Full-width green section band with the section's judge named beneath. Sets
+ *  the Special Award Classes and Junior Handling groups apart from the breed
+ *  classes in the by-class catalogue, matching the front-matter section bands
+ *  (Mandy 2026-07-20). `styles.sectionBand` carries a -20 top margin to bleed
+ *  into a page's top padding; neutralised here since this band sits mid-flow.
+ *  `minPresenceAhead` stops it stranding at the foot of a page. */
+function ClassSectionBand({ title, judge }: { title: string; judge: string | null }) {
+  return (
+    <View wrap={false} minPresenceAhead={90} style={{ marginTop: 12 }}>
+      <View style={{ ...styles.sectionBand, marginTop: 0, marginBottom: judge ? 3 : 8 }}>
+        <Text style={styles.sectionBandText}>{title}</Text>
+      </View>
+      {judge && (
+        <Text style={{ fontFamily: 'Inter', fontSize: 8.5, fontStyle: 'italic', color: C.textMedium, textAlign: 'center', marginBottom: 6 }}>
+          Judge: {judge}
+        </Text>
+      )}
+    </View>
+  );
+}
+
 export function CatalogueByClass({ show, entries, compact }: Props) {
   const isSvShow = show.showRuleset === 'wusv';
   // Build a lookup: classLabel -> sponsorship info (array, since one class
@@ -421,6 +443,27 @@ export function CatalogueByClass({ show, entries, compact }: Props) {
     if (aSort !== bSort) return aSort - bSort;
     return a.localeCompare(b);
   });
+
+  // Section headers for the two competitions that sit apart from the breed
+  // classes — Special Award Classes and Junior Handling — each with its own
+  // judge named beneath (Mandy 2026-07-20). The sort above already clusters the
+  // special-award classes after the numbered breed classes and floats JH last,
+  // so we just mark where each group starts and drop a band in front of it.
+  const LABEL_SEP = ' — '; // " — " em-dash separator in judgeDisplayList
+  const judgeForRole = (test: RegExp): string | null => {
+    for (const label of show.judgeDisplayList ?? []) {
+      const i = label.indexOf(LABEL_SEP);
+      if (i < 0) continue;
+      if (test.test(label.slice(0, i))) return label.slice(i + LABEL_SEP.length);
+    }
+    return null;
+  };
+  const specialAwardsJudge = judgeForRole(/special award/i);
+  const juniorHandlingJudge = judgeForRole(/junior handl/i);
+  const firstSpecialKey = classKeys.find(
+    (k) => jhFlag[k] === 0 && /special award/i.test(grouped[k].className),
+  );
+  const firstJhKey = classKeys.find((k) => jhFlag[k] === 1);
 
   // pdfkit underflows coordinates inside clipBorderTop once a wrapped
   // <Page> accumulates too many layout nodes (error:
@@ -598,8 +641,14 @@ export function CatalogueByClass({ show, entries, compact }: Props) {
         };
 
         return (
+          <Fragment key={classKey}>
+            {classKey === firstSpecialKey && (
+              <ClassSectionBand title="Special Awards Classes" judge={specialAwardsJudge} />
+            )}
+            {classKey === firstJhKey && (
+              <ClassSectionBand title="Junior Handling" judge={juniorHandlingJudge} />
+            )}
           <View
-            key={classKey}
             wrap={!keepTogether}
             style={idx > 0 ? { marginTop: 4 } : undefined}
           >
@@ -751,6 +800,7 @@ export function CatalogueByClass({ show, entries, compact }: Props) {
             {sorted.length > 0 && isSvShow && renderSvPlacings(sorted.length)}
 
           </View>
+          </Fragment>
         );
       })}
         <Text
