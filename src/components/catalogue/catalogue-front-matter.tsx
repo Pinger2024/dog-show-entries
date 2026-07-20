@@ -1018,14 +1018,14 @@ export function CoverPage({ show }: FrontMatterProps) {
             moved to ShowParticularsPage so the cover stays consistent
             across shows regardless of which optional fields are set. */}
         {show.onCallVet && (
-          <View style={{ width: '100%', marginTop: 2, marginBottom: 2 }}>
+          <View style={{ width: '100%', marginTop: 2, marginBottom: 2 }} wrap={false}>
             <Text style={styles.coverSectionLabel}>On-Call Veterinary Surgeon</Text>
             <Text style={styles.coverSectionText}>{show.onCallVet}</Text>
           </View>
         )}
 
         {show.firstAiders && show.firstAiders.length > 0 && (
-          <View style={{ width: '100%', marginTop: 2, marginBottom: 2 }}>
+          <View style={{ width: '100%', marginTop: 2, marginBottom: 2 }} wrap={false}>
             <Text style={styles.coverSectionLabel}>
               {show.firstAiders.length === 1 ? 'First Aider' : 'First Aiders'}
             </Text>
@@ -1034,7 +1034,7 @@ export function CoverPage({ show }: FrontMatterProps) {
         )}
 
         {show.showManager && (
-          <View style={{ width: '100%', marginTop: 2, marginBottom: 2 }}>
+          <View style={{ width: '100%', marginTop: 2, marginBottom: 2 }} wrap={false}>
             <Text style={styles.coverSectionLabel}>Show Manager</Text>
             <Text style={styles.coverSectionText}>{show.showManager}</Text>
           </View>
@@ -1237,8 +1237,16 @@ export function JudgesListContent({ show }: FrontMatterProps) {
   if (sortedBreeds.length === 0) return null;
 
   // Names already rendered in the breed table. Used to avoid
-  // double-rendering when we list "other" judges below.
-  const breedKeyedJudgeNames = new Set(Object.values(judges));
+  // double-rendering when we list "other" judges below. Compared on a
+  // normalised key: the breed table shows the plain name ("Hugh De Zutter")
+  // while the display list can carry an approval suffix ("Hugh De Zutter
+  // (subject to RKC approval)"). An exact match missed that and listed the
+  // main breed judge a second time under "Other Judges" (Mandy 2026-07-20).
+  const normaliseJudgeName = (n: string) =>
+    n.replace(/\s*\([^)]*\)\s*$/, '').trim().toLowerCase();
+  const breedKeyedJudgeNames = new Set(
+    Object.values(judges).map(normaliseJudgeName),
+  );
 
   // Judges with a bio/photo/display-list entry who are NOT assigned to
   // a specific breed — e.g. JH judges, or dog/bitch-only judges on a
@@ -1252,8 +1260,9 @@ export function JudgesListContent({ show }: FrontMatterProps) {
       const sepIdx = label.indexOf(LABEL_SEPARATOR);
       const role = sepIdx >= 0 ? label.slice(0, sepIdx) : null;
       const name = sepIdx >= 0 ? label.slice(sepIdx + LABEL_SEPARATOR.length) : label;
-      // Skip judges already in the breed table
-      if (breedKeyedJudgeNames.has(name)) continue;
+      // Skip judges already in the breed table (the main breed judge must
+      // not reappear under "Other Judges").
+      if (breedKeyedJudgeNames.has(normaliseJudgeName(name))) continue;
       const list = rolesByJudge.get(name) ?? [];
       if (role) list.push(role);
       rolesByJudge.set(name, list);
@@ -1312,46 +1321,55 @@ export function JudgesListContent({ show }: FrontMatterProps) {
       {/* Other judges (JH, dogs/bitches-only, etc.) not in the breed
           table. Each gets a card-style row with photo + name + role +
           bio — matching the single-breed branch layout above. */}
-      {otherJudges.length > 0 && (
-        <View style={{ marginTop: 10 }}>
-          {/* minPresenceAhead: keep the subheading with its first judge
-              card — never strand it alone at the foot of a page. */}
-          <View minPresenceAhead={60}>
-            <Text style={{ fontFamily: 'Inter', fontSize: 8, fontWeight: 'bold', color: C.primary, textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 6 }}>
-              Other Judges
-            </Text>
-          </View>
-          {otherJudges.map(({ name, roles }, i) => {
-            const bio = judgeBios[name];
-            const photoUrl = show.judgePhotos?.[name];
-            const roleLabel = roles.length > 0 ? roles.join(' & ') : null;
-            return (
-              <View key={i} wrap={false} style={{ marginBottom: 8 }}>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                  {photoUrl && (
-                    <Image src={photoUrl} style={{ width: 36, height: 36, borderRadius: 18 }} />
-                  )}
-                  <View style={{ flex: 1 }}>
-                    <Text style={{ fontFamily: 'Inter', fontSize: 10, fontWeight: 'bold', color: C.textDark }}>
-                      {name}
-                    </Text>
-                    {roleLabel && (
-                      <Text style={{ fontFamily: 'Inter', fontSize: 8, fontStyle: 'italic', color: C.textMedium }}>
-                        {roleLabel}
-                      </Text>
-                    )}
-                  </View>
-                </View>
-                {bio && (
-                  <Text style={{ ...styles.judgeBio, marginTop: 3, marginBottom: 0 }}>
-                    {bio}
-                  </Text>
+      {otherJudges.length > 0 && (() => {
+        const renderOtherJudge = ({ name, roles }: { name: string; roles: string[] }, i: number) => {
+          const bio = judgeBios[name];
+          const photoUrl = show.judgePhotos?.[name];
+          const roleLabel = roles.length > 0 ? roles.join(' & ') : null;
+          return (
+            <View key={i} wrap={false} style={{ marginBottom: 8 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                {photoUrl && (
+                  <Image src={photoUrl} style={{ width: 36, height: 36, borderRadius: 18 }} />
                 )}
+                <View style={{ flex: 1 }}>
+                  <Text style={{ fontFamily: 'Inter', fontSize: 10, fontWeight: 'bold', color: C.textDark }}>
+                    {name}
+                  </Text>
+                  {roleLabel && (
+                    <Text style={{ fontFamily: 'Inter', fontSize: 8, fontStyle: 'italic', color: C.textMedium }}>
+                      {roleLabel}
+                    </Text>
+                  )}
+                </View>
               </View>
-            );
-          })}
-        </View>
-      )}
+              {bio && (
+                <Text style={{ ...styles.judgeBio, marginTop: 3, marginBottom: 0 }}>
+                  {bio}
+                </Text>
+              )}
+            </View>
+          );
+        };
+        const OtherJudgesHeading = (
+          <Text style={{ fontFamily: 'Inter', fontSize: 8, fontWeight: 'bold', color: C.primary, textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 6 }}>
+            Other Judges
+          </Text>
+        );
+        return (
+          <View style={{ marginTop: 10 }}>
+            {/* Heading + first card kept atomic (wrap=false) so the
+                "Other Judges" subheading can never sit stranded at the
+                foot of a page with its names on the next (Mandy
+                2026-07-20). Remaining cards flow normally. */}
+            <View wrap={false}>
+              {OtherJudgesHeading}
+              {renderOtherJudge(otherJudges[0]!, 0)}
+            </View>
+            {otherJudges.slice(1).map((j, i) => renderOtherJudge(j, i + 1))}
+          </View>
+        );
+      })()}
 
     </>
   );
