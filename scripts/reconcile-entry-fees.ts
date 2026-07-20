@@ -45,10 +45,19 @@ async function main() {
 
   try {
     // ── Check A — Special Award Classes must be charged their own fee ────────
-    const specialMispriced = await sql`
+    // We compare the GROSS charge on the row against the class's own fee. Entry
+    // fees are stored gross on purpose (immutable record of what was charged);
+    // a refund is tracked separately at the payment row and netted into the
+    // club's receivable by show-metrics. So an overcharge that has ALREADY been
+    // refunded is fully remediated — the entry's gross fee is meant to stay put,
+    // and rewriting it would double-count the refund in the club's share. We net
+    // each entry's refunds against its overcharge and only flag the residual.
+    const specialRows = await sql`
       SELECT s.name AS show, u.name AS exhibitor, cd.name AS class,
              sc.entry_fee AS should_be, ec.fee AS charged, e.id AS entry_id,
-             o.status AS order_status
+             o.status AS order_status,
+             COALESCE((SELECT SUM(rp.amount) FROM payments rp
+                       WHERE rp.entry_id = e.id AND rp.type = 'refund'), 0) AS entry_refunds
       FROM entry_classes ec
       JOIN show_classes sc      ON sc.id = ec.show_class_id
       JOIN class_definitions cd ON cd.id = sc.class_definition_id
@@ -62,22 +71,39 @@ async function main() {
       ORDER BY s.name, u.name
     `;
 
+    type SpecialAgg = { show: string; exhibitor: string; orderStatus: string | null; refunds: number; overcharge: number; parts: string[] };
+    const specialByEntry = new Map<string, SpecialAgg>();
+    for (const r of specialRows) {
+      let a = specialByEntry.get(r.entry_id);
+      if (!a) {
+        a = { show: r.show, exhibitor: r.exhibitor, orderStatus: r.order_status, refunds: Number(r.entry_refunds), overcharge: 0, parts: [] };
+        specialByEntry.set(r.entry_id, a);
+      }
+      a.overcharge += r.charged - r.should_be;
+      a.parts.push(`"${r.class}" ${money(r.charged)}→${money(r.should_be)}`);
+    }
+    const specialEntries = [...specialByEntry.entries()].map(([id, a]) => ({ id, ...a, residual: a.overcharge - a.refunds }));
+    const unremediated = specialEntries.filter((a) => a.residual > 0);
+    const remediated = specialEntries.length - unremediated.length;
+    // Only PAID orders with a residual overcharge are real money owed; unpaid
+    // (stale pending) rows are data hygiene, not a shortfall — list, don't fail.
+    const realMoney = unremediated.filter((a) => a.orderStatus === 'paid');
+
     console.log('── A. Special Award Class pricing ──');
-    if (specialMispriced.length === 0) {
+    if (specialEntries.length === 0) {
       console.log('   ✓ every special class charged its own fee\n');
+    } else if (unremediated.length === 0) {
+      console.log(`   ✓ ${specialEntries.length} historical overcharge(s) found — ALL already remediated by a refund\n`);
     } else {
-      problems += specialMispriced.length;
-      // A paid order = real over/undercharge to reconcile; an unpaid pending
-      // order is a harmless stale row (resolves on re-checkout / cancel).
-      const paidRows = specialMispriced.filter((r) => r.order_status === 'paid');
+      problems += realMoney.length;
       console.log(
-        `   ✗ ${specialMispriced.length} special-class row(s) mispriced (${paidRows.length} on PAID orders — real money):`,
+        `   ${realMoney.length ? '✗' : '·'} ${unremediated.length} unremediated special overcharge(s)` +
+        ` (${realMoney.length} on PAID orders — real money owed${remediated ? `; ${remediated} already refunded` : ''}):`,
       );
-      for (const r of specialMispriced) {
-        const real = r.order_status === 'paid' ? 'REAL — paid' : `harmless — order ${r.order_status ?? 'none'}`;
-        console.log(
-          `     • ${r.show} — ${r.exhibitor} — "${r.class}": charged ${money(r.charged)}, should be ${money(r.should_be)}  [${real}]  (entry ${r.entry_id})`,
-        );
+      for (const a of unremediated) {
+        const tag = a.orderStatus === 'paid' ? 'REAL — paid, still owed' : `harmless — order ${a.orderStatus ?? 'none'}`;
+        const refundNote = a.refunds ? ` (less ${money(a.refunds)} already refunded)` : '';
+        console.log(`     • ${a.show} — ${a.exhibitor}: owed ${money(a.residual)}${refundNote} [${tag}] — ${a.parts.join(', ')} (entry ${a.id})`);
       }
       console.log('');
     }
