@@ -390,16 +390,16 @@ export const styles = StyleSheet.create({
   },
   coverContent: {
     paddingHorizontal: 30,
-    paddingTop: 8,
+    paddingTop: 4,
     flex: 1,
     alignItems: 'center',
   },
   coverLogo: {
-    maxWidth: 140,
-    maxHeight: 72,
+    maxWidth: 132,
+    maxHeight: 60,
     objectFit: 'contain',
     alignSelf: 'center',
-    marginBottom: 5,
+    marginBottom: 4,
   },
   coverShowName: {
     fontFamily: 'HankenGrotesk',
@@ -434,14 +434,14 @@ export const styles = StyleSheet.create({
     width: '100%',
     backgroundColor: C.cardBg,
     borderRadius: 6,
-    padding: '8 14',
-    marginBottom: 5,
+    padding: '6 14',
+    marginBottom: 4,
     borderLeftWidth: 3,
     borderLeftColor: C.accent,
   },
   coverDetailRow: {
     flexDirection: 'row',
-    marginVertical: 1.5,
+    marginVertical: 1,
   },
   coverDetailLabel: {
     fontFamily: 'Inter',
