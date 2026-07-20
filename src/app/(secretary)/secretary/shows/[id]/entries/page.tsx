@@ -86,8 +86,21 @@ function EntryStatusPill({ status }: { status: string }) {
 export default function EntriesPage() {
   const showId = useShowId();
 
+  // Default to "active" — withdrawn/cancelled entries are noise on the primary
+  // entries view (and their count drifts from the layout banner's confirmed
+  // count, which secretaries flag as a discrepancy). The dropdown still has
+  // explicit Pending/Withdrawn/Cancelled/All options for when they drill in.
+  // Declared above the query so the query key can depend on it: "pending"
+  // (awaiting-payment) entries are hidden from the default list as abandoned
+  // checkouts, so we ask the server for them explicitly when that filter is on.
+  const [statusFilter, setStatusFilter] = useState('active');
+
   const { data: showData } = trpc.shows.getById.useQuery({ id: showId });
-  const { data: entriesData, isLoading: entriesLoading } = trpc.entries.getForShow.useQuery({ showId, limit: 500 });
+  const { data: entriesData, isLoading: entriesLoading } = trpc.entries.getForShow.useQuery({
+    showId,
+    limit: 500,
+    ...(statusFilter === 'pending' ? { status: 'pending' as const } : {}),
+  });
   const entries = entriesData?.items ?? [];
   const total = entriesData?.total ?? 0;
   // Summary tiles read the same canonical stats query the dashboard and
@@ -101,12 +114,6 @@ export default function EntriesPage() {
   );
 
   const [search, setSearch] = useState('');
-  // Default to "active" — withdrawn/cancelled entries are noise on the
-  // primary entries view (and their visible count drifts from the layout
-  // banner's confirmed count, which secretaries flag as a discrepancy).
-  // The dropdown still has explicit Withdrawn/Cancelled/All options for
-  // when they need to drill in.
-  const [statusFilter, setStatusFilter] = useState('active');
   const [editingEntry, setEditingEntry] = useState<EntryItem | null>(null);
   const [transferringEntry, setTransferringEntry] = useState<EntryItem | null>(null);
   const [showAddEntry, setShowAddEntry] = useState(false);

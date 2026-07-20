@@ -556,13 +556,23 @@ export const entriesRouter = createTRPCRouter({
       //  - unpaid    (pending_payment / failed — an abandoned checkout that
       //               was never booked in; Amanda 2026-05-28).
       // The rows stay in the DB for audit; the Financial tab surfaces refunds.
+      //
+      // EXCEPTION: when the secretary explicitly asks for the "pending"
+      // (awaiting-payment) list — via the Pending status filter — surface the
+      // pending_payment-order entries so she can see WHO started but hasn't paid
+      // and chase them (Mandy 2026-07-20; the filter used to return nothing).
+      // Refunded/failed stay hidden either way.
+      const excludedStatuses =
+        input.status === 'pending'
+          ? (['refunded', 'failed'] as const)
+          : (['refunded', 'pending_payment', 'failed'] as const);
       const excludedOrderRows = await ctx.db
         .select({ id: orders.id })
         .from(orders)
         .where(
           and(
             eq(orders.showId, input.showId),
-            inArray(orders.status, ['refunded', 'pending_payment', 'failed']),
+            inArray(orders.status, [...excludedStatuses]),
           ),
         );
       const excludedOrderIds = excludedOrderRows.map((r) => r.id);
