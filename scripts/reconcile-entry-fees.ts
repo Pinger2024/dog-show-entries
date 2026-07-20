@@ -3,15 +3,19 @@
  *
  * The Special Award Class overcharge (Mandy 2026-07-19) sat in the database for
  * days because nothing ever re-checked stored fees. This script is that missing
- * check. It is READ-ONLY (SELECT only) and deliberately does NOT re-run the fee
- * engine — it validates the *internal consistency* of the stored rows, so it
- * can't share a bug with the engine that wrote them:
+ * check. It is READ-ONLY (SELECT only):
  *
  *   A. Every Special Award Class row must be charged that class's OWN fee
  *      (show_classes.entry_fee) — never the first/subsequent tier. This is the
- *      exact bug; it would have flagged Kathryn / Denise / Miss G on day one.
+ *      exact RKC bug; it would have flagged Kathryn / Denise / Miss G on day one.
  *   B. Every entry's per-class breakdown must sum to entries.total_fee, so the
  *      financial "Entries by Class" report reconciles with order revenue.
+ *      (A and B are engine-INDEPENDENT internal-consistency checks — they can't
+ *      share a bug with the engine that wrote the rows.)
+ *   C. Every regional (SV/WUSV) order is RE-PRICED from the regional engine and
+ *      compared to the stored entry subtotal. A regional edit that ignored the
+ *      tier scale wrote a self-consistent-but-wrong fee (so B can't see it) —
+ *      only a fresh recompute catches it.
  *
  * Usage (defaults to $DATABASE_URL):
  *   npx tsx scripts/reconcile-entry-fees.ts
@@ -22,6 +26,13 @@
  */
 import 'dotenv/config';
 import postgres from 'postgres';
+import {
+  computeRegionalOrderFees,
+  regionalClassFlatFee,
+  type RegionalDogEntryInput,
+  type RegionalFeeContext,
+  type RegionalFeeTier,
+} from '../src/lib/regional-fee-calc';
 
 async function main() {
   const url = process.env.DATABASE_URL;
@@ -93,6 +104,95 @@ async function main() {
         );
       }
       console.log('   (legacy entries predating per-class fees may show class-sum 0 — verify before acting)\n');
+    }
+
+    // ── Check C — regional orders re-priced from the engine ─────────────────
+    // One row per (regional entry, its first class). Regional dogs sit in one
+    // class; NFC regional entries can carry more, so we take the first (matching
+    // checkout's classIds[0]) and dedupe per entry below.
+    const regionalRows = await sql`
+      SELECT o.id AS order_id, o.regional_membership, o.regional_first_time_exhibitor,
+             s.name AS show, s.regional_fee_config, s.junior_handler_fee,
+             u.name AS exhibitor,
+             e.id AS entry_id, e.entry_type, e.total_fee,
+             cd.name AS class_name, cd.type AS class_type, sc.entry_fee AS class_fee
+      FROM orders o
+      JOIN shows s ON s.id = o.show_id
+      JOIN users u ON u.id = o.exhibitor_id
+      JOIN entries e ON e.order_id = o.id AND e.deleted_at IS NULL
+      LEFT JOIN entry_classes ec ON ec.entry_id = e.id
+      LEFT JOIN show_classes sc ON sc.id = ec.show_class_id
+      LEFT JOIN class_definitions cd ON cd.id = sc.class_definition_id
+      WHERE s.show_ruleset = 'wusv' AND s.regional_fee_config IS NOT NULL
+      ORDER BY o.id, e.id
+    `;
+
+    type OrderAgg = {
+      show: string; exhibitor: string; membership: string | null; firstTime: boolean;
+      cfg: { tiers?: RegionalFeeTier[]; memberships?: { label: string; tiers?: RegionalFeeTier[] }[]; firstTimeEnabled?: boolean; firstTimeFeePence?: number | null } | null;
+      jhFee: number | null;
+      entries: Map<string, { entryType: string; totalFee: number; className: string | null; classType: string | null; classFee: number | null }>;
+    };
+    const byOrder = new Map<string, OrderAgg>();
+    for (const r of regionalRows) {
+      let agg = byOrder.get(r.order_id);
+      if (!agg) {
+        agg = {
+          show: r.show, exhibitor: r.exhibitor, membership: r.regional_membership,
+          firstTime: !!r.regional_first_time_exhibitor, cfg: r.regional_fee_config,
+          jhFee: r.junior_handler_fee, entries: new Map(),
+        };
+        byOrder.set(r.order_id, agg);
+      }
+      // First class row wins (regional = one class per dog).
+      if (!agg.entries.has(r.entry_id)) {
+        agg.entries.set(r.entry_id, {
+          entryType: r.entry_type, totalFee: r.total_fee ?? 0,
+          className: r.class_name, classType: r.class_type, classFee: r.class_fee,
+        });
+      }
+    }
+
+    const regionalMispriced: { order: string; show: string; exhibitor: string; stored: number; expected: number }[] = [];
+    for (const [orderId, agg] of byOrder) {
+      const cfg = agg.cfg;
+      if (!cfg?.tiers?.length) continue; // no scale configured — nothing to check
+      const membershipOptions = cfg.memberships ?? [{ label: 'BRG/League member' }];
+      const declared = agg.membership ? membershipOptions.find((m) => m.label === agg.membership) : undefined;
+      const ctx: RegionalFeeContext = {
+        tiers: declared?.tiers ?? cfg.tiers,
+        isMember: !!declared && !declared.tiers,
+        firstTimeExhibitor: agg.firstTime && !!cfg.firstTimeEnabled,
+        firstTimeFeePence: cfg.firstTimeFeePence ?? 0,
+        juniorHandlerFeePence: agg.jhFee ?? 0,
+      };
+      const engineEntries: RegionalDogEntryInput[] = [...agg.entries.values()].map((e, i) => ({
+        key: String(i),
+        kind: e.entryType === 'junior_handler' ? 'junior_handler' : 'standard',
+        flatFeePence: regionalClassFlatFee(
+          { className: e.className, classType: e.classType, entryFee: e.classFee },
+          cfg.tiers!,
+        ),
+      }));
+      const expected = computeRegionalOrderFees(engineEntries, ctx).entriesTotal;
+      const stored = [...agg.entries.values()].reduce((s, e) => s + e.totalFee, 0);
+      if (expected !== stored) {
+        regionalMispriced.push({ order: orderId, show: agg.show, exhibitor: agg.exhibitor, stored, expected });
+      }
+    }
+
+    console.log('── C. Regional (SV/WUSV) orders re-priced from the engine ──');
+    if (byOrder.size === 0) {
+      console.log('   · no regional orders to check\n');
+    } else if (regionalMispriced.length === 0) {
+      console.log(`   ✓ all ${byOrder.size} regional order(s) match the tier scale\n`);
+    } else {
+      problems += regionalMispriced.length;
+      console.log(`   ✗ ${regionalMispriced.length} regional order(s) diverge from the scale:`);
+      for (const r of regionalMispriced) {
+        console.log(`     • ${r.show} — ${r.exhibitor}: stored ${money(r.stored)} vs engine ${money(r.expected)} (order ${r.order})`);
+      }
+      console.log('   (a pending, unpaid class upgrade can look like this — verify before acting)\n');
     }
 
     // ── Summary ──────────────────────────────────────────────────────────────

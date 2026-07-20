@@ -31,6 +31,12 @@ import {
   type FeeContext,
 } from '@/lib/fee-calc';
 import {
+  computeRegionalOrderFees,
+  regionalClassFlatFee,
+  type RegionalDogEntryInput,
+  type RegionalFeeContext,
+} from '@/lib/regional-fee-calc';
+import {
   createPaymentIntent,
   calculatePlatformFee,
 } from '@/server/services/stripe';
@@ -725,7 +731,7 @@ export const entriesRouter = createTRPCRouter({
           inArray(showClasses.id, input.classIds),
           eq(showClasses.showId, entry.showId)
         ),
-        with: { classDefinition: { columns: { type: true } } },
+        with: { classDefinition: { columns: { type: true, name: true } } },
       });
 
       if (newClasses.length !== input.classIds.length) {
@@ -746,7 +752,128 @@ export const entriesRouter = createTRPCRouter({
       let newFee: number;
       let perClassFees: number[];
 
-      if (entry.show.firstEntryFee != null) {
+      const regionalCfg =
+        entry.show.showRuleset === 'wusv' ? entry.show.regionalFeeConfig : null;
+
+      if (regionalCfg != null) {
+        // Regional (SV/WUSV) edit — price on the per-dog tier scale, NOT the raw
+        // class fee (Mandy 2026-07-02). Checkout runs this engine but edits used
+        // to fall through to the legacy per-class sum, so swapping a class
+        // demanded a bogus top-up (a 3rd dog priced £16 jumped to £20). We
+        // recompute the WHOLE order with the new class and let the edited entry
+        // absorb the order-total delta, leaving siblings untouched: regional
+        // per-dog attribution is order-arbitrary, so a swap that doesn't change
+        // the order total costs nothing and moves no other dog's fee.
+        const membershipOptions = regionalCfg.memberships ?? [
+          { label: 'BRG/League member' },
+        ];
+
+        type RegSib = {
+          id: string;
+          entryType: string;
+          totalFee: number;
+          entryClasses: {
+            showClass?: {
+              entryFee: number;
+              classDefinition?: { name: string | null; type: string | null } | null;
+            } | null;
+          }[];
+        };
+
+        // Reconstruct the exact context checkout used: the order's declared
+        // membership + first-time status (persisted on the order) and every
+        // sibling entry so the scale total is computed across the full order.
+        let regionalMembershipLabel: string | null = null;
+        let regionalFirstTime = false;
+        let siblingEntries: RegSib[] = [
+          {
+            id: input.id,
+            entryType: entry.entryType,
+            totalFee: entry.totalFee,
+            entryClasses: [],
+          },
+        ];
+
+        if (orderId) {
+          const [orderRow, dbSiblings] = await Promise.all([
+            ctx.db.query.orders.findFirst({
+              where: eq(orders.id, orderId),
+              columns: {
+                regionalMembership: true,
+                regionalFirstTimeExhibitor: true,
+              },
+            }),
+            ctx.db.query.entries.findMany({
+              where: and(eq(entries.orderId, orderId), isNull(entries.deletedAt)),
+              with: {
+                entryClasses: {
+                  columns: { id: true },
+                  with: {
+                    showClass: {
+                      columns: { entryFee: true },
+                      with: { classDefinition: { columns: { name: true, type: true } } },
+                    },
+                  },
+                },
+              },
+            }),
+          ]);
+          regionalMembershipLabel = orderRow?.regionalMembership ?? null;
+          regionalFirstTime = !!orderRow?.regionalFirstTimeExhibitor;
+          siblingEntries = dbSiblings as RegSib[];
+        }
+
+        const declared = regionalMembershipLabel
+          ? membershipOptions.find((m) => m.label === regionalMembershipLabel)
+          : undefined;
+        const regionalCtx: RegionalFeeContext = {
+          tiers: declared?.tiers ?? regionalCfg.tiers,
+          isMember: !!declared && !declared.tiers,
+          firstTimeExhibitor: regionalFirstTime && !!regionalCfg.firstTimeEnabled,
+          firstTimeFeePence: regionalCfg.firstTimeFeePence ?? 0,
+          juniorHandlerFeePence: entry.show.juniorHandlerFee ?? 0,
+        };
+
+        // Regional dogs sit in one class. Use the NEW class for the edited entry,
+        // each sibling's existing class for the rest. Flat detection uses the
+        // config tiers exactly as checkout does (`resolveClassFlatFee`).
+        const regionalEntries: RegionalDogEntryInput[] = siblingEntries.map((sib) => {
+          const isEdited = sib.id === input.id;
+          const cls = isEdited
+            ? {
+                name: newClasses[0]?.classDefinition?.name,
+                type: newClasses[0]?.classDefinition?.type,
+                entryFee: newClasses[0]?.entryFee,
+              }
+            : {
+                name: sib.entryClasses[0]?.showClass?.classDefinition?.name,
+                type: sib.entryClasses[0]?.showClass?.classDefinition?.type,
+                entryFee: sib.entryClasses[0]?.showClass?.entryFee,
+              };
+          return {
+            key: sib.id,
+            kind:
+              (isEdited ? entry.entryType : sib.entryType) === 'junior_handler'
+                ? 'junior_handler'
+                : 'standard',
+            flatFeePence: regionalClassFlatFee(
+              { className: cls.name, classType: cls.type, entryFee: cls.entryFee ?? null },
+              regionalCfg.tiers,
+            ),
+          };
+        });
+
+        const regionalResult = computeRegionalOrderFees(regionalEntries, regionalCtx);
+        const newOrderTotal = regionalResult.entriesTotal;
+        const oldOrderTotal = siblingEntries.reduce((sum, s) => sum + s.totalFee, 0);
+        // The edited entry absorbs the whole order delta; siblings stay put. So
+        // feeDiff (= newFee − oldFee, below) is exactly the order-level change,
+        // and the existing upgrade/downgrade + refund path handles it unchanged.
+        newFee = oldFee + (newOrderTotal - oldOrderTotal);
+        // Regional entries carry one fee per dog — attribute it to the first
+        // class slot (0 for any extra NFC classes) so the rows sum to newFee.
+        perClassFees = newClasses.map((_, i) => (i === 0 ? newFee : 0));
+      } else if (entry.show.firstEntryFee != null) {
         const entryKind = entry.entryType === 'junior_handler'
           ? 'junior_handler'
           : entry.isNfc
