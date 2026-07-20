@@ -382,7 +382,6 @@ export function JudgesSection({ showId }: { showId: string }) {
     // as a main-classes assignment using the show's overall breed (Amanda
     // 2026-05-19 fix).
     const showBreedName = showData?.breed?.name ?? null;
-    const isSvShow = (showData as { showRuleset?: 'rkc' | 'wusv' } | undefined)?.showRuleset === 'wusv';
 
     const seen = new Map<string, JudgeRow>();
     for (const a of assignments ?? []) {
@@ -390,11 +389,15 @@ export function JudgesSection({ showId }: { showId: string }) {
       if (a.judgeRole) continue;
       const isSac = (a as { isSpecialAwardsClassesJudge?: boolean }).isSpecialAwardsClassesJudge === true;
       const isJhShape = !isSac && a.breed === null && a.sex === null;
-      // SV main-class assignment: breed null + sex set + not SAC + isSvShow
-      const isSvMainClass = !isSac && isSvShow && a.breed === null && (a.sex === 'dog' || a.sex === 'bitch');
-      // Effective breed name for breed-sex mapping (real FK for RKC,
-      // show's implicit breed for SV main classes).
-      const effectiveBreed = a.breed?.name ?? (isSvMainClass ? showBreedName : null);
+      // Single-breed show (RKC or SV): breed-class assignments are stored with
+      // breed=null because the breed is implicit on the shows row. Treat
+      // breed=null + sex as a main breed-class assignment using the show's
+      // breed. This was gated to SV shows only, so RKC single-breed shows
+      // showed a BLANK Classification in the offer preview (Mandy 2026-07-20);
+      // the server lib buildJudgeBreedAndClassification already handles it.
+      const isImplicitBreedMainClass =
+        !isSac && showBreedName != null && a.breed === null && (a.sex === 'dog' || a.sex === 'bitch');
+      const effectiveBreed = a.breed?.name ?? (isImplicitBreedMainClass ? showBreedName : null);
       const existing = seen.get(a.judgeId);
       if (existing) {
         if (effectiveBreed && !isSac && !existing.breeds.includes(effectiveBreed)) {
@@ -411,7 +414,7 @@ export function JudgesSection({ showId }: { showId: string }) {
         existing.assignmentIds.push(a.id);
         if (isSac) existing.hasSpecialAwards = true;
         if (isJhShape) existing.hasJuniorHandling = true;
-        if ((a.breed && !isSac) || isSvMainClass) existing.hasBreedAssignment = true;
+        if ((a.breed && !isSac) || isImplicitBreedMainClass) existing.hasBreedAssignment = true;
         if ((a as { subjectToRkcApproval?: boolean }).subjectToRkcApproval) {
           existing.subjectToRkcApproval = true;
         }
@@ -433,7 +436,7 @@ export function JudgesSection({ showId }: { showId: string }) {
           assignmentIds: [a.id],
           hasSpecialAwards: isSac,
           hasJuniorHandling: isJhShape,
-          hasBreedAssignment: (!!a.breed && !isSac) || isSvMainClass,
+          hasBreedAssignment: (!!a.breed && !isSac) || isImplicitBreedMainClass,
           subjectToRkcApproval: (a as { subjectToRkcApproval?: boolean }).subjectToRkcApproval === true,
         });
       }
