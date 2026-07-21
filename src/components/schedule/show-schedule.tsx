@@ -23,6 +23,7 @@ import {
 import { SectionBand, InfoCard, GoldRule, Rule, TwoColSectionHeader } from './shared/elements';
 import { sortOfficers } from './shared/officers';
 import { buildEntryFeeGroups } from './shared/entry-fee-groups';
+import { juniorHandlerFeeForSchedule } from './shared/junior-handler-fee';
 import { AdvertPage, selectAdverts } from './shared/advert-page';
 import type { ScheduleAdvert } from './shared/types';
 import { groupSvClasses, type SvClassificationGroups } from './shared/sv-classification';
@@ -381,12 +382,19 @@ export function ShowSchedule({
                 <Text style={s.infoValue}>{formatCurrency(show.nfcEntryFee)}</Text>
               </View>
             )}
-            {show.juniorHandlerFee != null && (
-              <View style={[s.infoRow, s.infoRowNoBorder]}>
-                <Text style={s.infoLabel}>Junior Handler</Text>
-                <Text style={s.infoValue}>{formatCurrency(show.juniorHandlerFee)}</Text>
-              </View>
-            )}
+            {/* Junior Handler fee — shows (as £0.00) whenever the show has JH
+                classes even if the fee is left blank; see juniorHandlerFeeForSchedule
+                (Mandy 2026-07-21). */}
+            {(() => {
+              const jhFee = juniorHandlerFeeForSchedule(show.juniorHandlerFee, classes);
+              if (jhFee == null) return null;
+              return (
+                <View style={[s.infoRow, s.infoRowNoBorder]}>
+                  <Text style={s.infoLabel}>Junior Handler</Text>
+                  <Text style={s.infoValue}>{formatCurrency(jhFee)}</Text>
+                </View>
+              );
+            })()}
             {/* Per-class fee overrides — surface as "Baby Puppy classes — £4"
                 rather than the class numbers. Junior Handler classes are
                 skipped (they have their own Junior Handler row above) and
