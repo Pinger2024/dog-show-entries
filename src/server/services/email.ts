@@ -356,8 +356,10 @@ export async function sendSecretaryNotificationEmail(orderId: string) {
   const show = order.show;
   const org = show.organisation;
 
-  // Find secretary email: org contact email, or first active secretary member
-  let secretaryEmail = org?.contactEmail;
+  // Find secretary email: the show's named secretary first (the person actually
+  // running THIS show — clubs often appoint a different secretary per show),
+  // then the org contact email, then first active secretary member.
+  let secretaryEmail = show.secretaryEmail || org?.contactEmail;
   if (!secretaryEmail && org) {
     const secretaryMembership = await db.query.memberships.findFirst({
       where: and(

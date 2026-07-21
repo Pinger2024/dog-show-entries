@@ -34,7 +34,9 @@ beforeEach(() => {
   resendMocks.send.mockClear();
 });
 
-async function paidOrder() {
+async function paidOrder(
+  opts: { showSecretaryEmail?: string | null; orgContactEmail?: string | null } = {}
+) {
   const exhibitor = await makeUser({
     role: 'exhibitor',
     email: 'mandy@hundarkgsd.co.uk',
@@ -42,14 +44,15 @@ async function paidOrder() {
   });
   const org = await makeOrg({
     name: 'Clyde Valley GSD Club',
-    contactEmail: 'secretary@example.test',
+    contactEmail: 'orgContactEmail' in opts ? opts.orgContactEmail : 'secretary@example.test',
   });
   const breed = await makeBreed({ name: 'German Shepherd' });
   const show = await makeShow({
     organisationId: org.id,
     breedId: breed.id,
     name: 'Spring Open Show',
-    secretaryEmail: 'secretary@example.test',
+    secretaryEmail:
+      'showSecretaryEmail' in opts ? opts.showSecretaryEmail : 'secretary@example.test',
   });
   const showClass = await makeShowClass({ showId: show.id, breedId: breed.id });
   const dog = await makeDog({
@@ -104,6 +107,33 @@ describe('sendSecretaryNotificationEmail', () => {
     void show;
     const html = String(payload.html ?? '');
     expect(html).toContain('Bonzo Of The Glen');
+  });
+
+  // Paula's bug (Clyde Valley, 2026-07-21): the show's named secretary never
+  // received entry alerts because only the club contact address was used —
+  // and that address was dead. These two pin the resolution order.
+  it("prefers the show's named secretary over the club contact", async () => {
+    const { order } = await paidOrder({
+      showSecretaryEmail: 'paula@show.test',
+      orgContactEmail: 'club@org.test',
+    });
+    await sendSecretaryNotificationEmail(order.id);
+
+    expect(resendMocks.send).toHaveBeenCalledTimes(1);
+    const payload = resendMocks.send.mock.calls[0]?.[0] as Record<string, unknown>;
+    expect(payload.to).toBe('paula@show.test');
+  });
+
+  it('falls back to the club contact when the show has no named secretary', async () => {
+    const { order } = await paidOrder({
+      showSecretaryEmail: null,
+      orgContactEmail: 'club@org.test',
+    });
+    await sendSecretaryNotificationEmail(order.id);
+
+    expect(resendMocks.send).toHaveBeenCalledTimes(1);
+    const payload = resendMocks.send.mock.calls[0]?.[0] as Record<string, unknown>;
+    expect(payload.to).toBe('club@org.test');
   });
 });
 
