@@ -70,7 +70,13 @@ import { PaymentForm } from './payment-form';
 import { cn } from '@/lib/utils';
 import { isGsdOnlyClass, isGsdBreed } from '@/lib/class-templates';
 import { isCatalogueItem } from '@/lib/catalogue-utils';
-import { useEntryCart, getPaymentKey, restoreActionForStatus, type WizardStep } from './use-entry-cart';
+import {
+  useEntryCart,
+  getPaymentKey,
+  restoreActionForStatus,
+  computeClassSelectionTotal,
+  type WizardStep,
+} from './use-entry-cart';
 import { SecLabel, Chip, Eyebrow, SEButton, SECard, SEDarkPanel } from '@/components/show-experience/kit';
 import { SE_H } from '@/components/show-experience/tokens';
 import { Confetti } from '@/components/show-experience/confetti';
@@ -757,8 +763,18 @@ export default function EnterShowPage() {
     const subFee = show.subsequentEntryFee;
 
     if (firstFee != null) {
-      const subsequentRate = subFee ?? firstFee;
-      return firstFee + subsequentRate * (count - 1);
+      // Special Award Classes charge their own fee, not the tier — mirror the
+      // server + checkout preview so this running total matches the charge
+      // (Mandy 2026-07-21: was showing the £20 tier rate for a £3 special).
+      const classById = new Map((showClasses ?? []).map((sc) => [sc.id, sc]));
+      const selectedClassesForPricing = selectedClassIds.map((cid) => {
+        const sc = classById.get(cid);
+        return {
+          isSpecial: sc?.classDefinition.type === 'special',
+          entryFee: sc?.entryFee ?? 0,
+        };
+      });
+      return computeClassSelectionTotal(selectedClassesForPricing, firstFee, subFee);
     }
 
     // Fallback: per-class fees from showClasses
