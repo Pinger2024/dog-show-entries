@@ -1141,6 +1141,18 @@ export function ShowParticularsPage(props: FrontMatterProps) {
 
 // ── Judges List ─────────────────────────────────────────────────
 
+/**
+ * Normalise a judge's display name to a de-dupe key: strips a trailing
+ * parenthetical suffix (e.g. "(subject to RKC approval)"), trims whitespace,
+ * and lowercases. The breed table shows the plain name ("Hugh De Zutter")
+ * while the judge display list can carry an approval suffix ("Hugh De
+ * Zutter (subject to RKC approval)") — an exact-string match missed that and
+ * listed the main breed judge a second time under "Other Judges" (Mandy
+ * 2026-07-20). Exported for unit testing.
+ */
+export const normaliseJudgeName = (n: string) =>
+  n.replace(/\s*\([^)]*\)\s*$/, '').trim().toLowerCase();
+
 /** Judges list content block — breed → judge table or single-breed
  *  card layout, depending on the show's judge data shape. Returned as
  *  a fragment so it can be composed inside a larger front-matter page
@@ -1231,13 +1243,9 @@ export function JudgesListContent({ show }: FrontMatterProps) {
   if (sortedBreeds.length === 0) return null;
 
   // Names already rendered in the breed table. Used to avoid
-  // double-rendering when we list "other" judges below. Compared on a
-  // normalised key: the breed table shows the plain name ("Hugh De Zutter")
-  // while the display list can carry an approval suffix ("Hugh De Zutter
-  // (subject to RKC approval)"). An exact match missed that and listed the
-  // main breed judge a second time under "Other Judges" (Mandy 2026-07-20).
-  const normaliseJudgeName = (n: string) =>
-    n.replace(/\s*\([^)]*\)\s*$/, '').trim().toLowerCase();
+  // double-rendering when we list "other" judges below. Compared via
+  // normaliseJudgeName (module-level, above) so an approval-suffix or
+  // case/whitespace difference still collapses to the same judge.
   const breedKeyedJudgeNames = new Set(
     Object.values(judges).map(normaliseJudgeName),
   );
