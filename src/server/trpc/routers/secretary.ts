@@ -150,18 +150,31 @@ function isUnnumberedClassDef(
 
 export const secretaryRouter = createTRPCRouter({
   getDashboard: secretaryProcedure.query(async ({ ctx }) => {
-    // Get organisations the user is a member of
-    const userMemberships = await ctx.db.query.memberships.findMany({
-      where: and(
-        eq(memberships.userId, ctx.session.user.id),
-        eq(memberships.status, 'active')
-      ),
-      with: { organisation: true },
-    });
+    // Platform admins monitor every club's shows without needing a
+    // membership row in each one — mirrors the bypass verifyShowAccess
+    // already grants admins on individual show reads (see also
+    // admin.listAllShows, the read-only reporting equivalent of this).
+    // Excludes impersonation: while impersonating a secretary, the
+    // dashboard must show exactly what THAT secretary sees (their orgs
+    // only) — ctx.callerIsAdmin deliberately survives the session swap
+    // (see init.ts) so it alone isn't enough to tell "browsing as admin"
+    // from "impersonating a non-admin". Non-admins (and impersonated
+    // sessions) keep the existing membership-scoped behaviour untouched:
+    // `organisationScope` stays null only for a genuine admin browsing
+    // as themselves, and every query below shares the same code path
+    // either way.
+    const isRealAdmin = ctx.callerIsAdmin && !ctx.impersonating;
+    const organisationScope = isRealAdmin
+      ? null
+      : await ctx.db.query.memberships.findMany({
+          where: and(
+            eq(memberships.userId, ctx.session.user.id),
+            eq(memberships.status, 'active')
+          ),
+          with: { organisation: true },
+        });
 
-    const orgIds = userMemberships.map((m) => m.organisationId);
-
-    if (orgIds.length === 0) {
+    if (organisationScope && organisationScope.length === 0) {
       return {
         organisations: [],
         activeShows: [],
@@ -174,9 +187,12 @@ export const secretaryRouter = createTRPCRouter({
       };
     }
 
-    // Get all shows for the user's organisations
+    const orgIds = organisationScope?.map((m) => m.organisationId);
+
+    // Get all shows for the user's organisations — or every show on the
+    // platform when the caller is an admin.
     const orgShows = await ctx.db.query.shows.findMany({
-      where: inArray(shows.organisationId, orgIds),
+      where: orgIds ? inArray(shows.organisationId, orgIds) : undefined,
       with: {
         organisation: true,
         venue: true,
@@ -222,8 +238,23 @@ export const secretaryRouter = createTRPCRouter({
       };
     };
 
+    // For admins there's no membership list to read club names off, so
+    // derive the distinct set of organisations from the shows themselves —
+    // this is what feeds the club switcher and the "create show" org picker.
+    let organisations = organisationScope?.map((m) => m.organisation) ?? [];
+    if (!organisationScope) {
+      const seenOrgIds = new Set<string>();
+      organisations = [];
+      for (const s of orgShows) {
+        if (s.organisation && !seenOrgIds.has(s.organisation.id)) {
+          seenOrgIds.add(s.organisation.id);
+          organisations.push(s.organisation);
+        }
+      }
+    }
+
     return {
-      organisations: userMemberships.map((m) => m.organisation),
+      organisations,
       activeShows: activeShows.map(enrichShow),
       pastShows: pastShows.map(enrichShow),
       totalShows: orgShows.length,
@@ -5754,7 +5785,7 @@ export const secretaryRouter = createTRPCRouter({
           eq(memberships.status, 'active')
         ),
       });
-      if (!membership) {
+      if (!membership && !ctx.callerIsAdmin) {
         throw new TRPCError({ code: 'FORBIDDEN', message: 'You do not have access to this show' });
       }
       return show.scheduleData ?? null;
