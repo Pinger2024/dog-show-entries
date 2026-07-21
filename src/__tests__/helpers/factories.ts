@@ -376,7 +376,15 @@ export async function makeOrder(opts: {
   exhibitorId: string;
   status?: OrderStatus;
   totalAmount?: number;
-  stripePaymentIntentId?: string;
+  // Every real Stripe checkout has this set from the moment the
+  // PaymentIntent is created — show-metrics treats "paid + no
+  // stripePaymentIntentId" as an offline (postal/cash/direct-to-club)
+  // order collected outside Remi entirely. Most tests model a normal
+  // online checkout and never cared about this field, so the default
+  // below auto-generates a fake Stripe id to preserve that behaviour.
+  // Pass `stripePaymentIntentId: null` explicitly to model an offline
+  // (manual/postal/cash) order instead.
+  stripePaymentIntentId?: string | null;
 }) {
   const [row] = await testDb
     .insert(orders)
@@ -385,7 +393,10 @@ export async function makeOrder(opts: {
       exhibitorId: opts.exhibitorId,
       status: opts.status ?? 'pending_payment',
       totalAmount: opts.totalAmount ?? 1000,
-      stripePaymentIntentId: opts.stripePaymentIntentId,
+      stripePaymentIntentId:
+        opts.stripePaymentIntentId === null
+          ? null
+          : opts.stripePaymentIntentId ?? `pi_test_${randomUUID()}`,
     })
     .returning();
   return row;

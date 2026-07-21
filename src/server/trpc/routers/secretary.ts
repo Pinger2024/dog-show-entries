@@ -215,6 +215,11 @@ export const secretaryRouter = createTRPCRouter({
     const allShowIds = orgShows.map((s) => s.id);
     const metricsByShow = await computeShowsMetrics(ctx.db, allShowIds);
 
+    // Dashboard revenue is "how much has this show/club earned" — a general
+    // performance figure, not a "what's due from Remi" one — so it's the
+    // combined total across both channels (totalClubRevenuePence), not
+    // clubReceivablePence alone. Otherwise a show with lots of manually
+    // recorded postal/cash entries would look like it earned nothing.
     let totalEntries = 0;
     let activeRevenue = 0;
     let totalRevenue = 0;
@@ -223,9 +228,9 @@ export const secretaryRouter = createTRPCRouter({
       if (!m) continue;
       const entryCount = m.confirmedEntryCount + m.pendingEntryCount;
       totalEntries += entryCount;
-      totalRevenue += m.clubReceivablePence;
+      totalRevenue += m.totalClubRevenuePence;
       if (activeShowIds.includes(showId)) {
-        activeRevenue += m.clubReceivablePence;
+        activeRevenue += m.totalClubRevenuePence;
       }
     }
 
@@ -234,7 +239,7 @@ export const secretaryRouter = createTRPCRouter({
       return {
         ...s,
         entryCount: m ? m.confirmedEntryCount + m.pendingEntryCount : 0,
-        showRevenue: m?.clubReceivablePence ?? 0,
+        showRevenue: m?.totalClubRevenuePence ?? 0,
       };
     };
 
@@ -370,7 +375,13 @@ export const secretaryRouter = createTRPCRouter({
       // show-metrics service for the canonical definition.
       return {
         // Revenue (paid only, sundry-inclusive)
+        // clubReceivablePence = what Remi owes the club (Stripe-collected
+        // only). offlineCollectedPence = what the club already holds from
+        // postal/cash/direct-to-club entries. totalClubRevenuePence is the
+        // sum — the Financial page's "Total Income" headline.
         clubReceivablePence: metrics.clubReceivablePence,
+        offlineCollectedPence: metrics.offlineCollectedPence,
+        totalClubRevenuePence: metrics.totalClubRevenuePence,
         paidEntryFeesPence: metrics.paidEntryFeesPence,
         paidSundryRevenuePence: metrics.paidSundryRevenuePence,
         paidPlatformFeePence: metrics.paidPlatformFeePence,
@@ -388,8 +399,9 @@ export const secretaryRouter = createTRPCRouter({
         paidOnlineCatalogueCount: metrics.paidOnlineCatalogueCount,
         // Class count
         totalClasses: Number(classCount[0]?.count ?? 0),
-        // Back-compat alias — totalRevenue now means "club receivable, paid-only"
-        totalRevenue: metrics.clubReceivablePence,
+        // Back-compat alias — total revenue across both channels (was
+        // "club receivable, paid-only" before the offline-order split).
+        totalRevenue: metrics.totalClubRevenuePence,
 
         // ── "Dogs entered" canonical breakdown (financial-clarity redesign) ──
         // One headline number everywhere + the parts it's made of, so the
@@ -1102,6 +1114,7 @@ export const secretaryRouter = createTRPCRouter({
           status: o.status,
           totalAmount: o.totalAmount,
           platformFeePence: o.platformFeePence,
+          stripePaymentIntentId: o.stripePaymentIntentId,
         })),
         entries: showEntries.map((e) => ({
           id: e.id,
@@ -1119,7 +1132,10 @@ export const secretaryRouter = createTRPCRouter({
       return {
         rows,
         summary: {
-          totalRevenue: metrics.clubReceivablePence,
+          // This report lists every order regardless of channel, so the
+          // headline total should be the club's full take (Stripe +
+          // offline), not just what Remi owes.
+          totalRevenue: metrics.totalClubRevenuePence,
           paidCount: metrics.confirmedEntryCount,
           pendingCount: metrics.pendingEntryCount,
           totalEntries: showEntries.length,
@@ -5747,8 +5763,12 @@ export const secretaryRouter = createTRPCRouter({
         cancelled: metrics.cancelledEntryCount,
         // Legacy shape — we don't separately track transferred here
         transferred: 0,
-        // Revenue is club receivable (entries + sundries, net of refunds)
-        totalRevenue: metrics.clubReceivablePence,
+        // Revenue here is the show's total earnings across both channels
+        // (Stripe + offline), net of refunds — this feeds general "how much
+        // has this show made" displays (dashboard cards, lifecycle banner),
+        // not a "what's due from Remi" figure. See getShowStats for the
+        // strict clubReceivablePence/offlineCollectedPence split.
+        totalRevenue: metrics.totalClubRevenuePence,
         paidOrders: metrics.paidOrderCount,
         uniqueExhibitors: Number(exhibitorResult[0]?.count ?? 0),
         lastEntryAt: latestEntry[0]?.createdAt ?? null,

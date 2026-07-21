@@ -64,9 +64,35 @@ export type ShowMetrics = {
   /** Sum of payments.refund_amount on refunded orders — for display ("£X refunded") only, not subtracted from anything. */
   refundedPence: number;
 
-  /** What the club is due: paid entry fees + paid sundry. Refunded orders are excluded upstream. */
+  /**
+   * What Remi owes the club: paid entry fees + paid sundry, collected
+   * through STRIPE only, net of partial refunds. Refunded orders are
+   * excluded upstream.
+   *
+   * Excludes "offline" paid orders (secretary-recorded postal/cash/
+   * direct-to-club entries, `orders.stripePaymentIntentId IS NULL`) —
+   * Remi never touched that money, so it must never appear in a BACS
+   * figure. See `offlineCollectedPence` for that money and
+   * `totalClubRevenuePence` for the combined total.
+   */
   clubReceivablePence: number;
-  /** What Remi charged the exhibitor in total on paid orders (entries + sundry + platform fee). */
+  /**
+   * Paid revenue (entries + sundry) on orders the club collected itself,
+   * outside Remi — postal, cash, or otherwise settled directly with the
+   * exhibitor (`orders.createManualEntry`, `stripePaymentIntentId IS
+   * NULL`). The club already holds this money; it is NOT due from Remi
+   * and must never be added to a payout figure.
+   */
+  offlineCollectedPence: number;
+  /**
+   * clubReceivablePence + offlineCollectedPence — everything this show
+   * has earned the club, regardless of which channel collected it. Use
+   * this for "how much has this show made" displays (dashboards, payment
+   * reports); use clubReceivablePence alone for "what does Remi owe the
+   * club" (payouts, print-package deduction balance).
+   */
+  totalClubRevenuePence: number;
+  /** What Remi actually charged the exhibitor at Stripe on paid orders (entries + sundry + platform fee) — offline orders never touched Stripe, so they're excluded here too. */
   grossChargedPence: number;
 
   // ── Pending (exhibitors started checkout but Stripe hasn't confirmed) ──
@@ -125,6 +151,14 @@ export type OrderRow = {
   status: 'draft' | 'pending_payment' | 'paid' | 'failed' | 'cancelled' | 'refunded';
   totalAmount: number;
   platformFeePence: number;
+  /**
+   * Null for orders never collected via Stripe — a secretary recorded a
+   * postal/cash/direct-to-club entry (`orders.createManualEntry`). Every
+   * real Stripe checkout has this set from the moment the PaymentIntent
+   * is created, so "paid + no stripePaymentIntentId" unambiguously means
+   * "the club already holds this money, Remi never touched it."
+   */
+  stripePaymentIntentId: string | null;
 };
 
 export type EntryRow = {
@@ -161,6 +195,8 @@ export function aggregateShowMetrics(data: {
   payments: PaymentRefundRow[];
 }): ShowMetrics {
   const paidOrderIds = new Set<string>();
+  // Subset of paidOrderIds never collected via Stripe — see OrderRow.stripePaymentIntentId.
+  const offlinePaidOrderIds = new Set<string>();
   const pendingOrderIds = new Set<string>();
   const refundedOrderIds = new Set<string>();
   const pendingOrderPlatformFees = new Map<string, number>();
@@ -174,6 +210,9 @@ export function aggregateShowMetrics(data: {
       paidOrderIds.add(o.id);
       paidOrderCount += 1;
       paidPlatformFeePence += o.platformFeePence;
+      if (!o.stripePaymentIntentId) {
+        offlinePaidOrderIds.add(o.id);
+      }
     } else if (o.status === 'pending_payment') {
       pendingOrderIds.add(o.id);
       pendingOrderPlatformFees.set(o.id, o.platformFeePence);
@@ -196,6 +235,10 @@ export function aggregateShowMetrics(data: {
   let pendingEntryCount = 0;
   let paidEntryFeesPence = 0;
   let pendingEntryFeesPence = 0;
+  // Subset of paidEntryFeesPence attributable to offline (non-Stripe) paid
+  // orders — entry counts/fees stay channel-agnostic everywhere else, this
+  // accumulator exists only to carve the settlement split out at the end.
+  let offlineEntryFeesPence = 0;
 
   // "Dogs entered" split — new buckets.
   let confirmedJhEntryCount = 0;
@@ -227,9 +270,11 @@ export function aggregateShowMetrics(data: {
       continue;
     }
     if (paidOrderIds.has(e.orderId)) {
+      const isOffline = offlinePaidOrderIds.has(e.orderId);
       if (e.status === 'confirmed') {
         confirmedEntryCount += 1;
         paidEntryFeesPence += e.totalFee;
+        if (isOffline) offlineEntryFeesPence += e.totalFee;
         if (e.entryType === 'junior_handler') {
           confirmedJhEntryCount += 1;
           confirmedJhFeesPence += e.totalFee;
@@ -238,6 +283,7 @@ export function aggregateShowMetrics(data: {
         // Exhibitor paid then pulled out without a refund — fee stays with the club.
         withdrawnEntryCount += 1;
         paidEntryFeesPence += e.totalFee;
+        if (isOffline) offlineEntryFeesPence += e.totalFee;
         withdrawnKeptPence += e.totalFee;
       } else if (e.status === 'cancelled') {
         // Per-entry partial refund on an otherwise paid order: the entry
@@ -247,6 +293,7 @@ export function aggregateShowMetrics(data: {
         // that was refunded off THIS entry, for the "Cancelled — refunded"
         // reconciliation row.
         paidEntryFeesPence += e.totalFee;
+        if (isOffline) offlineEntryFeesPence += e.totalFee;
         cancelledEntryCount += 1;
         cancelledRefundedPence += e.totalFee;
       }
@@ -278,11 +325,15 @@ export function aggregateShowMetrics(data: {
   let pendingSundryRevenuePence = 0;
   let paidPrintedCatalogueCount = 0;
   let paidOnlineCatalogueCount = 0;
+  // Subset of paidSundryRevenuePence attributable to offline paid orders —
+  // same purpose as offlineEntryFeesPence above.
+  let offlineSundryRevenuePence = 0;
 
   for (const s of data.sundries) {
     const lineTotal = s.quantity * s.unitPrice;
     if (paidOrderIds.has(s.orderId)) {
       paidSundryRevenuePence += lineTotal;
+      if (offlinePaidOrderIds.has(s.orderId)) offlineSundryRevenuePence += lineTotal;
       if (isCatalogueItem(s.itemName)) {
         if (s.itemName.toLowerCase().includes('print')) {
           paidPrintedCatalogueCount += s.quantity;
@@ -295,30 +346,51 @@ export function aggregateShowMetrics(data: {
     }
   }
 
-  // Two buckets for refund amounts:
+  // Three buckets for refund amounts:
   //  - `refundedPence` = every refund, for secretary-facing display
   //    ("£X was refunded on this show").
-  //  - `partialRefundsOnPaidOrdersPence` = refunds on orders still in
-  //    'paid' state (i.e. per-entry partial refunds). These come out of
-  //    the club's share; fully-refunded orders are already excluded
-  //    from the paid buckets entirely.
+  //  - `partialRefundsOnStripePaidOrdersPence` = refunds on Stripe-collected
+  //    orders still in 'paid' state (i.e. per-entry partial refunds).
+  //    These come out of Remi's Stripe-held share; fully-refunded orders
+  //    are already excluded from the paid buckets entirely.
+  //  - `partialRefundsOnOfflinePaidOrdersPence` = the same, but on offline
+  //    orders. In practice a refund can only exist against a real Stripe
+  //    payment (there's nothing to refund on a postal/cash entry through
+  //    this system), so this should always be zero — tracked separately
+  //    anyway so an offline refund nets against offlineCollectedPence,
+  //    never against what Remi owes.
   let refundedPence = 0;
-  let partialRefundsOnPaidOrdersPence = 0;
+  let partialRefundsOnStripePaidOrdersPence = 0;
+  let partialRefundsOnOfflinePaidOrdersPence = 0;
   for (const p of data.payments) {
     if (!p.orderId || !p.refundAmount) continue;
     refundedPence += p.refundAmount;
-    if (paidOrderIds.has(p.orderId)) {
-      partialRefundsOnPaidOrdersPence += p.refundAmount;
+    if (offlinePaidOrderIds.has(p.orderId)) {
+      partialRefundsOnOfflinePaidOrdersPence += p.refundAmount;
+    } else if (paidOrderIds.has(p.orderId)) {
+      partialRefundsOnStripePaidOrdersPence += p.refundAmount;
     }
   }
 
-  const paidRevenuePence = paidEntryFeesPence + paidSundryRevenuePence;
+  // Stripe-collected vs offline-collected revenue split — entries + sundry
+  // fees are tracked channel-agnostically above (counts/fees stay the same
+  // regardless of who collected the money); the offline sub-totals are
+  // subtracted back out here purely to compute the settlement split.
+  const stripePaidRevenuePence =
+    (paidEntryFeesPence - offlineEntryFeesPence) +
+    (paidSundryRevenuePence - offlineSundryRevenuePence);
+  const offlinePaidRevenuePence = offlineEntryFeesPence + offlineSundryRevenuePence;
+
   const clubReceivablePence = Math.max(
     0,
-    paidRevenuePence - partialRefundsOnPaidOrdersPence
+    stripePaidRevenuePence - partialRefundsOnStripePaidOrdersPence
   );
-  const grossChargedPence =
-    paidRevenuePence + paidPlatformFeePence;
+  const offlineCollectedPence = Math.max(
+    0,
+    offlinePaidRevenuePence - partialRefundsOnOfflinePaidOrdersPence
+  );
+  const totalClubRevenuePence = clubReceivablePence + offlineCollectedPence;
+  const grossChargedPence = stripePaidRevenuePence + paidPlatformFeePence;
   const pendingClubReceivablePence =
     pendingEntryFeesPence + pendingSundryRevenuePence;
 
@@ -335,6 +407,8 @@ export function aggregateShowMetrics(data: {
     paidPlatformFeePence,
     refundedPence,
     clubReceivablePence,
+    offlineCollectedPence,
+    totalClubRevenuePence,
     grossChargedPence,
     pendingClubReceivablePence,
     pendingPlatformFeePence,
@@ -424,6 +498,7 @@ export async function computeShowsMetrics(
       status: orders.status,
       totalAmount: orders.totalAmount,
       platformFeePence: orders.platformFeePence,
+      stripePaymentIntentId: orders.stripePaymentIntentId,
     })
     .from(orders)
     .where(inArray(orders.showId, showIds));

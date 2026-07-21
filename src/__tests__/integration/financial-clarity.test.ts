@@ -202,6 +202,60 @@ describe('financial clarity — the parts always sum', () => {
   });
 });
 
+describe('financial clarity — offline (manual/postal/cash) orders never inflate what Remi owes', () => {
+  it('splits clubReceivablePence (Stripe) from offlineCollectedPence (club already holds it) on getShowStats and getPaymentReport', async () => {
+    const { secretary, show, showClass, breed } = await setupShow();
+
+    // A normal online entry, paid through Remi via Stripe.
+    const onlineExhibitor = await makeUser({ role: 'exhibitor' });
+    const onlineDog = await makeDog({ ownerId: onlineExhibitor.id, breedId: breed.id });
+    const onlineOrder = await makeOrder({
+      showId: show.id, exhibitorId: onlineExhibitor.id, status: 'paid', totalAmount: 2000,
+    });
+    const onlineEntry = await makeEntry({
+      showId: show.id, dogId: onlineDog.id, exhibitorId: onlineExhibitor.id,
+      orderId: onlineOrder.id, status: 'confirmed', totalFee: 2000,
+    });
+    await makeEntryClass({ entryId: onlineEntry.id, showClassId: showClass.id });
+
+    // A postal entry a secretary recorded manually — an order exists
+    // (unlike an orderless NFC/manual entry) but it never touched Stripe.
+    const postalExhibitor = await makeUser({ role: 'exhibitor' });
+    const postalDog = await makeDog({ ownerId: postalExhibitor.id, breedId: breed.id });
+    const postalOrder = await makeOrder({
+      showId: show.id, exhibitorId: postalExhibitor.id, status: 'paid', totalAmount: 1500,
+      stripePaymentIntentId: null,
+    });
+    const postalEntry = await makeEntry({
+      showId: show.id, dogId: postalDog.id, exhibitorId: postalExhibitor.id,
+      orderId: postalOrder.id, status: 'confirmed', totalFee: 1500,
+    });
+    await makeEntryClass({ entryId: postalEntry.id, showClassId: showClass.id });
+
+    const caller = createTestCaller(secretary);
+    const [stats, paymentReport] = await Promise.all([
+      caller.secretary.getShowStats({ showId: show.id }),
+      caller.secretary.getPaymentReport({ showId: show.id }),
+    ]);
+
+    // Settlement split — only the Stripe order is due from Remi.
+    expect(stats.clubReceivablePence).toBe(2000);
+    expect(stats.offlineCollectedPence).toBe(1500);
+    expect(stats.totalClubRevenuePence).toBe(3500);
+
+    // Entry counts stay channel-agnostic — both entries are "paid through Remi"
+    // in the dogsEntered sense (an entry is an entry regardless of how it was
+    // paid); only the settlement figures above split.
+    expect(stats.confirmedEntries).toBe(2);
+    expect(stats.dogsEntered).toBe(2);
+    expect(stats.paidThroughRemiFeesPence).toBe(3500);
+
+    // The Payment Report lists every order regardless of channel, so its
+    // headline total is the club's full take across both channels.
+    expect(paymentReport.summary.totalRevenue).toBe(3500);
+  });
+});
+
 describe('financial clarity — one procedure, one shape, everywhere', () => {
   it('getShowEntryStats and getShowStats agree on dogsEntered for the same show', async () => {
     const { secretary, show, showClass, breed } = await setupShow();
