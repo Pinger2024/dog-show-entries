@@ -79,4 +79,49 @@ describe('secretary.getDashboard — admin sees every club\'s shows', () => {
       createTestCaller(admin).entries.getForShow({ showId: show.id, limit: 50, cursor: 0 })
     ).resolves.not.toThrow();
   });
+
+  // Mandy hit this live 2026-07-21: admin blocked from adding a catalogue
+  // advert (Mary Curran memorial) on a show whose org she wasn't a member
+  // of — the adverts procedures were among ~10 call sites that forgot to
+  // thread callerIsAdmin into verifyShowAccess. The flag is now REQUIRED
+  // at the type level; these pin the behaviour both ways.
+  it('an admin with no membership can manage a foreign show\'s catalogue adverts', async () => {
+    const admin = await makeUser({ role: 'admin' });
+    const { org } = await makeSecretaryWithOrg();
+    const show = await makeShow({ organisationId: org.id, status: 'entries_open' });
+    const caller = createTestCaller(admin);
+
+    await expect(
+      caller.secretary.upsertCatalogueAdvert({
+        showId: show.id,
+        advertiserName: 'In memory of Mary Curran',
+        adType: 'full_page',
+        document: 'catalogue',
+        position: 'inside_front',
+        sortOrder: 0,
+        isPaid: false,
+      })
+    ).resolves.not.toThrow();
+
+    const adverts = await caller.secretary.getCatalogueAdverts({ showId: show.id });
+    expect(adverts.map((a) => a.advertiserName)).toContain('In memory of Mary Curran');
+  });
+
+  it('a foreign secretary is still FORBIDDEN from a show\'s catalogue adverts', async () => {
+    const { user: foreignSecretary } = await makeSecretaryWithOrg();
+    const { org } = await makeSecretaryWithOrg();
+    const show = await makeShow({ organisationId: org.id, status: 'entries_open' });
+
+    await expect(
+      createTestCaller(foreignSecretary).secretary.upsertCatalogueAdvert({
+        showId: show.id,
+        advertiserName: 'Should not work',
+        adType: 'full_page',
+        document: 'catalogue',
+        position: 'last_page',
+        sortOrder: 0,
+        isPaid: false,
+      })
+    ).rejects.toThrow(/do not have access/);
+  });
 });
