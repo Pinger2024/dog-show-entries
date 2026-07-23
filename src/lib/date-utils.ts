@@ -237,6 +237,28 @@ export function isShowDayReached(startDate: string): boolean {
 }
 
 /**
+ * Formats an entries-close timestamp's TIME as a human phrase, always in
+ * UK time regardless of the viewer's timezone (shows are UK events):
+ * 23:59 or 00:00 → "midnight", 12:00 → "noon", otherwise "5pm" / "12:30pm".
+ * Mandy 2026-07-21: countdowns showed the close DATE but not the time, and
+ * exhibitors (and secretaries) genuinely didn't know when the door shut.
+ */
+export function formatCloseTimeUK(date: Date): string {
+  const hm = new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'Europe/London',
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: false,
+  }).format(date);
+  const [h, m] = hm.split(':').map(Number);
+  if ((h === 23 && m === 59) || (h === 0 && m === 0)) return 'midnight';
+  if (h === 12 && m === 0) return 'noon';
+  const hour12 = ((h + 11) % 12) + 1;
+  const ampm = h < 12 ? 'am' : 'pm';
+  return m === 0 ? `${hour12}${ampm}` : `${hour12}:${String(m).padStart(2, '0')}${ampm}`;
+}
+
+/**
  * Formats a date as a human-friendly relative string.
  * - Today: "Today at 3:15 PM"
  * - Yesterday: "Yesterday"

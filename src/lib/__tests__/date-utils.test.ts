@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   formatCurrency,
+  formatCloseTimeUK,
   formatDateRange,
   poundsToPence,
   penceToPounds,
@@ -308,5 +309,34 @@ describe('getCompetitionAgeError', () => {
       classes: [babyPuppy, openClass],
     });
     expect(msg).toMatch(/at least 6 months old for competition classes/);
+  });
+});
+
+// Mandy 2026-07-21: countdowns must show WHEN the door shuts, UK time,
+// in words a 60-year-old secretary reads at a glance.
+describe('formatCloseTimeUK', () => {
+  it('reads 23:59 UK as midnight (BST date)', () => {
+    // 22:59 UTC in July = 23:59 BST
+    expect(formatCloseTimeUK(new Date('2026-07-26T22:59:00Z'))).toBe('midnight');
+  });
+  it('reads 00:00 UK as midnight', () => {
+    expect(formatCloseTimeUK(new Date('2026-07-25T23:00:00Z'))).toBe('midnight');
+  });
+  it('reads 23:59 UK as midnight in winter (GMT)', () => {
+    expect(formatCloseTimeUK(new Date('2026-12-05T23:59:00Z'))).toBe('midnight');
+  });
+  it('reads 12:00 UK as noon', () => {
+    expect(formatCloseTimeUK(new Date('2026-07-26T11:00:00Z'))).toBe('noon');
+  });
+  it('drops :00 minutes — 5pm not 5:00pm', () => {
+    // 16:00 UTC in July = 5pm BST
+    expect(formatCloseTimeUK(new Date('2026-07-26T16:00:00Z'))).toBe('5pm');
+  });
+  it('keeps real minutes — 12:30pm', () => {
+    expect(formatCloseTimeUK(new Date('2026-07-26T11:30:00Z'))).toBe('12:30pm');
+  });
+  it('morning times get am', () => {
+    // 08:15 UTC July = 9:15am BST
+    expect(formatCloseTimeUK(new Date('2026-07-26T08:15:00Z'))).toBe('9:15am');
   });
 });

@@ -651,6 +651,12 @@ function StepDetails({
       ? new Date(show.postalCloseDate).toISOString().slice(0, 16)
       : '',
   );
+  // Mandy 2026-07-23: choosing a close DATE defaults the time to 23:59 —
+  // date pickers leave datetime-local's time at 00:00, which silently set
+  // closes to the START of the chosen day (a show nearly lost its whole
+  // final entry day to this). A deliberately typed time is kept as-is.
+  const defaultTimeTo2359 = (v: string) =>
+    v.endsWith('T00:00') ? `${v.slice(0, 11)}23:59` : v;
   const [secretaryName, setSecretaryName] = useState(show.secretaryName ?? '');
   const [secretaryEmail, setSecretaryEmail] = useState(
     show.secretaryEmail ?? '',
@@ -867,7 +873,7 @@ function StepDetails({
               type="datetime-local"
               className="min-h-[2.75rem]"
               value={entryCloseDate}
-              onChange={(e) => setEntryCloseDate(e.target.value)}
+              onChange={(e) => setEntryCloseDate(defaultTimeTo2359(e.target.value))}
             />
           </div>
           {show.acceptsPostalEntries && (
@@ -880,7 +886,7 @@ function StepDetails({
                 type="datetime-local"
                 className="min-h-[2.75rem]"
                 value={postalCloseDate}
-                onChange={(e) => setPostalCloseDate(e.target.value)}
+                onChange={(e) => setPostalCloseDate(defaultTimeTo2359(e.target.value))}
               />
             </div>
           )}

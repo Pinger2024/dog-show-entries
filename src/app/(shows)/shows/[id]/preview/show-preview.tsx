@@ -33,7 +33,7 @@ import {
 } from '@/lib/class-labels';
 import { Button } from '@/components/ui/button';
 import { displayShowTypeLabel } from '@/lib/show-types';
-import { formatCurrency } from '@/lib/date-utils';
+import { formatCurrency, formatCloseTimeUK } from '@/lib/date-utils';
 import { buildRegionalFeeDisplay, buildRegionalSpecialClassFees } from '@/lib/regional-fee-calc';
 import { ShareKitDialog } from '@/components/show/share-kit-dialog';
 import { ShareKitCard } from '@/components/show/share-kit';
@@ -852,7 +852,7 @@ export function ShowPreviewClient() {
                   </span>
                 ) as unknown as string
               }
-              date={format(entryCloseDate, 'EEE d MMM')}
+              date={`${format(entryCloseDate, 'EEE d MMM')} · ${formatCloseTimeUK(entryCloseDate)}`}
               className="mt-[18px]"
             >
               <CountdownCells countdown={countdown} dark />

@@ -14,7 +14,7 @@ import {
 } from 'lucide-react';
 import { trpc } from '@/lib/trpc';
 import { cn } from '@/lib/utils';
-import { formatCurrency } from '@/lib/date-utils';
+import { formatCurrency, formatCloseTimeUK } from '@/lib/date-utils';
 import { displayShowTitle } from '@/lib/show-types';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
@@ -281,10 +281,10 @@ function UrgentBand({ urgent }: { urgent: UrgentFact }) {
             label={showTitle}
             date={
               urgent.days <= 0
-                ? 'Closes today!'
+                ? `Closes today at ${formatCloseTimeUK(urgent.closeDate)}`
                 : urgent.days === 1
-                  ? 'Closes tomorrow'
-                  : `Closes ${format(urgent.closeDate, 'd MMM')}`
+                  ? `Closes tomorrow at ${formatCloseTimeUK(urgent.closeDate)}`
+                  : `Closes ${format(urgent.closeDate, 'd MMM')} at ${formatCloseTimeUK(urgent.closeDate)}`
             }
           >
             <CountdownCells target={urgent.closeDate} dark />

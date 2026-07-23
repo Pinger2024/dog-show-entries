@@ -932,7 +932,11 @@ function EditShowDetailsDialog({
                   value={entryCloseDate}
                   max={startDate ? `${startDate}T00:00` : undefined}
                   onChange={(e) => {
-                    const newClose = e.target.value;
+                    // Untouched 00:00 → 23:59 (Mandy 2026-07-23: closes
+                    // default to the END of the chosen day, not its start).
+                    const newClose = e.target.value.endsWith('T00:00')
+                      ? `${e.target.value.slice(0, 11)}23:59`
+                      : e.target.value;
                     if (newClose && startDate && new Date(newClose) >= new Date(startDate)) {
                       toast.error('Entry close date must be before the show date');
                       return;
@@ -949,7 +953,9 @@ function EditShowDetailsDialog({
                   value={postalCloseDate}
                   max={startDate ? `${startDate}T00:00` : undefined}
                   onChange={(e) => {
-                    const newClose = e.target.value;
+                    const newClose = e.target.value.endsWith('T00:00')
+                      ? `${e.target.value.slice(0, 11)}23:59`
+                      : e.target.value;
                     if (newClose && startDate && new Date(newClose) >= new Date(startDate)) {
                       toast.error('Postal close date must be before the show date');
                       return;
