@@ -251,7 +251,12 @@ export function formatCloseTimeUK(date: Date): string {
     hour12: false,
   }).format(date);
   const [h, m] = hm.split(':').map(Number);
-  if ((h === 23 && m === 59) || (h === 0 && m === 0)) return 'midnight';
+  // Mandy 2026-07-23: show "23:59" rather than "midnight" — midnight is
+  // ambiguous about WHICH day it belongs to, the very confusion this
+  // feature exists to kill. 24h digits for the edge times, friendly 12h
+  // words for everything else.
+  if (h === 23 && m === 59) return '23:59';
+  if (h === 0 && m === 0) return '00:00';
   if (h === 12 && m === 0) return 'noon';
   const hour12 = ((h + 11) % 12) + 1;
   const ampm = h < 12 ? 'am' : 'pm';

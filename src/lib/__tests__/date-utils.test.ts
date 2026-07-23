@@ -315,15 +315,15 @@ describe('getCompetitionAgeError', () => {
 // Mandy 2026-07-21: countdowns must show WHEN the door shuts, UK time,
 // in words a 60-year-old secretary reads at a glance.
 describe('formatCloseTimeUK', () => {
-  it('reads 23:59 UK as midnight (BST date)', () => {
+  it('reads 23:59 UK as 23:59 (BST date)', () => {
     // 22:59 UTC in July = 23:59 BST
-    expect(formatCloseTimeUK(new Date('2026-07-26T22:59:00Z'))).toBe('midnight');
+    expect(formatCloseTimeUK(new Date('2026-07-26T22:59:00Z'))).toBe('23:59');
   });
-  it('reads 00:00 UK as midnight', () => {
-    expect(formatCloseTimeUK(new Date('2026-07-25T23:00:00Z'))).toBe('midnight');
+  it('reads 00:00 UK as 00:00', () => {
+    expect(formatCloseTimeUK(new Date('2026-07-25T23:00:00Z'))).toBe('00:00');
   });
-  it('reads 23:59 UK as midnight in winter (GMT)', () => {
-    expect(formatCloseTimeUK(new Date('2026-12-05T23:59:00Z'))).toBe('midnight');
+  it('reads 23:59 UK as 23:59 in winter (GMT)', () => {
+    expect(formatCloseTimeUK(new Date('2026-12-05T23:59:00Z'))).toBe('23:59');
   });
   it('reads 12:00 UK as noon', () => {
     expect(formatCloseTimeUK(new Date('2026-07-26T11:00:00Z'))).toBe('noon');
