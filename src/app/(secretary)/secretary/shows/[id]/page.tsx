@@ -923,46 +923,75 @@ function EditShowDetailsDialog({
                 />
               </div>
             </div>
+            {/* Separate date + time inputs (Mandy 2026-07-23): closes default
+                to 11:59pm on the chosen date. A combined datetime-local can't
+                deliver that on iOS — the wheel starts at an arbitrary time. */}
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-1.5">
                 <Label htmlFor="edit-entry-close">Entry Close Date</Label>
-                <Input
-                  id="edit-entry-close"
-                  type="datetime-local"
-                  value={entryCloseDate}
-                  max={startDate ? `${startDate}T00:00` : undefined}
-                  onChange={(e) => {
-                    // Untouched 00:00 → 23:59 (Mandy 2026-07-23: closes
-                    // default to the END of the chosen day, not its start).
-                    const newClose = e.target.value.endsWith('T00:00')
-                      ? `${e.target.value.slice(0, 11)}23:59`
-                      : e.target.value;
-                    if (newClose && startDate && new Date(newClose) >= new Date(startDate)) {
-                      toast.error('Entry close date must be before the show date');
-                      return;
+                <div className="flex gap-2">
+                  <Input
+                    id="edit-entry-close"
+                    type="date"
+                    className="flex-1"
+                    value={entryCloseDate.slice(0, 10)}
+                    max={startDate || undefined}
+                    onChange={(e) => {
+                      const newClose = e.target.value
+                        ? `${e.target.value}T${entryCloseDate.length >= 16 ? entryCloseDate.slice(11, 16) : '23:59'}`
+                        : '';
+                      if (newClose && startDate && new Date(newClose) >= new Date(startDate)) {
+                        toast.error('Entry close date must be before the show date');
+                        return;
+                      }
+                      setEntryCloseDate(newClose);
+                    }}
+                  />
+                  <Input
+                    aria-label="Closing time"
+                    type="time"
+                    className="w-28"
+                    value={entryCloseDate.length >= 16 ? entryCloseDate.slice(11, 16) : '23:59'}
+                    disabled={!entryCloseDate}
+                    onChange={(e) =>
+                      entryCloseDate &&
+                      setEntryCloseDate(`${entryCloseDate.slice(0, 10)}T${e.target.value || '23:59'}`)
                     }
-                    setEntryCloseDate(newClose);
-                  }}
-                />
+                  />
+                </div>
               </div>
               <div className="space-y-1.5">
                 <Label htmlFor="edit-postal-close">Postal Close Date</Label>
-                <Input
-                  id="edit-postal-close"
-                  type="datetime-local"
-                  value={postalCloseDate}
-                  max={startDate ? `${startDate}T00:00` : undefined}
-                  onChange={(e) => {
-                    const newClose = e.target.value.endsWith('T00:00')
-                      ? `${e.target.value.slice(0, 11)}23:59`
-                      : e.target.value;
-                    if (newClose && startDate && new Date(newClose) >= new Date(startDate)) {
-                      toast.error('Postal close date must be before the show date');
-                      return;
+                <div className="flex gap-2">
+                  <Input
+                    id="edit-postal-close"
+                    type="date"
+                    className="flex-1"
+                    value={postalCloseDate.slice(0, 10)}
+                    max={startDate || undefined}
+                    onChange={(e) => {
+                      const newClose = e.target.value
+                        ? `${e.target.value}T${postalCloseDate.length >= 16 ? postalCloseDate.slice(11, 16) : '23:59'}`
+                        : '';
+                      if (newClose && startDate && new Date(newClose) >= new Date(startDate)) {
+                        toast.error('Postal close date must be before the show date');
+                        return;
+                      }
+                      setPostalCloseDate(newClose);
+                    }}
+                  />
+                  <Input
+                    aria-label="Postal closing time"
+                    type="time"
+                    className="w-28"
+                    value={postalCloseDate.length >= 16 ? postalCloseDate.slice(11, 16) : '23:59'}
+                    disabled={!postalCloseDate}
+                    onChange={(e) =>
+                      postalCloseDate &&
+                      setPostalCloseDate(`${postalCloseDate.slice(0, 10)}T${e.target.value || '23:59'}`)
                     }
-                    setPostalCloseDate(newClose);
-                  }}
-                />
+                  />
+                </div>
               </div>
             </div>
             {isWusv ? (

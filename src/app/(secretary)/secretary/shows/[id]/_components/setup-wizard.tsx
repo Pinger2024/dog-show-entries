@@ -651,12 +651,6 @@ function StepDetails({
       ? new Date(show.postalCloseDate).toISOString().slice(0, 16)
       : '',
   );
-  // Mandy 2026-07-23: choosing a close DATE defaults the time to 23:59 —
-  // date pickers leave datetime-local's time at 00:00, which silently set
-  // closes to the START of the chosen day (a show nearly lost its whole
-  // final entry day to this). A deliberately typed time is kept as-is.
-  const defaultTimeTo2359 = (v: string) =>
-    v.endsWith('T00:00') ? `${v.slice(0, 11)}23:59` : v;
   const [secretaryName, setSecretaryName] = useState(show.secretaryName ?? '');
   const [secretaryEmail, setSecretaryEmail] = useState(
     show.secretaryEmail ?? '',
@@ -868,26 +862,68 @@ function StepDetails({
             <Label htmlFor="wiz-close-date" className="text-xs">
               Entry close date
             </Label>
-            <Input
-              id="wiz-close-date"
-              type="datetime-local"
-              className="min-h-[2.75rem]"
-              value={entryCloseDate}
-              onChange={(e) => setEntryCloseDate(defaultTimeTo2359(e.target.value))}
-            />
+            {/* Separate date + time inputs (Mandy 2026-07-23): closes default
+                to 11:59pm on the chosen date. A combined datetime-local can't
+                deliver that — iOS's wheel starts from an arbitrary time, so
+                the "default" was whatever the wheel happened to say. */}
+            <div className="flex gap-2">
+              <Input
+                id="wiz-close-date"
+                type="date"
+                className="min-h-[2.75rem] flex-1"
+                value={entryCloseDate.slice(0, 10)}
+                onChange={(e) =>
+                  setEntryCloseDate(
+                    e.target.value
+                      ? `${e.target.value}T${entryCloseDate.length >= 16 ? entryCloseDate.slice(11, 16) : '23:59'}`
+                      : '',
+                  )
+                }
+              />
+              <Input
+                aria-label="Closing time"
+                type="time"
+                className="min-h-[2.75rem] w-28"
+                value={entryCloseDate.length >= 16 ? entryCloseDate.slice(11, 16) : '23:59'}
+                disabled={!entryCloseDate}
+                onChange={(e) =>
+                  entryCloseDate &&
+                  setEntryCloseDate(`${entryCloseDate.slice(0, 10)}T${e.target.value || '23:59'}`)
+                }
+              />
+            </div>
           </div>
           {show.acceptsPostalEntries && (
             <div className="space-y-1.5">
               <Label htmlFor="wiz-postal-close" className="text-xs">
                 Postal close date
               </Label>
-              <Input
-                id="wiz-postal-close"
-                type="datetime-local"
-                className="min-h-[2.75rem]"
-                value={postalCloseDate}
-                onChange={(e) => setPostalCloseDate(defaultTimeTo2359(e.target.value))}
-              />
+              <div className="flex gap-2">
+                <Input
+                  id="wiz-postal-close"
+                  type="date"
+                  className="min-h-[2.75rem] flex-1"
+                  value={postalCloseDate.slice(0, 10)}
+                  onChange={(e) =>
+                    setPostalCloseDate(
+                      e.target.value
+                        ? `${e.target.value}T${postalCloseDate.length >= 16 ? postalCloseDate.slice(11, 16) : '23:59'}`
+                        : '',
+                    )
+                  }
+                />
+                <Input
+                  aria-label="Postal closing time"
+                  type="time"
+                  className="min-h-[2.75rem] w-28"
+                  value={postalCloseDate.length >= 16 ? postalCloseDate.slice(11, 16) : '23:59'}
+                  disabled={!postalCloseDate}
+                  onChange={(e) =>
+                    postalCloseDate &&
+                    setPostalCloseDate(`${postalCloseDate.slice(0, 10)}T${e.target.value || '23:59'}`)
+                  }
+                />
+              </div>
             </div>
           )}
         </div>
