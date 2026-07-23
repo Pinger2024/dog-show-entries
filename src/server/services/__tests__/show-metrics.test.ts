@@ -29,9 +29,9 @@ import {
 //   paidOnlineCatalogueCount  = 0
 
 const BAGSD_ORDERS: OrderRow[] = [
-  { id: 'order-cancelled', status: 'cancelled', totalAmount: 4700, platformFeePence: 147 },
-  { id: 'order-paid', status: 'paid', totalAmount: 4700, platformFeePence: 147 },
-  { id: 'order-pending', status: 'pending_payment', totalAmount: 4700, platformFeePence: 147 },
+  { id: 'order-cancelled', status: 'cancelled', totalAmount: 4700, platformFeePence: 147, stripePaymentIntentId: 'pi_bagsd_cancelled' },
+  { id: 'order-paid', status: 'paid', totalAmount: 4700, platformFeePence: 147, stripePaymentIntentId: 'pi_bagsd_paid' },
+  { id: 'order-pending', status: 'pending_payment', totalAmount: 4700, platformFeePence: 147, stripePaymentIntentId: 'pi_bagsd_pending' },
 ];
 
 const BAGSD_ENTRIES: EntryRow[] = [
@@ -128,7 +128,7 @@ describe('aggregateShowMetrics — refund accounting', () => {
     // contributes nothing to paid revenue, catalogue counts, or entry
     // counts — the exhibitor got all their money back.
     const metrics = aggregateShowMetrics({
-      orders: [{ id: 'o1', status: 'refunded', totalAmount: 4700, platformFeePence: 147 }],
+      orders: [{ id: 'o1', status: 'refunded', totalAmount: 4700, platformFeePence: 147, stripePaymentIntentId: 'pi_refunded' }],
       entries: [
         { id: 'e1', orderId: 'o1', status: 'cancelled', totalFee: 1800, deletedAt: null, isNfc: false, entryType: 'standard' },
         { id: 'e2', orderId: 'o1', status: 'cancelled', totalFee: 0, deletedAt: null, isNfc: false, entryType: 'standard' },
@@ -159,7 +159,7 @@ describe('aggregateShowMetrics — refund accounting', () => {
     // entries/sundries still count. Only the partial refund comes out
     // of the club's share.
     const metrics = aggregateShowMetrics({
-      orders: [{ id: 'o1', status: 'paid', totalAmount: 5000, platformFeePence: 150 }],
+      orders: [{ id: 'o1', status: 'paid', totalAmount: 5000, platformFeePence: 150, stripePaymentIntentId: 'pi_partial' }],
       entries: [
         { id: 'e1', orderId: 'o1', status: 'confirmed', totalFee: 5000, deletedAt: null, isNfc: false, entryType: 'standard' },
       ],
@@ -177,7 +177,7 @@ describe('aggregateShowMetrics — refund accounting', () => {
     // the refund ate into the platform fee. Club's share can't go
     // negative — the platform fee was Remi's, never the club's.
     const metrics = aggregateShowMetrics({
-      orders: [{ id: 'o1', status: 'paid', totalAmount: 4700, platformFeePence: 147 }],
+      orders: [{ id: 'o1', status: 'paid', totalAmount: 4700, platformFeePence: 147, stripePaymentIntentId: 'pi_over_refund' }],
       entries: [
         { id: 'e1', orderId: 'o1', status: 'confirmed', totalFee: 4700, deletedAt: null, isNfc: false, entryType: 'standard' },
       ],
@@ -193,7 +193,7 @@ describe('aggregateShowMetrics — refund accounting', () => {
 describe('aggregateShowMetrics — online catalogue splitting', () => {
   it('routes items named "Online Catalogue" to the online bucket', () => {
     const metrics = aggregateShowMetrics({
-      orders: [{ id: 'o1', status: 'paid', totalAmount: 1000, platformFeePence: 30 }],
+      orders: [{ id: 'o1', status: 'paid', totalAmount: 1000, platformFeePence: 30, stripePaymentIntentId: 'pi_catalogue' }],
       entries: [],
       sundries: [
         { orderId: 'o1', itemName: 'Printed Catalogue', quantity: 2, unitPrice: 400 },
@@ -242,7 +242,7 @@ describe('aggregateShowMetrics — "dogs entered" breakdown', () => {
 
   it('counts orderless NFC entries as notForCompetition, not paidThroughRemi', () => {
     const metrics = aggregateShowMetrics({
-      orders: [{ id: 'o1', status: 'paid', totalAmount: 2000, platformFeePence: 30 }],
+      orders: [{ id: 'o1', status: 'paid', totalAmount: 2000, platformFeePence: 30, stripePaymentIntentId: 'pi_nfc' }],
       entries: [
         entryRow({ id: 'paid-1', orderId: 'o1', status: 'confirmed', totalFee: 2000 }),
         // Two NFC dogs, no order at all — never paid via Remi.
@@ -282,7 +282,7 @@ describe('aggregateShowMetrics — "dogs entered" breakdown', () => {
 
   it('excludes withdrawn from dogsEntered but keeps its fee in withdrawnKeptPence', () => {
     const metrics = aggregateShowMetrics({
-      orders: [{ id: 'o1', status: 'paid', totalAmount: 4000, platformFeePence: 60 }],
+      orders: [{ id: 'o1', status: 'paid', totalAmount: 4000, platformFeePence: 60, stripePaymentIntentId: 'pi_withdrawn' }],
       entries: [
         entryRow({ id: 'paid-1', orderId: 'o1', status: 'confirmed', totalFee: 2000 }),
         entryRow({ id: 'withdrawn-1', orderId: 'o1', status: 'withdrawn', totalFee: 2000 }),
@@ -303,7 +303,7 @@ describe('aggregateShowMetrics — "dogs entered" breakdown', () => {
 
   it('puts entries on a pending_payment order into pendingEntryCount, NOT dogsEntered', () => {
     const metrics = aggregateShowMetrics({
-      orders: [{ id: 'o1', status: 'pending_payment', totalAmount: 2000, platformFeePence: 30 }],
+      orders: [{ id: 'o1', status: 'pending_payment', totalAmount: 2000, platformFeePence: 30, stripePaymentIntentId: 'pi_awaiting' }],
       entries: [
         entryRow({ id: 'awaiting-1', orderId: 'o1', status: 'pending', totalFee: 2000 }),
       ],
@@ -320,7 +320,7 @@ describe('aggregateShowMetrics — "dogs entered" breakdown', () => {
 
   it('splits a per-entry partial refund on a paid order into cancelledEntryCount', () => {
     const metrics = aggregateShowMetrics({
-      orders: [{ id: 'o1', status: 'paid', totalAmount: 4000, platformFeePence: 60 }],
+      orders: [{ id: 'o1', status: 'paid', totalAmount: 4000, platformFeePence: 60, stripePaymentIntentId: 'pi_cancelled' }],
       entries: [
         entryRow({ id: 'paid-1', orderId: 'o1', status: 'confirmed', totalFee: 2000 }),
         entryRow({ id: 'cancelled-1', orderId: 'o1', status: 'cancelled', totalFee: 2000 }),
@@ -337,7 +337,7 @@ describe('aggregateShowMetrics — "dogs entered" breakdown', () => {
 
   it('the parts always sum: paidThroughRemi + NFC + otherOrderless = dogsEntered, and income parts = totalIncome', () => {
     const metrics = aggregateShowMetrics({
-      orders: [{ id: 'o1', status: 'paid', totalAmount: 6000, platformFeePence: 90 }],
+      orders: [{ id: 'o1', status: 'paid', totalAmount: 6000, platformFeePence: 90, stripePaymentIntentId: 'pi_sum_check' }],
       entries: [
         entryRow({ id: 'paid-1', orderId: 'o1', status: 'confirmed', totalFee: 2000 }),
         entryRow({ id: 'paid-2', orderId: 'o1', status: 'confirmed', totalFee: 2000 }),
@@ -369,7 +369,7 @@ describe('aggregateShowMetrics — "dogs entered" breakdown', () => {
 
   it('splits Junior Handler entries within confirmedEntryCount', () => {
     const metrics = aggregateShowMetrics({
-      orders: [{ id: 'o1', status: 'paid', totalAmount: 2000, platformFeePence: 30 }],
+      orders: [{ id: 'o1', status: 'paid', totalAmount: 2000, platformFeePence: 30, stripePaymentIntentId: 'pi_jh' }],
       entries: [
         entryRow({ id: 'standard-1', orderId: 'o1', status: 'confirmed', totalFee: 1500, entryType: 'standard' }),
         entryRow({ id: 'jh-1', orderId: 'o1', status: 'confirmed', totalFee: 500, entryType: 'junior_handler' }),
@@ -381,5 +381,158 @@ describe('aggregateShowMetrics — "dogs entered" breakdown', () => {
     expect(metrics.confirmedEntryCount).toBe(2);
     expect(metrics.confirmedJhEntryCount).toBe(1);
     expect(metrics.confirmedJhFeesPence).toBe(500);
+  });
+});
+
+// ──────────────────────────────────────────────────────────────
+// Offline (manual/postal/cash) paid orders — the live bug caught
+// 2026-07-21: secretaries can record a manual entry
+// (secretary.createManualEntry) whose order is inserted straight to
+// status='paid' with NO stripe_payment_intent_id, because the money
+// never touched Remi's Stripe balance — the club already has it.
+// show-metrics used to fold these into clubReceivablePence ("what the
+// club is due from Remi"), which would have told the admin to BACS
+// money Remi never collected. Live at the time: GSD Club of Scotland
+// (£46 across 3 manual orders, one of them £0), Clyde Valley (£20),
+// South Western (£3).
+// ──────────────────────────────────────────────────────────────
+
+describe('aggregateShowMetrics — offline (manual/postal/cash) paid orders', () => {
+  const entryRow = (overrides: Partial<EntryRow> & Pick<EntryRow, 'id'>): EntryRow => ({
+    orderId: null,
+    status: 'confirmed',
+    totalFee: 0,
+    deletedAt: null,
+    isNfc: false,
+    entryType: 'standard',
+    ...overrides,
+  });
+
+  it('splits clubReceivablePence (Stripe-collected) from offlineCollectedPence (club already holds it), while entry counts include both', () => {
+    const metrics = aggregateShowMetrics({
+      orders: [
+        { id: 'stripe-order', status: 'paid', totalAmount: 2000, platformFeePence: 30, stripePaymentIntentId: 'pi_maxine_online' },
+        // A postal/cash entry Maxine recorded manually — no Stripe payment,
+        // the club already has this £15 in hand.
+        { id: 'offline-order', status: 'paid', totalAmount: 1500, platformFeePence: 0, stripePaymentIntentId: null },
+      ],
+      entries: [
+        entryRow({ id: 'stripe-entry', orderId: 'stripe-order', status: 'confirmed', totalFee: 2000 }),
+        entryRow({ id: 'offline-entry', orderId: 'offline-order', status: 'confirmed', totalFee: 1500 }),
+      ],
+      sundries: [],
+      payments: [],
+    });
+
+    // Settlement split — only the Stripe order is money Remi is holding.
+    expect(metrics.clubReceivablePence).toBe(2000);
+    expect(metrics.offlineCollectedPence).toBe(1500);
+    expect(metrics.totalClubRevenuePence).toBe(3500);
+    // Remi only ever charged the exhibitor at Stripe for the online order.
+    expect(metrics.grossChargedPence).toBe(2030);
+
+    // Entry counts/fees are channel-agnostic — an entry is an entry
+    // regardless of how it was paid, so both orders' entries count toward
+    // the same "paid through Remi" bucket the rest of the app reads.
+    expect(metrics.confirmedEntryCount).toBe(2);
+    expect(metrics.paidOrderCount).toBe(2);
+    expect(metrics.paidEntryFeesPence).toBe(3500);
+    expect(metrics.confirmedEntryFeesPence).toBe(3500);
+    expect(metrics.dogsEnteredCount).toBe(2);
+    expect(metrics.dogsEnteredFeesPence).toBe(3500);
+  });
+
+  it('handles a £0 offline order gracefully (a free manual entry)', () => {
+    const metrics = aggregateShowMetrics({
+      orders: [
+        { id: 'offline-zero', status: 'paid', totalAmount: 0, platformFeePence: 0, stripePaymentIntentId: null },
+      ],
+      entries: [
+        entryRow({ id: 'free-entry', orderId: 'offline-zero', status: 'confirmed', totalFee: 0 }),
+      ],
+      sundries: [],
+      payments: [],
+    });
+
+    expect(metrics.paidOrderCount).toBe(1);
+    expect(metrics.confirmedEntryCount).toBe(1);
+    expect(metrics.clubReceivablePence).toBe(0);
+    expect(metrics.offlineCollectedPence).toBe(0);
+    expect(metrics.totalClubRevenuePence).toBe(0);
+  });
+
+  it('splits offline sundry revenue the same way as entry fees', () => {
+    const metrics = aggregateShowMetrics({
+      orders: [
+        { id: 'stripe-order', status: 'paid', totalAmount: 2400, platformFeePence: 30, stripePaymentIntentId: 'pi_sundries' },
+        { id: 'offline-order', status: 'paid', totalAmount: 500, platformFeePence: 0, stripePaymentIntentId: null },
+      ],
+      entries: [
+        entryRow({ id: 'stripe-entry', orderId: 'stripe-order', status: 'confirmed', totalFee: 2000 }),
+        entryRow({ id: 'offline-entry', orderId: 'offline-order', status: 'confirmed', totalFee: 0 }),
+      ],
+      sundries: [
+        { orderId: 'stripe-order', itemName: 'Donation', quantity: 1, unitPrice: 400 },
+        { orderId: 'offline-order', itemName: 'Printed Catalogue', quantity: 1, unitPrice: 500 },
+      ],
+      payments: [],
+    });
+
+    expect(metrics.paidSundryRevenuePence).toBe(900); // channel-agnostic total, unchanged
+    expect(metrics.clubReceivablePence).toBe(2400); // 2000 entry + 400 sundry, Stripe only
+    expect(metrics.offlineCollectedPence).toBe(500); // the postal catalogue payment
+  });
+
+  it('nets a partial refund on a Stripe order against clubReceivablePence only, never offlineCollectedPence', () => {
+    const metrics = aggregateShowMetrics({
+      orders: [
+        { id: 'stripe-order', status: 'paid', totalAmount: 5000, platformFeePence: 150, stripePaymentIntentId: 'pi_refund_split' },
+        { id: 'offline-order', status: 'paid', totalAmount: 2000, platformFeePence: 0, stripePaymentIntentId: null },
+      ],
+      entries: [
+        entryRow({ id: 'stripe-entry', orderId: 'stripe-order', status: 'confirmed', totalFee: 5000 }),
+        entryRow({ id: 'offline-entry', orderId: 'offline-order', status: 'confirmed', totalFee: 2000 }),
+      ],
+      sundries: [],
+      payments: [{ orderId: 'stripe-order', refundAmount: 1000 }],
+    });
+
+    expect(metrics.clubReceivablePence).toBe(4000); // 5000 − 1000 refund
+    expect(metrics.offlineCollectedPence).toBe(2000); // untouched by the Stripe-side refund
+    expect(metrics.totalClubRevenuePence).toBe(6000);
+  });
+
+  it('(defensive) nets a refund recorded against an offline order against offlineCollectedPence, never clubReceivablePence', () => {
+    // Shouldn't happen in practice — there's nothing to refund on a
+    // postal/cash entry through this system — but if it ever does, the
+    // netting must never eat into what Remi actually owes the club.
+    const metrics = aggregateShowMetrics({
+      orders: [
+        { id: 'offline-order', status: 'paid', totalAmount: 2000, platformFeePence: 0, stripePaymentIntentId: null },
+      ],
+      entries: [
+        entryRow({ id: 'offline-entry', orderId: 'offline-order', status: 'confirmed', totalFee: 2000 }),
+      ],
+      sundries: [],
+      payments: [{ orderId: 'offline-order', refundAmount: 500 }],
+    });
+
+    expect(metrics.clubReceivablePence).toBe(0);
+    expect(metrics.offlineCollectedPence).toBe(1500);
+  });
+
+  it('a show with only Stripe orders keeps clubReceivablePence == totalClubRevenuePence (existing invariant, unchanged)', () => {
+    const metrics = aggregateShowMetrics({
+      orders: [{ id: 'o1', status: 'paid', totalAmount: 3000, platformFeePence: 45, stripePaymentIntentId: 'pi_all_stripe' }],
+      entries: [
+        entryRow({ id: 'e1', orderId: 'o1', status: 'confirmed', totalFee: 3000 }),
+      ],
+      sundries: [],
+      payments: [],
+    });
+
+    expect(metrics.offlineCollectedPence).toBe(0);
+    expect(metrics.clubReceivablePence).toBe(metrics.totalClubRevenuePence);
+    expect(metrics.clubReceivablePence).toBe(3000);
   });
 });

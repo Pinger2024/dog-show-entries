@@ -1,5 +1,12 @@
 import { describe, it, expect } from 'vitest';
-import { loadSavedState, getPaymentKey, restoreActionForStatus, cartReducer, type CartState } from './use-entry-cart';
+import {
+  loadSavedState,
+  getPaymentKey,
+  restoreActionForStatus,
+  cartReducer,
+  computeClassSelectionTotal,
+  type CartState,
+} from './use-entry-cart';
 
 const KEY = 'remi-entry-cart-SHOW';
 const PAY_KEY = getPaymentKey('SHOW');
@@ -179,5 +186,108 @@ describe('cartReducer — never strand a per-entry step without an active entry'
     const s = cartReducer({ ...base, step: 'select_dog' }, { type: 'SET_DOG', dogId: 'd1', dogName: 'Rex', breedName: 'GSD' });
     expect(s.step).toBe('select_dog');
     expect(s.entries).toHaveLength(0);
+  });
+});
+
+// Mandy 2026-07-21 (screenshots): a dog entered in a SPECIAL-only class was
+// shown the normal £20 first-class tier fee on screen instead of the special
+// class's own £3 fee — in both the class-picker running total AND the dog's
+// card in the entry cart. Checkout itself was always correct (computeOrderFees
+// server-side already knew about specialClassFees from 3d1f4e5); this was a
+// client DISPLAY bug because the running total was hand-rolled as
+// `first + subsequent * (count - 1)` and never learned about specials.
+// computeClassSelectionTotal fixes it by routing through computeOrderFees
+// instead — these tests fail against the old hand-rolled formula and pass
+// against the fix.
+describe('computeClassSelectionTotal — Special Award Classes priced at their own fee, not the tier', () => {
+  const FIRST = 2000; // £20 members'/standard first-class fee
+  const SUBSEQUENT = 500; // £5 subsequent-class fee
+  const SPECIAL = 300; // £3 Special Award Class fee
+
+  it('a dog entered ONLY in a special class is charged just the special fee, not the £20 tier', () => {
+    const total = computeClassSelectionTotal(
+      [{ isSpecial: true, entryFee: SPECIAL }],
+      FIRST,
+      SUBSEQUENT,
+    );
+    expect(total).toBe(SPECIAL);
+    expect(total).not.toBe(FIRST);
+  });
+
+  it('multiple special classes on one dog sum their own fees, never the tier', () => {
+    const total = computeClassSelectionTotal(
+      [
+        { isSpecial: true, entryFee: SPECIAL },
+        { isSpecial: true, entryFee: 500 },
+      ],
+      FIRST,
+      SUBSEQUENT,
+    );
+    expect(total).toBe(SPECIAL + 500);
+  });
+
+  it('one normal class + one special: normal priced at the first-class tier, special adds its own fee', () => {
+    const total = computeClassSelectionTotal(
+      [
+        { isSpecial: false, entryFee: FIRST },
+        { isSpecial: true, entryFee: SPECIAL },
+      ],
+      FIRST,
+      SUBSEQUENT,
+    );
+    expect(total).toBe(FIRST + SPECIAL);
+  });
+
+  it('order does not matter: special first then normal still charges the normal class the first-class rate', () => {
+    const total = computeClassSelectionTotal(
+      [
+        { isSpecial: true, entryFee: SPECIAL },
+        { isSpecial: false, entryFee: FIRST },
+      ],
+      FIRST,
+      SUBSEQUENT,
+    );
+    expect(total).toBe(FIRST + SPECIAL);
+  });
+
+  it('two normal classes + one special: first + subsequent tier plus the special fee', () => {
+    const total = computeClassSelectionTotal(
+      [
+        { isSpecial: false, entryFee: FIRST },
+        { isSpecial: false, entryFee: FIRST },
+        { isSpecial: true, entryFee: SPECIAL },
+      ],
+      FIRST,
+      SUBSEQUENT,
+    );
+    expect(total).toBe(FIRST + SUBSEQUENT + SPECIAL);
+  });
+
+  it('no special classes selected: unaffected, still first + subsequent * (count - 1)', () => {
+    const total = computeClassSelectionTotal(
+      [
+        { isSpecial: false, entryFee: FIRST },
+        { isSpecial: false, entryFee: FIRST },
+      ],
+      FIRST,
+      SUBSEQUENT,
+    );
+    expect(total).toBe(FIRST + SUBSEQUENT);
+  });
+
+  it('no subsequentEntryFeePence configured falls back to the first-class rate for extra classes', () => {
+    const total = computeClassSelectionTotal(
+      [
+        { isSpecial: false, entryFee: FIRST },
+        { isSpecial: false, entryFee: FIRST },
+      ],
+      FIRST,
+      null,
+    );
+    expect(total).toBe(FIRST + FIRST);
+  });
+
+  it('no classes selected → 0', () => {
+    expect(computeClassSelectionTotal([], FIRST, SUBSEQUENT)).toBe(0);
   });
 });

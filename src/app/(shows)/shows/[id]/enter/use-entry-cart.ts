@@ -1,4 +1,5 @@
 import { useReducer, useCallback, useEffect } from 'react';
+import { computeOrderFees } from '@/lib/fee-calc';
 
 export type EntryType = 'standard' | 'junior_handler';
 
@@ -24,6 +25,63 @@ export interface CartSundryItem {
   quantity: number;
   unitPrice: number; // pence
   maxPerOrder: number | null;
+}
+
+export interface SelectedClassForPricing {
+  /** True for a Special Award Class — charged its own `entryFee`, never the tier. */
+  isSpecial: boolean;
+  /** The class's own entry_fee (pence). Only used when `isSpecial` is true. */
+  entryFee: number;
+}
+
+/**
+ * Running total for the classes currently selected in the class-picker, for a
+ * STANDARD (non-NFC, non-JH, non-regional) show using show-level first/
+ * subsequent fee tiers.
+ *
+ * Delegates to `computeOrderFees` — the SAME engine the server checkout and
+ * the cart-review preview use — instead of hand-rolling `first + subsequent *
+ * (count - 1)`. That hand-rolled version was the fee-display bug Mandy
+ * reported 2026-07-21: a Special Award Class (its own low fee, e.g. £3) was
+ * shown at the normal first-class tier rate (e.g. £20) in both the
+ * class-picker running total AND the dog's card in the entry cart, because
+ * `3d1f4e5` taught the server + checkout preview about `specialClassFees` but
+ * not this client running-total calc. Checkout itself was always correct —
+ * this was purely a display bug. Never hand-duplicate fee logic again; route
+ * new pricing branches through `computeOrderFees`.
+ *
+ * Deliberately has NO multi-dog-package or discount-group awareness — this
+ * mirrors the pre-existing (pre-bug) behaviour: it's a per-dog estimate shown
+ * while picking classes, before the exhibitor has declared a discount group.
+ * The authoritative, package/discount-aware total is computed separately for
+ * the checkout preview once all dogs are in the cart.
+ */
+export function computeClassSelectionTotal(
+  selectedClasses: SelectedClassForPricing[],
+  firstEntryFeePence: number,
+  subsequentEntryFeePence: number | null,
+): number {
+  if (selectedClasses.length === 0) return 0;
+  const specialClassFees = selectedClasses.map((c) => (c.isSpecial ? c.entryFee : null));
+  const result = computeOrderFees(
+    [
+      {
+        key: 'selection',
+        kind: 'standard',
+        classCount: selectedClasses.length,
+        specialClassFees,
+      },
+    ],
+    {
+      firstEntryFeePence,
+      subsequentEntryFeePence,
+      nfcEntryFeePence: null,
+      juniorHandlerFeePence: null,
+      multiDogThreshold: null,
+      multiDogPackagePence: null,
+    },
+  );
+  return result.total;
 }
 
 export type WizardStep =

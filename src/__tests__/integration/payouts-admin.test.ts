@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { eq } from 'drizzle-orm';
+import { randomUUID } from 'crypto';
 import { orders, payouts, payments } from '@/server/db/schema';
 import { testDb } from '../helpers/db';
 import { createTestCaller } from '../helpers/context';
@@ -24,6 +25,11 @@ async function seedPaidOrder(opts: {
   exhibitorId: string;
   amount: number;
   status?: 'paid' | 'pending_payment' | 'cancelled';
+  // Every real Stripe checkout has this set — omitting it here defaults
+  // to a fake Stripe id so these orders model normal online entries.
+  // Pass `stripePaymentIntentId: null` explicitly to model a manual
+  // (postal/cash/direct-to-club) order a secretary recorded by hand.
+  stripePaymentIntentId?: string | null;
 }) {
   const [row] = await testDb
     .insert(orders)
@@ -33,6 +39,10 @@ async function seedPaidOrder(opts: {
       status: opts.status ?? 'paid',
       totalAmount: opts.amount,
       platformFeePence: 100 + Math.round(opts.amount * 0.01),
+      stripePaymentIntentId:
+        opts.stripePaymentIntentId === null
+          ? null
+          : opts.stripePaymentIntentId ?? `pi_test_${randomUUID()}`,
     })
     .returning();
   return row!;
@@ -126,6 +136,62 @@ describe('adminDashboard.listPayouts', () => {
     const row = result.rows.find((r) => r.id === org.id)!;
     expect(row.totalOwedPence).toBe(3500); // 5000 gross − 1500 refunded
     expect(row.outstandingPence).toBe(3500);
+  });
+
+  // ── Offline (manual/postal/cash) paid orders — live bug 2026-07-21 ──
+  // secretary.createManualEntry inserts an order straight to status='paid'
+  // with no stripe_payment_intent_id because the money never touched
+  // Remi's Stripe balance — the club already holds it (postal/cash entry).
+  // listPayouts used to sum these into "owed" from raw orders.total_amount
+  // with no channel filter, which would have told Michael to BACS money
+  // Remi never collected. Live at the time: GSD Club of Scotland (£46
+  // across 3 manual orders, one of them £0), Clyde Valley (£20), South
+  // Western (£3).
+  it('excludes offline (manual) paid orders from "owed" and surfaces them as already-collected-by-the-club instead', async () => {
+    const caller = await adminCaller();
+    const breed = await makeBreed();
+    const exhibitor = await makeUser({ role: 'exhibitor' });
+    const org = await makeOrg({ name: 'GSD Club of Scotland' });
+    const show = await makeShow({ organisationId: org.id, breedId: breed.id });
+
+    // A real Stripe-collected order — this is what Remi should BACS.
+    await seedPaidOrder({ showId: show.id, exhibitorId: exhibitor.id, amount: 2000 });
+    // Three manual entries recorded postal/cash, settled directly with the
+    // club — no Stripe payment. One of them is £0 (a free manual entry),
+    // which must be handled without blowing up.
+    await seedPaidOrder({ showId: show.id, exhibitorId: exhibitor.id, amount: 2000, stripePaymentIntentId: null });
+    await seedPaidOrder({ showId: show.id, exhibitorId: exhibitor.id, amount: 2600, stripePaymentIntentId: null });
+    await seedPaidOrder({ showId: show.id, exhibitorId: exhibitor.id, amount: 0, stripePaymentIntentId: null });
+
+    const result = await caller.adminDashboard.listPayouts();
+    const row = result.rows.find((r) => r.id === org.id)!;
+
+    // "Owed" (BACS this) counts only the Stripe order.
+    expect(row.totalOwedPence).toBe(2000);
+    expect(row.outstandingPence).toBe(2000);
+    // The £46 of manual orders is surfaced separately — the club already
+    // has it, so it must never be added to "owed".
+    expect(row.totalOfflineCollectedPence).toBe(4600);
+
+    expect(result.summary.totalOwed).toBe(2000);
+    expect(result.summary.totalOfflineCollected).toBe(4600);
+  });
+
+  it('a club with ONLY offline orders owes nothing and is not double-counted into "owed"', async () => {
+    const caller = await adminCaller();
+    const breed = await makeBreed();
+    const exhibitor = await makeUser({ role: 'exhibitor' });
+    const org = await makeOrg({ name: 'Clyde Valley' });
+    const show = await makeShow({ organisationId: org.id, breedId: breed.id });
+
+    await seedPaidOrder({ showId: show.id, exhibitorId: exhibitor.id, amount: 2000, stripePaymentIntentId: null });
+
+    const result = await caller.adminDashboard.listPayouts();
+    const row = result.rows.find((r) => r.id === org.id)!;
+
+    expect(row.totalOwedPence).toBe(0);
+    expect(row.outstandingPence).toBe(0);
+    expect(row.totalOfflineCollectedPence).toBe(2000);
   });
 });
 

@@ -85,7 +85,12 @@ export default function AdminPayoutsPage() {
   }
 
   const rows = data?.rows ?? [];
-  const summary = data?.summary ?? { totalOwed: 0, totalPaid: 0, totalOutstanding: 0 };
+  const summary = data?.summary ?? {
+    totalOwed: 0,
+    totalPaid: 0,
+    totalOutstanding: 0,
+    totalOfflineCollected: 0,
+  };
 
   return (
     <div className="space-y-6 p-4 sm:p-6 lg:p-8">
@@ -109,13 +114,13 @@ export default function AdminPayoutsPage() {
         </p>
       </div>
 
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <Card>
           <CardContent className="flex items-center gap-3 p-4">
             <PoundSterling className="size-5 shrink-0 text-muted-foreground" />
             <div>
               <p className="text-2xl font-bold">{formatCurrency(summary.totalOwed)}</p>
-              <p className="text-xs text-muted-foreground">Total paid into Remi (for clubs)</p>
+              <p className="text-xs text-muted-foreground">Collected by Remi — BACS this</p>
             </div>
           </CardContent>
         </Card>
@@ -134,6 +139,15 @@ export default function AdminPayoutsPage() {
             <div>
               <p className="text-2xl font-bold">{formatCurrency(summary.totalOutstanding)}</p>
               <p className="text-xs text-muted-foreground">Outstanding</p>
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="flex items-center gap-3 p-4">
+            <Banknote className="size-5 shrink-0 text-muted-foreground" />
+            <div>
+              <p className="text-2xl font-bold">{formatCurrency(summary.totalOfflineCollected)}</p>
+              <p className="text-xs text-muted-foreground">Already held by clubs (postal/cash — don&apos;t BACS this)</p>
             </div>
           </CardContent>
         </Card>
@@ -180,6 +194,12 @@ export default function AdminPayoutsPage() {
                         Outstanding: {formatCurrency(row.outstandingPence)}
                       </span>
                     </div>
+                    {row.totalOfflineCollectedPence > 0 && (
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        Plus {formatCurrency(row.totalOfflineCollectedPence)} the club already
+                        holds from postal/cash entries — not part of the BACS above.
+                      </p>
+                    )}
                   </div>
                   <Button
                     size="sm"

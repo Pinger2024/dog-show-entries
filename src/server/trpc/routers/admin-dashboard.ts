@@ -555,16 +555,31 @@ export const adminDashboardRouter = createTRPCRouter({
    * Admin-side payout ledger — one row per org showing what we owe them
    * vs. what we've already paid. Drives /admin/payouts.
    *
-   * "Owed" is computed from paid orders: sum of orders.total_amount
-   * (the CLUB's share, exclusive of Remi's handling fee) minus sum of
-   * past payouts for that org. Kept as a single SQL round-trip per side
-   * so we don't fire N queries on a page with many clubs.
+   * "Owed" is computed from paid orders collected THROUGH STRIPE only:
+   * sum of orders.total_amount (the CLUB's share, exclusive of Remi's
+   * handling fee) minus sum of past payouts for that org. Kept as a
+   * single SQL round-trip per side so we don't fire N queries on a page
+   * with many clubs.
+   *
+   * Secretaries can also record a manual entry for a postal/cash/
+   * direct-to-club payment (`secretary.createManualEntry`) — that order
+   * is inserted straight to status='paid' with NO
+   * stripe_payment_intent_id, because the money never touched Remi's
+   * Stripe balance; the club already has it in hand. Those orders must
+   * NEVER be summed into "owed" — Michael found this live: GSD Club of
+   * Scotland (£46 across 3 manual orders), Clyde Valley (£20), and South
+   * Western (£3) were all inflating "owed" for money the club already
+   * held, which would have had him BACS money Remi never collected.
+   * They're surfaced separately as `totalOfflineCollectedPence` so the
+   * admin can see "BACS this" vs "club already holds this" per club.
+   * Mirrors the same split in show-metrics' clubReceivablePence /
+   * offlineCollectedPence.
    */
   listPayouts: adminProcedure.query(async ({ ctx }) => {
-    // The three queries are independent — fire them in parallel. Orgs
+    // The four queries are independent — fire them in parallel. Orgs
     // with neither money in either direction nor bank details on file
     // are noise for this view, so pull only the ones that qualify.
-    const [owedRows, refundedRows, paidRows, activeOrgs] = await Promise.all([
+    const [owedRows, offlineRows, refundedRows, paidRows, activeOrgs] = await Promise.all([
       ctx.db
         .select({
           organisationId: shows.organisationId,
@@ -572,13 +587,27 @@ export const adminDashboardRouter = createTRPCRouter({
         })
         .from(orders)
         .innerJoin(shows, eq(orders.showId, shows.id))
-        .where(eq(orders.status, 'paid'))
+        .where(and(eq(orders.status, 'paid'), isNotNull(orders.stripePaymentIntentId)))
+        .groupBy(shows.organisationId),
+      // Money the club already holds itself — paid orders with no Stripe
+      // payment intent at all. Informational only; never added to "owed".
+      ctx.db
+        .select({
+          organisationId: shows.organisationId,
+          totalOfflineCollected: sql<number>`COALESCE(SUM(${orders.totalAmount}), 0)::int`,
+        })
+        .from(orders)
+        .innerJoin(shows, eq(orders.showId, shows.id))
+        .where(and(eq(orders.status, 'paid'), isNull(orders.stripePaymentIntentId)))
         .groupBy(shows.organisationId),
       // Partial (per-entry) refunds leave the order in status='paid' and record
       // the refunded amount only on the payment row, so the owed sum above
       // overstates the club's share by exactly the refund — meaning we'd BACS
       // the club too much and Remi (merchant of record) eats the difference.
-      // Net it off, mirroring show-metrics' clubReceivablePence. (NOTE:
+      // Net it off, mirroring show-metrics' clubReceivablePence. Refunds only
+      // ever exist against a real Stripe payment (nothing to refund on a
+      // manually-recorded postal/cash order through this system), so this
+      // implicitly only ever nets against the Stripe-collected bucket. (NOTE:
       // deducted_from_payout print orders are a SEPARATE netting gap owned by
       // the print-package work — see memory project_print_shop_model.)
       ctx.db
@@ -612,6 +641,7 @@ export const adminDashboardRouter = createTRPCRouter({
     ]);
 
     const owedMap = new Map(owedRows.map((r) => [r.organisationId, Number(r.totalOwed)]));
+    const offlineMap = new Map(offlineRows.map((r) => [r.organisationId, Number(r.totalOfflineCollected)]));
     const refundedMap = new Map(refundedRows.map((r) => [r.organisationId, Number(r.totalRefunded)]));
     const paidMap = new Map(paidRows.map((r) => [r.organisationId, Number(r.totalPaid)]));
 
@@ -623,6 +653,7 @@ export const adminDashboardRouter = createTRPCRouter({
       ...activeOrgs.map((o) => o.id),
       ...owedMap.keys(),
       ...paidMap.keys(),
+      ...offlineMap.keys(),
     ]);
 
     const orgsNeedingBankLookup = [...relevantOrgIds].filter(
@@ -643,14 +674,18 @@ export const adminDashboardRouter = createTRPCRouter({
 
     const allRelevantOrgs = [...activeOrgs, ...extraOrgs];
     const filtered = allRelevantOrgs.map((org) => {
-      // Net the club's gross share down by any partial refunds on still-paid orders.
+      // Net the club's gross Stripe-collected share down by any partial
+      // refunds on still-paid orders. Offline-collected money never
+      // touches this — it was never Remi's to owe.
       const totalOwed = (owedMap.get(org.id) ?? 0) - (refundedMap.get(org.id) ?? 0);
       const totalPaid = paidMap.get(org.id) ?? 0;
+      const totalOfflineCollected = offlineMap.get(org.id) ?? 0;
       return {
         ...org,
         totalOwedPence: totalOwed,
         totalPaidPence: totalPaid,
         outstandingPence: totalOwed - totalPaid,
+        totalOfflineCollectedPence: totalOfflineCollected,
       };
     });
 
@@ -659,8 +694,9 @@ export const adminDashboardRouter = createTRPCRouter({
         totalOwed: acc.totalOwed + r.totalOwedPence,
         totalPaid: acc.totalPaid + r.totalPaidPence,
         totalOutstanding: acc.totalOutstanding + r.outstandingPence,
+        totalOfflineCollected: acc.totalOfflineCollected + r.totalOfflineCollectedPence,
       }),
-      { totalOwed: 0, totalPaid: 0, totalOutstanding: 0 }
+      { totalOwed: 0, totalPaid: 0, totalOutstanding: 0, totalOfflineCollected: 0 }
     );
 
     return { rows: filtered, summary };

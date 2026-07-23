@@ -149,7 +149,7 @@ function ReconciliationStrip({
       </ReconciliationRow>
       {incomeParts.length > 0 && (
         <ReconciliationRow>
-          <b>Total income {formatCurrency(stats.clubReceivablePence)}</b>
+          <b>Total income {formatCurrency(stats.totalClubRevenuePence)}</b>
           <Op>=</Op>
           {incomeParts.map((part, i) => (
             <span key={part}>
@@ -158,6 +158,16 @@ function ReconciliationStrip({
             </span>
           ))}
         </ReconciliationRow>
+      )}
+      {/* Only shown when there's postal/cash money in the mix — most shows
+          are 100% online, so this line stays hidden rather than adding
+          noise to the common case. */}
+      {stats.offlineCollectedPence > 0 && (
+        <p className="mt-2 text-[12px] leading-relaxed text-se-ink3">
+          {formatCurrency(stats.clubReceivablePence)} was collected by Remi for
+          you (paid out after the show) · {formatCurrency(stats.offlineCollectedPence)}{' '}
+          was paid directly to the club (cash/postal entries).
+        </p>
       )}
     </div>
   );
@@ -316,7 +326,7 @@ export default function FinancialPage() {
       <div className="grid grid-cols-2 gap-2.5 lg:grid-cols-4">
         <FinancialStat
           label="Total Income"
-          value={<span className="text-se-fresh-deep">{formatCurrency(stats?.clubReceivablePence ?? 0)}</span>}
+          value={<span className="text-se-fresh-deep">{formatCurrency(stats?.totalClubRevenuePence ?? 0)}</span>}
           subtext={totalIncomeWorkings}
         />
         <FinancialStat
@@ -879,6 +889,9 @@ function OrderRefundCard({
           </p>
         </div>
         <div className="flex items-center gap-2">
+          {!order.stripePaymentIntentId && (
+            <Badge variant="outline">Paid directly to club</Badge>
+          )}
           {fullyRefunded ? (
             <Badge variant="outline">Fully refunded</Badge>
           ) : refunded > 0 ? (
