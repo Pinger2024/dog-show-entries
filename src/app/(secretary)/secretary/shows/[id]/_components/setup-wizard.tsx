@@ -875,7 +875,7 @@ function StepDetails({
                 onChange={(e) =>
                   setEntryCloseDate(
                     e.target.value
-                      ? `${e.target.value}T${entryCloseDate.length >= 16 ? entryCloseDate.slice(11, 16) : '23:59'}`
+                      ? `${e.target.value}T23:59`
                       : '',
                   )
                 }
@@ -907,7 +907,7 @@ function StepDetails({
                   onChange={(e) =>
                     setPostalCloseDate(
                       e.target.value
-                        ? `${e.target.value}T${postalCloseDate.length >= 16 ? postalCloseDate.slice(11, 16) : '23:59'}`
+                        ? `${e.target.value}T23:59`
                         : '',
                     )
                   }
