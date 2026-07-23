@@ -597,33 +597,36 @@ export function BestAwardsContent({ show, compact }: FrontMatterProps & { compac
           <View style={bestAwardsStyles.winnerLine} />
           <Text style={bestAwardsStyles.winnerLabel}>Winner</Text>
         </View>
-            <View style={bestAwardsStyles.trophyCol}>
-              {sponsors.length === 0 ? (
-                <Text style={{ ...bestAwardsStyles.trophyName, color: C.textLight }}>—</Text>
-              ) : (
-                sponsors.map((s, idx) => (
-                  <Text key={idx} style={{ ...bestAwardsStyles.trophyName, marginBottom: idx < sponsors.length - 1 ? 2 : 0 }}>
-                    {s.trophyName ?? '—'}
-                  </Text>
-                ))
-              )}
+        {/* Prize + sponsor render as PAIRED lines — one row per
+            sponsorship — so each prize sits beside the sponsor giving it.
+            The old independent-column layout let the pairs drift: with two
+            sponsors on one award, a sponsor affix line pushed the second
+            sponsor below its prize (Mandy 2026-07-22 — "Prize Money £25"
+            floated away from Pat Wills, who gives it). */}
+        <View style={{ width: '62%' }}>
+          {sponsors.length === 0 ? (
+            <View style={{ flexDirection: 'row' }}>
+              <Text style={{ ...bestAwardsStyles.trophyName, color: C.textLight, width: '39%', paddingRight: 6 }}>—</Text>
+              <Text style={{ ...bestAwardsStyles.sponsorName, color: C.textLight, flex: 1 }}>—</Text>
             </View>
-            <View style={bestAwardsStyles.sponsorCol}>
-              {sponsors.length === 0 ? (
-                <Text style={{ ...bestAwardsStyles.sponsorName, color: C.textLight }}>—</Text>
-              ) : (
-                sponsors.map((s, idx) => (
-                  <View key={idx} style={{ marginBottom: idx < sponsors.length - 1 ? 4 : 0 }}>
-                    <Text style={bestAwardsStyles.sponsorName}>{s.sponsorName}</Text>
-                    {s.sponsorAffix && (
-                      <Text style={bestAwardsStyles.sponsorAffix}>{s.sponsorAffix}</Text>
-                    )}
-                  </View>
-                ))
-              )}
-            </View>
-          </View>
-        );
+          ) : (
+            sponsors.map((s, idx) => (
+              <View key={idx} style={{ flexDirection: 'row', marginBottom: idx < sponsors.length - 1 ? 4 : 0 }}>
+                <Text style={{ ...bestAwardsStyles.trophyName, width: '39%', paddingRight: 6 }}>
+                  {s.trophyName ?? '—'}
+                </Text>
+                <View style={{ flex: 1 }}>
+                  <Text style={bestAwardsStyles.sponsorName}>{s.sponsorName}</Text>
+                  {s.sponsorAffix && (
+                    <Text style={bestAwardsStyles.sponsorAffix}>{s.sponsorAffix}</Text>
+                  )}
+                </View>
+              </View>
+            ))
+          )}
+        </View>
+      </View>
+    );
   };
 
   return (
