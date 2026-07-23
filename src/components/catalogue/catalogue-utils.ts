@@ -213,7 +213,6 @@ export function ownerHeading(
 
 export function formatOwnerKC(
   owners: { title?: string | null; name: string; address: string | null; userId: string | null }[],
-  exhibitorId?: string | undefined,
   withhold?: boolean
 ): string {
   if (owners.length === 0) return withhold ? 'Details withheld' : '';
@@ -224,12 +223,9 @@ export function formatOwnerKC(
     owners.map((o) => ({ title: o.title ?? null, name: o.name })),
   );
 
-  // Address: use the primary (first) owner's address. If "Exh." applies
-  // to any owner, append it.
+  // Address: use the primary (first) owner's address. (The trailing "Exh."
+  // exhibitor marker was binned per Mandy 2026-07-22 — name + address only.)
   const primary = owners[0]!;
-  const isExhibitor = owners.some(
-    (o) => exhibitorId && o.userId && o.userId === exhibitorId,
-  );
 
   const tail: string[] = [];
   if (withhold) {
@@ -237,7 +233,6 @@ export function formatOwnerKC(
   } else if (primary.address) {
     tail.push(primary.address);
   }
-  if (isExhibitor) tail.push('Exh.');
 
   return tail.length > 0 ? `${heading}, ${tail.join(', ')}` : heading;
 }

@@ -710,7 +710,7 @@ export function CatalogueMarked({ show, entries, results, absentees, achievement
                                 <Text style={styles.entryDetailLabel}>
                                   Owner{entry.owners.length > 1 ? 's' : ''}:{' '}
                                 </Text>
-                                {formatOwnerKC(entry.owners, entry.exhibitorId)}
+                                {formatOwnerKC(entry.owners)}
                               </Text>
                             )}
                             {result?.specialAward && (
@@ -770,7 +770,7 @@ export function CatalogueMarked({ show, entries, results, absentees, achievement
                               <Text style={styles.entryDetailLabel}>
                                 Owner{entry.owners.length > 1 ? 's' : ''}:{' '}
                               </Text>
-                              {formatOwnerKC(entry.owners, entry.exhibitorId)}
+                              {formatOwnerKC(entry.owners)}
                             </Text>
                           )}
 

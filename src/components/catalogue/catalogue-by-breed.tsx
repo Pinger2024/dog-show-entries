@@ -296,7 +296,7 @@ export function CatalogueByBreed({ show, entries }: Props) {
                               <Text style={styles.entryDetailLabel}>
                                 Owner{entry.owners.length > 1 ? 's' : ''}:{' '}
                               </Text>
-                              {formatOwnerKC(entry.owners, entry.exhibitorId, entry.withholdFromPublication)}
+                              {formatOwnerKC(entry.owners, entry.withholdFromPublication)}
                             </Text>
                           )}
                         </View>
@@ -345,13 +345,13 @@ export function CatalogueByBreed({ show, entries }: Props) {
                           </Text>
                         )}
 
-                        {/* Owner(s) — UPPER CASE + address (or "Exh." if owner is exhibiting) */}
+                        {/* Owner(s) — UPPER CASE + address */}
                         {entry.owners.length > 0 && (
                           <Text style={styles.entryDetail}>
                             <Text style={styles.entryDetailLabel}>
                               Owner{entry.owners.length > 1 ? 's' : ''}:{' '}
                             </Text>
-                            {formatOwnerKC(entry.owners, entry.exhibitorId, entry.withholdFromPublication)}
+                            {formatOwnerKC(entry.owners, entry.withholdFromPublication)}
                           </Text>
                         )}
 

@@ -601,7 +601,7 @@ export function CatalogueByClass({ show, entries, compact }: Props) {
                     <Text style={styles.entryDetailLabel}>
                       Owner{entry.owners.length > 1 ? 's' : ''}:{' '}
                     </Text>
-                    {formatOwnerKC(entry.owners, entry.exhibitorId, entry.withholdFromPublication)}
+                    {formatOwnerKC(entry.owners, entry.withholdFromPublication)}
                   </Text>
                 )}
               </View>
@@ -633,7 +633,7 @@ export function CatalogueByClass({ show, entries, compact }: Props) {
                   <Text style={styles.entryDetailLabel}>
                     Owner{entry.owners.length > 1 ? 's' : ''}:{' '}
                   </Text>
-                  {formatOwnerKC(entry.owners, entry.exhibitorId, entry.withholdFromPublication)}
+                  {formatOwnerKC(entry.owners, entry.withholdFromPublication)}
                 </Text>
               )}
             </View>

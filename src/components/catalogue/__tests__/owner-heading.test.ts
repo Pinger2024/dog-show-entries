@@ -5,6 +5,7 @@ import {
   ownerHeading,
   smartOwnerTitleCase,
   formatRkcOwnerHeading,
+  formatOwnerKC,
 } from '../catalogue-utils';
 
 // Locked with Amanda 2026-05-14: the exhibitor index at the back of
@@ -179,5 +180,24 @@ describe('smartOwnerTitleCase', () => {
   });
   it('mixed case in one word, all-upper in next', () => {
     expect(smartOwnerTitleCase('Maxine COWAN')).toBe('Maxine Cowan');
+  });
+});
+
+// Mandy 2026-07-22: the trailing "Exh." exhibitor marker is binned —
+// owner lines are name + address (or "address withheld"), nothing else.
+describe('formatOwnerKC (no Exh. marker)', () => {
+  const owner = { title: 'Mrs', name: 'Amanda McAteer', address: '1 Kennel Lane, ML10 6SY', userId: 'u1' };
+
+  it('renders name + address with no trailing marker', () => {
+    const out = formatOwnerKC([owner]);
+    expect(out).toContain('1 Kennel Lane, ML10 6SY');
+    expect(out).not.toContain('Exh');
+  });
+
+  it('renders "address withheld" when withheld, still no marker', () => {
+    const out = formatOwnerKC([owner], true);
+    expect(out).toContain('address withheld');
+    expect(out).not.toContain('1 Kennel Lane');
+    expect(out).not.toContain('Exh');
   });
 });
