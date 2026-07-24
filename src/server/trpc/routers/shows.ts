@@ -510,24 +510,11 @@ export const showsRouter = createTRPCRouter({
         });
       }
 
-      // Check subscription: first show is free, subsequent shows require an active subscription
-      const [org, [showCount]] = await Promise.all([
-        ctx.db.query.organisations.findFirst({
-          where: eq(organisations.id, input.organisationId),
-          columns: { subscriptionStatus: true },
-        }),
-        ctx.db
-          .select({ count: sql<number>`count(*)::int` })
-          .from(shows)
-          .where(eq(shows.organisationId, input.organisationId)),
-      ]);
-
-      if ((showCount?.count ?? 0) > 0 && org?.subscriptionStatus !== 'active') {
-        throw new TRPCError({
-          code: 'FORBIDDEN',
-          message: 'A subscription is required to create additional shows. Your first show was free — subscribe to keep going!',
-        });
-      }
+      // No subscription gate: Remi's pricing is per-show (booking fees +
+      // print packages), not SaaS. The old "first show free, then subscribe"
+      // check that lived here was a fossil of the abandoned subscription
+      // model and would have blocked every club's SECOND show (binned on
+      // Mandy's instruction, 2026-07-24).
 
       const { classDefinitionIds, entryFee, firstEntryFee, subsequentEntryFee, nfcEntryFee, juniorHandlerFee, allBreedClassData, ...showData } = input;
 

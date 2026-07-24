@@ -129,43 +129,31 @@ describe('shows.create', () => {
     };
 
     const first = await caller.shows.create(input);
-    // Second show needs an active subscription (subscription gate). Set it.
-    await testDb
-      .update(organisations)
-      .set({ subscriptionStatus: 'active' })
-      .where(eq(organisations.id, org.id));
     const second = await caller.shows.create(input);
 
     expect(first.slug).not.toBe(second.slug);
     expect(second.slug).toMatch(/-2$/);
   });
 
-  it('blocks the second show until subscriptionStatus is active (first show free)', async () => {
+  it('creates unlimited shows with no subscription — pricing is per-show (Mandy binned the gate, 2026-07-24)', async () => {
     const { user, org, breed } = await makeSecretaryWithOrgAndBreed();
     const caller = createTestCaller(user);
-    // Org defaults to subscriptionStatus='none'. First show should succeed…
-    await caller.shows.create({
-      name: 'Free Show',
-      showType: 'open',
-      showScope: 'single_breed',
-      organisationId: org.id,
-      breedId: breed.id,
-      startDate: '2030-06-01',
-      endDate: '2030-06-01',
-    });
-
-    // …second should be FORBIDDEN until subscription is active.
-    await expect(
-      caller.shows.create({
-        name: 'Second Show',
-        showType: 'open',
-        showScope: 'single_breed',
-        organisationId: org.id,
-        breedId: breed.id,
-        startDate: '2030-07-01',
-        endDate: '2030-07-01',
-      }),
-    ).rejects.toThrow(/subscription/i);
+    // Org defaults to subscriptionStatus='none' — that must never matter:
+    // the old "first show free, then subscribe" fossil would have blocked
+    // every real club's second show of the season.
+    for (const [name, month] of [['First Show', '06'], ['Second Show', '07'], ['Third Show', '08']] as const) {
+      await expect(
+        caller.shows.create({
+          name,
+          showType: 'open',
+          showScope: 'single_breed',
+          organisationId: org.id,
+          breedId: breed.id,
+          startDate: `2030-${month}-01`,
+          endDate: `2030-${month}-01`,
+        }),
+      ).resolves.toBeTruthy();
+    }
   });
 
   it('rejects a secretary who is not a member of the target organisation', async () => {
