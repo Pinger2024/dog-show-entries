@@ -351,6 +351,7 @@ function ShowRow({ show, featured }: { show: DashboardShow; featured?: boolean }
   const dayNum = format(start, 'd');
   const monthShort = format(start, 'MMM').toUpperCase();
   const entryCount = show.entryCount ?? 0;
+  const pendingCount = show.pendingEntryCount ?? 0;
   const revenue = show.showRevenue ?? 0;
   const metaLine = [show.organisation?.name, show.venue?.name].filter(Boolean).join(' · ');
 
@@ -400,6 +401,16 @@ function ShowRow({ show, featured }: { show: DashboardShow; featured?: boolean }
               <span className="inline-flex items-center gap-1 text-xs font-semibold text-se-fresh-deep">
                 <Ticket className="size-3" />
                 {entryCount} entr{entryCount !== 1 ? 'ies' : 'y'}
+              </span>
+            )}
+
+            {/* Awaiting payment used to be folded silently into the count
+                above. Called out separately instead, so the headline stays the
+                figure a club would announce while nothing in flight goes
+                unseen (Mandy 2026-07-27). */}
+            {pendingCount > 0 && (
+              <span className="inline-flex items-center gap-1 text-xs font-medium text-se-honey-deep">
+                +{pendingCount} awaiting payment
               </span>
             )}
 

@@ -226,7 +226,13 @@ export const secretaryRouter = createTRPCRouter({
     for (const showId of allShowIds) {
       const m = metricsByShow.get(showId);
       if (!m) continue;
-      const entryCount = m.confirmedEntryCount + m.pendingEntryCount;
+      // CLASS ENTRIES — the same figure the show's own Entries tile leads with,
+      // and the number a club announces. This used to be confirmed + pending
+      // ENTRY ROWS, so South Western read 91 on the dashboard while its own
+      // page read 110 (Mandy 2026-07-27: "We missed an update on the figures ..
+      // 91 still showing here"). Three definitions of "entries" across three
+      // screens is the whole of today's bug list in miniature.
+      const entryCount = m.classEntryCount;
       totalEntries += entryCount;
       totalRevenue += m.totalClubRevenuePence;
       if (activeShowIds.includes(showId)) {
@@ -238,7 +244,10 @@ export const secretaryRouter = createTRPCRouter({
       const m = metricsByShow.get(s.id);
       return {
         ...s,
-        entryCount: m ? m.confirmedEntryCount + m.pendingEntryCount : 0,
+        entryCount: m?.classEntryCount ?? 0,
+        // Awaiting payment is no longer folded silently into the headline —
+        // it's surfaced separately so an open show still shows what's in flight.
+        pendingEntryCount: m?.pendingEntryCount ?? 0,
         showRevenue: m?.totalClubRevenuePence ?? 0,
       };
     };
