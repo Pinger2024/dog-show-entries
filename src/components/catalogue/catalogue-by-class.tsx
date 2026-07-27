@@ -676,22 +676,15 @@ export function CatalogueByClass({ show, entries, compact }: Props) {
                 (2026-05-26 we briefly dropped that chasing tighter packing;
                 the visual cost beat the page saving, so it came back.)
 
-                The header no longer swallows the first dog to achieve that.
-                It used to, and the oversized atomic block cost whole pages —
-                react-pdf would not pack it into space it plainly fitted, so
-                South Western spent a near-empty A5 sheet (Mandy 2026-07-27).
-                Instead the header stays non-wrapping but SMALL, and
-                minPresenceAhead reserves ~70pt below it: enough for a dog, so
-                the header can still never sit alone at a page foot.
-
-                minPresenceAhead only works on a NON-wrapping View — on a
-                wrapping one react-pdf ignores it entirely (measured identical
-                at 100/130/160/200). That distinction is the whole trick.
-
-                Measured on South Western: 25 pages → 24, with zero stranded
-                placings lines, zero stranded tail dogs and zero orphaned
-                headers. */}
-            <View wrap={false} minPresenceAhead={70}>
+                Kept as wrap={false} deliberately. Dropping it packs South
+                Western into 24 pages instead of 25, but produces 2 class
+                headers stranded at the foot of a page with their first dog
+                overleaf — the exact thing Amanda banned. minPresenceAhead is
+                NOT an alternative here: react-pdf ignores it on a wrapping
+                View (measured identical at 100/130/160/200). So the page cost
+                is the price of the rule, and changing it is Mandy's call, not
+                a silent trade (2026-07-27). */}
+            <View wrap={false}>
               {/* Class-sponsor banner — landscape strip above the class
                   header when a class sponsor has uploaded a banner image
                   (HUNDARK / ROBASDAN-style festive strips). SV/WUSV
@@ -804,10 +797,18 @@ export function CatalogueByClass({ show, entries, compact }: Props) {
                 </Text>
               )}
 
+              {sorted.length > 0 && renderEntry(sorted[0], 0)}
+              {/* A ONE-DOG class has its only dog up here in the atomic block,
+                  so its placings line has no trailing dog to travel with and
+                  would strand on the next page by itself. Mandy 2026-07-27
+                  caught exactly that on Yearling (Dog), a single-entry class:
+                  "page 9-10 Yearling dog, the 1st, 2nd etc has fallen over to
+                  page 10". Keeping it inside this block ties it to the dog. */}
+              {sorted.length === 1 && renderPlacings()}
             </View>
 
             {/* Every dog but the last flows normally. */}
-            {sorted.slice(0, -1).map((entry, idx) => renderEntry(entry, idx))}
+            {sorted.slice(1, -1).map((entry, sliceIdx) => renderEntry(entry, sliceIdx + 1))}
 
             {/* The LAST dog and the placings line are bound together.
                 • RKC: 1st / 2nd / 3rd / Res / VHC (Amanda 2026-05-14).
@@ -825,7 +826,9 @@ export function CatalogueByClass({ show, entries, compact }: Props) {
                 lower print cost, which is why classes may break across pages
                 at all (Amanda 2026-05-26). */}
             {(() => {
-              if (sorted.length === 0) return null;
+              // 0 dogs: nothing to place. 1 dog: already rendered inside the
+              // atomic header block above, alongside its only dog.
+              if (sorted.length <= 1) return null;
               const placings = renderPlacings();
               return (
                 <View wrap={false}>
