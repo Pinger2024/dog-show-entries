@@ -1,5 +1,9 @@
 import { describe, it, expect } from 'vitest';
+import { eq } from 'drizzle-orm';
 import { createTestCaller } from '../helpers/context';
+import { testDb } from '../helpers/db';
+import { entries } from '@/server/db/schema';
+import { classEntriesLabel, formatBannerBreakdown } from '@/app/(secretary)/secretary/shows/[id]/_lib/show-utils';
 import {
   makeSecretaryWithOrgAndBreed,
   makeShow,
@@ -347,5 +351,150 @@ describe('financial clarity — entries paid direct to the club are marked out',
     // £120 it actually collected — the £80 is already in the club's bank.
     expect(stats.clubReceivablePence).toBe(12000);
     expect(stats.offlineCollectedPence).toBe(8000);
+  });
+});
+
+// ──────────────────────────────────────────────────────────────
+// Mandy, 2026-07-27, "93 dogs entered" (dashboard) vs "109 entries" (Class
+// Breakdown PDF): both numbers were correct, but a dog entered in two
+// classes is one dog and two class entries, and neither screen said which
+// unit it meant. classEntryCount / classEntries exposes the judges'-book
+// unit alongside dogsEntered so the two can never look contradictory again.
+// ──────────────────────────────────────────────────────────────
+describe('financial clarity — class entries (judges-book count) vs dogs entered', () => {
+  it('counts each class entry separately: a dog in two classes counts twice', async () => {
+    const { secretary, show, breed } = await setupShow();
+    const classA = await makeShowClass({ showId: show.id, breedId: breed.id });
+    const classB = await makeShowClass({ showId: show.id, breedId: breed.id });
+
+    const exhibitor = await makeUser({ role: 'exhibitor' });
+    const dog1 = await makeDog({ ownerId: exhibitor.id, breedId: breed.id });
+    const dog2 = await makeDog({ ownerId: exhibitor.id, breedId: breed.id });
+    const dog3 = await makeDog({ ownerId: exhibitor.id, breedId: breed.id });
+    const order = await makeOrder({ showId: show.id, exhibitorId: exhibitor.id, status: 'paid', totalAmount: 6000 });
+
+    // Entry 1 — two classes.
+    const entry1 = await makeEntry({
+      showId: show.id, dogId: dog1.id, exhibitorId: exhibitor.id,
+      orderId: order.id, status: 'confirmed', totalFee: 4000,
+    });
+    await makeEntryClass({ entryId: entry1.id, showClassId: classA.id });
+    await makeEntryClass({ entryId: entry1.id, showClassId: classB.id });
+
+    // Entry 2 — one class.
+    const entry2 = await makeEntry({
+      showId: show.id, dogId: dog2.id, exhibitorId: exhibitor.id,
+      orderId: order.id, status: 'confirmed', totalFee: 1000,
+    });
+    await makeEntryClass({ entryId: entry2.id, showClassId: classA.id });
+
+    // Entry 3 — one class.
+    const entry3 = await makeEntry({
+      showId: show.id, dogId: dog3.id, exhibitorId: exhibitor.id,
+      orderId: order.id, status: 'confirmed', totalFee: 1000,
+    });
+    await makeEntryClass({ entryId: entry3.id, showClassId: classB.id });
+
+    const caller = createTestCaller(secretary);
+    const [entryStats, stats] = await Promise.all([
+      caller.secretary.getShowEntryStats({ showId: show.id }),
+      caller.secretary.getShowStats({ showId: show.id }),
+    ]);
+
+    // 3 dogs, 4 class entries — the exact shape of Mandy's report.
+    expect(entryStats.dogsEntered).toBe(3);
+    expect(entryStats.classEntries).toBe(4);
+    expect(stats.dogsEntered).toBe(3);
+    expect(stats.classEntries).toBe(4);
+  });
+
+  it('excludes class rows belonging to soft-deleted or non-confirmed entries', async () => {
+    const { secretary, show, breed } = await setupShow();
+    const classA = await makeShowClass({ showId: show.id, breedId: breed.id });
+
+    const exhibitor = await makeUser({ role: 'exhibitor' });
+
+    // The one entry that should actually count.
+    const paidDog = await makeDog({ ownerId: exhibitor.id, breedId: breed.id });
+    const order = await makeOrder({ showId: show.id, exhibitorId: exhibitor.id, status: 'paid', totalAmount: 2000 });
+    const paidEntry = await makeEntry({
+      showId: show.id, dogId: paidDog.id, exhibitorId: exhibitor.id,
+      orderId: order.id, status: 'confirmed', totalFee: 2000,
+    });
+    await makeEntryClass({ entryId: paidEntry.id, showClassId: classA.id });
+
+    // Soft-deleted entry — its entry_classes row is still in the table,
+    // but the entry itself is gone, so it must not be counted.
+    const deletedDog = await makeDog({ ownerId: exhibitor.id, breedId: breed.id });
+    const deletedEntry = await makeEntry({
+      showId: show.id, dogId: deletedDog.id, exhibitorId: exhibitor.id,
+      orderId: order.id, status: 'confirmed', totalFee: 2000,
+    });
+    await makeEntryClass({ entryId: deletedEntry.id, showClassId: classA.id });
+    await testDb.update(entries).set({ deletedAt: new Date() }).where(eq(entries.id, deletedEntry.id));
+
+    // Pending (awaiting payment) entry — hasn't reached the catalogue yet.
+    const pendingOrder = await makeOrder({ showId: show.id, exhibitorId: exhibitor.id, status: 'pending_payment', totalAmount: 2000 });
+    const pendingDog = await makeDog({ ownerId: exhibitor.id, breedId: breed.id });
+    const pendingEntry = await makeEntry({
+      showId: show.id, dogId: pendingDog.id, exhibitorId: exhibitor.id,
+      orderId: pendingOrder.id, status: 'pending', totalFee: 2000,
+    });
+    await makeEntryClass({ entryId: pendingEntry.id, showClassId: classA.id });
+
+    const entryStats = await createTestCaller(secretary).secretary.getShowEntryStats({ showId: show.id });
+
+    expect(entryStats.dogsEntered).toBe(1);
+    expect(entryStats.classEntries).toBe(1);
+  });
+});
+
+describe('classEntriesLabel', () => {
+  it('returns null when class entries equal dogs entered — nothing to explain', () => {
+    expect(classEntriesLabel(93, 93)).toBeNull();
+  });
+
+  it('returns null when classEntries is undefined', () => {
+    expect(classEntriesLabel(93, undefined)).toBeNull();
+  });
+
+  it('returns the label when classEntries exceeds dogsEntered', () => {
+    expect(classEntriesLabel(93, 109)).toBe('109 class entries');
+  });
+});
+
+// The "Entries closed — 93 dogs entered" banner reads its sub-line from
+// formatBannerBreakdown. Mandy's number has to actually appear there, not
+// just in the helper the banner calls.
+describe('formatBannerBreakdown — carries the class-entries count', () => {
+  const base = {
+    confirmed: 93,
+    notForCompetitionEntries: 0,
+    otherOrderlessEntries: 0,
+    withdrawn: 0,
+  };
+
+  it('appends the class-entries count when it differs from dogs entered', () => {
+    expect(formatBannerBreakdown({ ...base, dogsEntered: 93, classEntries: 109 })).toBe(
+      'all paid · 109 class entries',
+    );
+  });
+
+  it('leaves the line alone when every dog is in a single class', () => {
+    expect(formatBannerBreakdown({ ...base, dogsEntered: 93, classEntries: 93 })).toBe('all paid');
+  });
+
+  it('still works for callers that pass no class-entry data at all', () => {
+    expect(formatBannerBreakdown(base)).toBe('all paid');
+  });
+
+  it('keeps the withdrawn suffix ahead of the class count', () => {
+    const line = formatBannerBreakdown({
+      ...base,
+      withdrawn: 1,
+      dogsEntered: 93,
+      classEntries: 109,
+    });
+    expect(line).toBe('93 paid · 1 withdrawn (fee kept) · 109 class entries');
   });
 });

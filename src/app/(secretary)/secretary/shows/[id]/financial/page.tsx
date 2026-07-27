@@ -35,6 +35,7 @@ import {
   formatWholePounds,
   joinWorkings,
   dogsEnteredParts,
+  classEntriesLabel,
 } from '../_lib/show-utils';
 import { useShowId } from '../_lib/show-context';
 import { computeClassBreakdown } from '@/lib/class-breakdown';
@@ -135,6 +136,13 @@ function ReconciliationStrip({
     stats.paidSundryRevenuePence > 0 ? `${formatCurrency(stats.paidSundryRevenuePence)} sundries` : null,
   ].filter((p): p is string => !!p);
 
+  // Mandy 2026-07-27: the dashboard said "93 dogs entered" while the Class
+  // Breakdown report said "109 entries" and neither named its unit — this
+  // line spells out why the two numbers differ instead of leaving them
+  // looking like a contradiction. Hidden when every dog is in a single
+  // class, since then there's nothing to explain.
+  const classEntriesNote = classEntriesLabel(stats.dogsEntered, stats.classEntries);
+
   return (
     <div className="rounded-[18px] border border-se-fresh-line bg-se-fresh-soft p-4 sm:p-5">
       <ReconciliationRow>
@@ -147,6 +155,11 @@ function ReconciliationStrip({
           </span>
         ))}
       </ReconciliationRow>
+      {classEntriesNote && (
+        <p className="mt-2 text-[12px] leading-relaxed text-se-ink3">
+          {stats.dogsEntered} dogs · {stats.classEntries} class entries — a dog entered in more than one class is counted in each of them.
+        </p>
+      )}
       {incomeParts.length > 0 && (
         <ReconciliationRow>
           <b>Total income {formatCurrency(stats.totalClubRevenuePence)}</b>

@@ -1,6 +1,7 @@
 import { and, eq, inArray, isNull, sql } from 'drizzle-orm';
 import {
   entries,
+  entryClasses,
   orders,
   orderSundryItems,
   payments,
@@ -153,6 +154,14 @@ export type ShowMetrics = {
   /** dogsEnteredCount + withdrawnEntryCount + cancelledEntryCount — every entry ever made on the show. */
   allEntriesCount: number;
   allEntriesFeesPence: number;
+  /**
+   * Class entries across every catalogue entry — a dog in two classes counts
+   * twice. This is what the judges' books and the Class Breakdown report hold,
+   * and it is ALWAYS >= dogsEnteredCount. Mandy 2026-07-27: the dashboard read
+   * "93 dogs entered" while the report read "109 entries" and nothing named
+   * either unit, so the two looked like a contradiction. Both are shown now.
+   */
+  classEntryCount: number;
 };
 
 // ── Pure aggregation (unit-testable without a DB) ───────────────
@@ -195,6 +204,11 @@ export type PaymentRefundRow = {
   refundAmount: number | null;
 };
 
+/** One row per (entry, class) pair — the judges'-book unit. */
+export type ClassEntryRow = {
+  entryId: string;
+};
+
 /**
  * Pure aggregation — given raw rows, compute the canonical metrics shape.
  * The DB wrapper below fetches these rows and calls this function.
@@ -204,6 +218,7 @@ export function aggregateShowMetrics(data: {
   entries: EntryRow[];
   sundries: SundryLineRow[];
   payments: PaymentRefundRow[];
+  classEntries?: ClassEntryRow[];
 }): ShowMetrics {
   const paidOrderIds = new Set<string>();
   // Subset of paidOrderIds never collected via Stripe — see OrderRow.stripePaymentIntentId.
@@ -241,6 +256,9 @@ export function aggregateShowMetrics(data: {
   // show up in "Awaiting Payment" even though the row is still
   // pending_payment.
   const livePendingOrderIds = new Set<string>();
+  // Entries that reach the catalogue — the population the judges' books and
+  // the Class Breakdown report count their class entries against.
+  const catalogueEntryIds = new Set<string>();
   let confirmedEntryCount = 0;
   let withdrawnEntryCount = 0;
   let pendingEntryCount = 0;
@@ -266,6 +284,7 @@ export function aggregateShowMetrics(data: {
 
   for (const e of data.entries) {
     if (e.deletedAt) continue;
+    if (e.status === 'confirmed') catalogueEntryIds.add(e.id);
     if (!e.orderId) {
       // Orderless entries never touched a Remi order — either an NFC dog
       // (no fee collected) or an entry a secretary added and settled
@@ -331,6 +350,13 @@ export function aggregateShowMetrics(data: {
   const dogsEnteredFeesPence = confirmedEntryFeesPence + notForCompetitionFeesPence + otherOrderlessFeesPence;
   const allEntriesCount = dogsEnteredCount + withdrawnEntryCount + cancelledEntryCount;
   const allEntriesFeesPence = dogsEnteredFeesPence + withdrawnKeptPence + cancelledRefundedPence;
+
+  // A dog in two classes is two class entries. Counted against the catalogue
+  // population so this ties to the Class Breakdown report exactly.
+  let classEntryCount = 0;
+  for (const ce of data.classEntries ?? []) {
+    if (catalogueEntryIds.has(ce.entryId)) classEntryCount += 1;
+  }
 
   const pendingOrderCount = livePendingOrderIds.size;
   let pendingPlatformFeePence = 0;
@@ -447,6 +473,7 @@ export function aggregateShowMetrics(data: {
     dogsEnteredFeesPence,
     allEntriesCount,
     allEntriesFeesPence,
+    classEntryCount,
   };
 }
 
@@ -477,6 +504,7 @@ export function shapeDogsEnteredFields(metrics: ShowMetrics) {
     allEntries: metrics.allEntriesCount,
     allEntriesFeesPence: metrics.allEntriesFeesPence,
     sundriesPence: metrics.paidSundryRevenuePence,
+    classEntries: metrics.classEntryCount,
   };
 }
 
@@ -533,7 +561,7 @@ export async function computeShowsMetrics(
   // zeroed dogsEntered for exactly the shows this redesign exists to fix.
   // Sundries/payments are keyed off orderId, so those two stay skipped
   // when there are no orders to join against.
-  const [entryRows, sundryRows, paymentRows] = await Promise.all([
+  const [entryRows, sundryRows, paymentRows, classEntryRows] = await Promise.all([
     db
       .select({
         id: entries.id,
@@ -573,6 +601,14 @@ export async function computeShowsMetrics(
               sql`${payments.refundAmount} IS NOT NULL`
             )
           ),
+    // Class entries — joined via entries so it's scoped to these shows and
+    // skips soft-deleted entries. Keyed by entryId; the aggregation decides
+    // which entries count toward the catalogue.
+    db
+      .select({ entryId: entryClasses.entryId, showId: entries.showId })
+      .from(entryClasses)
+      .innerJoin(entries, eq(entryClasses.entryId, entries.id))
+      .where(and(inArray(entries.showId, showIds), isNull(entries.deletedAt))),
   ]);
 
   // Bucket rows by showId
@@ -583,12 +619,13 @@ export async function computeShowsMetrics(
       entries: EntryRow[];
       sundries: SundryLineRow[];
       payments: PaymentRefundRow[];
+      classEntries: ClassEntryRow[];
     }
   >();
   const bucket = (id: string) => {
     let b = buckets.get(id);
     if (!b) {
-      b = { orders: [], entries: [], sundries: [], payments: [] };
+      b = { orders: [], entries: [], sundries: [], payments: [], classEntries: [] };
       buckets.set(id, b);
     }
     return b;
@@ -605,6 +642,7 @@ export async function computeShowsMetrics(
     const showId = orderToShow.get(p.orderId);
     if (showId) bucket(showId).payments.push(p);
   }
+  for (const ce of classEntryRows) bucket(ce.showId).classEntries.push({ entryId: ce.entryId });
 
   for (const [showId, data] of buckets) {
     result.set(showId, aggregateShowMetrics(data));

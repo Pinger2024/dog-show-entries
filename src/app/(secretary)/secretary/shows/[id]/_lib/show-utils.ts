@@ -115,6 +115,21 @@ export function formatDogsEnteredParts(opts: {
   return dogsEnteredParts(opts).join(' · ');
 }
 
+/**
+ * "109 class entries" — the judges'-book unit, shown next to the dogs count
+ * whenever the two differ. Mandy 2026-07-27: the dashboard said 93 and the
+ * Class Breakdown report said 109, and with neither naming its unit the two
+ * looked like a contradiction. Omitted when they're equal (every dog in a
+ * single class), because then it says nothing.
+ */
+export function classEntriesLabel(
+  dogsEntered: number,
+  classEntries: number | undefined,
+): string | null {
+  if (classEntries == null || classEntries <= dogsEntered) return null;
+  return `${classEntries} class entries`;
+}
+
 /** The lifecycle banner's breakdown line — dogsEnteredParts plus a
  *  withdrawn suffix, e.g. "74 paid · 4 not for competition · 1 withdrawn
  *  (fee kept)". Shared by every phase variant that shows an entry count
@@ -125,6 +140,8 @@ export function formatBannerBreakdown(entryStats: {
   notForCompetitionEntries: number;
   otherOrderlessEntries: number;
   withdrawn: number;
+  dogsEntered?: number;
+  classEntries?: number;
 } | undefined): string {
   if (!entryStats) return '';
   const parts = dogsEnteredParts({
@@ -134,6 +151,8 @@ export function formatBannerBreakdown(entryStats: {
     withdrawn: entryStats.withdrawn,
   });
   if (entryStats.withdrawn > 0) parts.push(`${entryStats.withdrawn} withdrawn (fee kept)`);
+  const classes = classEntriesLabel(entryStats.dogsEntered ?? 0, entryStats.classEntries);
+  if (classes) parts.push(classes);
   return parts.join(' · ');
 }
 

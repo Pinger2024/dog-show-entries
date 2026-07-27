@@ -57,6 +57,7 @@ import {
   formatWholePounds,
   joinWorkings,
   formatDogsEnteredParts,
+  classEntriesLabel,
 } from './_lib/show-utils';
 
 export default function ShowManagementLayout({
@@ -439,6 +440,14 @@ export default function ShowManagementLayout({
                 otherOrderless: entryStats.otherOrderlessEntries,
               })}
             </p>
+            {/* The judges'-book count. Mandy 2026-07-27: this card read 93
+                while the Class Breakdown read 109 and neither said which unit
+                it meant — a dog in two classes is one dog, two class entries. */}
+            {classEntriesLabel(entryStats.dogsEntered, entryStats.classEntries) && (
+              <p className="mt-1 text-[11px] text-se-ink3">
+                {classEntriesLabel(entryStats.dogsEntered, entryStats.classEntries)}
+              </p>
+            )}
             {entryStats.pending > 0 && (
               <p className="mt-1 text-[11px] text-se-honey-deep">{entryStats.pending} awaiting payment</p>
             )}

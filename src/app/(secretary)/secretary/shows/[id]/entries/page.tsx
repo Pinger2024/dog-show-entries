@@ -56,7 +56,7 @@ import { isGsdOnlyClass, isGsdBreed } from '@/lib/class-templates';
 import { EmptyState } from '@/components/ui/empty-state';
 import { SECard, Eyebrow } from '@/components/show-experience/kit';
 import { SE_H } from '@/components/show-experience/tokens';
-import { EntryItem, entryStatusConfig, formatDate, formatDogsEnteredParts } from '../_lib/show-utils';
+import { EntryItem, entryStatusConfig, formatDate, formatDogsEnteredParts, classEntriesLabel } from '../_lib/show-utils';
 import { useShowId } from '../_lib/show-context';
 
 /* Entry status pill — same fresh/honey/light pill language as the rest of
@@ -214,6 +214,7 @@ export default function EntriesPage() {
         otherOrderless: entryStats.otherOrderlessEntries,
       })
     : '';
+  const classEntriesSub = classEntriesLabel(dogsEntered, entryStats?.classEntries);
 
   return (
     <>
@@ -227,6 +228,9 @@ export default function EntriesPage() {
           <p className={cn(SE_H, 'mt-1 text-[22px] leading-none tabular-nums text-se-ink')}>{dogsEntered}</p>
           {dogsEnteredSub && (
             <p className="mt-1 truncate text-[11px] text-se-ink3">{dogsEnteredSub}</p>
+          )}
+          {classEntriesSub && (
+            <p className="mt-1 truncate text-[11px] text-se-ink3">{classEntriesSub}</p>
           )}
         </SECard>
         <SECard className="p-3.5">
