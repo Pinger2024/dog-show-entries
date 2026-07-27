@@ -39,6 +39,8 @@ type NumberingClass = {
 
 export type NumberingEntry = {
   id: string;
+  /** Null for Junior Handler entries, which have no dog. */
+  dogId: string | null;
   isNfc: boolean | null;
   entryDate: Date | string;
   dog: {
@@ -110,13 +112,46 @@ async function fetchConfirmed(db: Db, showId: string) {
   });
 }
 
-async function writeSequential(db: Db, ordered: { id: string }[]) {
+/**
+ * Number the ordered entries 1..N, but ONE NUMBER PER DOG.
+ *
+ * Mandy, 2026-07-27: "they should always keep the same catalogue number
+ * throughout the show." A dog can hold two entry rows — buy a class, come back
+ * later and buy a Special Award Class, and the second purchase creates its own
+ * entry. Numbering per row gave that dog two numbers, so it printed twice as if
+ * it were two dogs and the handler wouldn't know which number to wear.
+ *
+ * The dog takes the number of its FIRST appearance in catalogue order (its
+ * earliest class), and later rows reuse it. The counter only advances when a
+ * number is actually issued, so the sequence stays 1..N with no gaps. Junior
+ * Handler entries carry no dog and are always numbered individually.
+ */
+function assignNumbers(ordered: NumberingEntry[]): { id: string; number: string }[] {
+  const numberByDog = new Map<string, string>();
+  const assignments: { id: string; number: string }[] = [];
+  let next = 1;
+
+  for (const e of ordered) {
+    const existing = e.dogId ? numberByDog.get(e.dogId) : undefined;
+    if (existing) {
+      assignments.push({ id: e.id, number: existing });
+      continue;
+    }
+    const number = String(next++);
+    if (e.dogId) numberByDog.set(e.dogId, number);
+    assignments.push({ id: e.id, number });
+  }
+  return assignments;
+}
+
+async function writeSequential(db: Db, ordered: NumberingEntry[]) {
+  const assignments = assignNumbers(ordered);
   await db.transaction(async (tx) => {
-    for (let i = 0; i < ordered.length; i++) {
+    for (const a of assignments) {
       await tx
         .update(schema.entries)
-        .set({ catalogueNumber: String(i + 1), updatedAt: new Date() })
-        .where(eq(schema.entries.id, ordered[i].id));
+        .set({ catalogueNumber: a.number, updatedAt: new Date() })
+        .where(eq(schema.entries.id, a.id));
     }
   });
 }
@@ -137,6 +172,11 @@ export async function resortCatalogueNumbers(db: Db, showId: string): Promise<{ 
 /**
  * Number the confirmed entries that don't have a number yet, appending them at
  * max+1 in catalogue order. Existing numbers never move.
+ *
+ * Dog-aware, same rule as the full re-sort: if the dog already holds a number
+ * on another entry, this row joins it rather than taking a new one. Otherwise
+ * buying a Special Award Class on a locked show would hand the dog a second
+ * number — the very thing the numbering is meant to prevent.
  */
 async function appendMissingNumbers(db: Db, showId: string): Promise<{ assigned: number }> {
   const confirmed = await fetchConfirmed(db, showId);
@@ -148,16 +188,33 @@ async function appendMissingNumbers(db: Db, showId: string): Promise<{ assigned:
     return Number.isFinite(n) && n > max ? n : max;
   }, 0);
 
+  // Numbers already held, by dog — a late row for one of these joins it.
+  const numberByDog = new Map<string, string>();
+  for (const e of confirmed) {
+    if (e.dogId && e.catalogueNumber != null && !numberByDog.has(e.dogId)) {
+      numberByDog.set(e.dogId, e.catalogueNumber);
+    }
+  }
+
   const ordered = sortForCatalogue(unnumbered as unknown as NumberingEntry[]);
+  let next = highest + 1;
+  const assignments = ordered.map((e) => {
+    const existing = e.dogId ? numberByDog.get(e.dogId) : undefined;
+    if (existing) return { id: e.id, number: existing };
+    const number = String(next++);
+    if (e.dogId) numberByDog.set(e.dogId, number);
+    return { id: e.id, number };
+  });
+
   await db.transaction(async (tx) => {
-    for (let i = 0; i < ordered.length; i++) {
+    for (const a of assignments) {
       await tx
         .update(schema.entries)
-        .set({ catalogueNumber: String(highest + 1 + i), updatedAt: new Date() })
-        .where(eq(schema.entries.id, ordered[i].id));
+        .set({ catalogueNumber: a.number, updatedAt: new Date() })
+        .where(eq(schema.entries.id, a.id));
     }
   });
-  return { assigned: ordered.length };
+  return { assigned: assignments.length };
 }
 
 /**

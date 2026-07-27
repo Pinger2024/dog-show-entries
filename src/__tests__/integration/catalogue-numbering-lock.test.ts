@@ -102,6 +102,120 @@ describe('catalogue numbering — grouping + provisional/locked', () => {
 });
 
 /**
+ * Mandy, 2026-07-27: "they should always keep the same catalogue number
+ * throughout the show." A dog can end up with two entry rows — buy a class,
+ * come back later and buy a Special Award Class, and the second purchase makes
+ * its own entry. On South Western that gave four dogs two numbers each, so they
+ * printed twice as if they were two dogs.
+ */
+describe('catalogue numbering — one number per dog', () => {
+  /** A dog with two separate entry rows: a main class and a later Special Award. */
+  async function dogWithTwoEntries(user: { id: string }, showId: string, classes: string[]) {
+    const dog = await makeDog({ ownerId: user.id });
+    const made = [];
+    for (const showClassId of classes) {
+      const [e] = await testDb
+        .insert(entries)
+        .values({ showId, dogId: dog.id, exhibitorId: user.id, status: 'confirmed', totalFee: 500 })
+        .returning();
+      await makeEntryClass({ entryId: e.id, showClassId });
+      made.push(e);
+    }
+    return { dog, entries: made };
+  }
+
+  it('gives a dog holding two entry rows a single number', async () => {
+    const { user, org } = await makeSecretaryWithOrg();
+    const show = await makeShow({ organisationId: org.id, status: 'entries_closed' });
+    const mainDef = await makeClassDef({ type: 'age', name: 'Limit' });
+    const sacDef = await makeClassDef({ type: 'special', name: 'Special Award Class - Open' });
+    const mainClass = await makeShowClass({ showId: show.id, classDefinitionId: mainDef.id });
+    const sacClass = await makeShowClass({ showId: show.id, classDefinitionId: sacDef.id });
+    await testDb.update(showClasses).set({ classNumber: 1 }).where(eq(showClasses.id, mainClass.id));
+    await testDb.update(showClasses).set({ classNumber: 2 }).where(eq(showClasses.id, sacClass.id));
+
+    const split = await dogWithTwoEntries(user, show.id, [mainClass.id, sacClass.id]);
+    // A second, ordinary dog so we can prove the sequence has no gap after the reuse.
+    const otherDog = await makeDog({ ownerId: user.id });
+    const [other] = await testDb
+      .insert(entries)
+      .values({ showId: show.id, dogId: otherDog.id, exhibitorId: user.id, status: 'confirmed', totalFee: 500 })
+      .returning();
+    await makeEntryClass({ entryId: other.id, showClassId: mainClass.id });
+
+    await resortCatalogueNumbers(testDb, show.id);
+
+    const a = await catNum(split.entries[0].id);
+    const b = await catNum(split.entries[1].id);
+    expect(a).toBe(b); // both rows of the same dog share one number
+
+    // ...and the counter didn't skip: two dogs → numbers 1 and 2, nothing higher.
+    const all = await testDb.query.entries.findMany({ where: eq(entries.showId, show.id) });
+    const distinct = [...new Set(all.map((e) => e.catalogueNumber))].sort();
+    expect(distinct).toEqual(['1', '2']);
+    expect(await catNum(other.id)).not.toBe(a);
+  });
+
+  it('joins a late Special Award entry to the number its dog already holds, even when locked', async () => {
+    const { user, org } = await makeSecretaryWithOrg();
+    const show = await makeShow({ organisationId: org.id, status: 'entries_closed' });
+    const mainDef = await makeClassDef({ type: 'age', name: 'Limit' });
+    const sacDef = await makeClassDef({ type: 'special', name: 'Special Award Class - Open' });
+    const mainClass = await makeShowClass({ showId: show.id, classDefinitionId: mainDef.id });
+    const sacClass = await makeShowClass({ showId: show.id, classDefinitionId: sacDef.id });
+
+    const dog = await makeDog({ ownerId: user.id });
+    const [main] = await testDb
+      .insert(entries)
+      .values({ showId: show.id, dogId: dog.id, exhibitorId: user.id, status: 'confirmed', totalFee: 2000 })
+      .returning();
+    await makeEntryClass({ entryId: main.id, showClassId: mainClass.id });
+    await resortCatalogueNumbers(testDb, show.id);
+    const originalNumber = await catNum(main.id);
+    expect(originalNumber).toBe('1');
+
+    // Numbers locked for printing, THEN the exhibitor buys a Special Award.
+    await testDb.update(shows).set({ catalogueNumbersLockedAt: new Date() }).where(eq(shows.id, show.id));
+    const [late] = await testDb
+      .insert(entries)
+      .values({ showId: show.id, dogId: dog.id, exhibitorId: user.id, status: 'confirmed', totalFee: 300 })
+      .returning();
+    await makeEntryClass({ entryId: late.id, showClassId: sacClass.id });
+
+    await syncCatalogueNumbers(testDb, show.id);
+
+    expect(await catNum(main.id)).toBe(originalNumber); // printed number untouched
+    expect(await catNum(late.id)).toBe(originalNumber); // late row joins its dog
+  });
+
+  it('still numbers dogless Junior Handler entries individually', async () => {
+    const { user, org } = await makeSecretaryWithOrg();
+    const show = await makeShow({ organisationId: org.id, status: 'entries_closed' });
+    const jhDef = await makeClassDef({ type: 'junior_handler', name: 'JHA Handling (12-16)' });
+    const jhClass = await makeShowClass({ showId: show.id, classDefinitionId: jhDef.id });
+
+    const mkJh = async () => {
+      const [e] = await testDb
+        .insert(entries)
+        .values({
+          showId: show.id, dogId: null, exhibitorId: user.id,
+          status: 'confirmed', totalFee: 300, entryType: 'junior_handler',
+        })
+        .returning();
+      await makeEntryClass({ entryId: e.id, showClassId: jhClass.id });
+      return e;
+    };
+    const jh1 = await mkJh();
+    const jh2 = await mkJh();
+
+    await resortCatalogueNumbers(testDb, show.id);
+
+    // Both have dogId null — they must NOT collapse onto one number.
+    expect(await catNum(jh1.id)).not.toBe(await catNum(jh2.id));
+  });
+});
+
+/**
  * South Western GSD, 2026-07-26: the show closed with 93 confirmed entries and
  * only 55 catalogue numbers. A report render had numbered the first 55; the
  * close-time pass was first-time-only, saw entry #1 already numbered, and
