@@ -66,6 +66,22 @@ export function buildBestAwards(
   showType: string | null | undefined,
   customAwards: string[] = [],
 ): string[] {
+  // A CONFIGURED list wins VERBATIM — same order, nothing added. The sponsors
+  // page is the source of truth the secretary sees and edits; prepending
+  // show-type defaults meant the catalogue and judges book printed a different
+  // list, in a different order, from the one on her screen.
+  //
+  // Mandy 2026-07-27, South Western: "the order in which we have the best
+  // awards in this table should be mirrored in the catalogue but currently
+  // they are not", and "for this show we should have best in show instead of
+  // best of breed" — Best of Breed was never in her list; the championship
+  // defaults were injecting it ahead of everything she had configured.
+  //
+  // resolveTopAwards (top-awards.ts) has always worked this way for results,
+  // for the same stated reason. This brings the printed documents into line,
+  // so a club's awards read identically everywhere.
+  if (customAwards.length > 0) return [...customAwards];
+
   const defaults = DEFAULT_BEST_AWARDS[showType ?? ''] ?? ['Best in Show'];
   const canon = (a: string) => a.toLowerCase().trim();
   const present = new Set(defaults.map(canon));
