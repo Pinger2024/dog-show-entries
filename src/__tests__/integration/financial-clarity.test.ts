@@ -466,6 +466,72 @@ describe('classEntriesLabel', () => {
 // The "Entries closed — 93 dogs entered" banner reads its sub-line from
 // formatBannerBreakdown. Mandy's number has to actually appear there, not
 // just in the helper the banner calls.
+// Mandy 2026-07-27, on the Entries tile reading 91: "i'm scratching me head
+// with this 91 … 81 entries for hugh which is 80 unique dogs. 24 for Kat of
+// which only 2 are unique as the rest are entered under Hugh and 4 Junior
+// Handlers". She was right — 91 counted entry ROWS, so a dog who came back to
+// buy a Special Award was counted twice, against a catalogue of 90.
+describe('the figures a secretary quotes — class entries, dogs, catalogue numbers', () => {
+  it('counts a dog once however many separate entries it holds', async () => {
+    const { secretary, show, showClass, breed } = await setupShow();
+    const exhibitor = await makeUser({ role: 'exhibitor' });
+    const order = await makeOrder({ showId: show.id, exhibitorId: exhibitor.id, status: 'paid', totalAmount: 2300 });
+
+    // ONE dog, TWO entry rows — a main class then a Special Award bought
+    // later, which is exactly LORNSTONE SIJUR's shape on South Western.
+    const dog = await makeDog({ ownerId: exhibitor.id, breedId: breed.id });
+    for (const fee of [2000, 300]) {
+      const e = await makeEntry({
+        showId: show.id, dogId: dog.id, exhibitorId: exhibitor.id,
+        orderId: order.id, status: 'confirmed', totalFee: fee,
+      });
+      await makeEntryClass({ entryId: e.id, showClassId: showClass.id });
+    }
+
+    const stats = await createTestCaller(secretary).secretary.getShowStats({ showId: show.id });
+
+    expect(stats.dogCount).toBe(1);            // one dog
+    expect(stats.classEntries).toBe(2);        // two class entries
+    expect(stats.catalogueNumberCount).toBe(1); // one catalogue number
+    // ...and the money is untouched by the de-duplication.
+    expect(stats.dogsEnteredFeesPence).toBe(2300);
+  });
+
+  it('never counts a Junior Handler as a dog — the RKC return is competing dogs', async () => {
+    const { secretary, show, showClass, breed } = await setupShow();
+    const exhibitor = await makeUser({ role: 'exhibitor' });
+    const order = await makeOrder({ showId: show.id, exhibitorId: exhibitor.id, status: 'paid', totalAmount: 2300 });
+
+    const dog = await makeDog({ ownerId: exhibitor.id, breedId: breed.id });
+    const competing = await makeEntry({
+      showId: show.id, dogId: dog.id, exhibitorId: exhibitor.id,
+      orderId: order.id, status: 'confirmed', totalFee: 2000,
+    });
+    await makeEntryClass({ entryId: competing.id, showClassId: showClass.id });
+
+    // A Not For Competition dog — in the catalogue, in no judged class.
+    const nfcDog = await makeDog({ ownerId: exhibitor.id, breedId: breed.id });
+    await makeEntry({
+      showId: show.id, dogId: nfcDog.id, exhibitorId: exhibitor.id,
+      orderId: order.id, status: 'confirmed', totalFee: 0, isNfc: true,
+    });
+
+    // A Junior Handler — a child and a handling class, NO dog at all.
+    await makeEntry({
+      showId: show.id, dogId: null, exhibitorId: exhibitor.id,
+      orderId: order.id, status: 'confirmed', totalFee: 300,
+      entryType: 'junior_handler',
+    });
+
+    const stats = await createTestCaller(secretary).secretary.getShowStats({ showId: show.id });
+
+    expect(stats.dogCount).toBe(2);             // the competing dog + the NFC dog
+    expect(stats.nfcDogCount).toBe(1);
+    expect(stats.competingDogCount).toBe(1);    // ← Mandy's RKC figure
+    expect(stats.catalogueNumberCount).toBe(3); // 2 dogs + 1 junior handler
+  });
+});
+
 describe('formatBannerBreakdown — carries the class-entries count', () => {
   const base = {
     confirmed: 93,

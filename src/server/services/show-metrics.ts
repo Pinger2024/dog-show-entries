@@ -2,6 +2,8 @@ import { and, eq, inArray, isNull, sql } from 'drizzle-orm';
 import {
   entries,
   entryClasses,
+  showClasses,
+  classDefinitions,
   orders,
   orderSundryItems,
   payments,
@@ -162,6 +164,30 @@ export type ShowMetrics = {
    * either unit, so the two looked like a contradiction. Both are shown now.
    */
   classEntryCount: number;
+
+  // ── The figures a secretary actually quotes ────────────────────
+  // Mandy 2026-07-27: "when we share the numbers we will be giving the
+  // breakdown with a total of 110 entries". The number a club ANNOUNCES is
+  // class entries, not dogs — the dog count serves one job, printing the
+  // catalogue. Every one of these says plainly what it counts, because the
+  // whole of today's bug list was screens counting one thing and labelling it
+  // another.
+  /** classEntryCount split by what kind of class it is. Sums to classEntryCount. */
+  classEntriesBreed: number;
+  classEntriesSpecialAwards: number;
+  classEntriesJuniorHandling: number;
+  /** DISTINCT dogs in the catalogue. A dog entered twice (e.g. a Special Award
+   *  bought separately) counts ONCE — unlike dogsEnteredCount, which counts
+   *  entry rows and read 91 against a catalogue of 90 (Mandy 2026-07-27). */
+  dogCount: number;
+  /** Dogs flagged Not For Competition — in the catalogue, in no judged class. */
+  nfcDogCount: number;
+  /** dogCount − nfcDogCount. **This is the RKC return figure** — Mandy
+   *  confirmed 82, i.e. dogs actually competing, excluding NFC and excluding
+   *  Junior Handlers (a JH has no dog at all). */
+  competingDogCount: number;
+  /** dogCount + junior handlers — how many catalogue numbers the show prints. */
+  catalogueNumberCount: number;
 };
 
 // ── Pure aggregation (unit-testable without a DB) ───────────────
@@ -190,6 +216,13 @@ export type EntryRow = {
   /** Not For Competition flag — drives the orderless notForCompetition/otherOrderless split. */
   isNfc: boolean;
   entryType: 'standard' | 'junior_handler';
+  /**
+   * Null on Junior Handler entries — a JH entry is a child and a handling
+   * class, with no dog attached. That is why a show's catalogue-number count
+   * is dogs PLUS junior handlers, and why a JH must never be counted as a dog
+   * in an RKC return (Mandy 2026-07-27).
+   */
+  dogId: string | null;
 };
 
 export type SundryLineRow = {
@@ -207,6 +240,8 @@ export type PaymentRefundRow = {
 /** One row per (entry, class) pair — the judges'-book unit. */
 export type ClassEntryRow = {
   entryId: string;
+  /** class_definitions.type — 'junior_handler' | 'special' | age/achievement. */
+  classType: string | null;
 };
 
 /**
@@ -354,9 +389,36 @@ export function aggregateShowMetrics(data: {
   // A dog in two classes is two class entries. Counted against the catalogue
   // population so this ties to the Class Breakdown report exactly.
   let classEntryCount = 0;
+  let classEntriesBreed = 0;
+  let classEntriesSpecialAwards = 0;
+  let classEntriesJuniorHandling = 0;
   for (const ce of data.classEntries ?? []) {
-    if (catalogueEntryIds.has(ce.entryId)) classEntryCount += 1;
+    if (!catalogueEntryIds.has(ce.entryId)) continue;
+    classEntryCount += 1;
+    if (ce.classType === 'junior_handler') classEntriesJuniorHandling += 1;
+    else if (ce.classType === 'special') classEntriesSpecialAwards += 1;
+    else classEntriesBreed += 1;
   }
+
+  // Dogs, counted as DOGS — one row per dog however many times it was entered.
+  // Junior Handler entries carry no dog, so they are counted separately and
+  // never fold into a dog figure (Mandy 2026-07-27: the RKC return wants dogs).
+  const dogIds = new Set<string>();
+  const nfcDogIds = new Set<string>();
+  let juniorHandlerEntries = 0;
+  for (const e of data.entries) {
+    if (e.deletedAt || !catalogueEntryIds.has(e.id)) continue;
+    if (e.dogId == null) {
+      juniorHandlerEntries += 1;
+      continue;
+    }
+    dogIds.add(e.dogId);
+    if (e.isNfc) nfcDogIds.add(e.dogId);
+  }
+  const dogCount = dogIds.size;
+  const nfcDogCount = nfcDogIds.size;
+  const competingDogCount = dogCount - nfcDogCount;
+  const catalogueNumberCount = dogCount + juniorHandlerEntries;
 
   const pendingOrderCount = livePendingOrderIds.size;
   let pendingPlatformFeePence = 0;
@@ -474,6 +536,13 @@ export function aggregateShowMetrics(data: {
     allEntriesCount,
     allEntriesFeesPence,
     classEntryCount,
+    classEntriesBreed,
+    classEntriesSpecialAwards,
+    classEntriesJuniorHandling,
+    dogCount,
+    nfcDogCount,
+    competingDogCount,
+    catalogueNumberCount,
   };
 }
 
@@ -505,6 +574,13 @@ export function shapeDogsEnteredFields(metrics: ShowMetrics) {
     allEntriesFeesPence: metrics.allEntriesFeesPence,
     sundriesPence: metrics.paidSundryRevenuePence,
     classEntries: metrics.classEntryCount,
+    classEntriesBreed: metrics.classEntriesBreed,
+    classEntriesSpecialAwards: metrics.classEntriesSpecialAwards,
+    classEntriesJuniorHandling: metrics.classEntriesJuniorHandling,
+    dogCount: metrics.dogCount,
+    nfcDogCount: metrics.nfcDogCount,
+    competingDogCount: metrics.competingDogCount,
+    catalogueNumberCount: metrics.catalogueNumberCount,
   };
 }
 
@@ -572,6 +648,7 @@ export async function computeShowsMetrics(
         deletedAt: entries.deletedAt,
         isNfc: entries.isNfc,
         entryType: entries.entryType,
+        dogId: entries.dogId,
       })
       .from(entries)
       .where(and(inArray(entries.showId, showIds), isNull(entries.deletedAt))),
@@ -605,9 +682,15 @@ export async function computeShowsMetrics(
     // skips soft-deleted entries. Keyed by entryId; the aggregation decides
     // which entries count toward the catalogue.
     db
-      .select({ entryId: entryClasses.entryId, showId: entries.showId })
+      .select({
+        entryId: entryClasses.entryId,
+        showId: entries.showId,
+        classType: classDefinitions.type,
+      })
       .from(entryClasses)
       .innerJoin(entries, eq(entryClasses.entryId, entries.id))
+      .leftJoin(showClasses, eq(showClasses.id, entryClasses.showClassId))
+      .leftJoin(classDefinitions, eq(classDefinitions.id, showClasses.classDefinitionId))
       .where(and(inArray(entries.showId, showIds), isNull(entries.deletedAt))),
   ]);
 
@@ -642,7 +725,7 @@ export async function computeShowsMetrics(
     const showId = orderToShow.get(p.orderId);
     if (showId) bucket(showId).payments.push(p);
   }
-  for (const ce of classEntryRows) bucket(ce.showId).classEntries.push({ entryId: ce.entryId });
+  for (const ce of classEntryRows) bucket(ce.showId).classEntries.push({ entryId: ce.entryId, classType: ce.classType });
 
   for (const [showId, data] of buckets) {
     result.set(showId, aggregateShowMetrics(data));

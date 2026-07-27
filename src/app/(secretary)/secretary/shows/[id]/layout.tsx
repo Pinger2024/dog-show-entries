@@ -57,7 +57,8 @@ import {
   formatWholePounds,
   joinWorkings,
   formatDogsEnteredParts,
-  classEntriesLabel,
+  classEntryBreakdownParts,
+  dogCountParts,
 } from './_lib/show-utils';
 
 export default function ShowManagementLayout({
@@ -427,25 +428,29 @@ export default function ShowManagementLayout({
               <ClipboardList className="size-3.5" />
               <Eyebrow>Entries</Eyebrow>
             </div>
-            {/* Headline = "dogs entered" — the same canonical number the
-                entries list, banner, and Financial page all show now (was
-                "confirmed", which silently dropped orderless NFC / manually
-                added dogs and read lower than the entries list — Amanda's
-                74/75/78 report). The lines beneath show its workings. */}
-            <p className={cn(SE_H, 'mt-1.5 text-[22px] leading-none tabular-nums text-se-ink')}>{entryStats.dogsEntered}</p>
-            <p className="mt-1 text-[11px] text-se-ink3">
-              {formatDogsEnteredParts({
-                paid: entryStats.confirmed,
-                notForCompetition: entryStats.notForCompetitionEntries,
-                otherOrderless: entryStats.otherOrderlessEntries,
-              })}
+            {/* Headline = CLASS ENTRIES, the figure a club actually announces.
+                Mandy 2026-07-27: "when we share the numbers we will be giving
+                the breakdown with a total of 110 entries". It used to lead with
+                a dog count, which was both the wrong figure to publish AND
+                wrong in itself — it counted entry ROWS, so a dog who came back
+                to buy a Special Award was counted twice and the card read 91
+                against a catalogue of 90.
+
+                Beneath it: the split she'd quote, then the dog figures. A
+                Junior Handler has no dog, so JH is a class-entry part and never
+                a dog — her RKC return is the competing-dogs number. */}
+            <p className={cn(SE_H, 'mt-1.5 text-[22px] leading-none tabular-nums text-se-ink')}>
+              {entryStats.classEntries ?? entryStats.dogsEntered}
             </p>
-            {/* The judges'-book count. Mandy 2026-07-27: this card read 93
-                while the Class Breakdown read 109 and neither said which unit
-                it meant — a dog in two classes is one dog, two class entries. */}
-            {classEntriesLabel(entryStats.dogsEntered, entryStats.classEntries) && (
-              <p className="mt-1 text-[11px] text-se-ink3">
-                {classEntriesLabel(entryStats.dogsEntered, entryStats.classEntries)}
+            <p className="mt-1 text-[11px] text-se-ink3">entries</p>
+            {classEntryBreakdownParts(entryStats).length > 0 && (
+              <p className="mt-1 text-[11px] leading-snug text-se-ink3">
+                {classEntryBreakdownParts(entryStats).join(' · ')}
+              </p>
+            )}
+            {dogCountParts(entryStats).length > 0 && (
+              <p className="mt-1 text-[11px] leading-snug text-se-ink3">
+                {dogCountParts(entryStats).join(' · ')}
               </p>
             )}
             {entryStats.pending > 0 && (

@@ -116,6 +116,43 @@ export function formatDogsEnteredParts(opts: {
 }
 
 /**
+ * The parts that make up a show's class-entry total, e.g.
+ * `["82 breed classes", "24 special awards", "4 junior handling"]`.
+ *
+ * Mandy 2026-07-27: "I almost think i want to show 110 entries in that bold
+ * number and then in smaller detail a breakdown … but that wont fit every
+ * show". So it builds itself from what the show actually has — Clyde Valley
+ * has no special awards, so that part simply doesn't appear.
+ */
+export function classEntryBreakdownParts(stats: {
+  classEntriesBreed?: number;
+  classEntriesSpecialAwards?: number;
+  classEntriesJuniorHandling?: number;
+} | undefined): string[] {
+  if (!stats) return [];
+  const parts: string[] = [];
+  if (stats.classEntriesBreed) parts.push(`${stats.classEntriesBreed} breed classes`);
+  if (stats.classEntriesSpecialAwards) parts.push(`${stats.classEntriesSpecialAwards} special awards`);
+  if (stats.classEntriesJuniorHandling) parts.push(`${stats.classEntriesJuniorHandling} junior handling`);
+  return parts;
+}
+
+/**
+ * The dog-side line under the headline, e.g. "86 dogs · 4 not for competition".
+ * Junior Handlers are deliberately NOT folded in — a JH entry has no dog, and
+ * Mandy's RKC return counts dogs (2026-07-27).
+ */
+export function dogCountParts(stats: {
+  dogCount?: number;
+  nfcDogCount?: number;
+} | undefined): string[] {
+  if (!stats?.dogCount) return [];
+  const parts = [`${stats.dogCount} ${stats.dogCount === 1 ? 'dog' : 'dogs'}`];
+  if (stats.nfcDogCount) parts.push(`${stats.nfcDogCount} not for competition`);
+  return parts;
+}
+
+/**
  * "109 class entries" — the judges'-book unit, shown next to the dogs count
  * whenever the two differ. Mandy 2026-07-27: the dashboard said 93 and the
  * Class Breakdown report said 109, and with neither naming its unit the two
