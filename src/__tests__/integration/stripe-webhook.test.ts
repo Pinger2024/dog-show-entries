@@ -111,6 +111,30 @@ describe('POST /api/webhooks/stripe — payment_intent.succeeded', () => {
     expect(vi.mocked(emailService.sendSecretaryNotificationEmail)).toHaveBeenCalledWith(order.id);
   });
 
+  // South Western GSD, 2026-07-26: 38 of 93 paid entries reached close night
+  // with no catalogue number, because nothing on the payment path assigned one.
+  it('gives a paid entry its catalogue number', async () => {
+    const { exhibitor, show, showClass, entry } = await entryReadyForPayment();
+    await makeEntryClass({ entryId: entry.id, showClassId: showClass.id });
+    const order = await makeOrder({ showId: show.id, exhibitorId: exhibitor.id, status: 'pending_payment' });
+    await testDb.update(entries).set({ orderId: order.id }).where(eq(entries.id, entry.id));
+    const intentId = 'pi_test_catalogue_number';
+    await makePayment({ orderId: order.id, stripePaymentId: intentId });
+
+    expect((await testDb.query.entries.findFirst({ where: eq(entries.id, entry.id) }))?.catalogueNumber).toBeNull();
+
+    injectStripeEvent({
+      type: 'payment_intent.succeeded',
+      data: { object: { id: intentId, metadata: { orderId: order.id } } },
+    });
+    const res = await stripeWebhook(buildStripeWebhookRequest() as never);
+
+    expect(res.status).toBe(200);
+    const paid = await testDb.query.entries.findFirst({ where: eq(entries.id, entry.id) });
+    expect(paid?.status).toBe('confirmed');
+    expect(paid?.catalogueNumber).toBe('1');
+  });
+
   it('is idempotent across re-delivery (Stripe may send the same event twice)', async () => {
     const { exhibitor, show, entry } = await entryReadyForPayment();
     const order = await makeOrder({ showId: show.id, exhibitorId: exhibitor.id });

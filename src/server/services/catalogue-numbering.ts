@@ -8,8 +8,13 @@
  *   entries slot into their class instead of piling up at the end.
  *
  *   LOCKED (lockedAt set) — the secretary has locked the numbers for printing.
- *   Existing numbers never shift; new entries append at max+1 (handled by the
- *   entry-creation mutations). The catalogue render path is a strict no-op.
+ *   Existing numbers never shift; new entries append at max+1.
+ *
+ * Every path that confirms an entry — the Stripe webhook, the £0 free-entry
+ * shortcut, the secretary's manual add — and the close-entries transition go
+ * through `syncCatalogueNumbers`, which picks the right phase. Render paths
+ * pass `allowResort: false` so opening a catalogue can never shift a number
+ * out from under a secretary who is mid-print; they only fill blanks.
  *
  * Ordering (single source of truth — `sortForCatalogue`): entries are grouped
  * into three tiers so Junior Handlers and Not-For-Competition dogs never
@@ -130,21 +135,55 @@ export async function resortCatalogueNumbers(db: Db, showId: string): Promise<{ 
 }
 
 /**
- * Assign catalogue numbers the first time — no-op if ANY confirmed entry already
- * has a number, so the render path never shifts numbers out from under a
- * secretary who is mid-print. Called on every catalogue/judges-book render.
+ * Number the confirmed entries that don't have a number yet, appending them at
+ * max+1 in catalogue order. Existing numbers never move.
  */
-export async function ensureCatalogueNumbers(db: Db, showId: string): Promise<{ assigned: number }> {
-  const alreadyNumbered = await db.query.entries.findFirst({
-    where: and(
-      eq(schema.entries.showId, showId),
-      eq(schema.entries.status, 'confirmed'),
-      isNull(schema.entries.deletedAt),
-    ),
-    columns: { id: true, catalogueNumber: true },
+async function appendMissingNumbers(db: Db, showId: string): Promise<{ assigned: number }> {
+  const confirmed = await fetchConfirmed(db, showId);
+  const unnumbered = confirmed.filter((e) => e.catalogueNumber == null);
+  if (unnumbered.length === 0) return { assigned: 0 };
+
+  const highest = confirmed.reduce((max, e) => {
+    const n = Number(e.catalogueNumber);
+    return Number.isFinite(n) && n > max ? n : max;
+  }, 0);
+
+  const ordered = sortForCatalogue(unnumbered as unknown as NumberingEntry[]);
+  await db.transaction(async (tx) => {
+    for (let i = 0; i < ordered.length; i++) {
+      await tx
+        .update(schema.entries)
+        .set({ catalogueNumber: String(highest + 1 + i), updatedAt: new Date() })
+        .where(eq(schema.entries.id, ordered[i].id));
+    }
   });
-  if (alreadyNumbered?.catalogueNumber != null) {
-    return { assigned: 0 };
-  }
-  return resortCatalogueNumbers(db, showId);
+  return { assigned: ordered.length };
+}
+
+/**
+ * Bring a show's catalogue numbers in line with its confirmed entries. The one
+ * entry point every caller should use — it picks the right phase so no
+ * confirmed entry is ever left without a number.
+ *
+ *   provisional + allowResort → full class-order re-sort
+ *   locked, or allowResort=false → append the blanks at max+1, shift nothing
+ *
+ * `allowResort` is false on render paths (catalogue, judges book, ring numbers,
+ * reports): opening a document must never renumber a show mid-print, but it
+ * must not print a blank number either. The authoritative re-sort happens when
+ * an entry is confirmed and when entries close.
+ */
+export async function syncCatalogueNumbers(
+  db: Db,
+  showId: string,
+  { allowResort = true }: { allowResort?: boolean } = {},
+): Promise<{ assigned: number }> {
+  const show = await db.query.shows.findFirst({
+    where: eq(schema.shows.id, showId),
+    columns: { catalogueNumbersLockedAt: true },
+  });
+  const locked = show?.catalogueNumbersLockedAt != null;
+
+  if (!locked && allowResort) return resortCatalogueNumbers(db, showId);
+  return appendMissingNumbers(db, showId);
 }

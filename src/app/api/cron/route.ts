@@ -3,14 +3,14 @@ import { requireCronSecret } from '@/server/lib/cron-auth';
 import { db } from '@/server/db';
 import { shows, orders, orderSundryItems, sundryItems } from '@/server/db/schema';
 import { and, eq, ilike, isNull, lte, lt, isNotNull, sql } from 'drizzle-orm';
-import { ensureCatalogueNumbers } from '@/server/services/catalogue-numbering';
+import { syncCatalogueNumbers } from '@/server/services/catalogue-numbering';
 import { sendCatalogueReadyEmail } from '@/server/services/email';
 import { CATALOGUE_NAME_PATTERN } from '@/lib/catalogue-utils';
 import { todayInLondon } from '@/lib/date-utils';
 
 /** Wall-clock hour:minute in Europe/London — used to gate the catalogue-ready
- *  email to "morning of the show, on or after 8:30 am". Cron runs every 15
- *  minutes so any time past 08:30 in London will catch the send window. */
+ *  email to "morning of the show, on or after 8:30 am". The cron ticks hourly
+ *  on the hour, so in practice the 09:00 London tick is the one that sends. */
 function londonHourMinute(): { hour: number; minute: number } {
   const parts = new Intl.DateTimeFormat('en-GB', {
     timeZone: 'Europe/London',
@@ -29,7 +29,7 @@ function londonHourMinute(): { hour: number; minute: number } {
  * Call via Render Cron Job or external scheduler:
  *   GET /api/cron?secret=<CRON_SECRET>
  *
- * Runs every 15 minutes in production.
+ * Render cron `remi-daily-cron` runs this hourly (`0 * * * *`).
  */
 export async function GET(request: Request) {
   const denied = requireCronSecret(request);
@@ -56,15 +56,17 @@ export async function GET(request: Request) {
 
   // Lock in catalogue numbers the moment each show closes. Per Amanda
   // 2026-04-17: the close-entries transition is the natural moment for
-  // numbers to become stable. Runs sequentially rather than in parallel
-  // to stay gentle on Render's db connection cap for a 15-min cron tick.
+  // numbers to become stable. A full re-sort, not a first-time-only pass —
+  // entries that arrived after the secretary last opened the catalogue
+  // would otherwise close with no number at all. Runs sequentially rather
+  // than in parallel to stay gentle on Render's db connection cap.
   const numberedShows: { id: string; assigned: number }[] = [];
   for (const show of closedShows) {
     try {
-      const result = await ensureCatalogueNumbers(db, show.id);
+      const result = await syncCatalogueNumbers(db, show.id);
       if (result.assigned > 0) numberedShows.push({ id: show.id, assigned: result.assigned });
     } catch (err) {
-      console.error(`[cron] ensureCatalogueNumbers failed for ${show.id}:`, err);
+      console.error(`[cron] syncCatalogueNumbers failed for ${show.id}:`, err);
     }
   }
 

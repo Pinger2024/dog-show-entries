@@ -18,7 +18,7 @@ import { sanitizeFilename } from '@/lib/slugify';
 import { authenticatePdfRequest, validateRasterLogoUrl, makePdfResponse } from '@/lib/pdf-utils';
 import { isShowDayReached } from '@/lib/date-utils';
 import { padPdfToMultiple, stripUnembeddedBase14Fonts } from '@/lib/pdf-pad';
-import { ensureCatalogueNumbers } from '@/server/services/catalogue-numbering';
+import { syncCatalogueNumbers } from '@/server/services/catalogue-numbering';
 import { getDockingStatementFromScheduleData } from '@/lib/rkc-compliance';
 import { buildClassLabelMap, buildCatalogueClassDefinitions } from '@/lib/class-labels';
 import { buildScheduleJudges, aggregateJudgeAssignments } from '@/lib/schedule-judges';
@@ -69,7 +69,7 @@ export async function GET(
   // have any yet. Amanda's UX ask 2026-04-17: she shouldn't have to
   // find a button — opening a catalogue should just give you numbered
   // entries. No-op when numbers already exist.
-  await ensureCatalogueNumbers(db, showId);
+  await syncCatalogueNumbers(db, showId, { allowResort: false });
 
   // For the absentees format, materialise the paid-order IDs first so the
   // entries query can filter on a plain array — embedding a Drizzle select

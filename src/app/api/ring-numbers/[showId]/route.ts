@@ -6,7 +6,7 @@ import { generateRingNumbersPdf } from '@/server/services/pdf-generation';
 import type { RingNumberFormat } from '@/components/ring-numbers/ring-numbers';
 import { sanitizeFilename } from '@/lib/slugify';
 import { authenticatePdfRequest, makePdfResponse } from '@/lib/pdf-utils';
-import { ensureCatalogueNumbers } from '@/server/services/catalogue-numbering';
+import { syncCatalogueNumbers } from '@/server/services/catalogue-numbering';
 
 export async function GET(
   request: NextRequest,
@@ -30,7 +30,7 @@ export async function GET(
   const authResult = await authenticatePdfRequest(show.organisationId);
   if (authResult instanceof NextResponse) return authResult;
 
-  await ensureCatalogueNumbers(db, showId);
+  await syncCatalogueNumbers(db, showId, { allowResort: false });
 
   const searchParams = request.nextUrl.searchParams;
   const format: RingNumberFormat = searchParams.get('format') === 'single' ? 'single' : 'multi-up';

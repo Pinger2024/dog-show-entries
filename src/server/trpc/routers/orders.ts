@@ -5,6 +5,7 @@ import { differenceInWeeks } from 'date-fns';
 import { protectedProcedure } from '../procedures';
 import { createTRPCRouter } from '../init';
 import { publicOrgColumns } from '../public-org-columns';
+import { syncCatalogueNumbers } from '@/server/services/catalogue-numbering';
 import {
   orders,
   entries,
@@ -869,6 +870,15 @@ export const ordersRouter = createTRPCRouter({
             .update(entries)
             .set({ status: 'confirmed' })
             .where(eq(entries.id, entry.id));
+        }
+
+        // Same as the paid path: a confirmed entry needs a catalogue number or
+        // it never reaches the catalogue. Non-fatal — the entries are already
+        // committed, so a numbering hiccup mustn't fail the exhibitor's booking.
+        try {
+          await syncCatalogueNumbers(ctx.db, input.showId);
+        } catch (err) {
+          console.error(`[orders] syncCatalogueNumbers failed for show ${input.showId}:`, err);
         }
 
         return {

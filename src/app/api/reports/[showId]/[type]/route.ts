@@ -8,7 +8,7 @@ import { format, parseISO } from 'date-fns';
 import { sanitizeFilename } from '@/lib/slugify';
 import { authenticatePdfRequest, makePdfResponse } from '@/lib/pdf-utils';
 import { stripUnembeddedBase14Fonts } from '@/lib/pdf-pad';
-import { ensureCatalogueNumbers } from '@/server/services/catalogue-numbering';
+import { syncCatalogueNumbers } from '@/server/services/catalogue-numbering';
 import { buildClassLabelMap } from '@/lib/class-labels';
 import { CATALOGUE_NAME_PATTERN } from '@/lib/catalogue-utils';
 import {
@@ -49,7 +49,7 @@ export async function GET(
   const authResult = await authenticatePdfRequest(show.organisationId);
   if (authResult instanceof NextResponse) return authResult;
 
-  await ensureCatalogueNumbers(db, showId);
+  await syncCatalogueNumbers(db, showId, { allowResort: false });
 
   const [showClasses, entries] = await Promise.all([
     db.query.showClasses.findMany({

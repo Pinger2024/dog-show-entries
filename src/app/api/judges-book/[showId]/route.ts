@@ -7,7 +7,7 @@ import { JudgesBook } from '@/components/judges-book/judges-book';
 import React from 'react';
 import { sanitizeFilename } from '@/lib/slugify';
 import { authenticatePdfRequest, makePdfResponse } from '@/lib/pdf-utils';
-import { ensureCatalogueNumbers } from '@/server/services/catalogue-numbering';
+import { syncCatalogueNumbers } from '@/server/services/catalogue-numbering';
 import { buildClassLabelMap } from '@/lib/class-labels';
 import { buildBestAwards } from '@/lib/best-awards';
 import { stripUnembeddedBase14Fonts } from '@/lib/pdf-pad';
@@ -65,7 +65,7 @@ export async function GET(
   const authResult = await authenticatePdfRequest(show.organisationId);
   if (authResult instanceof NextResponse) return authResult;
 
-  await ensureCatalogueNumbers(db, showId);
+  await syncCatalogueNumbers(db, showId, { allowResort: false });
 
   // Run independent DB queries in parallel
   const [showClasses, judgeAssignments] = await Promise.all([

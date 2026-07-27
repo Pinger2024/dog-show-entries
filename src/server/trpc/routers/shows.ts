@@ -897,15 +897,15 @@ export const showsRouter = createTRPCRouter({
         .returning();
 
       // Amanda's spec 2026-04-17: catalogue numbers should lock in at
-      // the moment entries close. Fire ensureCatalogueNumbers on any
+      // the moment entries close. Fire syncCatalogueNumbers on any
       // transition into entries_closed (or further along the lifecycle
       // — in_progress / completed — for shows that skip that status).
       if (
         input.status &&
         ['entries_closed', 'in_progress', 'completed'].includes(input.status)
       ) {
-        const { ensureCatalogueNumbers } = await import('@/server/services/catalogue-numbering');
-        await ensureCatalogueNumbers(ctx.db, id);
+        const { syncCatalogueNumbers } = await import('@/server/services/catalogue-numbering');
+        await syncCatalogueNumbers(ctx.db, id);
       }
 
       return updated!;

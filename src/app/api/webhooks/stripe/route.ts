@@ -4,8 +4,23 @@ import { getStripe } from '@/server/services/stripe';
 import { db } from '@/server/db';
 import { entries, entryClasses, entryAuditLog, orders, payments, organisations, plans, users, printOrders, printOrderItems } from '@/server/db/schema';
 import { sendEntryConfirmationEmail, sendSecretaryNotificationEmail, sendPrintOrderConfirmationEmail, sendPrintOrderAdminNotificationEmail } from '@/server/services/email';
+import { syncCatalogueNumbers } from '@/server/services/catalogue-numbering';
 import { formatOrderRef } from '@/lib/print-products';
 import type Stripe from 'stripe';
+
+/**
+ * Give freshly-confirmed entries their catalogue number. Never allowed to throw:
+ * an unhandled error here fails the webhook, Stripe retries the whole event and
+ * the exhibitor gets a second confirmation email. A number we can re-derive is
+ * a far smaller problem than a duplicate email.
+ */
+async function numberConfirmedEntries(showId: string) {
+  try {
+    await syncCatalogueNumbers(db, showId);
+  } catch (err) {
+    console.error(`[stripe-webhook] syncCatalogueNumbers failed for show ${showId}:`, err);
+  }
+}
 
 export async function POST(request: NextRequest) {
   const body = await request.text();
@@ -113,6 +128,12 @@ export async function POST(request: NextRequest) {
               .update(entries)
               .set({ status: 'confirmed' })
               .where(inArray(entries.id, toConfirm));
+
+            // A confirmed entry with no catalogue number is invisible to the
+            // catalogue. Number it now — this is the only moment an online
+            // entry becomes catalogue-eligible.
+            const showId = orderEntries[0]?.showId;
+            if (showId) await numberConfirmedEntries(showId);
           }
 
           await db
@@ -133,6 +154,8 @@ export async function POST(request: NextRequest) {
             .update(entries)
             .set({ status: 'confirmed' })
             .where(eq(entries.id, entryId));
+
+          await numberConfirmedEntries(entry.showId);
         }
       }
 

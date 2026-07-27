@@ -56,7 +56,7 @@ import { deriveTopAwardJudge } from '@/server/services/derive-award-judge';
 import { penceToPoundsString } from '@/lib/date-utils';
 import { Resend } from 'resend';
 import { searchKcJudges, fetchKcJudgeProfile } from '@/server/services/kc-judges';
-import { ensureCatalogueNumbers, resortCatalogueNumbers } from '@/server/services/catalogue-numbering';
+import { syncCatalogueNumbers, resortCatalogueNumbers } from '@/server/services/catalogue-numbering';
 import { generateJudgeContractPdf } from '@/server/services/judge-contract-pdf';
 import { normaliseOfficers } from '@/components/schedule/shared/officers';
 import { CATALOGUE_NAME_PATTERN, isCatalogueItem } from '@/lib/catalogue-utils';
@@ -747,7 +747,7 @@ export const secretaryRouter = createTRPCRouter({
     .mutation(async ({ ctx, input }) => {
       await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId, { callerIsAdmin: ctx.callerIsAdmin });
       // Make sure numbers exist + are in order before we freeze them.
-      await ensureCatalogueNumbers(ctx.db, input.showId);
+      await syncCatalogueNumbers(ctx.db, input.showId);
       await ctx.db
         .update(shows)
         .set({ catalogueNumbersLockedAt: new Date(), updatedAt: new Date() })
@@ -778,8 +778,9 @@ export const secretaryRouter = createTRPCRouter({
 
       // Auto-assign catalogue numbers in class order the first time the
       // secretary opens the catalogue page, so they don't have to hunt
-      // for a button. No-op if numbers already exist.
-      await ensureCatalogueNumbers(ctx.db, input.showId);
+      // for a button. Fills blanks only — viewing the page must never
+      // renumber a show someone is mid-print on.
+      await syncCatalogueNumbers(ctx.db, input.showId, { allowResort: false });
 
       const show = await ctx.db.query.shows.findFirst({
         where: eq(shows.id, input.showId),
