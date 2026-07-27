@@ -147,6 +147,11 @@ function LoadingCard() {
 function EntryReportContent({ showId }: { showId: string }) {
   const { data: entries, isLoading } =
     trpc.secretary.getEntryReport.useQuery({ showId });
+  // Headline figures come from the ONE canonical calculation — the same one the
+  // show page and the dashboard read. This page used to count the rows of its
+  // own list, a FOURTH definition of "entries", so it read 91 while the show
+  // page read 110 (Mandy 2026-07-27: "Still seeing that 91, should I be").
+  const { data: showStats } = trpc.secretary.getShowStats.useQuery({ showId });
   const [search, setSearch] = useState('');
   const [groupByExhibitor, setGroupByExhibitor] = useState(false);
 
@@ -240,11 +245,16 @@ function EntryReportContent({ showId }: { showId: string }) {
       {/* Summary stats */}
       {stats && (
         <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-          <StatCard label="Total Entries" value={stats.total} />
+          {/* "Entries" and "Dogs" are the canonical figures, not a count of the
+              rows below — the list carries one row per entry, and a dog that
+              bought a Special Award separately has two. "Total Entries 91" over
+              a show announcing 110 was the fourth screen to invent its own
+              answer (Mandy 2026-07-27). */}
           <StatCard
-            label="Confirmed"
-            value={<span className="text-se-fresh-deep">{stats.confirmed}</span>}
+            label="Entries"
+            value={<span className="text-se-fresh-deep">{showStats?.classEntries ?? stats.total}</span>}
           />
+          <StatCard label="Dogs" value={showStats?.dogCount ?? stats.confirmed} />
           <StatCard label="Exhibitors" value={stats.uniqueExhibitors} />
           <StatCard label="Total Fees" value={formatCurrency(stats.totalRevenue)} />
         </div>
@@ -253,8 +263,14 @@ function EntryReportContent({ showId }: { showId: string }) {
       <Card>
         <CardHeader>
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            {/* Says what the list is counting. One row per entry, so a dog that
+                bought a Special Award separately appears twice — which is why
+                this can differ from both the entries and dogs figures above. */}
             <CardTitle className="text-base">
-              Entry Report {filtered.length !== (entries?.length ?? 0) ? `(${filtered.length} of ${entries?.length ?? 0})` : `(${entries?.length ?? 0})`}
+              Entry Report{' '}
+              {filtered.length !== (entries?.length ?? 0)
+                ? `(${filtered.length} of ${entries?.length ?? 0} entry records)`
+                : `(${entries?.length ?? 0} entry records)`}
             </CardTitle>
             <div className="flex items-center gap-2">
               <div className="relative flex-1 sm:w-56 sm:flex-initial">
