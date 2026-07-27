@@ -1,5 +1,6 @@
-import { beforeEach, vi } from 'vitest';
+import { afterAll, beforeEach, vi } from 'vitest';
 import { cleanDb } from './db';
+import { dbClient } from '@/server/db';
 
 // ── Safety: refuse to run tests against anything but localhost. ────────────
 const url = process.env.DATABASE_URL ?? '';
@@ -125,4 +126,17 @@ vi.mock('@/lib/auth', () => ({
 
 beforeEach(async () => {
   await cleanDb();
+});
+
+// Vitest's default per-file module isolation re-evaluates src/server/db
+// for every test file, each creating its own postgres.js connection pool
+// (up to DATABASE_POOL_MAX/10 connections). Without closing it here, idle
+// pools from earlier files only get reaped after `idle_timeout` (20s), so
+// dozens of files' pools can be alive simultaneously and exhaust Postgres's
+// max_connections mid-run — surfacing as random, unrelated query failures
+// ("sorry, too many clients already") in whichever test happens to be
+// running when the limit is hit. Closing promptly at file teardown keeps
+// at most a couple of files' pools open at once.
+afterAll(async () => {
+  await dbClient?.end({ timeout: 1 });
 });
