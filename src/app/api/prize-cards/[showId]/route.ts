@@ -76,7 +76,7 @@ export async function GET(
     }
   }
 
-  const classLabelMap = buildClassLabelMap(showClasses);
+  const classLabelMap = buildClassLabelMap(showClasses, show.showRuleset);
 
   const filteredShowClasses = filterSac
     ? showClasses.filter((sc) => isSpecialAwardClass(sc))

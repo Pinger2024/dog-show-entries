@@ -205,7 +205,7 @@ export async function GET(
   // Veteran). Shared with the print pipeline so the page can't drift.
   const classDefinitions = buildCatalogueClassDefinitions(showClassRows);
 
-  const classLabelMap = buildClassLabelMap(showClassRows);
+  const classLabelMap = buildClassLabelMap(showClassRows, show.showRuleset);
 
   // Collect class sponsorship data for trophies page + inline display
   const classSponsorships: { className: string; classNumber: number | null; classLabel: string; trophyName: string | null; trophyDonor: string | null; sponsorName: string | null; sponsorAffix: string | null; prizeDescription: string | null; bannerImageUrl: string | null }[] = [];

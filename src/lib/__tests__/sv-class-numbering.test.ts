@@ -42,7 +42,7 @@ const fullCard: Row[] = [
 
 describe('buildClassLabelMap — SV regional numbering', () => {
   it('numbers Baby Puppy as class 1 (bitch) and 2 (dog) with a/b coat letters', () => {
-    const m = buildClassLabelMap(fullCard);
+    const m = buildClassLabelMap(fullCard, 'wusv');
     expect(m.get('bp-b-s')).toBe('1a'); // Baby Puppy Bitch, Standard
     expect(m.get('bp-b-l')).toBe('1b'); // Baby Puppy Bitch, Long
     expect(m.get('bp-d-s')).toBe('2a'); // Baby Puppy Dog, Standard
@@ -52,7 +52,7 @@ describe('buildClassLabelMap — SV regional numbering', () => {
 
   it('renumbers so Minor Puppy becomes class 1 when Baby Puppy is deleted', () => {
     const noBaby = fullCard.filter((c) => !c.id.startsWith('bp-'));
-    const m = buildClassLabelMap(noBaby);
+    const m = buildClassLabelMap(noBaby, 'wusv');
     expect(m.get('mp-b-s')).toBe('1a');
     expect(m.get('mp-b-l')).toBe('1b');
     expect(m.get('mp-d-s')).toBe('2a');
@@ -64,7 +64,7 @@ describe('buildClassLabelMap — SV regional numbering', () => {
       mk('j-b-s', 'SV Junior', 'bitch', 'stock'),
       mk('j-d-s', 'SV Junior', 'dog', 'stock'),
     ];
-    const m = buildClassLabelMap(stockOnly);
+    const m = buildClassLabelMap(stockOnly, 'wusv');
     expect(m.get('j-b-s')).toBe('1');
     expect(m.get('j-d-s')).toBe('2');
   });
@@ -74,15 +74,116 @@ describe('buildClassLabelMap — SV regional numbering', () => {
       { id: 'r1', classNumber: 1, sortOrder: 0, classDefinition: { type: 'age', name: 'Puppy' } },
       { id: 'r2', classNumber: 2, sortOrder: 1, classDefinition: { type: 'age', name: 'Junior' } },
     ];
-    const m = buildClassLabelMap(rkc);
+    const m = buildClassLabelMap(rkc, 'wusv');
     expect(m.get('r1')).toBe('1');
     expect(m.get('r2')).toBe('2');
+  });
+
+  // Mandy, South Western GSD, 2026-07-27: there is exactly ONE sv_age-typed
+  // "Baby Puppy" class definition in the DB, shared by both RKC and WUSV
+  // shows. On an RKC show it must NOT be relabelled with the SV
+  // bitch-before-dog convention — it must keep its stored classNumber, same
+  // as any other RKC breed class. This is Mandy's exact bug: without the
+  // showRuleset gate, Baby Puppy Dog (real classNumber 1) rendered as "2"
+  // and Baby Puppy Bitch (real classNumber 12) rendered as "1", colliding
+  // with the real class 2 (Minor Puppy Dog).
+  it('an RKC show with an sv_age Baby Puppy pair keeps its stored classNumbers, not SV labels', () => {
+    const rkcBabyPuppy = [
+      {
+        id: 'bp-dog',
+        classNumber: 1,
+        sortOrder: 0,
+        sex: 'dog',
+        svCoatType: null,
+        classDefinition: { type: 'sv_age', name: 'Baby Puppy' },
+      },
+      {
+        id: 'bp-bitch',
+        classNumber: 12,
+        sortOrder: 1,
+        sex: 'bitch',
+        svCoatType: null,
+        classDefinition: { type: 'sv_age', name: 'Baby Puppy' },
+      },
+    ];
+    const m = buildClassLabelMap(rkcBabyPuppy, 'rkc');
+    expect(m.get('bp-dog')).toBe('1');
+    expect(m.get('bp-bitch')).toBe('12');
+  });
+
+  it('the same Baby Puppy pair still gets SV bitch-before-dog labelling on a wusv show', () => {
+    const wusvBabyPuppy = [
+      {
+        id: 'bp-dog',
+        classNumber: 1,
+        sortOrder: 0,
+        sex: 'dog',
+        svCoatType: null,
+        classDefinition: { type: 'sv_age', name: 'Baby Puppy' },
+      },
+      {
+        id: 'bp-bitch',
+        classNumber: 12,
+        sortOrder: 1,
+        sex: 'bitch',
+        svCoatType: null,
+        classDefinition: { type: 'sv_age', name: 'Baby Puppy' },
+      },
+    ];
+    const m = buildClassLabelMap(wusvBabyPuppy, 'wusv');
+    // Bitch before dog (Amanda 2026-05-28) — bitch gets the lower number.
+    expect(m.get('bp-bitch')).toBe('1');
+    expect(m.get('bp-dog')).toBe('2');
+  });
+
+  it('undefined/null showRuleset behaves like RKC — stored numbers, no SV override', () => {
+    const babyPuppy = [
+      {
+        id: 'bp-dog',
+        classNumber: 1,
+        sortOrder: 0,
+        sex: 'dog',
+        svCoatType: null,
+        classDefinition: { type: 'sv_age', name: 'Baby Puppy' },
+      },
+      {
+        id: 'bp-bitch',
+        classNumber: 12,
+        sortOrder: 1,
+        sex: 'bitch',
+        svCoatType: null,
+        classDefinition: { type: 'sv_age', name: 'Baby Puppy' },
+      },
+    ];
+    const mUndefined = buildClassLabelMap(babyPuppy);
+    expect(mUndefined.get('bp-dog')).toBe('1');
+    expect(mUndefined.get('bp-bitch')).toBe('12');
+
+    const mNull = buildClassLabelMap(babyPuppy, null);
+    expect(mNull.get('bp-dog')).toBe('1');
+    expect(mNull.get('bp-bitch')).toBe('12');
+  });
+
+  it('Junior Handler and Special Award lettering is unaffected by ruleset', () => {
+    const mixed = [
+      { id: 'jh-1', classNumber: null, sortOrder: 0, classDefinition: { type: 'junior_handler', name: 'Junior Handling' } },
+      { id: 'jh-2', classNumber: null, sortOrder: 1, classDefinition: { type: 'junior_handler', name: 'Junior Handling' } },
+      { id: 'sac-1', classNumber: null, sortOrder: 0, classDefinition: { type: 'special', name: 'Special Award Class 1' } },
+      { id: 'sac-2', classNumber: null, sortOrder: 1, classDefinition: { type: 'special', name: 'Special Award Class 2' } },
+    ];
+    for (const ruleset of [undefined, null, 'rkc', 'wusv']) {
+      const m = buildClassLabelMap(mixed, ruleset);
+      expect(m.get('jh-1')).toBe('JHA');
+      expect(m.get('jh-2')).toBe('JHB');
+      expect(m.get('sac-1')).toBe('A');
+      expect(m.get('sac-2')).toBe('B');
+    }
   });
 });
 
 describe('buildSvClassNumbering — structured output', () => {
   it('shares one number across both coats of an age/sex', () => {
-    const m = buildSvClassNumbering(fullCard);
+    const m = buildSvClassNumbering(fullCard, 'wusv');
     expect(m.get('bp-b-s')?.number).toBe(1);
     expect(m.get('bp-b-l')?.number).toBe(1); // same number, different coat letter
     expect(m.get('bp-b-s')?.coatLetter).toBe('a');
@@ -90,7 +191,13 @@ describe('buildSvClassNumbering — structured output', () => {
   });
 
   it('orders bitch before dog within an age', () => {
-    const m = buildSvClassNumbering(fullCard);
+    const m = buildSvClassNumbering(fullCard, 'wusv');
     expect(m.get('bp-b-s')?.number).toBeLessThan(m.get('bp-d-s')!.number);
+  });
+
+  it('returns an empty map when the show is not run under WUSV rules', () => {
+    expect(buildSvClassNumbering(fullCard, 'rkc').size).toBe(0);
+    expect(buildSvClassNumbering(fullCard, null).size).toBe(0);
+    expect(buildSvClassNumbering(fullCard).size).toBe(0);
   });
 });

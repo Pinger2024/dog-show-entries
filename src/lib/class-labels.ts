@@ -82,9 +82,23 @@ export interface SvClassNumber {
  * is left untouched as the ordering key used by catalogue numbering + every
  * sorted PDF output.
  *
+ * SV numbering only applies to shows actually run under WUSV rules
+ * (`showRuleset === 'wusv'`). There is exactly ONE `sv_age`-typed "Baby
+ * Puppy" class definition in the DB and it's shared by both RKC and WUSV
+ * shows — an RKC show that happens to offer Baby Puppy must keep its stored
+ * `classNumber`, not get relabelled with the SV bitch-before-dog convention
+ * (Mandy, South Western GSD, 2026-07-27). Pass `showRuleset` from the show
+ * record; any value other than `'wusv'` (including `null`/`undefined`)
+ * returns an empty map so those classes fall through to their stored number.
+ *
  * Returns a map keyed by show-class id. Only `sv_age` rows appear.
  */
-export function buildSvClassNumbering(classes: ClassLike[]): Map<string, SvClassNumber> {
+export function buildSvClassNumbering(
+  classes: ClassLike[],
+  showRuleset?: string | null,
+): Map<string, SvClassNumber> {
+  if (showRuleset !== 'wusv') return new Map();
+
   const svRows = classes.filter(
     (c) =>
       c.classDefinition?.type === 'sv_age' &&
@@ -147,10 +161,17 @@ export function isSpecialAwardClass(cls: ClassLike): boolean {
 /**
  * Build a `{classId → display label}` map for every class in a show.
  * JH classes are labelled JHA, JHB, … and SAC classes A, B, C, … both in
- * their natural (sortOrder) order. Non-JH/non-SAC classes display their
- * stored `classNumber`.
+ * their natural (sortOrder) order — this lettering is ruleset-independent.
+ * Non-JH/non-SAC classes display their stored `classNumber`, UNLESS the show
+ * runs under WUSV rules (`showRuleset === 'wusv'`), in which case `sv_age`
+ * classes get the SV 1a/1b age×sex+coat labelling instead. Always pass the
+ * show's `showRuleset` — omitting it is only correct for RKC/non-regional
+ * shows (see `buildSvClassNumbering` for why this gate exists).
  */
-export function buildClassLabelMap(classes: ClassLike[]): Map<string, string> {
+export function buildClassLabelMap(
+  classes: ClassLike[],
+  showRuleset?: string | null,
+): Map<string, string> {
   const map = new Map<string, string>();
 
   const jhOrdered = classes
@@ -169,8 +190,9 @@ export function buildClassLabelMap(classes: ClassLike[]): Map<string, string> {
 
   // SV/WUSV age classes get the 1a/1b age×sex+coat labelling — the single
   // source of truth shared with the schedule + catalogue classification
-  // pages (Amanda 2026-05-28).
-  const svNumbering = buildSvClassNumbering(classes);
+  // pages (Amanda 2026-05-28). Gated on showRuleset === 'wusv' so an RKC
+  // show's shared sv_age Baby Puppy definition keeps its stored classNumber.
+  const svNumbering = buildSvClassNumbering(classes, showRuleset);
   for (const [id, info] of svNumbering) {
     map.set(id, info.label);
   }

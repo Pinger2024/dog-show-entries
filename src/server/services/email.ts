@@ -124,7 +124,7 @@ export async function sendEntryConfirmationEmail(orderId: string) {
     where: eq(showClasses.showId, show.id),
     with: { classDefinition: true },
   });
-  const classLabelMap = buildClassLabelMap(allShowClasses);
+  const classLabelMap = buildClassLabelMap(allShowClasses, show.showRuleset);
 
   // Build entries summary
   const entrySections = entryRows.map((entry) => {

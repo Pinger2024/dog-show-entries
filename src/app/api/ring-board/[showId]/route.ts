@@ -70,7 +70,7 @@ export async function GET(
     }
   }
 
-  const classLabelMap = buildClassLabelMap(showClasses);
+  const classLabelMap = buildClassLabelMap(showClasses, show.showRuleset);
 
   // Group classes by ring number
   const ringGroups = new Map<number, Map<string, {

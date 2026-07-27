@@ -119,7 +119,7 @@ export async function GET(
     return (sc.breedId ? judgeByBreed.get(sc.breedId) ?? null : null) ?? breedFallback;
   };
 
-  const classLabelMap = buildClassLabelMap(showClasses);
+  const classLabelMap = buildClassLabelMap(showClasses, show.showRuleset);
 
   // Build the classes data for the judge's book
   const classes: JudgesBookClass[] = showClasses.map((sc) => {

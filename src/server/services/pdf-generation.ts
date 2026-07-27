@@ -147,7 +147,7 @@ export async function generateCataloguePdf(
     .map((j) => j.displayLabel)
     .filter((label): label is string => !!label);
 
-  const classLabelMap = buildClassLabelMap(showClassRows);
+  const classLabelMap = buildClassLabelMap(showClassRows, show.showRuleset);
 
   // Build class sponsorship list for the Trophies & Sponsorships page
   // AND the inline per-class sponsor lines. Mirrors route.ts so the two
@@ -423,7 +423,7 @@ export async function generatePrizeCardsPdf(
     }
   }
 
-  const prizeCardLabelMap = buildClassLabelMap(showClasses);
+  const prizeCardLabelMap = buildClassLabelMap(showClasses, show.showRuleset);
   const filteredShowClasses = onlySac
     ? showClasses.filter((sc) => isSpecialAwardClass(sc))
     : showClasses;
@@ -621,7 +621,7 @@ export async function generateSchedulePdf(showId: string): Promise<Buffer> {
     });
   }
 
-  const classLabelMap = buildClassLabelMap(showClasses);
+  const classLabelMap = buildClassLabelMap(showClasses, show.showRuleset);
   const classes: ScheduleClass[] = showClasses.map((sc) => ({
     classNumber: sc.classNumber,
     classLabel: classLabelMap.get(sc.id) ?? '',
@@ -824,7 +824,7 @@ export async function generateRingBoardPdf(showId: string): Promise<Buffer> {
     if (ja.ringId && ja.judge?.name) ringJudgeMap.set(ja.ringId, ja.judge.name);
   }
 
-  const ringBoardLabelMap = buildClassLabelMap(showClasses);
+  const ringBoardLabelMap = buildClassLabelMap(showClasses, show.showRuleset);
 
   const ringData: RingBoardRing[] = rings.map((ring) => {
     const ringClasses = showClasses.filter((sc) => {

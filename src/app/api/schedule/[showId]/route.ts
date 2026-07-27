@@ -93,7 +93,7 @@ export async function GET(
 
   // Build classes data — classLabel is what the PDF actually renders
   // (non-JH classes show their classNumber, JH classes show JHA/JHB…).
-  const classLabelMap = buildClassLabelMap(showClasses);
+  const classLabelMap = buildClassLabelMap(showClasses, show.showRuleset);
   const classes: ScheduleClass[] = showClasses.map((sc) => ({
     classNumber: sc.classNumber,
     classLabel: classLabelMap.get(sc.id) ?? '',

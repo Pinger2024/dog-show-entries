@@ -484,7 +484,7 @@ export function ShowPreviewClient() {
     const allClasses = (show.showClasses ?? []) as PreviewShowClass[];
     // Single source of truth for the per-class label (RKC number, SV 1a/1b,
     // JHA, SAC letter) — shared with the schedule + catalogue.
-    const labelMap = buildClassLabelMap(allClasses);
+    const labelMap = buildClassLabelMap(allClasses, show.showRuleset);
 
     const m = new Map<string, { rows: PreviewShowClass[]; isJH: boolean; isSac: boolean; judgeName?: string }>();
     for (const sc of allClasses) {

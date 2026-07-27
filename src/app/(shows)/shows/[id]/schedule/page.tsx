@@ -54,8 +54,8 @@ export default function SchedulePage({
   // Shared JHA/JHB resolver — non-JH classes display their classNumber,
   // JH classes get JHA/JHB/... labels outside the RKC-licensed count.
   const classLabelMap = useMemo(
-    () => buildClassLabelMap(show?.showClasses ?? []),
-    [show?.showClasses],
+    () => buildClassLabelMap(show?.showClasses ?? [], show?.showRuleset),
+    [show?.showClasses, show?.showRuleset],
   );
 
   const breedGroups = useMemo(() => {

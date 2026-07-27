@@ -67,7 +67,7 @@ export async function GET(
     }),
   ]);
 
-  const classLabelMap = buildClassLabelMap(showClasses);
+  const classLabelMap = buildClassLabelMap(showClasses, show.showRuleset);
   const confirmed = entries.filter((e) => e.status === 'confirmed' && !e.deletedAt);
 
   const info: ShowReportInfo = {
