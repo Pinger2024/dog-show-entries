@@ -80,6 +80,19 @@ export type EntryForBreakdown = {
 
 import { formatSvClassName } from './class-labels';
 
+/** A show's scheduled class (show_classes row), used to seed a zero-entry
+ *  bucket for classes nobody has entered yet — otherwise a scheduled class
+ *  with no entries never appears on screen at all (Mandy 2026-07-27: Baby
+ *  Puppy Dog/Bitch missing from the Financial page when unentered, even
+ *  though the PDF report — which is built from the show's class list, not
+ *  the entry set — already showed them as "0"). */
+export type ScheduledClassForBreakdown = {
+  sex?: 'dog' | 'bitch' | null;
+  svCoatType?: 'stock' | 'long_stock' | null;
+  sortOrder?: number | null;
+  classDefinition?: { name?: string | null; type?: string | null } | null;
+};
+
 const sumTotals = (items: ClassBreakdownItem[]): ClassTotals =>
   items.reduce(
     (s, c) => ({ entries: s.entries + c.entries, revenue: s.revenue + c.revenue }),
@@ -105,7 +118,8 @@ const NFC_BUCKET_NAME = 'Not For Competition';
 const NFC_SORT_ORDER = 100_000;
 
 export function computeClassBreakdown(
-  entryReport: EntryForBreakdown[] | null | undefined
+  entryReport: EntryForBreakdown[] | null | undefined,
+  scheduledClasses?: ScheduledClassForBreakdown[] | null,
 ): ClassBreakdown {
   const dogMap = new Map<string, OrderedItem>();
   const bitchMap = new Map<string, OrderedItem>();
@@ -128,6 +142,39 @@ export function computeClassBreakdown(
     if (sortOrder < existing.sortOrder) existing.sortOrder = sortOrder;
     map.set(name, existing);
   };
+
+  // Seed a ZERO-entry bucket for every scheduled class before the entry loop
+  // runs, so a class nobody has entered still shows up (with entries: 0)
+  // instead of vanishing from the card entirely. bumpBucket then increments
+  // the seeded bucket in place rather than creating a fresh one, so seeding
+  // never changes any total. Mirrors the entry-bucketing rules exactly so a
+  // scheduled class and its own entries land in the same bucket.
+  const seedBucket = (map: Map<string, OrderedItem>, name: string, sortOrder: number) => {
+    const existing = map.get(name);
+    if (existing) {
+      if (sortOrder < existing.sortOrder) existing.sortOrder = sortOrder;
+      return;
+    }
+    map.set(name, { name, entries: 0, revenue: 0, sortOrder });
+  };
+
+  for (const sc of scheduledClasses ?? []) {
+    const className = formatSvClassName(sc.classDefinition?.name ?? 'Unknown', sc.svCoatType);
+    const sortOrder = sc.sortOrder ?? 9999;
+
+    seedBucket(combinedMap, className, sortOrder);
+
+    const targetMap =
+      sc.classDefinition?.type === 'junior_handler'
+        ? jhMap
+        : sc.sex === 'dog'
+          ? dogMap
+          : sc.sex === 'bitch'
+            ? bitchMap
+            : mixedMap;
+
+    seedBucket(targetMap, className, sortOrder);
+  }
 
   for (const entry of entryReport ?? []) {
     if (entry.status === 'cancelled' || entry.status === 'withdrawn') continue;

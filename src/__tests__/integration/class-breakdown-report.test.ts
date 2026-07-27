@@ -58,7 +58,7 @@ describe('getClassBreakdownReport — full catalogue entry set (Mandy/BAGSD)', (
 
     const caller = createTestCaller(secretary);
     const report = await caller.secretary.getClassBreakdownReport({ showId: show.id });
-    const breakdown = computeClassBreakdown(report);
+    const breakdown = computeClassBreakdown(report.entries, report.classes);
 
     // The grand total ties to the catalogue: 2 competing + 1 NFC = 3.
     expect(breakdown.combinedTotals.entries).toBe(3);

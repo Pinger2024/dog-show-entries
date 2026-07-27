@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   computeClassBreakdown,
   type EntryForBreakdown,
+  type ScheduledClassForBreakdown,
 } from '../class-breakdown';
 
 const makeEntry = (
@@ -291,6 +292,74 @@ describe('computeClassBreakdown', () => {
     it('excludes cancelled/withdrawn NFC entries', () => {
       const r = computeClassBreakdown([makeNfc(0, 'cancelled'), makeNfc(0, 'withdrawn'), makeNfc(0)]);
       expect(r.notForCompetitionTotals.entries).toBe(1);
+    });
+  });
+
+  // Mandy, 2026-07-27: "we are not displaying classes with no entries, so
+  // Baby Puppy Dog and Baby Puppy Bitch as an example. they should be
+  // displayed before Minor Puppy in each Sex." The screen only ever bucketed
+  // ENTRIES, so a scheduled class nobody entered never appeared — unlike the
+  // PDF report, which builds from the show's class list. The optional second
+  // argument seeds a zero-entry bucket for every scheduled class up front.
+  describe('scheduled classes with no entries (second argument)', () => {
+    const babyPuppyDog: ScheduledClassForBreakdown = {
+      sex: 'dog',
+      sortOrder: 1,
+      classDefinition: { name: 'Baby Puppy', type: 'age' },
+    };
+    const babyPuppyBitch: ScheduledClassForBreakdown = {
+      sex: 'bitch',
+      sortOrder: 2,
+      classDefinition: { name: 'Baby Puppy', type: 'age' },
+    };
+    const minorPuppyDog: ScheduledClassForBreakdown = {
+      sex: 'dog',
+      sortOrder: 3,
+      classDefinition: { name: 'Minor Puppy', type: 'age' },
+    };
+
+    it('shows an unentered scheduled class as entries: 0 in its sex bucket', () => {
+      const r = computeClassBreakdown([], [babyPuppyDog, babyPuppyBitch]);
+      expect(r.dogs).toEqual([{ name: 'Baby Puppy', entries: 0, revenue: 0 }]);
+      expect(r.bitches).toEqual([{ name: 'Baby Puppy', entries: 0, revenue: 0 }]);
+      expect(r.combined).toEqual([{ name: 'Baby Puppy', entries: 0, revenue: 0 }]);
+    });
+
+    it("sorts an unentered class by its own sortOrder, ahead of a class that DOES have entries (Baby Puppy before Minor Puppy)", () => {
+      const r = computeClassBreakdown(
+        [
+          makeEntry('confirmed', [{ name: 'Minor Puppy', sex: 'dog', type: 'age', fee: 1800, sortOrder: 3 }]),
+        ],
+        [babyPuppyDog, minorPuppyDog],
+      );
+      expect(r.dogs).toEqual([
+        { name: 'Baby Puppy', entries: 0, revenue: 0 },
+        { name: 'Minor Puppy', entries: 1, revenue: 1800 },
+      ]);
+    });
+
+    it('seeding scheduled classes changes no totals — combinedTotals match with and without the second argument', () => {
+      const entries = [
+        makeEntry('confirmed', [{ name: 'Minor Puppy', sex: 'dog', type: 'age', fee: 1800, sortOrder: 3 }]),
+        makeEntry('confirmed', [{ name: 'Junior', sex: 'bitch', type: 'age', fee: 1800, sortOrder: 4 }]),
+        makeNfc(0),
+      ];
+      const withoutClasses = computeClassBreakdown(entries);
+      const withClasses = computeClassBreakdown(entries, [babyPuppyDog, babyPuppyBitch, minorPuppyDog]);
+      expect(withClasses.combinedTotals).toEqual(withoutClasses.combinedTotals);
+      expect(withClasses.dogTotals).toEqual(withoutClasses.dogTotals);
+      expect(withClasses.bitchTotals).toEqual(withoutClasses.bitchTotals);
+      expect(withClasses.notForCompetitionTotals).toEqual(withoutClasses.notForCompetitionTotals);
+    });
+
+    it('omitting the second argument behaves exactly as before (no scheduled-class seeding)', () => {
+      const entries = [
+        makeEntry('confirmed', [{ name: 'Minor Puppy', sex: 'dog', type: 'age', fee: 1800, sortOrder: 3 }]),
+      ];
+      const r = computeClassBreakdown(entries);
+      // No seeding happened, so only the entered class appears — Baby Puppy
+      // (which nobody entered and which wasn't passed in) is absent.
+      expect(r.dogs).toEqual([{ name: 'Minor Puppy', entries: 1, revenue: 1800 }]);
     });
   });
 });

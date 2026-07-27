@@ -246,7 +246,7 @@ export default function FinancialPage() {
   // Team, Stakes). The four buckets are exhaustive so subtotals always
   // sum to the grand total. See src/lib/class-breakdown.ts.
   const classBreakdown = useMemo(
-    () => computeClassBreakdown(classEntryReport),
+    () => computeClassBreakdown(classEntryReport?.entries, classEntryReport?.classes),
     [classEntryReport]
   );
 
@@ -367,11 +367,16 @@ export default function FinancialPage() {
         </Button>
       </div>
 
-      {/* Per-class breakdown by sex */}
-      {classBreakdown.combined.length > 0 && (
+      {/* Per-class breakdown by sex. Gated on actual ENTRIES, not on row count:
+          scheduled classes are now seeded at zero (so Mandy sees Baby Puppy
+          before Minor Puppy even with nobody in it), which makes `combined`
+          non-empty as soon as a show has any classes at all — and a freshly
+          set-up show would otherwise greet its secretary with a table of
+          nothing but zeros. */}
+      {classBreakdown.combinedTotals.entries > 0 && (
         <FinancialSection
           title="Entries by Class"
-          description="Every entry in the catalogue, by class — including any paid directly to the club and Not For Competition."
+          description="Every class in the schedule, with its entries — including any paid directly to the club and Not For Competition. Classes with no entries are shown at zero."
         >
             <Table>
               <TableHeader>

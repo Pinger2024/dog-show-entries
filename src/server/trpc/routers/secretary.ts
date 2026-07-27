@@ -910,26 +910,40 @@ export const secretaryRouter = createTRPCRouter({
     .query(async ({ ctx, input }) => {
       await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId, { callerIsAdmin: ctx.callerIsAdmin });
 
-      return ctx.db.query.entries.findMany({
-        where: and(
-          eq(entries.showId, input.showId),
-          eq(entries.status, 'confirmed'),
-          isNull(entries.deletedAt)
-        ),
-        columns: { id: true, status: true, isNfc: true, totalFee: true },
-        with: {
-          entryClasses: {
-            columns: { fee: true },
-            with: {
-              showClass: {
-                columns: { sex: true, svCoatType: true, sortOrder: true, classNumber: true },
-                with: { classDefinition: { columns: { name: true, type: true } } },
+      // `classes` is the show's full scheduled class list, independent of
+      // whether anyone has entered — computeClassBreakdown uses it to seed a
+      // zero-entry row for a scheduled class nobody entered (e.g. Baby Puppy
+      // Dog/Bitch), matching what the PDF class-breakdown report already
+      // does from `orderedClasses` (Mandy 2026-07-27).
+      const [entryRows, classRows] = await Promise.all([
+        ctx.db.query.entries.findMany({
+          where: and(
+            eq(entries.showId, input.showId),
+            eq(entries.status, 'confirmed'),
+            isNull(entries.deletedAt)
+          ),
+          columns: { id: true, status: true, isNfc: true, totalFee: true },
+          with: {
+            entryClasses: {
+              columns: { fee: true },
+              with: {
+                showClass: {
+                  columns: { sex: true, svCoatType: true, sortOrder: true, classNumber: true },
+                  with: { classDefinition: { columns: { name: true, type: true } } },
+                },
               },
             },
           },
-        },
-        orderBy: [asc(entries.entryDate)],
-      });
+          orderBy: [asc(entries.entryDate)],
+        }),
+        ctx.db.query.showClasses.findMany({
+          where: eq(showClasses.showId, input.showId),
+          columns: { sex: true, svCoatType: true, sortOrder: true },
+          with: { classDefinition: { columns: { name: true, type: true } } },
+        }),
+      ]);
+
+      return { entries: entryRows, classes: classRows };
     }),
 
   getPaymentReport: secretaryProcedure
