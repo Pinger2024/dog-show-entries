@@ -255,12 +255,25 @@ type Section = {
   classes: ClassGroup[];
 };
 
-export function CatalogueJudging({ show, entries }: Props) {
-  const allClasses = groupByClassShared(entries, show);
-  const isChampionship = show.showType === 'championship';
-
-  // Split into sections: Dogs, Bitches, Junior Handling.
-  // JH classes have sex=null and class name contains "handling".
+/**
+ * Split a show's classes into the steward book's three sections.
+ *
+ * Classes with NO entries are kept. Mandy 2026-07-27: "steward book, can we
+ * include classes with no entries ie baby puppy". A steward works down the
+ * schedule calling classes in order, so one that silently vanishes because
+ * nobody entered it makes them lose their place and wonder whether it was
+ * missed. Printed as "0 entries" it plainly says: scheduled, no takers.
+ *
+ * `groupByClass` already injects unentered classes from show.allShowClasses;
+ * this function used to filter them straight back out, which is why the
+ * steward book disagreed with the by-class catalogue, which has always
+ * printed them.
+ *
+ * Exported for testing — the rendering around it is a PDF tree, but which
+ * classes reach the page is plain logic and should be asserted as such.
+ */
+export function buildJudgingSections(allClasses: ClassGroup[]): Section[] {
+  // JH classes have sex=null and a class name containing "handling".
   const dogClasses: ClassGroup[] = [];
   const bitchClasses: ClassGroup[] = [];
   const jhClasses: ClassGroup[] = [];
@@ -282,12 +295,13 @@ export function CatalogueJudging({ show, entries }: Props) {
   if (dogClasses.length > 0) sections.push({ key: 'dog', label: 'Dogs', classes: dogClasses });
   if (bitchClasses.length > 0) sections.push({ key: 'bitch', label: 'Bitches', classes: bitchClasses });
   if (jhClasses.length > 0) sections.push({ key: 'jh', label: 'Junior Handling', classes: jhClasses });
+  return sections;
+}
 
-  // Drop empty classes — no point wasting print space on them
-  for (const section of sections) {
-    section.classes = section.classes.filter((c) => c.entries.length > 0);
-  }
-  const activeSections = sections.filter((s) => s.classes.length > 0);
+export function CatalogueJudging({ show, entries }: Props) {
+  const allClasses = groupByClassShared(entries, show);
+  const isChampionship = show.showType === 'championship';
+  const activeSections = buildJudgingSections(allClasses);
 
   // Build judge list for cover
   const judgeList: { name: string; label: string }[] = [];
