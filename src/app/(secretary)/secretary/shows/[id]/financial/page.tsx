@@ -490,9 +490,19 @@ export default function FinancialPage() {
                 </TableRow>
               </TableBody>
             </Table>
+            {/* Mandy 2026-07-27 spotted this reading "156 class entries across
+                160 dogs" — self-contradictory, because combinedTotals.entries
+                is the total of the column above (class entries + not for
+                competition), never a dog count. Show all three numbers and how
+                they add up, so the card reconciles on its face. */}
             <p className="mt-3 text-xs text-se-ink3">
-              {totalClassEntries} class entries across {classBreakdown.combinedTotals.entries}{' '}
-              {classBreakdown.combinedTotals.entries === 1 ? 'dog' : 'dogs'} — many dogs run more than one class.
+              {classBreakdown.combinedTotals.entries} lines = {totalClassEntries} class{' '}
+              {totalClassEntries === 1 ? 'entry' : 'entries'}
+              {classBreakdown.notForCompetitionTotals.entries > 0 && (
+                <> + {classBreakdown.notForCompetitionTotals.entries} not for competition</>
+              )}
+              {stats?.dogsEntered != null && <>, from {stats.dogsEntered} {stats.dogsEntered === 1 ? 'dog' : 'dogs'}</>}
+              . A dog entered in more than one class is counted in each of them.
             </p>
         </FinancialSection>
       )}
@@ -594,7 +604,12 @@ export default function FinancialPage() {
             <TableHeader>
               <TableRow>
                 <TableHead></TableHead>
-                <TableHead className="text-right">Entries</TableHead>
+                {/* "Dogs", not "Entries" — every row here counts dogs, while
+                    the Entries by Class card above counts class entries. Mandy
+                    2026-07-27 read 84 here against 160 there and reasonably
+                    asked which was wrong; neither was, the columns just didn't
+                    say what they were counting. */}
+                <TableHead className="text-right">Dogs</TableHead>
                 <TableHead className="text-right">Fees</TableHead>
               </TableRow>
             </TableHeader>
