@@ -116,6 +116,33 @@ export function formatDogsEnteredParts(opts: {
 }
 
 /**
+ * The "Entries by Class" footer, as text.
+ *
+ * Mandy 2026-07-27 read it as "156 class entries across 160 dogs" — nonsense,
+ * because it printed the column total (class entries PLUS not-for-competition)
+ * where a dog count belonged. Extracted from the page so the sentence itself
+ * can be asserted: as inline JSX no test could fail on the bug, only on an
+ * invariant near it.
+ */
+export function classBreakdownFooterText(opts: {
+  totalLines: number;
+  classEntries: number;
+  notForCompetition: number;
+  dogsEntered?: number | null;
+}): string {
+  const parts = [`${opts.classEntries} class ${opts.classEntries === 1 ? 'entry' : 'entries'}`];
+  if (opts.notForCompetition > 0) parts.push(`${opts.notForCompetition} not for competition`);
+  const from =
+    opts.dogsEntered != null
+      ? `, from ${opts.dogsEntered} ${opts.dogsEntered === 1 ? 'dog' : 'dogs'}`
+      : '';
+  return (
+    `${opts.totalLines} lines = ${parts.join(' + ')}${from}` +
+    `. A dog entered in more than one class is counted in each of them.`
+  );
+}
+
+/**
  * The parts that make up a show's class-entry total, e.g.
  * `["82 breed classes", "24 special awards", "4 junior handling"]`.
  *

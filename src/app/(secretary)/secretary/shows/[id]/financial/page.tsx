@@ -35,6 +35,7 @@ import {
   formatWholePounds,
   joinWorkings,
   dogsEnteredParts,
+  classBreakdownFooterText,
   classEntriesLabel,
 } from '../_lib/show-utils';
 import { useShowId } from '../_lib/show-context';
@@ -501,13 +502,12 @@ export default function FinancialPage() {
                 competition), never a dog count. Show all three numbers and how
                 they add up, so the card reconciles on its face. */}
             <p className="mt-3 text-xs text-se-ink3">
-              {classBreakdown.combinedTotals.entries} lines = {totalClassEntries} class{' '}
-              {totalClassEntries === 1 ? 'entry' : 'entries'}
-              {classBreakdown.notForCompetitionTotals.entries > 0 && (
-                <> + {classBreakdown.notForCompetitionTotals.entries} not for competition</>
-              )}
-              {stats?.dogsEntered != null && <>, from {stats.dogsEntered} {stats.dogsEntered === 1 ? 'dog' : 'dogs'}</>}
-              . A dog entered in more than one class is counted in each of them.
+              {classBreakdownFooterText({
+                totalLines: classBreakdown.combinedTotals.entries,
+                classEntries: totalClassEntries,
+                notForCompetition: classBreakdown.notForCompetitionTotals.entries,
+                dogsEntered: stats?.dogsEntered,
+              })}
             </p>
         </FinancialSection>
       )}

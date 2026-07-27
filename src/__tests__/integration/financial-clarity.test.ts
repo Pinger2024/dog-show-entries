@@ -8,6 +8,7 @@ import {
   makeSecretaryWithOrgAndBreed,
   makeShow,
   makeShowClass,
+  makeClassDef,
   makeDog,
   makeEntry,
   makeEntryClass,
@@ -562,5 +563,99 @@ describe('formatBannerBreakdown — carries the class-entries count', () => {
       classEntries: 109,
     });
     expect(line).toBe('93 paid · 1 withdrawn (fee kept) · 109 class entries');
+  });
+});
+
+// ──────────────────────────────────────────────────────────────
+// 2026-07-27 fault log, guarded here: four screens each computed "how many
+// entries" a different way for the SAME show — the show tile said 110
+// (class entries), the dashboard said 91 (entry rows + pending), the
+// Reports tab said 91 (rows in its own list), the catalogue printed 90
+// numbers. Every one of those was "fixed" as a one-line label change with
+// no test, and the underlying bug (one quantity, several call sites) came
+// back three more times the same day. getShowStats, getShowEntryStats and
+// secretary.getDashboard must now all read the SAME classEntries figure —
+// this test builds one deliberately awkward show and proves they agree.
+// ──────────────────────────────────────────────────────────────
+describe('every screen\'s entries figure comes from one calculation', () => {
+  it('getShowStats, getShowEntryStats and getDashboard agree on class entries, dogs, and catalogue numbers', async () => {
+    const { secretary, org, show, breed } = await setupShow();
+    const classA = await makeShowClass({ showId: show.id, breedId: breed.id });
+    const classB = await makeShowClass({ showId: show.id, breedId: breed.id });
+    const jhClassDef = await makeClassDef({ type: 'junior_handler' });
+    const jhClass = await makeShowClass({ showId: show.id, classDefinitionId: jhClassDef.id });
+
+    const exhibitor = await makeUser({ role: 'exhibitor' });
+    const order = await makeOrder({ showId: show.id, exhibitorId: exhibitor.id, status: 'paid', totalAmount: 8000 });
+
+    // Dog 1 — one entry row, entered in TWO classes. Class entries > dogs.
+    const dog1 = await makeDog({ ownerId: exhibitor.id, breedId: breed.id });
+    const dog1Entry = await makeEntry({
+      showId: show.id, dogId: dog1.id, exhibitorId: exhibitor.id,
+      orderId: order.id, status: 'confirmed', totalFee: 4000,
+    });
+    await makeEntryClass({ entryId: dog1Entry.id, showClassId: classA.id });
+    await makeEntryClass({ entryId: dog1Entry.id, showClassId: classB.id });
+
+    // Dog 2 — ONE dog, TWO entry rows (main class, then a later Special
+    // Award purchase) — LORNSTONE SIJUR's exact shape on South Western.
+    const dog2 = await makeDog({ ownerId: exhibitor.id, breedId: breed.id });
+    for (const fee of [2000, 300]) {
+      const e = await makeEntry({
+        showId: show.id, dogId: dog2.id, exhibitorId: exhibitor.id,
+        orderId: order.id, status: 'confirmed', totalFee: fee,
+      });
+      await makeEntryClass({ entryId: e.id, showClassId: classA.id });
+    }
+
+    // A Not For Competition dog — in the catalogue, no judged class, no order.
+    const nfcOwner = await makeUser({ role: 'exhibitor' });
+    const nfcDog = await makeDog({ ownerId: nfcOwner.id, breedId: breed.id });
+    await makeEntry({
+      showId: show.id, dogId: nfcDog.id, exhibitorId: nfcOwner.id,
+      status: 'confirmed', totalFee: 0, isNfc: true,
+    });
+
+    // A Junior Handler entry — no dog at all, but its own class entry and
+    // catalogue number.
+    const jhEntry = await makeEntry({
+      showId: show.id, dogId: null, exhibitorId: exhibitor.id,
+      orderId: order.id, status: 'confirmed', totalFee: 300,
+      entryType: 'junior_handler',
+    });
+    await makeEntryClass({ entryId: jhEntry.id, showClassId: jhClass.id });
+
+    const caller = createTestCaller(secretary);
+    const [entryStats, stats, dashboard] = await Promise.all([
+      caller.secretary.getShowEntryStats({ showId: show.id }),
+      caller.secretary.getShowStats({ showId: show.id }),
+      caller.secretary.getDashboard(),
+    ]);
+
+    // classEntries: dog1 (2) + dog2 (2) + JH (1) = 5. The NFC dog contributes
+    // no class entry (it's in no judged class).
+    expect(stats.classEntries).toBe(5);
+    expect(entryStats.classEntries).toBe(stats.classEntries);
+
+    const dashboardRow = [...dashboard.activeShows, ...dashboard.pastShows].find((s) => s.id === show.id);
+    expect(dashboardRow).toBeDefined();
+    expect(dashboardRow?.entryCount).toBe(stats.classEntries);
+
+    // dogCount counts distinct dogs — dog2's second entry row must not
+    // double it. 3 dogs: dog1, dog2, the NFC dog.
+    expect(stats.dogCount).toBe(3);
+    expect(entryStats.dogCount).toBe(stats.dogCount);
+
+    // catalogueNumberCount = dogCount + junior handlers = 3 + 1.
+    expect(stats.catalogueNumberCount).toBe(stats.dogCount + 1);
+    expect(stats.catalogueNumberCount).toBe(4);
+
+    // competingDogCount = dogCount − nfcDogCount = 3 − 1.
+    expect(stats.nfcDogCount).toBe(1);
+    expect(stats.competingDogCount).toBe(stats.dogCount - stats.nfcDogCount);
+    expect(stats.competingDogCount).toBe(2);
+
+    // Sanity: the org this show belongs to is the one the secretary caller owns.
+    expect(dashboard.organisations.map((o) => o.id)).toContain(org.id);
   });
 });
