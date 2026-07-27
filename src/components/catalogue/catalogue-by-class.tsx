@@ -653,15 +653,21 @@ export function CatalogueByClass({ show, entries, compact }: Props) {
             style={idx > 0 ? { marginTop: 4 } : undefined}
           >
 
-            {/* Header block kept atomic with the FIRST entry so the
-                banner + class header never lands at the bottom of a
-                page with no dog underneath — Amanda 2026-05-27:
-                "I defo dont want the banner and class name on one
-                page without having 1 dog immediately underneath it
-                as it doesnt look correct." (Earlier on 2026-05-26
-                we'd dropped this constraint chasing tighter page
-                packing; the visual cost was worse than the page
-                saving so we're back to the atomic block.) */}
+            {/* The banner + class header must never land at the foot of a
+                page with no dog underneath — Amanda 2026-05-27: "I defo dont
+                want the banner and class name on one page without having 1
+                dog immediately underneath it as it doesnt look correct."
+                (2026-05-26 we briefly dropped that chasing tighter packing;
+                the visual cost beat the page saving, so it came back.)
+
+                Kept as wrap={false} deliberately. Dropping it packs South
+                Western into 24 pages instead of 25, but produces 2 class
+                headers stranded at the foot of a page with their first dog
+                overleaf — the exact thing Amanda banned. minPresenceAhead is
+                NOT an alternative here: react-pdf ignores it on a wrapping
+                View (measured identical at 100/130/160/200). So the page cost
+                is the price of the rule, and changing it is Mandy's call, not
+                a silent trade (2026-07-27). */}
             <View wrap={false}>
               {/* Class-sponsor banner — landscape strip above the class
                   header when a class sponsor has uploaded a banner image
@@ -778,26 +784,46 @@ export function CatalogueByClass({ show, entries, compact }: Props) {
               {sorted.length > 0 && renderEntry(sorted[0], 0)}
             </View>
 
-            {sorted.slice(1).map((entry, sliceIdx) => renderEntry(entry, sliceIdx + 1))}
+            {/* Every dog but the last flows normally. */}
+            {sorted.slice(1, -1).map((entry, sliceIdx) => renderEntry(entry, sliceIdx + 1))}
 
-            {/* Placements write-in row.
+            {/* The LAST dog and the placings line are bound together.
                 • RKC: 1st / 2nd / 3rd / Res / VHC (Amanda 2026-05-14).
                 • SV/WUSV: a placing + grade slot per dog in the class,
                   dynamic to the class size, written at the FOOT of the
-                  class like the RKC shows (Mandy 2026-06-14 — moved off
-                  the right of each dog; SV judges place AND grade every
-                  exhibit). */}
-            {sorted.length > 0 && !isSvShow && (
-              <View style={styles.placementsRow} wrap={false}>
-                {['1st', '2nd', '3rd', 'Res', 'VHC'].map((lbl) => (
-                  <View key={lbl} style={styles.placementSlot}>
-                    <Text style={styles.placementSlotLabel}>{lbl}</Text>
-                    <View style={styles.placementSlotLine} />
-                  </View>
-                ))}
-              </View>
-            )}
-            {sorted.length > 0 && isSvShow && renderSvPlacings(sorted.length)}
+                  class like the RKC shows (Mandy 2026-06-14).
+
+                Mandy 2026-07-27: South Western page 18 was a whole A5 sheet
+                carrying nothing but "1st 2nd 3rd Res VHC". Its class filled
+                page 17 to within ~23pt of the bottom margin — too little for
+                the ~40pt placings block — so the line moved on by itself and
+                the next class started on a fresh page behind it, wasting most
+                of a sheet. Bound to the last dog, the pair travel together and
+                the following class packs in behind them. Fewer pages is also
+                lower print cost, which is why classes may break across pages
+                at all (Amanda 2026-05-26). */}
+            {(() => {
+              if (sorted.length === 0) return null;
+              const placings = isSvShow ? renderSvPlacings(sorted.length) : (
+                <View style={styles.placementsRow} wrap={false}>
+                  {['1st', '2nd', '3rd', 'Res', 'VHC'].map((lbl) => (
+                    <View key={lbl} style={styles.placementSlot}>
+                      <Text style={styles.placementSlotLabel}>{lbl}</Text>
+                      <View style={styles.placementSlotLine} />
+                    </View>
+                  ))}
+                </View>
+              );
+              // A one-dog class already has its only dog inside the atomic
+              // header block above, so there's no trailing dog to bind to.
+              if (sorted.length === 1) return placings;
+              return (
+                <View wrap={false}>
+                  {renderEntry(sorted[sorted.length - 1], sorted.length - 1)}
+                  {placings}
+                </View>
+              );
+            })()}
 
           </View>
           </Fragment>
