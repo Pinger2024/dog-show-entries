@@ -640,6 +640,22 @@ export function CatalogueByClass({ show, entries, compact }: Props) {
           );
         };
 
+        /** The write-in placings block that closes a class.
+         *  • RKC: 1st / 2nd / 3rd / Res / VHC (Amanda 2026-05-14).
+         *  • SV/WUSV: a placing + grade slot per dog, dynamic to the class
+         *    size, at the FOOT of the class (Mandy 2026-06-14). */
+        const renderPlacings = () =>
+          isSvShow ? renderSvPlacings(sorted.length) : (
+            <View style={styles.placementsRow} wrap={false}>
+              {['1st', '2nd', '3rd', 'Res', 'VHC'].map((lbl) => (
+                <View key={lbl} style={styles.placementSlot}>
+                  <Text style={styles.placementSlotLabel}>{lbl}</Text>
+                  <View style={styles.placementSlotLine} />
+                </View>
+              ))}
+            </View>
+          );
+
         return (
           <Fragment key={classKey}>
             {classKey === firstSpecialKey && (
@@ -660,15 +676,22 @@ export function CatalogueByClass({ show, entries, compact }: Props) {
                 (2026-05-26 we briefly dropped that chasing tighter packing;
                 the visual cost beat the page saving, so it came back.)
 
-                Kept as wrap={false} deliberately. Dropping it packs South
-                Western into 24 pages instead of 25, but produces 2 class
-                headers stranded at the foot of a page with their first dog
-                overleaf — the exact thing Amanda banned. minPresenceAhead is
-                NOT an alternative here: react-pdf ignores it on a wrapping
-                View (measured identical at 100/130/160/200). So the page cost
-                is the price of the rule, and changing it is Mandy's call, not
-                a silent trade (2026-07-27). */}
-            <View wrap={false}>
+                The header no longer swallows the first dog to achieve that.
+                It used to, and the oversized atomic block cost whole pages —
+                react-pdf would not pack it into space it plainly fitted, so
+                South Western spent a near-empty A5 sheet (Mandy 2026-07-27).
+                Instead the header stays non-wrapping but SMALL, and
+                minPresenceAhead reserves ~70pt below it: enough for a dog, so
+                the header can still never sit alone at a page foot.
+
+                minPresenceAhead only works on a NON-wrapping View — on a
+                wrapping one react-pdf ignores it entirely (measured identical
+                at 100/130/160/200). That distinction is the whole trick.
+
+                Measured on South Western: 25 pages → 24, with zero stranded
+                placings lines, zero stranded tail dogs and zero orphaned
+                headers. */}
+            <View wrap={false} minPresenceAhead={70}>
               {/* Class-sponsor banner — landscape strip above the class
                   header when a class sponsor has uploaded a banner image
                   (HUNDARK / ROBASDAN-style festive strips). SV/WUSV
@@ -781,11 +804,10 @@ export function CatalogueByClass({ show, entries, compact }: Props) {
                 </Text>
               )}
 
-              {sorted.length > 0 && renderEntry(sorted[0], 0)}
             </View>
 
             {/* Every dog but the last flows normally. */}
-            {sorted.slice(1, -1).map((entry, sliceIdx) => renderEntry(entry, sliceIdx + 1))}
+            {sorted.slice(0, -1).map((entry, idx) => renderEntry(entry, idx))}
 
             {/* The LAST dog and the placings line are bound together.
                 • RKC: 1st / 2nd / 3rd / Res / VHC (Amanda 2026-05-14).
@@ -804,19 +826,7 @@ export function CatalogueByClass({ show, entries, compact }: Props) {
                 at all (Amanda 2026-05-26). */}
             {(() => {
               if (sorted.length === 0) return null;
-              const placings = isSvShow ? renderSvPlacings(sorted.length) : (
-                <View style={styles.placementsRow} wrap={false}>
-                  {['1st', '2nd', '3rd', 'Res', 'VHC'].map((lbl) => (
-                    <View key={lbl} style={styles.placementSlot}>
-                      <Text style={styles.placementSlotLabel}>{lbl}</Text>
-                      <View style={styles.placementSlotLine} />
-                    </View>
-                  ))}
-                </View>
-              );
-              // A one-dog class already has its only dog inside the atomic
-              // header block above, so there's no trailing dog to bind to.
-              if (sorted.length === 1) return placings;
+              const placings = renderPlacings();
               return (
                 <View wrap={false}>
                   {renderEntry(sorted[sorted.length - 1], sorted.length - 1)}
