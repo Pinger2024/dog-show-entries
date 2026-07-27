@@ -131,7 +131,7 @@ describe('catalogue numbering — no confirmed entry is left unnumbered', () => 
 
     const late = [];
     for (let i = 0; i < blank; i++) late.push(await add()); // entries that arrive afterwards
-    return { show, early, late };
+    return { show, early, late, secretary: user };
   }
 
   it('numbers entries that arrived after an earlier render numbered the rest', async () => {
@@ -148,6 +148,18 @@ describe('catalogue numbering — no confirmed entry is left unnumbered', () => 
     expect(all.every((e) => e.catalogueNumber != null)).toBe(true);
     // 1..5, no gaps, no duplicates.
     expect(all.map((e) => Number(e.catalogueNumber)).sort((a, b) => a - b)).toEqual([1, 2, 3, 4, 5]);
+  });
+
+  it('lets the catalogue page repair a part-numbered show', async () => {
+    // The page fires assignCatalogueNumbers whenever an entry is missing a
+    // number. Until 2026-07-27 it only fired when NO entry had one, so a
+    // part-numbered show had no route back to correct from the UI at all.
+    const { show, late, secretary } = await showWithPartialNumbering(3, 2);
+
+    await createTestCaller(secretary).secretary.assignCatalogueNumbers({ showId: show.id });
+
+    expect(await catNum(late[0].id)).not.toBeNull();
+    expect(await catNum(late[1].id)).not.toBeNull();
   });
 
   it('fills blanks without shifting existing numbers when the show is locked', async () => {

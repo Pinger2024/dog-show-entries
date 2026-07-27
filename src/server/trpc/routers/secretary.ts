@@ -737,7 +737,11 @@ export const secretaryRouter = createTRPCRouter({
       // Full class-first re-sort (breed → Junior Handlers → NFC). Shared with
       // the auto-resort that runs on every provisional add/remove so the button
       // and the automatic path can never disagree.
-      return resortCatalogueNumbers(ctx.db, input.showId);
+      //
+      // Lock-aware since 2026-07-27: the catalogue page now fires this whenever
+      // ANY entry is missing a number (not just when none has one), and on a
+      // locked show that must fill the blanks rather than shift printed numbers.
+      return syncCatalogueNumbers(ctx.db, input.showId);
     }),
 
   // Lock catalogue numbers for printing. After this, late entries append at the

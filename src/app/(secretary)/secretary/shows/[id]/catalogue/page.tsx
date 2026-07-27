@@ -83,20 +83,26 @@ export default function CataloguePage() {
   const entryCloseDate = catalogueData?.show?.entryCloseDate;
   const numbersLocked = Boolean(catalogueData?.show?.catalogueNumbersLockedAt);
 
-  // Auto-assign catalogue numbers the first time a secretary lands on the
-  // page with confirmed entries but no numbers yet. There is no manual
-  // reassignment button any more — numbers should always appear
-  // automatically (backlog #81).
+  // Auto-assign catalogue numbers when a secretary lands on the page and any
+  // confirmed entry is missing one. There is no manual reassignment button any
+  // more — numbers should always appear automatically (backlog #81).
+  //
+  // Gated on "every entry numbered", not "any entry numbered" (2026-07-27):
+  // South Western closed with 55 of 93 numbered, and the old `hasNumbers`
+  // guard meant the page saw numbers, skipped the assign, and left 38 paid
+  // dogs printing blank with no button to fix it. The mutation is lock-aware,
+  // so on a locked show this fills the blanks instead of shifting.
+  const allNumbered = entries.length > 0 && entries.every((e) => e.catalogueNumber);
   const autoAssignedRef = useRef(false);
   useEffect(() => {
     if (autoAssignedRef.current) return;
     if (isLoading) return;
     if (entries.length === 0) return;
-    if (hasNumbers) return;
+    if (allNumbered) return;
     if (assignMutation.isPending) return;
     autoAssignedRef.current = true;
     assignMutation.mutate({ showId });
-  }, [isLoading, entries.length, hasNumbers, assignMutation, showId]);
+  }, [isLoading, entries.length, allNumbered, assignMutation, showId]);
 
   return (
     <div className="space-y-6">
@@ -240,7 +246,7 @@ export default function CataloguePage() {
       <div className="grid gap-4 lg:grid-cols-3">
         <StatCard label="Catalogue Entries" value={entries.length} icon={BookOpen} />
         <StatCard label="Absentees" value={absentees?.length ?? 0} icon={ClipboardList} />
-        <StatCard label="Numbers Assigned" value={hasNumbers ? 'Yes' : 'Not yet'} icon={Hash} />
+        <StatCard label="Numbers Assigned" value={allNumbered ? 'Yes' : hasNumbers ? 'Some missing' : 'Not yet'} icon={Hash} />
       </div>
 
       {/* Empty state when there are no entries yet — the previous in-page
