@@ -73,6 +73,7 @@ function ReportShell({
   columns,
   rows,
   total,
+  note,
 }: {
   info: ShowReportInfo;
   title: string;
@@ -81,6 +82,8 @@ function ReportShell({
    *  string, or {text, sub} to add a small muted sub-line. */
   rows: Array<Array<string | { text: string; sub?: string }>>;
   total?: { label: string; value: string };
+  /** Small muted line under the totals row — for saying what the total counts. */
+  note?: string;
 }) {
   return (
     <Document title={`${title} — ${info.showName}`} author="Remi Show Manager">
@@ -138,6 +141,8 @@ function ReportShell({
             <Text style={s.totalText}>{total.value}</Text>
           </View>
         ) : null}
+
+        {note ? <Text style={s.cellMuted}>{note}</Text> : null}
 
         <Text
           style={s.footer}
@@ -249,12 +254,33 @@ export type ClassBreakdownRow = {
   count: number;
 };
 
+/**
+ * The Class Breakdown footer, as text. Pure so it can be asserted directly.
+ *
+ * Mandy 2026-07-27: this report totalled "109 entries" while every other
+ * screen read "93 dogs entered", and nothing on either said which was which.
+ * Both were right — a dog in two classes is two class entries — so the total
+ * names its unit and the note reconciles it against the dogs figure.
+ */
+export function classBreakdownFooter(classEntries: number, dogCount?: number) {
+  return {
+    value: `${classEntries} class entries`,
+    note:
+      dogCount == null
+        ? undefined
+        : `${classEntries} class entries from ${dogCount} ${dogCount === 1 ? 'dog' : 'dogs'} — a dog entered in more than one class is counted in each of them.`,
+  };
+}
+
 export function ClassBreakdownReport({
   info,
   rows,
+  dogCount,
 }: {
   info: ShowReportInfo;
   rows: ClassBreakdownRow[];
+  /** Confirmed dogs entered — the headline figure every other screen shows. */
+  dogCount?: number;
 }) {
   const columns: ReportColumn[] = [
     { header: 'No.', width: 12, align: 'right' },
@@ -266,13 +292,16 @@ export function ClassBreakdownReport({
   const body = rows.map((r) => [r.label, r.name, sexLabel(r.sex), String(r.count)]);
   const total = rows.reduce((sum, r) => sum + r.count, 0);
 
+  const footer = classBreakdownFooter(total, dogCount);
+
   return (
     <ReportShell
       info={info}
       title="Class Breakdown"
       columns={columns}
       rows={body}
-      total={{ label: `${rows.length} classes`, value: `${total} entries` }}
+      total={{ label: `${rows.length} classes`, value: footer.value }}
+      note={footer.note}
     />
   );
 }

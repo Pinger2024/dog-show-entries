@@ -13,6 +13,7 @@ import {
   makeUser,
 } from '../helpers/factories';
 import { computeClassBreakdown } from '@/lib/class-breakdown';
+import { classBreakdownFooter } from '@/components/reports/show-report-pdf';
 
 // Mandy, BAGSD 2026-06-17: the Financial page's "Entries by Class" card must
 // count the TRUE ring numbers — every confirmed catalogue entry regardless of
@@ -71,5 +72,24 @@ describe('getClassBreakdownReport — full catalogue entry set (Mandy/BAGSD)', (
     const paidOnly = await caller.secretary.getEntryReport({ showId: show.id });
     expect(paidOnly).toHaveLength(1);
     expect(computeClassBreakdown(paidOnly).combinedTotals.entries).toBe(1);
+  });
+});
+
+// Mandy, South Western GSD 2026-07-27: "on the main screen it's got 93 but on
+// this report it's got 109 — I've physically counted and we have 109". Both
+// figures were correct: 93 dogs entered, 109 class entries (82 breed + 24
+// Special Award + 3 Junior Handling), because a dog in two classes appears in
+// both. Neither screen said which unit it was counting.
+describe('class breakdown PDF footer — says what it is counting', () => {
+  it('names the unit and reconciles it against the dogs-entered figure', () => {
+    const footer = classBreakdownFooter(109, 93);
+    expect(footer.value).toBe('109 class entries');
+    expect(footer.note).toContain('109 class entries from 93 dogs');
+    expect(footer.note).toContain('counted in each of them');
+  });
+
+  it('reads naturally for a single dog and omits the note when no dog count is given', () => {
+    expect(classBreakdownFooter(1, 1).note).toContain('from 1 dog —');
+    expect(classBreakdownFooter(109).note).toBeUndefined();
   });
 });

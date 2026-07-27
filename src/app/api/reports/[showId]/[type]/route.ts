@@ -161,7 +161,7 @@ export async function GET(
       sex: sc.sex,
       count: counts.get(sc.id) ?? 0,
     }));
-    element = React.createElement(ClassBreakdownReport, { info, rows });
+    element = React.createElement(ClassBreakdownReport, { info, rows, dogCount: confirmed.length });
     filenameSuffix = 'Class-Breakdown';
   } else if (type === 'sh01') {
     // RKC SH01 Championship Absentee Report — per-breed dog/bitch/absentee
