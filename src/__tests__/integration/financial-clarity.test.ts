@@ -294,3 +294,58 @@ describe('financial clarity — one procedure, one shape, everywhere', () => {
     expect(entryStats.dogsEntered).toBe(2);
   });
 });
+
+// ──────────────────────────────────────────────────────────────
+// Mandy, 2026-07-27, South Western GSD: "85 dogs entered ... but 4 done
+// manually so payment direct to bank ... this report is showing only 76".
+// Her hand-added, paid-direct-to-the-club entries were folded into a row
+// labelled "Paid through Remi" with nothing marking them out, so the row
+// reconciled against neither the bank statement nor the Remi payout.
+// ──────────────────────────────────────────────────────────────
+describe('financial clarity — entries paid direct to the club are marked out', () => {
+  it('counts them in dogs entered but reports them separately from Remi-collected money', async () => {
+    const { secretary, show, showClass, breed } = await setupShow();
+
+    const addEntry = async (opts: { offline: boolean; fee: number }) => {
+      const exhibitor = await makeUser({ role: 'exhibitor' });
+      const dog = await makeDog({ ownerId: exhibitor.id, breedId: breed.id });
+      const order = await makeOrder({
+        showId: show.id,
+        exhibitorId: exhibitor.id,
+        status: 'paid',
+        totalAmount: opts.fee,
+        // Offline = a secretary's manual entry: paid, but with no Stripe
+        // PaymentIntent, because the money went straight to the club.
+        ...(opts.offline ? { stripePaymentIntentId: null } : {}),
+      });
+      const entry = await makeEntry({
+        showId: show.id, dogId: dog.id, exhibitorId: exhibitor.id,
+        orderId: order.id, status: 'confirmed', totalFee: opts.fee,
+      });
+      await makeEntryClass({ entryId: entry.id, showClassId: showClass.id });
+    };
+
+    for (let i = 0; i < 6; i++) await addEntry({ offline: false, fee: 2000 });
+    for (let i = 0; i < 4; i++) await addEntry({ offline: true, fee: 2000 });
+
+    const caller = createTestCaller(secretary);
+    const [entryStats, stats] = await Promise.all([
+      caller.secretary.getShowEntryStats({ showId: show.id }),
+      caller.secretary.getShowStats({ showId: show.id }),
+    ]);
+
+    // The headline is unchanged — all ten dogs are entered, all ten print.
+    expect(stats.dogsEntered).toBe(10);
+    expect(stats.dogsEnteredFeesPence).toBe(20000);
+
+    // ...but the four hand-added ones are now identifiable.
+    expect(stats.paidDirectToClubEntries).toBe(4);
+    expect(stats.paidDirectToClubFeesPence).toBe(8000);
+    expect(entryStats.paidDirectToClubEntries).toBe(stats.paidDirectToClubEntries);
+
+    // And the settlement split is untouched: Remi owes the club only the
+    // £120 it actually collected — the £80 is already in the club's bank.
+    expect(stats.clubReceivablePence).toBe(12000);
+    expect(stats.offlineCollectedPence).toBe(8000);
+  });
+});

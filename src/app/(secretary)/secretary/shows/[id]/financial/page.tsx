@@ -588,10 +588,20 @@ export default function FinancialPage() {
             <TableBody>
               <TableRow>
                 <TableCell className="font-medium">
-                  Paid through Remi
+                  Entries paid
                   {(stats?.confirmedJhEntries ?? 0) > 0 && (
                     <span className="mt-1 block pl-3 text-xs font-normal text-muted-foreground">
                       including {stats?.confirmedJhEntries} junior handler · {formatCurrency(stats?.confirmedJhFeesPence ?? 0)}
+                    </span>
+                  )}
+                  {/* Mandy 2026-07-27: entries she added by hand and settled
+                      straight into the club's bank were counted in this row
+                      while it was labelled "Paid through Remi", so it matched
+                      neither the bank statement nor the Remi payout. */}
+                  {(stats?.paidDirectToClubEntries ?? 0) > 0 && (
+                    <span className="mt-1 block pl-3 text-xs font-normal text-muted-foreground">
+                      including {stats?.paidDirectToClubEntries} paid direct to the club · {formatCurrency(stats?.paidDirectToClubFeesPence ?? 0)}
+                      <span className="mt-0.5 block">added by hand — that money is already in the club account, not in your Remi payout</span>
                     </span>
                   )}
                 </TableCell>

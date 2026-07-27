@@ -130,6 +130,17 @@ export type ShowMetrics = {
   /** Junior Handler entries within confirmedEntryCount — for the "including N junior handler" subrow. */
   confirmedJhEntryCount: number;
   confirmedJhFeesPence: number;
+  /**
+   * Confirmed entries within confirmedEntryCount that the club collected
+   * itself — `createManualEntry` postal/cash entries whose order never
+   * touched Stripe. Mandy 2026-07-27: the entries table showed these inside a
+   * row labelled "Paid through Remi", so a secretary reconciling her bank
+   * statement had no way to tell which money Remi is holding and which is
+   * already in the club account. Counted, not subtracted — the headline
+   * totals are unchanged, this only lets the row show its workings.
+   */
+  offlineConfirmedEntryCount: number;
+  offlineConfirmedEntryFeesPence: number;
   /** The fee withdrawn entries keep with the club — same pence already folded into paidEntryFeesPence, split out for display. */
   withdrawnKeptPence: number;
   /** Alive entries with status='cancelled' on an otherwise-paid order (a per-entry partial refund). */
@@ -243,6 +254,8 @@ export function aggregateShowMetrics(data: {
   // "Dogs entered" split — new buckets.
   let confirmedJhEntryCount = 0;
   let confirmedJhFeesPence = 0;
+  let offlineConfirmedEntryCount = 0;
+  let offlineConfirmedEntryFeesPence = 0;
   let withdrawnKeptPence = 0;
   let cancelledEntryCount = 0;
   let cancelledRefundedPence = 0;
@@ -274,7 +287,11 @@ export function aggregateShowMetrics(data: {
       if (e.status === 'confirmed') {
         confirmedEntryCount += 1;
         paidEntryFeesPence += e.totalFee;
-        if (isOffline) offlineEntryFeesPence += e.totalFee;
+        if (isOffline) {
+          offlineEntryFeesPence += e.totalFee;
+          offlineConfirmedEntryCount += 1;
+          offlineConfirmedEntryFeesPence += e.totalFee;
+        }
         if (e.entryType === 'junior_handler') {
           confirmedJhEntryCount += 1;
           confirmedJhFeesPence += e.totalFee;
@@ -417,6 +434,8 @@ export function aggregateShowMetrics(data: {
     confirmedEntryFeesPence,
     confirmedJhEntryCount,
     confirmedJhFeesPence,
+    offlineConfirmedEntryCount,
+    offlineConfirmedEntryFeesPence,
     withdrawnKeptPence,
     cancelledEntryCount,
     cancelledRefundedPence,
@@ -450,6 +469,8 @@ export function shapeDogsEnteredFields(metrics: ShowMetrics) {
     otherOrderlessFeesPence: metrics.otherOrderlessFeesPence,
     confirmedJhEntries: metrics.confirmedJhEntryCount,
     confirmedJhFeesPence: metrics.confirmedJhFeesPence,
+    paidDirectToClubEntries: metrics.offlineConfirmedEntryCount,
+    paidDirectToClubFeesPence: metrics.offlineConfirmedEntryFeesPence,
     withdrawnKeptPence: metrics.withdrawnKeptPence,
     cancelledEntries: metrics.cancelledEntryCount,
     cancelledRefundedPence: metrics.cancelledRefundedPence,
