@@ -197,6 +197,10 @@ export default function DocumentsPage() {
 
   const resultsFinalised = Boolean(catalogueData?.show?.resultsPublishedAt);
   const isKcChampionship = show?.showType === 'championship' && show?.showRuleset !== 'wusv';
+  // SV / WUSV regional shows get the graded results report + spreadsheet the
+  // regional group circulates after the show (Mandy 2026-06-27). RKC shows
+  // use the Marked Catalogue for this instead — never show both.
+  const isWusvShow = stats?.showRuleset === 'wusv';
 
   // Distinct judges (by id) so a multi-judge show can offer a separate Judge's
   // Book per judge — e.g. the breed judge's book and the Junior Handling
@@ -554,6 +558,42 @@ export default function DocumentsPage() {
             <DocRow icon={<UserX className="size-4" />} label="RKC SH01 Return" description="Championship show absentee return for RKC submission">
               <PdfViewerButton icon={<UserX className="size-4" />} label="View" url={`/api/reports/${showId}/sh01`} />
             </DocRow>
+          )}
+          {isWusvShow && (
+            <>
+              <DocRow
+                icon={<Trophy className="size-4" />}
+                label="SV Graded Results"
+                description="Graded results by coat and class — V/SG/G grades, placings, absentees kept in, with Best Male/Female, Most Promising, and Junior Handling"
+              >
+                <PdfViewerButton icon={<Trophy className="size-4" />} label="View" url={`/api/reports/${showId}/sv-results`} />
+              </DocRow>
+              <DocRow
+                icon={<FileSpreadsheet className="size-4" />}
+                label="SV Results Spreadsheet"
+                description="One row per dog with full pedigree, grading and placing — the SV records format for the regional group"
+              >
+                {downloadingKey === 'sv-results-xlsx' ? (
+                  <Button disabled className="min-h-[2.75rem]">
+                    <Loader2 className="size-4 animate-spin" />Downloading…
+                  </Button>
+                ) : (
+                  <Button
+                    variant="outline"
+                    className="min-h-[2.75rem]"
+                    onClick={() =>
+                      handleDownload(
+                        'sv-results-xlsx',
+                        `/api/reports/${showId}/sv-results-xlsx`,
+                        `SV-Results-${showId}.xlsx`,
+                      )
+                    }
+                  >
+                    <Download className="size-4" />Download
+                  </Button>
+                )}
+              </DocRow>
+            </>
           )}
         </DocSection>
 

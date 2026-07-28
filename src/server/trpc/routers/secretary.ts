@@ -371,12 +371,16 @@ export const secretaryRouter = createTRPCRouter({
     .query(async ({ ctx, input }) => {
       await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId, { callerIsAdmin: ctx.callerIsAdmin });
 
-      const [metrics, classCount] = await Promise.all([
+      const [metrics, classCount, showRow] = await Promise.all([
         computeShowMetrics(ctx.db, input.showId),
         ctx.db
           .select({ count: sql<number>`count(*)` })
           .from(showClasses)
           .where(eq(showClasses.showId, input.showId)),
+        ctx.db
+          .select({ showRuleset: shows.showRuleset })
+          .from(shows)
+          .where(eq(shows.id, input.showId)),
       ]);
 
       // "Active" revenue is paid-orders-only, net of refunds, INCLUDING
@@ -408,6 +412,8 @@ export const secretaryRouter = createTRPCRouter({
         paidOnlineCatalogueCount: metrics.paidOnlineCatalogueCount,
         // Class count
         totalClasses: Number(classCount[0]?.count ?? 0),
+        // Regional (SV/WUSV) eligibility gate for the SV-graded Results report
+        showRuleset: showRow[0]?.showRuleset ?? 'rkc',
         // Back-compat alias — total revenue across both channels (was
         // "club receivable, paid-only" before the offline-order split).
         totalRevenue: metrics.totalClubRevenuePence,
