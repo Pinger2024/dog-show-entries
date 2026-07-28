@@ -391,7 +391,12 @@ const bestAwardsStyles = StyleSheet.create({
     color: '#666',
   },
   columnHeaderTitle: {
-    fontSize: 10,
+    // 9pt (not 10) so "BEST AWARDS" sits on one line in the 28mm strips too —
+    // at 10pt it wrapped to "BEST / AWARDS" in the Secretary strip (narrower
+    // net width than Awards Board's due to its dashed vs solid divider
+    // padding) but fit on one line in Awards Board, an inconsistent look
+    // (Mandy 2026-07-28).
+    fontSize: 9,
     fontWeight: 'bold',
     textTransform: 'uppercase',
   },
