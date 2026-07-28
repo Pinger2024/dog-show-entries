@@ -1,4 +1,4 @@
-import { pgTable, text, timestamp, uuid, boolean } from 'drizzle-orm/pg-core';
+import { pgTable, text, timestamp, uuid, boolean, integer } from 'drizzle-orm/pg-core';
 import { relations } from 'drizzle-orm';
 import { subscriptionStatusEnum, stripeAccountStatusEnum, showRulesetEnum } from './enums';
 import { shows } from './shows';
@@ -64,6 +64,11 @@ export const organisations = pgTable('organisations', {
   logoColorPrimary: text('logo_color_primary'),
   logoColorSecondary: text('logo_color_secondary'),
   logoMonochrome: boolean('logo_monochrome').notNull().default(false),
+  // Club-invoice numbering (admin-invoices.issue). Incremented atomically
+  // inside the issue transaction via an UPDATE ... RETURNING row-level
+  // lock — the returned value becomes the invoice's sequenceNumber. See
+  // src/server/db/schema/invoices.ts for the full numbering rationale.
+  nextInvoiceSequence: integer('next_invoice_sequence').notNull().default(1),
   createdAt: timestamp('created_at', { withTimezone: true })
     .defaultNow()
     .notNull(),
