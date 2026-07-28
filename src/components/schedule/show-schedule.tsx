@@ -1134,20 +1134,10 @@ export function ShowSchedule({
           </View>
         </View>
 
-        {mixedBottomClasses.length > 0 && (
-          <View style={{ marginTop: 8 }}>
-            <TwoColSectionHeader title="Junior Handling" />
-            {mixedBottomClasses.map((cls, i) => (
-              <View key={i} style={[s.twoColRow, i % 2 !== 0 && s.twoColRowAlt]} wrap={false}>
-                <Text style={s.twoColNum}>{cls.classLabel}</Text>
-                <Text style={s.twoColName}>{cls.className}</Text>
-              </View>
-            ))}
-          </View>
-        )}
-
-        {/* Special Award Classes — their own section after Junior Handling,
-            judged in the lunch break. Labelled A, B, C, … and not counted
+        {/* Special Award Classes — their own section, before Junior Handling
+            to match the catalogue and steward's book (the secretary's
+            convention; this page had them the other way round until
+            2026-07-28). Judged in the lunch break. Labelled A, B, C, … and not counted
             against the RKC-licensed class total. Amanda 2026-05-19, expanded
             2026-05-27 to mirror the SW GSD specimen wording: club-rationale
             paragraph, N.B. emphasis that beaten dogs in SAC are NOT
@@ -1193,6 +1183,18 @@ export function ShowSchedule({
             <Text style={{ fontFamily: 'Times', fontSize: 8.5, fontWeight: 'bold', textAlign: 'center', color: C.textDark, marginTop: 8 }}>
               SO PLEASE DO SUPPORT AND ENTER — THANK YOU
             </Text>
+          </View>
+        )}
+
+        {mixedBottomClasses.length > 0 && (
+          <View style={{ marginTop: 8 }}>
+            <TwoColSectionHeader title="Junior Handling" />
+            {mixedBottomClasses.map((cls, i) => (
+              <View key={i} style={[s.twoColRow, i % 2 !== 0 && s.twoColRowAlt]} wrap={false}>
+                <Text style={s.twoColNum}>{cls.classLabel}</Text>
+                <Text style={s.twoColName}>{cls.className}</Text>
+              </View>
+            ))}
           </View>
         )}
 
