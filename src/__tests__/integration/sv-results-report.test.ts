@@ -114,7 +114,9 @@ describe('SV graded results report — end to end', () => {
 
     // Dogs
     const anton = await makeDog({ ownerId: exhibitor.id, breedId: breed.id, registeredName: 'Anton Vom Haus Garyn', sex: 'dog', coatType: 'stock', registrationBody: 'sv', kcRegNumber: 'SZ2386790', sireName: 'Grimm Della Valcuvia', damName: "Rover Du Val D'Anzin", breederName: 'Jocelyn Thiel', breederCity: 'Solingen', breederPostcode: '42699', breederCountry: 'Germany' });
-    const tornado = await makeDog({ ownerId: exhibitor.id, breedId: breed.id, registeredName: 'Tornado', sex: 'dog', coatType: 'stock' });
+    // Explicitly pedigree-less: this absent dog proves missing sire/dam render as
+    // blanks (makeDog defaults a full pedigree since the pedigree-required work).
+    const tornado = await makeDog({ ownerId: exhibitor.id, breedId: breed.id, registeredName: 'Tornado', sex: 'dog', coatType: 'stock', sireName: null, damName: null });
     const bailey = await makeDog({ ownerId: exhibitor.id, breedId: breed.id, registeredName: 'Bailey Vom Springberg', sex: 'bitch', coatType: 'stock', sireName: 'Sastor', damName: 'Lorah' });
     const zandamor = await makeDog({ ownerId: exhibitor.id, breedId: breed.id, registeredName: 'Zandamor Gamba', sex: 'bitch', coatType: 'stock' });
     const kehlani = await makeDog({ ownerId: exhibitor.id, breedId: breed.id, registeredName: 'Kleehuegel Kehlani', sex: 'bitch', coatType: 'stock' });
