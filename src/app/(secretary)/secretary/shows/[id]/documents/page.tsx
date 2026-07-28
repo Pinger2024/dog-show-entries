@@ -46,6 +46,7 @@ import { Switch } from '@/components/ui/switch';
 import { downloadCsv } from '../_lib/show-utils';
 import { useShowId } from '../_lib/show-context';
 import { PdfViewerButton } from '../_components/pdf-viewer-button';
+import { buildAbsenteeRow, buildFinancialStatementRow } from '@/lib/report-rows';
 
 const placementPreviews = [
   { label: '1st', colour: 'bg-red-100 text-red-800 border-red-300' },
@@ -151,6 +152,35 @@ function CsvButton({
         setBusy(true);
         try {
           await onGenerate();
+        } catch (err) {
+          toast.error(`Download failed — ${(err as Error).message}`);
+        } finally {
+          setBusy(false);
+        }
+      }}
+    >
+      {busy ? <Loader2 className="size-4 animate-spin" /> : <FileSpreadsheet className="size-4" />}
+      {label}
+    </Button>
+  );
+}
+
+/** Excel download button for a server-generated .xlsx report (Mandy's
+ * original ask: "the option to generate on excel or pdf"). Same shape as
+ * CsvButton — self-contained busy state, routed through downloadBlob so
+ * iOS PWA users get a real save. Every xlsx route reuses the exact row
+ * builder or DB query its PDF/CSV sibling uses, so the two can't disagree. */
+function XlsxButton({ href, filename, label = 'Excel' }: { href: string; filename: string; label?: string }) {
+  const [busy, setBusy] = useState(false);
+  return (
+    <Button
+      variant="outline"
+      className="min-h-[2.75rem]"
+      disabled={busy}
+      onClick={async () => {
+        setBusy(true);
+        try {
+          await downloadBlob(href, filename);
         } catch (err) {
           toast.error(`Download failed — ${(err as Error).message}`);
         } finally {
@@ -304,42 +334,28 @@ export default function DocumentsPage() {
     downloadCsv(headers, rows, `extras-summary-${showId}`);
   }
 
+  // Shared with this report's .xlsx twin via lib/report-rows.ts — the same
+  // pure row-builder feeds both outputs so they can never disagree.
   function exportWithdrawnAndAbsentCsv() {
     const headers = ['Catalogue No', 'Dog Name', 'Breed', 'Sex', 'Classes', 'Owner', 'Exhibitor', 'Status'];
-    const rows = (withdrawnAndAbsent ?? []).map((e) => [
-      e.catalogueNumber ?? '',
-      e.dog?.registeredName ?? 'Junior Handler',
-      e.dog?.breed?.name ?? '',
-      e.dog?.sex === 'dog' ? 'Dog' : e.dog?.sex === 'bitch' ? 'Bitch' : '',
-      (e.entryClasses ?? [])
-        .map((ec) => {
-          const num = ec.showClass?.classNumber;
-          const name = ec.showClass?.classDefinition?.name ?? '';
-          return num != null ? `${num}. ${name}` : name;
-        })
-        .filter(Boolean)
-        .join('; '),
-      e.dog?.owners?.map((o) => o.ownerName).join(' & ') ?? '',
-      e.exhibitor?.name ?? '',
-      e.status === 'withdrawn' ? 'Withdrawn' : 'Absent',
-    ]);
+    const rows = (withdrawnAndAbsent ?? []).map((e) => {
+      const r = buildAbsenteeRow(e);
+      return [r.catalogueNumber, r.dogName, r.breed, r.sex, r.classes, r.owner, r.exhibitor, r.status];
+    });
     downloadCsv(headers, rows, `withdrawn-and-absent-${showId}`);
   }
 
+  // Shared with the Financial Statement .xlsx via lib/report-rows.ts.
   function exportFinancialStatementCsv() {
     const catalogueBuyerEmails = new Set<string>([
       ...(catalogueOrders?.printed ?? []).map((o) => o.email.toLowerCase()),
       ...(catalogueOrders?.online ?? []).map((o) => o.email.toLowerCase()),
     ]);
     const headers = ['Dog', 'Exhibitor', 'Status', 'Classes', 'Fee', 'Catalogue Ordered'];
-    const rows = (entryReport ?? []).map((e) => [
-      e.dog?.registeredName ?? 'Unknown',
-      e.exhibitor?.name ?? 'Unknown',
-      e.status,
-      e.entryClasses.map((ec) => ec.showClass?.classDefinition?.name ?? '').join('; '),
-      (e.totalFee / 100).toFixed(2),
-      e.exhibitor?.email && catalogueBuyerEmails.has(e.exhibitor.email.toLowerCase()) ? 'Yes' : 'No',
-    ]);
+    const rows = (entryReport ?? []).map((e) => {
+      const r = buildFinancialStatementRow(e, catalogueBuyerEmails);
+      return [r.dog, r.exhibitor, r.status, r.classes, r.fee, r.catalogueOrdered];
+    });
     downloadCsv(headers, rows, `financial-statement-${showId}`);
   }
 
@@ -407,12 +423,15 @@ export default function DocumentsPage() {
           <DocSection title="Entry Lists" description="Working lists you check while entries are coming in" icon={FileSpreadsheet}>
             <DocRow icon={<ListOrdered className="size-4" />} label="Exhibitor List" description="Alphabetical list of exhibitors and their dogs">
               <PdfViewerButton icon={<ListOrdered className="size-4" />} label="View" url={`/api/reports/${showId}/catalogue-order`} />
+              <XlsxButton href={`/api/reports/${showId}/catalogue-order-xlsx`} filename={`Exhibitor-List-${showId}.xlsx`} />
             </DocRow>
             <DocRow icon={<BookMarked className="size-4" />} label="Pre-booked Catalogues" description="Who ordered a printed or online catalogue">
               <PdfViewerButton icon={<BookMarked className="size-4" />} label="View" url={`/api/reports/${showId}/catalogue-orders`} />
+              <XlsxButton href={`/api/reports/${showId}/catalogue-orders-xlsx`} filename={`Pre-booked-Catalogues-${showId}.xlsx`} />
             </DocRow>
             <DocRow icon={<BarChart3 className="size-4" />} label="Class Breakdown" description="Entry counts and revenue per class">
               <PdfViewerButton icon={<BarChart3 className="size-4" />} label="View" url={`/api/reports/${showId}/class-breakdown`} />
+              <XlsxButton href={`/api/reports/${showId}/class-breakdown-xlsx`} filename={`Class-Breakdown-${showId}.xlsx`} />
             </DocRow>
             <DocRow icon={<FileSpreadsheet className="size-4" />} label="Entry Report (CSV)" description="Every entry — exhibitor, dog, classes and fee, one row each">
               <CsvButton label="Download CSV" onGenerate={exportEntryReportCsv} />
@@ -536,6 +555,7 @@ export default function DocumentsPage() {
             description="Dogs marked absent on paid entries — matches your printed catalogue, excludes Junior Handling"
           >
             <PdfViewerButton icon={<UserX className="size-4" />} label="View" url={`/api/catalogue/${showId}/absentees`} />
+            <XlsxButton href={`/api/reports/${showId}/absentee-catalogue-xlsx`} filename={`Absentees-${showId}.xlsx`} />
           </DocRow>
           <DocRow
             icon={<FileSpreadsheet className="size-4" />}
@@ -546,6 +566,7 @@ export default function DocumentsPage() {
               label="Download CSV"
               onGenerate={() => downloadBlob(`/api/absentee-report/${showId}`, `Absentee-Report-${showId}.csv`)}
             />
+            <XlsxButton href={`/api/reports/${showId}/absentee-report-xlsx`} filename={`Absentee-Report-${showId}.xlsx`} />
           </DocRow>
           <DocRow
             icon={<FileSpreadsheet className="size-4" />}
@@ -553,10 +574,12 @@ export default function DocumentsPage() {
             description="Every withdrawn or absent entry on a paid order, including Junior Handling"
           >
             <CsvButton label="Download CSV" onGenerate={exportWithdrawnAndAbsentCsv} />
+            <XlsxButton href={`/api/reports/${showId}/withdrawn-absent-xlsx`} filename={`Withdrawn-And-Absent-${showId}.xlsx`} />
           </DocRow>
           {isKcChampionship && (
             <DocRow icon={<UserX className="size-4" />} label="RKC SH01 Return" description="Championship show absentee return for RKC submission">
               <PdfViewerButton icon={<UserX className="size-4" />} label="View" url={`/api/reports/${showId}/sh01`} />
+              <XlsxButton href={`/api/reports/${showId}/sh01-xlsx`} filename={`KC-Absentee-Report-SH01-${showId}.xlsx`} />
             </DocRow>
           )}
           {isWusvShow && (
@@ -603,6 +626,7 @@ export default function DocumentsPage() {
         <DocSection title="Money & Orders" description="Records for the club's books, once entries are paid and the show has run" icon={PoundSterling}>
           <DocRow icon={<PoundSterling className="size-4" />} label="Financial Statement (CSV)" description="Every entry with its fee and catalogue-order status, for club records">
             <CsvButton label="Download CSV" onGenerate={exportFinancialStatementCsv} />
+            <XlsxButton href={`/api/reports/${showId}/financial-statement-xlsx`} filename={`Financial-Statement-${showId}.xlsx`} />
           </DocRow>
           <DocRow icon={<FileSpreadsheet className="size-4" />} label="Payment Report (CSV)" description="Entry fees, add-ons and payment status per order">
             <CsvButton label="Download CSV" onGenerate={exportPaymentReportCsv} />

@@ -1,9 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/server/db';
-import { and, eq, ne, isNull, asc } from 'drizzle-orm';
+import { eq } from 'drizzle-orm';
 import * as schema from '@/server/db/schema';
 import { sanitizeFilename } from '@/lib/slugify';
 import { authenticatePdfRequest } from '@/lib/pdf-utils';
+import { loadAbsenteeLikeEntries, confirmedAbsentNonJhWhere } from '@/server/services/report-queries';
+import { buildAbsenteeRow } from '@/lib/report-rows';
 
 /**
  * Absentee Report API — generates a CSV of dogs that were entered but absent
@@ -43,49 +45,13 @@ export async function GET(
   // Dogs that were entered but absent on the day: confirmed + absent, excluding
   // Junior Handling entries (they carry no dog and aren't a dog absence for the
   // report). Withdrawn entries are deliberately NOT included — a withdrawal
-  // isn't an absence (Mandy 2026-07-06).
-  const allAbsentees = await db.query.entries.findMany({
-    where: and(
-      eq(schema.entries.showId, showId),
-      eq(schema.entries.status, 'confirmed'),
-      eq(schema.entries.absent, true),
-      ne(schema.entries.entryType, 'junior_handler'),
-      isNull(schema.entries.deletedAt)
-    ),
-    with: {
-      dog: {
-        with: {
-          breed: true,
-          owners: { orderBy: [asc(schema.dogOwners.sortOrder)] },
-        },
-      },
-      exhibitor: true,
-      entryClasses: {
-        with: { showClass: { with: { classDefinition: true } } },
-      },
-    },
-    orderBy: [asc(schema.entries.catalogueNumber)],
-  });
+  // isn't an absence (Mandy 2026-07-06). Shared with this report's .xlsx twin
+  // via report-queries.ts / report-rows.ts so the two can't disagree.
+  const allAbsentees = await loadAbsenteeLikeEntries(db, confirmedAbsentNonJhWhere(showId));
 
   const outputFormat = request.nextUrl.searchParams.get('format') ?? 'csv';
 
-  const rows = allAbsentees.map((entry) => ({
-    catalogueNumber: entry.catalogueNumber ?? '',
-    dogName: entry.dog?.registeredName ?? 'Junior Handler',
-    breed: entry.dog?.breed?.name ?? '',
-    sex: entry.dog?.sex === 'dog' ? 'Dog' : entry.dog?.sex === 'bitch' ? 'Bitch' : '',
-    classes: entry.entryClasses
-      .map((ec) => {
-        const num = ec.showClass?.classNumber;
-        const name = ec.showClass?.classDefinition?.name ?? '';
-        return num != null ? `${num}. ${name}` : name;
-      })
-      .filter(Boolean)
-      .join('; '),
-    owner: entry.dog?.owners?.map((o) => o.ownerName).join(' & ') ?? '',
-    exhibitor: entry.exhibitor?.name ?? '',
-    status: entry.status === 'withdrawn' ? 'Withdrawn' : 'Absent',
-  }));
+  const rows = allAbsentees.map(buildAbsenteeRow);
 
   if (outputFormat === 'json') {
     return NextResponse.json({

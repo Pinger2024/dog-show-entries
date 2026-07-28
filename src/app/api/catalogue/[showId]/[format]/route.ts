@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/server/db';
-import { and, eq, ne, isNull, asc, inArray, sql } from 'drizzle-orm';
+import { and, eq, isNull, asc, inArray } from 'drizzle-orm';
 import { getPaidOrderIdsForShow } from '@/server/services/show-metrics';
+import { paidConfirmedAbsentNonJhWhere } from '@/server/services/report-queries';
 import * as schema from '@/server/db/schema';
 import { formatDogName, formatDogNameForCatalogue } from '@/lib/utils';
 import { renderToBuffer } from '@react-pdf/renderer';
@@ -99,23 +100,14 @@ export async function GET(
       orderBy: [asc(schema.showClasses.sortOrder), asc(schema.showClasses.classNumber)],
     }),
     db.query.entries.findMany({
-      where: and(
-        eq(schema.entries.showId, showId),
+      // Absentees = dogs entered but absent on the day, paid orders only,
+      // excluding Junior Handling (Mandy 2026-07-06). Shared with this
+      // format's .xlsx twin via report-queries.ts so the two row sets can
+      // never diverge.
+      where:
         format === 'absentees'
-          ? paidOrderIds && paidOrderIds.length > 0
-            ? and(
-                // Absentees = dogs entered but absent on the day. A withdrawal
-                // isn't an absence, and Junior Handling entries are excluded
-                // from the list (Mandy 2026-07-06). Only on paid orders.
-                inArray(schema.entries.orderId, paidOrderIds),
-                eq(schema.entries.status, 'confirmed'),
-                eq(schema.entries.absent, true),
-                ne(schema.entries.entryType, 'junior_handler')
-              )
-            : sql`false`
-          : eq(schema.entries.status, 'confirmed'),
-        isNull(schema.entries.deletedAt)
-      ),
+          ? paidConfirmedAbsentNonJhWhere(showId, paidOrderIds ?? [])
+          : and(eq(schema.entries.showId, showId), eq(schema.entries.status, 'confirmed'), isNull(schema.entries.deletedAt)),
       with: {
         dog: {
           with: {

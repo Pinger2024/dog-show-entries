@@ -59,7 +59,6 @@ import { searchKcJudges, fetchKcJudgeProfile } from '@/server/services/kc-judges
 import { syncCatalogueNumbers, resortCatalogueNumbers } from '@/server/services/catalogue-numbering';
 import { generateJudgeContractPdf } from '@/server/services/judge-contract-pdf';
 import { normaliseOfficers } from '@/components/schedule/shared/officers';
-import { CATALOGUE_NAME_PATTERN, isCatalogueItem } from '@/lib/catalogue-utils';
 import {
   aggregateShowMetrics,
   computeShowMetrics,
@@ -67,6 +66,12 @@ import {
   getPaidOrderIdsForShow,
   shapeDogsEnteredFields,
 } from '@/server/services/show-metrics';
+import {
+  loadAbsenteeLikeEntries,
+  loadEntryReportEntries,
+  loadCatalogueOrdersSplit,
+  withdrawnOrAbsentPaidWhere,
+} from '@/server/services/report-queries';
 
 /**
  * True if this judge has assignments with any organisation outside the
@@ -845,33 +850,13 @@ export const secretaryRouter = createTRPCRouter({
 
       // An absentee is only meaningful for entries that were actually paid
       // for. Withdrawn entries from abandoned checkouts (order still in
-      // pending_payment) never made the catalogue.
+      // pending_payment) never made the catalogue. Query shared with this
+      // list's xlsx twin (see the Documents & Reports page) via
+      // report-queries.ts so the two can't disagree.
       const paidOrderIds = await getPaidOrderIdsForShow(ctx.db, input.showId);
       if (paidOrderIds.length === 0) return [];
 
-      return ctx.db.query.entries.findMany({
-        where: and(
-          eq(entries.showId, input.showId),
-          inArray(entries.orderId, paidOrderIds),
-          sql`(${entries.status} = 'withdrawn' OR ${entries.absent} = true)`,
-          isNull(entries.deletedAt)
-        ),
-        with: {
-          dog: {
-            with: {
-              breed: true,
-              owners: { orderBy: [asc(dogOwners.sortOrder)] },
-            },
-          },
-          exhibitor: true,
-          entryClasses: {
-            with: {
-              showClass: { with: { classDefinition: true } },
-            },
-          },
-        },
-        orderBy: [asc(entries.catalogueNumber)],
-      });
+      return loadAbsenteeLikeEntries(ctx.db, withdrawnOrAbsentPaidWhere(input.showId, paidOrderIds));
     }),
 
   // ── Reports ────────────────────────────────────────────────
@@ -884,32 +869,10 @@ export const secretaryRouter = createTRPCRouter({
       // Only entries on paid orders belong in reports — abandoned
       // pending_payment checkouts produce ghost entries that inflate
       // "Total Entries" and leak non-paying exhibitors into the tally.
+      // Query shared with the Financial Statement xlsx via report-queries.ts
+      // so the CSV and the spreadsheet can't disagree.
       const paidOrderIds = await getPaidOrderIdsForShow(ctx.db, input.showId);
-      if (paidOrderIds.length === 0) return [];
-
-      return ctx.db.query.entries.findMany({
-        where: and(
-          eq(entries.showId, input.showId),
-          inArray(entries.orderId, paidOrderIds),
-          isNull(entries.deletedAt)
-        ),
-        with: {
-          dog: {
-            with: {
-              breed: { with: { group: true } },
-              owners: true,
-            },
-          },
-          exhibitor: true,
-          entryClasses: {
-            with: {
-              showClass: { with: { classDefinition: true, breed: true } },
-            },
-          },
-          payments: true,
-        },
-        orderBy: [asc(entries.entryDate)],
-      });
+      return loadEntryReportEntries(ctx.db, input.showId, paidOrderIds);
     }),
 
   // Entry set for the Financial page's "Entries by Class" card. Unlike
@@ -1182,58 +1145,9 @@ export const secretaryRouter = createTRPCRouter({
     .query(async ({ ctx, input }) => {
       await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId, { callerIsAdmin: ctx.callerIsAdmin });
 
-      // Find catalogue sundry items for this show
-      const catalogueItems = await ctx.db
-        .select({ id: sundryItems.id, name: sundryItems.name })
-        .from(sundryItems)
-        .where(
-          and(
-            eq(sundryItems.showId, input.showId),
-            ilike(sundryItems.name, CATALOGUE_NAME_PATTERN)
-          )
-        );
-
-      if (catalogueItems.length === 0) return { printed: [], online: [] };
-
-      const catalogueItemIds = catalogueItems.map((i) => i.id);
-
-      // Only paid orders count — a catalogue "order" that never paid
-      // isn't an order the club needs to fulfil.
-      const catalogueOrders = await ctx.db
-        .select({
-          itemName: sundryItems.name,
-          quantity: orderSundryItems.quantity,
-          exhibitorName: users.name,
-          exhibitorEmail: users.email,
-        })
-        .from(orderSundryItems)
-        .innerJoin(sundryItems, eq(orderSundryItems.sundryItemId, sundryItems.id))
-        .innerJoin(orders, eq(orderSundryItems.orderId, orders.id))
-        .innerJoin(users, eq(orders.exhibitorId, users.id))
-        .where(
-          and(
-            inArray(orderSundryItems.sundryItemId, catalogueItemIds),
-            eq(orders.status, 'paid')
-          )
-        );
-
-      const printed: { name: string; email: string; quantity: number }[] = [];
-      const online: { name: string; email: string; quantity: number }[] = [];
-
-      for (const row of catalogueOrders) {
-        const entry = {
-          name: row.exhibitorName ?? '—',
-          email: row.exhibitorEmail,
-          quantity: row.quantity,
-        };
-        if (row.itemName.toLowerCase().includes('print')) {
-          printed.push(entry);
-        } else {
-          online.push(entry);
-        }
-      }
-
-      return { printed, online };
+      // Query shared with the Financial Statement xlsx's catalogue-buyer
+      // check via report-queries.ts so the two can't disagree.
+      return loadCatalogueOrdersSplit(ctx.db, input.showId);
     }),
 
   // ── Dog editing (for secretary) ──────────────────────────
