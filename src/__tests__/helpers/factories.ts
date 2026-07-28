@@ -268,6 +268,8 @@ export async function makeJudgeAssignment(opts: {
   judgeId: string;
   breedId?: string;
   sex?: 'dog' | 'bitch' | null;
+  ringId?: string;
+  isSpecialAwardsClassesJudge?: boolean;
 }) {
   const [row] = await testDb
     .insert(judgeAssignments)
@@ -276,6 +278,8 @@ export async function makeJudgeAssignment(opts: {
       judgeId: opts.judgeId,
       breedId: opts.breedId,
       sex: opts.sex,
+      ringId: opts.ringId,
+      isSpecialAwardsClassesJudge: opts.isSpecialAwardsClassesJudge,
     })
     .returning();
   return row;
