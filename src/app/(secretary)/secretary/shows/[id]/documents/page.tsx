@@ -39,20 +39,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Label } from '@/components/ui/label';
-import { Switch } from '@/components/ui/switch';
 import { downloadCsv } from '../_lib/show-utils';
 import { useShowId } from '../_lib/show-context';
 import { PdfViewerButton } from '../_components/pdf-viewer-button';
 import { buildAbsenteeRow, buildFinancialStatementRow } from '@/lib/report-rows';
-
-const placementPreviews = [
-  { label: '1st', colour: 'bg-red-100 text-red-800 border-red-300' },
-  { label: '2nd', colour: 'bg-blue-100 text-blue-800 border-blue-300' },
-  { label: '3rd', colour: 'bg-yellow-100 text-yellow-800 border-yellow-300' },
-  { label: 'Reserve', colour: 'bg-green-100 text-green-800 border-green-300' },
-  { label: 'VHC', colour: 'bg-purple-100 text-purple-800 border-purple-300' },
-];
 
 /**
  * Fetch a same-origin file and kick off a download via a temporary anchor +
@@ -250,13 +240,11 @@ export default function DocumentsPage() {
   const [ringNumberFormat, setRingNumberFormat] = useState<'grid' | 'single'>('grid');
   const ringNumbersHref = `/api/ring-numbers/${showId}${ringNumberFormat === 'single' ? '?format=single' : ''}`;
 
-  // Prize card options
-  const [prizeCardPlacements, setPrizeCardPlacements] = useState('5');
-  const [includeJudge, setIncludeJudge] = useState(true);
-  const [prizeCardStyle, setPrizeCardStyle] = useState<'filled' | 'outline'>('outline');
-  const prizeCardQuery = `placements=${prizeCardPlacements}&judge=${includeJudge}&style=${prizeCardStyle}`;
-  const prizeCardHref = `/api/prize-cards/${showId}?${prizeCardQuery}`;
-  const prizeCardPrintHref = `/api/prize-cards/${showId}/print?${prizeCardQuery}`;
+  // Prize cards — official template design, one page per placement
+  // (1st/2nd/3rd/Reserve) with the club/show/judge details overprinted.
+  // No customisation options: the artwork and layout are fixed.
+  const prizeCardHref = `/api/prize-cards/${showId}`;
+  const prizeCardPrintHref = `/api/prize-cards/${showId}/print`;
 
   function exportEntryReportCsv() {
     const headers = ['Entry Date', 'Status', 'Exhibitor', 'Email', 'Dog', 'Breed', 'Group', 'Sex', 'Classes', 'Fee (£)', 'NFC'];
@@ -450,7 +438,7 @@ export default function DocumentsPage() {
             <DocRow icon={<Award className="size-4" />} label="Award Board" description="A4 landscape wipe-clean grid — laminate and re-use to record placements and best-of awards on the day">
               <PdfViewerButton icon={<Award className="size-4" />} label="View" url={`/api/award-board/${showId}`} />
             </DocRow>
-            <DocRow icon={<Award className="size-4" />} label="Prize Cards" description="A5 prize cards for 1st through to HC — customise below, then download">
+            <DocRow icon={<Award className="size-4" />} label="Prize Cards" description="Official A5 template for 1st, 2nd, 3rd and Reserve, with your club, show and judge details printed on">
               {downloadingKey === 'prize-print' ? (
                 <Button disabled className="min-h-[2.75rem]"><Loader2 className="size-4 animate-spin" />Downloading…</Button>
               ) : (
@@ -460,53 +448,6 @@ export default function DocumentsPage() {
               )}
               <PdfViewerButton icon={<Award className="size-4" />} label="Preview" url={prizeCardHref} variant="outline" />
             </DocRow>
-
-            <div className="flex flex-wrap items-end gap-4 border-t pt-4">
-              <div className="space-y-1.5">
-                <Label htmlFor="placements">Placements per class</Label>
-                <Select value={prizeCardPlacements} onValueChange={setPrizeCardPlacements}>
-                  <SelectTrigger id="placements" className="w-full sm:w-40">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent position="popper">
-                    <SelectItem value="1">1st only</SelectItem>
-                    <SelectItem value="2">1st – 2nd</SelectItem>
-                    <SelectItem value="3">1st – 3rd</SelectItem>
-                    <SelectItem value="4">1st – Reserve</SelectItem>
-                    <SelectItem value="5">1st – VHC</SelectItem>
-                    <SelectItem value="6">1st – HC</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="card-style">Card Style</Label>
-                <Select value={prizeCardStyle} onValueChange={(v) => setPrizeCardStyle(v as 'filled' | 'outline')}>
-                  <SelectTrigger id="card-style" className="w-full sm:w-40">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent position="popper">
-                    <SelectItem value="filled">Filled (coloured bg)</SelectItem>
-                    <SelectItem value="outline">Outline (white bg)</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="flex items-center gap-2">
-                <Switch id="judge" checked={includeJudge} onCheckedChange={setIncludeJudge} />
-                <Label htmlFor="judge">Include judge name</Label>
-              </div>
-            </div>
-            <div className="flex flex-wrap gap-2 pt-1">
-              {placementPreviews.map((p) => (
-                <div key={p.label} className={`rounded-md border px-3 py-1.5 text-xs font-medium ${p.colour}`}>
-                  {p.label}
-                </div>
-              ))}
-              <p className="self-center text-xs text-muted-foreground">
-                {(stats?.totalClasses ?? 0) > 0
-                  ? `${stats?.totalClasses ?? 0} classes × ${prizeCardPlacements} placements`
-                  : 'Colour scheme preview'}
-              </p>
-            </div>
           </DocSection>
         </div>
       </div>

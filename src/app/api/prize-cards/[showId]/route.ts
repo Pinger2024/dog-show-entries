@@ -1,15 +1,21 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/server/db';
-import { eq, asc } from 'drizzle-orm';
+import { eq } from 'drizzle-orm';
 import * as schema from '@/server/db/schema';
 import { renderToBuffer } from '@react-pdf/renderer';
-import { PrizeCards } from '@/components/prize-cards/prize-cards';
-import type { PrizeCardShowInfo, PrizeCardClass, PrizeCardStyle } from '@/components/prize-cards/prize-cards';
+import { PrizeCardComposite } from '@/components/prize-cards/prize-card-composite';
+import type { CompositeShowInfo } from '@/components/prize-cards/prize-card-composite';
 import React from 'react';
 import { sanitizeFilename } from '@/lib/slugify';
-import { authenticatePdfRequest, validateRasterLogoUrl, makePdfResponse } from '@/lib/pdf-utils';
-import { buildClassLabelMap, isSpecialAwardClass } from '@/lib/class-labels';
+import { authenticatePdfRequest, makePdfResponse } from '@/lib/pdf-utils';
 
+/**
+ * Prize Cards PDF endpoint — the official template design. Renders the
+ * Mixam-designed artwork (public/prize-cards/*.jpg) as a full-bleed A5
+ * background with the club/show/judge text overprinted, one page per
+ * placement (1st/2nd/3rd/Reserve). See prize-card-composite.tsx for the
+ * rendering details.
+ */
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ showId: string }> }
@@ -22,7 +28,12 @@ export async function GET(
 
   const show = await db.query.shows.findFirst({
     where: eq(schema.shows.id, showId),
-    with: { organisation: true },
+    with: {
+      organisation: true,
+      judgeAssignments: {
+        with: { judge: true },
+      },
+    },
   });
 
   if (!show) {
@@ -32,85 +43,46 @@ export async function GET(
   const authResult = await authenticatePdfRequest(show.organisationId);
   if (authResult instanceof NextResponse) return authResult;
 
-  // Parse query params
-  const searchParams = request.nextUrl.searchParams;
-  const includeJudgeName = searchParams.get('judge') !== 'false';
-  const placements = Math.min(Math.max(parseInt(searchParams.get('placements') ?? '5'), 1), 5);
-  const cardStyle = (searchParams.get('style') === 'outline' ? 'outline' : 'filled') as PrizeCardStyle;
-  // filter=sac restricts the output to Special Award Classes only — used
-  // when the secretary wants to print just the SAC cards locally rather
-  // than the full set (Amanda 2026-05-27).
-  const filterSac = searchParams.get('filter') === 'sac';
+  // Pick the "main" breed judges — same convention as
+  // prize-card-overprint.tsx (breed=null AND sex=null is the Junior
+  // Handling judge and is excluded; the Special Award Classes judge
+  // shares that same null/null shape so it's excluded too):
+  //   - breed=X                  → main judge for that breed
+  //   - breed=null AND sex!=null → sex-specific main judge
+  //     (single-breed shows leave breed implicit)
+  const mainAssignments = show.judgeAssignments.filter((a) => {
+    if (!a.judge) return false;
+    if (a.breedId === show.breedId && show.breedId !== null) return true;
+    if (a.breedId === null && a.sex !== null) return true;
+    return false;
+  });
 
-  // Run independent DB queries and logo validation in parallel
-  const [showClasses, judgeAssignments, safeLogoUrl] = await Promise.all([
-    db.query.showClasses.findMany({
-      where: eq(schema.showClasses.showId, showId),
-      with: {
-        classDefinition: true,
-        breed: true,
-      },
-      orderBy: [asc(schema.showClasses.sortOrder), asc(schema.showClasses.classNumber)],
-    }),
-    db.query.judgeAssignments.findMany({
-      where: eq(schema.judgeAssignments.showId, showId),
-      with: { judge: true },
-    }),
-    validateRasterLogoUrl(show.organisation?.logoUrl),
-  ]);
-
-  const judgeByBreed = new Map<string | null, string>();
-  // SAC classes (Special Award Class — Junior / PG / Open) have a
-  // dedicated judge flagged on the assignment with
-  // isSpecialAwardsClassesJudge. The breed map can't surface them
-  // (their breedId is null and they collide with the breed-judge's
-  // null-breed assignment), so we pick the SAC judge separately and
-  // route SAC classes to them (Amanda 2026-05-27).
-  let sacJudgeName: string | null = null;
-  for (const ja of judgeAssignments) {
-    if (!ja.judge?.name) continue;
-    if (ja.isSpecialAwardsClassesJudge) {
-      sacJudgeName = ja.judge.name;
-    } else {
-      judgeByBreed.set(ja.breedId, ja.judge.name);
-    }
+  // Dedupe by judge id — a judge assigned to both dog and bitch classes
+  // only needs one card variant.
+  const seen = new Set<string>();
+  const breedJudges: { name: string; affix: string | null }[] = [];
+  for (const a of mainAssignments) {
+    if (seen.has(a.judge!.id)) continue;
+    seen.add(a.judge!.id);
+    breedJudges.push({
+      name: a.judge!.name,
+      affix: a.judge!.kennelClubAffix,
+    });
   }
 
-  const classLabelMap = buildClassLabelMap(showClasses, show.showRuleset);
-
-  const filteredShowClasses = filterSac
-    ? showClasses.filter((sc) => isSpecialAwardClass(sc))
-    : showClasses;
-
-  const classes: PrizeCardClass[] = filteredShowClasses.map((sc) => ({
-    classLabel: classLabelMap.get(sc.id) ?? '',
-    className: sc.classDefinition?.name ?? 'Unknown Class',
-    sex: sc.sex,
-    breedName: sc.breed?.name ?? null,
-    judgeName: isSpecialAwardClass(sc)
-      ? sacJudgeName
-      : judgeByBreed.get(sc.breedId) ?? judgeByBreed.get(null) ?? null,
-  }));
-
-  const showInfo: PrizeCardShowInfo = {
-    name: show.name,
+  const showInfo: CompositeShowInfo = {
+    clubName: show.organisation?.name ?? 'Unknown Club',
+    showName: show.name,
     showType: show.showType,
     date: show.startDate,
-    organisation: show.organisation?.name ?? null,
-    logoUrl: safeLogoUrl,
+    judges: breedJudges,
   };
 
   try {
-    const pdfDocument = React.createElement(PrizeCards, {
-      show: showInfo,
-      classes,
-      includeJudgeName,
-      placements,
-      cardStyle,
-    });
+    const pdfDocument = React.createElement(PrizeCardComposite, { show: showInfo });
     const buffer = await renderToBuffer(pdfDocument);
     const filename = `${sanitizeFilename(show.name)}-Prize-Cards.pdf`;
-    const isPreview = searchParams.has('preview');
+    const isPreview = request.nextUrl.searchParams.has('preview');
     return makePdfResponse(buffer, filename, isPreview);
   } catch (err) {
     console.error('Prize card PDF generation failed:', err);
