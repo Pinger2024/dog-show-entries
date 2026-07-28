@@ -344,57 +344,83 @@ const s = StyleSheet.create({
 });
 
 // ── Best Awards page styles ──
+// Mandy photographed this page 2026-07-28: its three equal-width columns
+// printed dashed dividers at ~1/3 and ~2/3 across the page, but the club's
+// awards-board slots (and the perforated paper) are cut at a fixed 28mm from
+// the right edge — the same geometry the per-class pages already use. This
+// reuses the SAME STRIP_WIDTH constant (not a re-declared number) so the
+// dashed guides land at the identical x-position on every page in the book.
+// Unlike the per-class pages — which pair a fixed 34mm Judge's strip against
+// a wide notes column — this page has no notes column, so the Judge's copy
+// takes whatever's left after the two 28mm tear-offs (flex: 1).
 const bestAwardsStyles = StyleSheet.create({
-  // The sign-off page has no notes column, so its triplicate columns share the
-  // full page width evenly (unlike the per-class strips, which are a fixed
-  // 28mm). Kept full-width until Mandy tells us the BOB/BP slips also need the
-  // 28mm awards-board size.
-  column: {
+  columnJudge: {
     flex: 1,
+    borderRightWidth: 1.5,
+    borderRightColor: '#000',
+  },
+  // Secretary strip — a true 28mm, dashed divider (tears off).
+  column: {
+    width: STRIP_WIDTH,
+    flexShrink: 0,
     borderRightWidth: 1,
     borderRightColor: '#000',
     borderRightStyle: 'dashed',
   },
+  // Awards Board strip (last) — a true 28mm, flush to the page's right edge.
   columnLast: {
-    flex: 1,
+    width: STRIP_WIDTH,
+    flexShrink: 0,
   },
+  // Fixed height (mirrors columnClassHeader on the class pages) so the
+  // header occupies the same vertical space whether or not "Best Awards"
+  // wraps in the narrow 28mm strips — otherwise the award rows below it
+  // would start at different heights in each column.
   columnHeader: {
-    padding: 6,
+    height: 34,
+    overflow: 'hidden',
+    padding: 5,
     backgroundColor: '#f4f4f4',
     borderBottomWidth: 1,
     borderBottomColor: '#000',
   },
   columnHeaderLabel: {
-    fontSize: 9,
+    fontSize: 7,
     textTransform: 'uppercase',
-    letterSpacing: 0.8,
+    letterSpacing: 0.6,
     color: '#666',
   },
   columnHeaderTitle: {
-    fontSize: 12,
+    fontSize: 10,
     fontWeight: 'bold',
     textTransform: 'uppercase',
   },
+  // Fixed height, same in every column, sized to fit the longest award name
+  // ("Reserve Bitch Challenge Certificate") wrapped across several lines in
+  // the 28mm strips at the reduced font size below. Label stacks ABOVE the
+  // write line (rather than side-by-side, as the class page placement rows
+  // do for short "1st"/"2nd" labels) because a long award name needs the
+  // strip's full width to wrap into, not half of it.
   awardRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-end',
+    height: 46,
+    flexDirection: 'column',
+    justifyContent: 'space-between',
     borderBottomWidth: 0.5,
     borderBottomColor: '#ccc',
-    minHeight: 32,
     paddingHorizontal: 6,
-    paddingBottom: 3,
+    paddingTop: 5,
+    paddingBottom: 5,
+    overflow: 'hidden',
   },
   awardLabel: {
-    fontSize: 9,
+    fontSize: 7,
     fontWeight: 'bold',
-    flexBasis: '50%',
+    textTransform: 'uppercase',
+    letterSpacing: 0.3,
   },
   awardWriteLine: {
-    flex: 1,
     borderBottomWidth: 1,
     borderBottomColor: '#888',
-    marginLeft: 4,
-    marginBottom: 4,
     height: 1,
   },
 });
@@ -511,15 +537,21 @@ interface ColumnHeaderProps {
 
 function BestAwardsColumn({
   awards,
-  isLast,
+  variant,
   copyLabel,
 }: {
   awards: string[];
-  isLast?: boolean;
+  variant: 'judge' | 'secretary' | 'awardsBoard';
   copyLabel: string;
 }) {
+  const columnStyle =
+    variant === 'judge'
+      ? bestAwardsStyles.columnJudge
+      : variant === 'awardsBoard'
+        ? bestAwardsStyles.columnLast
+        : bestAwardsStyles.column;
   return (
-    <View style={isLast ? bestAwardsStyles.columnLast : bestAwardsStyles.column}>
+    <View style={columnStyle}>
       <View style={s.copyLabelBox}><Text style={s.copyLabel}>{copyLabel}</Text></View>
       <View style={bestAwardsStyles.columnHeader}>
         <Text style={bestAwardsStyles.columnHeaderLabel}>Sign-off</Text>
@@ -714,9 +746,9 @@ export function JudgesBook({
           </View>
 
           <View style={s.body}>
-            <BestAwardsColumn awards={show.bestAwards} copyLabel="Judge's copy — keep" />
-            <BestAwardsColumn awards={show.bestAwards} copyLabel="✂ Tear off — Secretary" />
-            <BestAwardsColumn awards={show.bestAwards} copyLabel="✂ Tear off — Awards Board" isLast />
+            <BestAwardsColumn awards={show.bestAwards} variant="judge" copyLabel="Judge's copy — keep" />
+            <BestAwardsColumn awards={show.bestAwards} variant="secretary" copyLabel="✂ Tear off — Secretary" />
+            <BestAwardsColumn awards={show.bestAwards} variant="awardsBoard" copyLabel="✂ Tear off — Awards Board" />
           </View>
 
           <Text
