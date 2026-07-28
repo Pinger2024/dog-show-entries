@@ -217,7 +217,7 @@ const s = StyleSheet.create({
   placementColumnLast: {
     width: STRIP_WIDTH,
   },
-  // Fixed-height header band so a label that wraps to two lines (e.g. "✂ Tear
+  // Fixed-height header band so a label that wraps to two lines (e.g. "Tear
   // off — Awards Board") doesn't push that column's placement rows out of line
   // with the other two columns (Mandy 2026-06-16). All three headers are now
   // the same height and the text is vertically centred within.
@@ -721,8 +721,8 @@ export function JudgesBook({
               {/* Right: three tearoff placement columns */}
               <View style={s.placementsSection}>
                 <PlacementColumn {...columnProps} copyLabel="Judge's copy — keep" wide />
-                <PlacementColumn {...columnProps} copyLabel="✂ Tear off — Secretary" />
-                <PlacementColumn {...columnProps} copyLabel="✂ Tear off — Awards Board" isLast />
+                <PlacementColumn {...columnProps} copyLabel="Tear off — Secretary" />
+                <PlacementColumn {...columnProps} copyLabel="Tear off — Awards Board" isLast />
               </View>
             </View>
 
@@ -752,8 +752,8 @@ export function JudgesBook({
 
           <View style={s.body}>
             <BestAwardsColumn awards={show.bestAwards} variant="judge" copyLabel="Judge's copy — keep" />
-            <BestAwardsColumn awards={show.bestAwards} variant="secretary" copyLabel="✂ Tear off — Secretary" />
-            <BestAwardsColumn awards={show.bestAwards} variant="awardsBoard" copyLabel="✂ Tear off — Awards Board" />
+            <BestAwardsColumn awards={show.bestAwards} variant="secretary" copyLabel="Tear off — Secretary" />
+            <BestAwardsColumn awards={show.bestAwards} variant="awardsBoard" copyLabel="Tear off — Awards Board" />
           </View>
 
           <Text
