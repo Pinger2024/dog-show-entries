@@ -63,9 +63,19 @@ describe('steward book — classes with no entries', () => {
     expect(sections.find((s) => s.key === 'jh')!.classes[0]!.className).toBe('JHA Handling (6-11)');
   });
 
-  it('puts a sexless, non-handling class in the Dogs section rather than losing it', () => {
+  it('puts a Special Award Class in its own section, not Dogs', () => {
+    // Was: fell through to the Dogs bucket (no section, no judge line) —
+    // fixed 2026-07-28, see special-award-classes.test.ts for the full
+    // regression covering Mandy's "mirror the catalogue order" report.
     const sections = buildJudgingSections([
       cls({ className: 'Special Award Class - Open', sex: null, classLabel: 'C', entries: [dog] }),
+    ]);
+    expect(sections.map((s) => s.key)).toEqual(['special']);
+  });
+
+  it('still routes a genuinely unknown sexless class to Dogs (the true catch-all)', () => {
+    const sections = buildJudgingSections([
+      cls({ className: 'Mystery Class', sex: null, classLabel: undefined, entries: [dog] }),
     ]);
     expect(sections.map((s) => s.key)).toEqual(['dog']);
   });

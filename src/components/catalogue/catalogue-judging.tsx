@@ -139,6 +139,18 @@ const s = StyleSheet.create({
     marginTop: 6,
     marginBottom: 4,
   },
+  // Judge line under a section band (Special Awards / Junior Handling) —
+  // mirrors catalogue-ringside.tsx's sexBandJudge, scaled to this format's
+  // denser type.
+  sexBandJudge: {
+    fontFamily: 'Inter',
+    fontSize: 7,
+    fontStyle: 'italic',
+    color: C.textMedium,
+    textAlign: 'center',
+    marginTop: -2,
+    marginBottom: 5,
+  },
   // Class header row — thin primary strip with class name + entry count
   classHeader: {
     flexDirection: 'row',
@@ -250,13 +262,18 @@ const s = StyleSheet.create({
 });
 
 type Section = {
-  key: 'dog' | 'bitch' | 'jh';
+  key: 'dog' | 'bitch' | 'special' | 'jh';
   label: string;
   classes: ClassGroup[];
+  /** Named judge for competitions that have their own, apart from the breed
+   *  judge (Special Awards Classes, Junior Handling) — attached by the
+   *  caller (needs `show.judgeDisplayList`, which this pure function
+   *  doesn't take). */
+  judge?: string | null;
 };
 
 /**
- * Split a show's classes into the steward book's three sections.
+ * Split a show's classes into the steward book's FOUR sections.
  *
  * Classes with NO entries are kept. Mandy 2026-07-27: "steward book, can we
  * include classes with no entries ie baby puppy". A steward works down the
@@ -269,24 +286,45 @@ type Section = {
  * steward book disagreed with the by-class catalogue, which has always
  * printed them.
  *
+ * Special Award Classes (sex=null, name "Special Award Class - …") used to
+ * fall through the else branch below into the Dogs bucket — no section
+ * heading, no judge line, silently mixed in after Veteran Dog. Mandy,
+ * South Western 2026-07-28: "the stewards book should also mirror the
+ * catalogue order" — the Standard Catalogue (catalogue-ringside.tsx) has
+ * always given Special Awards its own section between Bitch and Junior
+ * Handling; the steward book just never grew the matching bucket. Detected
+ * the SAME way ringside does — a `/special award/i` match on the class
+ * name — rather than the shared `isSpecialAwardClass` predicate (lib/
+ * class-labels.ts), because that predicate needs `classDefinition.type`/
+ * `.name`, which `ClassGroup` (this function's input, shared with ringside
+ * via `groupByClass`) doesn't carry; widening `ClassGroup` to add it would
+ * ripple into the Standard Catalogue too, which is out of scope for this
+ * fix (Mandy's 9 Aug deadline — not refactoring three working documents to
+ * fix a fourth).
+ *
  * Exported for testing — the rendering around it is a PDF tree, but which
- * classes reach the page is plain logic and should be asserted as such.
+ * classes reach which section, and the section order, is plain logic and
+ * should be asserted as such.
  */
 export function buildJudgingSections(allClasses: ClassGroup[]): Section[] {
   // JH classes have sex=null and a class name containing "handling".
   const dogClasses: ClassGroup[] = [];
   const bitchClasses: ClassGroup[] = [];
+  const specialClasses: ClassGroup[] = [];
   const jhClasses: ClassGroup[] = [];
   for (const cls of allClasses) {
     const isJh = cls.sex == null && /handling|handler/i.test(cls.className);
     if (isJh) {
       jhClasses.push(cls);
+    } else if (/special award/i.test(cls.className)) {
+      specialClasses.push(cls);
     } else if (cls.sex === 'dog') {
       dogClasses.push(cls);
     } else if (cls.sex === 'bitch') {
       bitchClasses.push(cls);
     } else {
-      // Unknown/mixed — treat as dog section so it's not orphaned
+      // Truly unknown (neither dog, bitch, JH, nor special) — treat as dog
+      // section so it's not orphaned.
       dogClasses.push(cls);
     }
   }
@@ -294,6 +332,7 @@ export function buildJudgingSections(allClasses: ClassGroup[]): Section[] {
   const sections: Section[] = [];
   if (dogClasses.length > 0) sections.push({ key: 'dog', label: 'Dogs', classes: dogClasses });
   if (bitchClasses.length > 0) sections.push({ key: 'bitch', label: 'Bitches', classes: bitchClasses });
+  if (specialClasses.length > 0) sections.push({ key: 'special', label: 'Special Awards Classes', classes: specialClasses });
   if (jhClasses.length > 0) sections.push({ key: 'jh', label: 'Junior Handling', classes: jhClasses });
   return sections;
 }
@@ -301,7 +340,29 @@ export function buildJudgingSections(allClasses: ClassGroup[]): Section[] {
 export function CatalogueJudging({ show, entries }: Props) {
   const allClasses = groupByClassShared(entries, show);
   const isChampionship = show.showType === 'championship';
-  const activeSections = buildJudgingSections(allClasses);
+
+  // Special Awards Classes and Junior Handling each have their own judge,
+  // apart from the breed judge — sourced from the "role — name" display
+  // list, same parse as catalogue-ringside.tsx's judgeForRole so the two
+  // catalogues can't drift on who's named.
+  const LABEL_SEP = ' — ';
+  const judgeForRole = (test: RegExp): string | null => {
+    for (const label of show.judgeDisplayList ?? []) {
+      const i = label.indexOf(LABEL_SEP);
+      if (i < 0) continue;
+      if (test.test(label.slice(0, i))) return label.slice(i + LABEL_SEP.length);
+    }
+    return null;
+  };
+  const activeSections = buildJudgingSections(allClasses).map((section) => ({
+    ...section,
+    judge:
+      section.key === 'special'
+        ? judgeForRole(/special award/i)
+        : section.key === 'jh'
+          ? judgeForRole(/junior handl/i)
+          : undefined,
+  }));
 
   // Build judge list for cover
   const judgeList: { name: string; label: string }[] = [];
@@ -408,6 +469,9 @@ export function CatalogueJudging({ show, entries }: Props) {
             <Text style={s.sexBand} minPresenceAhead={80}>
               {section.label}
             </Text>
+            {section.judge && (
+              <Text style={s.sexBandJudge}>Judge: {section.judge}</Text>
+            )}
 
             {section.classes.map((classGroup, classIdx) => {
               const sorted = sortEntries(classGroup.entries);
