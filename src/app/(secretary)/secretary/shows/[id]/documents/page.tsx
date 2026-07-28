@@ -600,7 +600,7 @@ export default function DocumentsPage() {
             settled, which is why they sit here rather than with the entry
             lists (Mandy's rule: group by when you PRODUCE it). */}
         <DocSection title="Money & Orders" description="Records for the club's books, once entries are paid and the show has run" icon={PoundSterling}>
-          <DocRow icon={<PoundSterling className="size-4" />} label="Financial Statement (CSV)" description="Every entry with its fee and catalogue-order status, for club records">
+          <DocRow icon={<PoundSterling className="size-4" />} label="Full Financial Statement (CSV)" description="Every entry with its fee and catalogue-order status, for club records">
             <CsvButton label="Download CSV" onGenerate={exportFinancialStatementCsv} />
             <XlsxButton href={`/api/reports/${showId}/financial-statement-xlsx`} filename={`Financial-Statement-${showId}.xlsx`} />
           </DocRow>
