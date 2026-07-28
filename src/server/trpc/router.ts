@@ -15,6 +15,7 @@ import { onboardingRouter } from './routers/onboarding';
 import { invitationsRouter } from './routers/invitations';
 import { adminRouter } from './routers/admin';
 import { adminDashboardRouter } from './routers/admin-dashboard';
+import { adminInvoicesRouter } from './routers/admin-invoices';
 import { secretaryApplicationsRouter } from './routers/secretary-applications';
 import { proRouter } from './routers/pro';
 import { backlogRouter } from './routers/backlog';
@@ -40,6 +41,7 @@ export const appRouter = createTRPCRouter({
   invitations: invitationsRouter,
   admin: adminRouter,
   adminDashboard: adminDashboardRouter,
+  adminInvoices: adminInvoicesRouter,
   applications: secretaryApplicationsRouter,
   pro: proRouter,
   backlog: backlogRouter,
