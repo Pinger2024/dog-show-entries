@@ -242,6 +242,74 @@ describe('POST /api/webhooks/stripe — Stripe fee/net capture', () => {
     expect(payment?.feePence).toBeNull();
     expect(payment?.netPence).toBeNull();
   });
+
+  // Bug found in review: a refund row shares the SAME stripe_payment_id as
+  // the original payment (one PaymentIntent per Stripe refund). Stripe can
+  // redeliver a payment_intent.succeeded event well after a refund exists
+  // (recovery redelivery, sometimes days later) — without excluding
+  // type='refund' from the fee-capture UPDATE's WHERE clause, that replay
+  // would overwrite the refund row's feePence:0/netPence:-amount with the
+  // ORIGINAL CHARGE's positive fee/net, corrupting the reconciliation this
+  // feature exists for.
+  it('does not overwrite an existing refund row when the succeeded event is replayed (fee-capture must exclude type=refund)', async () => {
+    const { entry } = await entryReadyForPayment();
+    const intentId = 'pi_test_fee_capture_refund_replay';
+    const originalPayment = await makePayment({
+      entryId: entry.id,
+      stripePaymentId: intentId,
+      amount: 2500,
+      status: 'refunded',
+    });
+
+    // A refund row already exists for this PaymentIntent — same stripe_payment_id,
+    // written by executeStripeRefund with the never-returned-fee convention.
+    const [refundRow] = await testDb
+      .insert(payments)
+      .values({
+        entryId: entry.id,
+        stripePaymentId: intentId,
+        amount: 2500,
+        status: 'refunded',
+        type: 'refund',
+        feePence: 0,
+        netPence: -2500,
+      })
+      .returning();
+
+    // Stripe redelivers the original succeeded event (retrying delivery, or a
+    // dashboard replay) well after the refund has already happened.
+    injectStripeEvent(
+      {
+        type: 'payment_intent.succeeded',
+        data: { object: { id: intentId, metadata: { entryId: entry.id } } },
+      },
+      {
+        retrievePaymentIntent: {
+          balance_transaction: { id: 'txn_replay', fee: 75, net: 2425 },
+          payment_method_details: { card: { brand: 'visa', country: 'GB' } },
+        },
+      }
+    );
+    const res = await stripeWebhook(buildStripeWebhookRequest() as never);
+    expect(res.status).toBe(200);
+
+    // The refund row must be untouched — still feePence 0 / netPence -2500.
+    const refreshedRefund = await testDb.query.payments.findFirst({
+      where: eq(payments.id, refundRow!.id),
+    });
+    expect(refreshedRefund?.feePence).toBe(0);
+    expect(refreshedRefund?.netPence).toBe(-2500);
+    expect(refreshedRefund?.balanceTransactionId).toBeNull();
+
+    // The original (non-refund) payment row DOES get the captured values —
+    // proving the WHERE clause targets it, not that capture silently no-oped.
+    const refreshedOriginal = await testDb.query.payments.findFirst({
+      where: eq(payments.id, originalPayment!.id),
+    });
+    expect(refreshedOriginal?.feePence).toBe(75);
+    expect(refreshedOriginal?.netPence).toBe(2425);
+    expect(refreshedOriginal?.balanceTransactionId).toBe('txn_replay');
+  });
 });
 
 describe('POST /api/webhooks/stripe — print_order payment_intent.succeeded', () => {

@@ -61,20 +61,51 @@ async function main() {
 
   console.log(`${rows.length} payment row(s) missing fee capture.\n`);
 
+  // Refund rows share the SAME stripe_payment_id as the original charge
+  // (one PaymentIntent per Stripe refund) — retrieving that PI returns the
+  // ORIGINAL CHARGE's positive fee/net, which would corrupt a refund row
+  // (money going OUT) if applied directly. Historic refund rows are handled
+  // in a separate, no-API-call pass below that mirrors the live webhook's
+  // behaviour: feePence: 0, netPence: -amount, derived from the row itself.
+  const refundRows = rows.filter((r) => r.type === 'refund');
+  const chargeRows = rows.filter((r) => r.type !== 'refund');
+
   type Update = {
     id: string;
     showId: string | null;
     amount: number;
     feePence: number;
     netPence: number;
-    balanceTransactionId: string;
+    balanceTransactionId: string | null;
     cardBrand: string | null;
     cardCountry: string | null;
+    // Refund rows are money going OUT — feePence+netPence never equals a
+    // positive `amount` (netPence is deliberately -amount), so the
+    // fee+net==amount consistency check below doesn't apply to them.
+    isRefund: boolean;
   };
   const updates: Update[] = [];
   const skipped: { id: string; stripePaymentId: string; reason: string }[] = [];
 
-  for (const row of rows) {
+  // Historic refund rows: no API call, no Stripe fee to look up — Stripe
+  // never returns the processing fee on refund. Mirrors the live webhook's
+  // executeStripeRefund behaviour exactly: feePence 0, netPence = -amount.
+  for (const row of refundRows) {
+    const showId = row.order?.showId ?? row.entry?.showId ?? null;
+    updates.push({
+      id: row.id,
+      showId,
+      amount: row.amount,
+      feePence: 0,
+      netPence: -row.amount,
+      balanceTransactionId: null,
+      cardBrand: null,
+      cardCountry: null,
+      isRefund: true,
+    });
+  }
+
+  for (const row of chargeRows) {
     const paymentIntentId = row.stripePaymentId!;
     const showId = row.order?.showId ?? row.entry?.showId ?? null;
     try {
@@ -99,6 +130,7 @@ async function main() {
         balanceTransactionId: balanceTransaction.id,
         cardBrand: card?.brand ?? null,
         cardCountry: card?.country ?? null,
+        isRefund: false,
       });
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
@@ -112,10 +144,14 @@ async function main() {
     await sleep(BATCH_DELAY_MS);
   }
 
-  console.log(`── Would set fee/net (${updates.length}) ──`);
+  console.log(`── Would set fee/net (${updates.length}; ${refundRows.length} refund row(s), ${chargeRows.length - skipped.length} charge row(s)) ──`);
   for (const u of updates) {
+    // Charge rows: fee+net must equal the positive amount charged.
+    // Refund rows: netPence is deliberately -amount (money out), feePence 0 —
+    // the invariant there is netPence === -amount, not fee+net===amount.
+    const mismatch = u.isRefund ? u.netPence !== -u.amount : u.feePence + u.netPence !== u.amount;
     console.log(
-      `  ✓ ${u.id}  amount=${u.amount}  fee=${u.feePence}  net=${u.netPence}  (fee+net=${u.feePence + u.netPence}${u.feePence + u.netPence !== u.amount ? '  ⚠ MISMATCH vs amount' : ''})`
+      `  ✓ ${u.id}${u.isRefund ? ' [refund]' : ''}  amount=${u.amount}  fee=${u.feePence}  net=${u.netPence}${mismatch ? '  ⚠ MISMATCH' : ''}`
     );
   }
   console.log(`\n── Skipped (${skipped.length}) ──`);
@@ -126,30 +162,36 @@ async function main() {
   // per row and spot anomalies before/after applying.
   const byShow = new Map<
     string,
-    { amount: number; fee: number; net: number; skipped: number; count: number }
+    { amount: number; fee: number; net: number; skipped: number; count: number; refunds: number }
   >();
   const showKey = (id: string | null) => id ?? '(no show — unlinked payment)';
   for (const u of updates) {
     const key = showKey(u.showId);
-    const bucket = byShow.get(key) ?? { amount: 0, fee: 0, net: 0, skipped: 0, count: 0 };
+    const bucket = byShow.get(key) ?? { amount: 0, fee: 0, net: 0, skipped: 0, count: 0, refunds: 0 };
     bucket.amount += u.amount;
     bucket.fee += u.feePence;
     bucket.net += u.netPence;
     bucket.count += 1;
+    if (u.isRefund) bucket.refunds += 1;
     byShow.set(key, bucket);
   }
   for (const s of skipped) {
     const row = rows.find((r) => r.id === s.id);
     const key = showKey(row?.order?.showId ?? row?.entry?.showId ?? null);
-    const bucket = byShow.get(key) ?? { amount: 0, fee: 0, net: 0, skipped: 0, count: 0 };
+    const bucket = byShow.get(key) ?? { amount: 0, fee: 0, net: 0, skipped: 0, count: 0, refunds: 0 };
     bucket.skipped += 1;
     byShow.set(key, bucket);
   }
 
   console.log(`\n── Reconciliation summary (per show) ──`);
+  console.log(`  (fee+net vs SUM(amount) only reconciles when a show has no refund rows — a`);
+  console.log(`   refund row's amount is the positive refunded pence while its netPence is`);
+  console.log(`   negative, so mixing them into one show naturally breaks that equality.)`);
   for (const [showId, bucket] of byShow) {
+    const expectMatch = bucket.refunds === 0;
+    const mismatch = expectMatch && bucket.fee + bucket.net !== bucket.amount;
     console.log(
-      `  ${showId}: rows=${bucket.count} skipped=${bucket.skipped} SUM(amount)=${bucket.amount} SUM(fee)=${bucket.fee} SUM(net)=${bucket.net} (fee+net=${bucket.fee + bucket.net}${bucket.fee + bucket.net !== bucket.amount ? '  ⚠ MISMATCH vs SUM(amount)' : ''})`
+      `  ${showId}: rows=${bucket.count} (${bucket.refunds} refund) skipped=${bucket.skipped} SUM(amount)=${bucket.amount} SUM(fee)=${bucket.fee} SUM(net)=${bucket.net}${mismatch ? '  ⚠ MISMATCH vs SUM(amount)' : ''}`
     );
   }
 

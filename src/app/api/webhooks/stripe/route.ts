@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { and, eq, inArray, isNull, notInArray, sql } from 'drizzle-orm';
+import { and, eq, inArray, isNull, ne, notInArray, sql } from 'drizzle-orm';
 import { getStripe } from '@/server/services/stripe';
 import { db } from '@/server/db';
 import { entries, entryClasses, entryAuditLog, orders, payments, organisations, plans, users, printOrders, printOrderItems } from '@/server/db/schema';
@@ -18,6 +18,13 @@ import type Stripe from 'stripe';
  * Stripe to retry the whole event (which would re-fire entry confirmation
  * emails). A payment row with null fee/net columns is a finding for the
  * backfill script, not an outage.
+ *
+ * Refund rows share the SAME stripe_payment_id as the original payment
+ * (there's one PaymentIntent per Stripe refund), so the update below MUST
+ * exclude type='refund' — otherwise a late/retried succeeded delivery
+ * (Stripe redelivers on recovery, sometimes days later) would overwrite a
+ * refund row's feePence:0/netPence:-amount with the ORIGINAL charge's
+ * positive fee/net, corrupting the reconciliation this feature exists for.
  */
 async function captureStripeFeeDetails(paymentIntentId: string) {
   try {
@@ -46,7 +53,7 @@ async function captureStripeFeeDetails(paymentIntentId: string) {
         cardBrand: cardDetails?.brand ?? null,
         cardCountry: cardDetails?.country ?? null,
       })
-      .where(eq(payments.stripePaymentId, paymentIntentId));
+      .where(and(eq(payments.stripePaymentId, paymentIntentId), ne(payments.type, 'refund')));
   } catch (err) {
     console.warn(`[stripe-webhook] fee capture failed for PI ${paymentIntentId}:`, err);
   }
