@@ -4,8 +4,9 @@ import { and, eq, ne, isNull, isNotNull, asc, sql, inArray } from 'drizzle-orm';
 import { stewardProcedure, publicProcedure } from '../procedures';
 import { createTRPCRouter } from '../init';
 import type { Database } from '@/server/db';
-import { ACHIEVEMENT_TYPES, getPlacementLabel } from '@/lib/placements';
+import { ACHIEVEMENT_TYPES, getPlacementLabel, type AchievementType } from '@/lib/placements';
 import { isShowDayReached } from '@/lib/date-utils';
+import { resolveTopAwards } from '@/lib/top-awards';
 import {
   shows,
   entries,
@@ -940,7 +941,7 @@ export const stewardRouter = createTRPCRouter({
       // secretary/steward could read unpublished BOB/BIS before publication).
       const achShow = await ctx.db.query.shows.findFirst({
         where: eq(shows.id, showId),
-        columns: { organisationId: true },
+        columns: { organisationId: true, showType: true, scheduleData: true },
       });
       const isPrivileged = achShow
         ? await callerIsPrivilegedForShow(
@@ -957,7 +958,25 @@ export const stewardRouter = createTRPCRouter({
         },
       });
 
-      return isPrivileged ? rows : rows.filter((a) => a.publishedAt !== null);
+      const visible = isPrivileged ? rows : rows.filter((a) => a.publishedAt !== null);
+
+      // The secretary's configured Best Awards list is the source of truth for
+      // ORDER and DISPLAY NAME — mirrors resolveTopAwards, used by the secretary
+      // results page and steward ringside page, so all three surfaces agree
+      // (Mandy 2026-07-27: same disease as the catalogue/judges-book, 9a6a475).
+      // Types outside the configured list are NEVER dropped — grouping is
+      // labelling only, never gating — they just sort after the configured ones.
+      const topAwards = resolveTopAwards(achShow?.showType, achShow?.scheduleData?.bestAwards ?? []);
+      const orderByType = new Map(topAwards.map((a, i) => [a.type, i]));
+      const nameByType = new Map(topAwards.map((a) => [a.type, a.name]));
+
+      return [...visible]
+        .map((a) => ({ ...a, awardName: nameByType.get(a.type as AchievementType) ?? null }))
+        .sort((a, b) => {
+          const ai = orderByType.get(a.type as AchievementType) ?? Number.MAX_SAFE_INTEGER;
+          const bi = orderByType.get(b.type as AchievementType) ?? Number.MAX_SAFE_INTEGER;
+          return ai - bi;
+        });
     }),
 
   // ── Public: live results for a show ─────────────────────

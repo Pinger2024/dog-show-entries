@@ -54,7 +54,7 @@ describe('awardNameToType', () => {
 
 describe('awardFilter', () => {
   it('derives sex / puppy / veteran / long-coat bands', () => {
-    expect(awardFilter('best_dog')).toEqual({ sex: 'dog', puppy: false, veteran: false, longCoat: false });
+    expect(awardFilter('best_dog')).toEqual({ sex: 'dog', puppy: false, veteran: false, longCoat: false, babyPuppy: false });
     expect(awardFilter('best_bitch').sex).toBe('bitch');
     expect(awardFilter('reserve_best_dog').sex).toBe('dog');
     expect(awardFilter('best_puppy_dog')).toMatchObject({ sex: 'dog', puppy: true });
@@ -280,5 +280,74 @@ describe('eligibleCandidates — real-show scenarios (Mandy 2026-07-02)', () => 
     const dogs = [dog('pupDog', 'dog'), dog('pupBitch', 'bitch'), dog('adult', 'dog')];
     const out = eligibleCandidates(award('best_puppy_in_show'), dogs, index).map((d) => d.dogId).sort();
     expect(out).toEqual(['pupBitch', 'pupDog']);
+  });
+});
+
+// South Western GSD club's real stored bestAwards list (2026-07-27 audit): 13
+// names, 3 of which had NO recordable type at all until this fix — they
+// printed in the catalogue/judges' book but could never appear in results.
+describe("resolveTopAwards — South Western's real 13-award list", () => {
+  const southWestern = [
+    'Best in Show',
+    'Reserve Best in Show',
+    'Dog Challenge Certificate',
+    'Reserve Dog Challenge Certificate',
+    'Bitch Challenge Certificate',
+    'Reserve Bitch Challenge Certificate',
+    'Best Long Coat Adult',
+    'Best Puppy in Show',
+    'Best Puppy Dog',
+    'Best Puppy Bitch',
+    'Best Long Coat Puppy',
+    'Best Baby Puppy',
+    'Best Veteran',
+  ];
+
+  it('resolves all 13 configured names to recordable types, in her exact order, none dropped', () => {
+    const resolved = resolveTopAwards('championship', southWestern);
+    expect(resolved.map((a) => a.name)).toEqual(southWestern);
+    expect(resolved.map((a) => a.type)).toEqual([
+      'best_in_show',
+      'reserve_best_in_show',
+      'dog_cc',
+      'reserve_dog_cc',
+      'bitch_cc',
+      'reserve_bitch_cc',
+      'best_long_coat_adult',
+      'best_puppy_in_show',
+      'best_puppy_dog',
+      'best_puppy_bitch',
+      'best_long_coat_puppy',
+      'best_baby_puppy',
+      'best_veteran_in_show',
+    ]);
+  });
+
+  it('aliases the SV short-form "most promising dog/bitch" to the existing WUSV types', () => {
+    expect(awardNameToType('most promising dog')).toBe('most_promising_young_dog');
+    expect(awardNameToType('Most Promising Bitch')).toBe('most_promising_young_bitch');
+  });
+});
+
+describe('eligibleCandidates — baby puppy is its own disjoint band', () => {
+  it('a Baby Puppy class winner is eligible for Best Baby Puppy but NOT Best Puppy in Show', () => {
+    const index = buildPlacementIndex([
+      cls('Baby Puppy Dog', [['babyWin', 1]]),
+      cls('Minor Puppy Dog', [['minorWin', 1]]),
+    ]);
+    const dogs = [dog('babyWin', 'dog'), dog('minorWin', 'dog')];
+
+    const babyOut = eligibleCandidates(award('best_baby_puppy'), dogs, index).map((d) => d.dogId);
+    expect(babyOut).toEqual(['babyWin']);
+
+    const puppyOut = eligibleCandidates(award('best_puppy_in_show'), dogs, index).map((d) => d.dogId);
+    expect(puppyOut).toEqual(['minorWin']); // baby puppy winner is NOT in the puppy band
+  });
+
+  it('a Minor Puppy winner is eligible for Best Puppy in Show but NOT Best Baby Puppy', () => {
+    const index = buildPlacementIndex([cls('Minor Puppy Dog', [['minorWin', 1]])]);
+    const dogs = [dog('minorWin', 'dog')];
+    expect(eligibleCandidates(award('best_baby_puppy'), dogs, index)).toEqual([]);
+    expect(eligibleCandidates(award('best_puppy_in_show'), dogs, index).map((d) => d.dogId)).toEqual(['minorWin']);
   });
 });

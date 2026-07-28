@@ -148,35 +148,28 @@ export default function LiveResultsPage({
   // plain placements (Amanda 2026-05-28).
   const isWusv = (show as { showRuleset?: string }).showRuleset === 'wusv';
 
-  // Group achievements by type for display
-  const showLevelTypes = ['best_in_show', 'reserve_best_in_show', 'best_puppy_in_show', 'best_veteran_in_show', 'reserve_best_veteran_in_show', 'best_long_coat_in_show'];
-  const breedLevelTypes = [
-    'best_of_breed', 'best_puppy_in_breed', 'best_veteran_in_breed',
-    'dog_cc', 'reserve_dog_cc', 'bitch_cc', 'reserve_bitch_cc',
-    'best_dog', 'best_bitch', 'reserve_best_dog', 'reserve_best_bitch',
-    'best_puppy_dog', 'best_puppy_bitch',
-    'best_long_coat_dog', 'best_long_coat_bitch',
-    'cc', 'reserve_cc',
-  ];
   // SV/WUSV regionals have only 4 top awards (no BoB/CC/BIS). Show those
-  // in their own block and suppress the RKC award groups (Amanda 2026-05-28).
+  // in their own block and suppress the shared Best Awards block — their four
+  // types aren't in NAME_TO_TYPE, so routing them through the secretary's
+  // configured order would drop them (Amanda 2026-05-28).
   const svAwardOrder = ['most_promising_young_dog', 'most_promising_young_bitch', 'best_dog', 'best_bitch'];
   const svAwards = isWusv
     ? svAwardOrder
         .map((t) => (achievements ?? []).find((a) => a.type === t))
         .filter((a): a is NonNullable<typeof a> => !!a)
     : [];
-  const showAwards = isWusv
-    ? []
-    : (achievements ?? []).filter((a) => showLevelTypes.includes(a.type));
-  const breedAwards = isWusv
-    ? []
-    : (achievements ?? []).filter((a) => breedLevelTypes.includes(a.type));
-  const breedAwardsByBreed = new Map<string, typeof breedAwards>();
-  for (const a of breedAwards) {
-    const breedName = a.dog?.breed?.name ?? 'Unknown';
-    if (!breedAwardsByBreed.has(breedName)) breedAwardsByBreed.set(breedName, []);
-    breedAwardsByBreed.get(breedName)!.push(a);
+  // Best Awards, in the secretary's configured order (server-sorted) — every
+  // achievement the show recorded, never gated by a hardcoded type list.
+  const bestAwards = isWusv ? [] : (achievements ?? []);
+  // Per-breed strips only make sense on genuine all-breed shows — for the
+  // single-breed shows this page mostly serves, the top block IS the story.
+  const breedAwardsByBreed = new Map<string, typeof bestAwards>();
+  if (breedGroups.length > 1) {
+    for (const a of bestAwards) {
+      const breedName = a.dog?.breed?.name ?? 'Unknown';
+      if (!breedAwardsByBreed.has(breedName)) breedAwardsByBreed.set(breedName, []);
+      breedAwardsByBreed.get(breedName)!.push(a);
+    }
   }
   const lastUpdated = dataUpdatedAt
     ? new Date(dataUpdatedAt).toLocaleTimeString('en-GB', {
@@ -185,10 +178,10 @@ export default function LiveResultsPage({
       })
     : null;
 
-  // Build share text for show-level awards
-  const showAwardsShareText = showAwards.length > 0
-    ? showAwards.map((a) => {
-        const label = achievementLabels[a.type] ?? a.type;
+  // Build share text for the Best Awards block
+  const bestAwardsShareText = bestAwards.length > 0
+    ? bestAwards.map((a) => {
+        const label = a.awardName ?? achievementLabels[a.type] ?? a.type;
         const dog = a.dog?.registeredName ?? 'TBC';
         const breed = a.dog?.breed?.name ? ` (${a.dog.breed.name})` : '';
         return `${label}: ${dog}${breed}`;
@@ -323,46 +316,61 @@ export default function LiveResultsPage({
               </div>
             )}
 
-            {/* Show-level awards (BIS/RBIS/BPS) */}
-            {showAwards.length > 0 && (
-              <div id="show-awards" className="rounded-lg border border-se-honey-line bg-se-honey-soft p-4 sm:p-5">
-                <div className="mb-3 flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <Trophy className="size-5 text-se-honey-deep" />
-                    <h2 className="font-serif text-lg font-semibold text-se-honey-deep">
-                      Show Awards
-                    </h2>
-                  </div>
-                  <ShareButton
-                    title={`${show.name} — Show Awards`}
-                    text={`Show Awards at ${show.name}\n\n${showAwardsShareText}`}
-                    hash="show-awards"
-                    size="sm"
-                  />
-                </div>
-                <div className="space-y-2">
-                  {showAwards.map((a) => (
-                    <div key={a.id} className="flex flex-wrap items-center gap-1.5 sm:gap-3">
-                      <Badge className="w-auto sm:w-44 justify-center bg-se-honey-soft text-se-honey-deep border-se-honey-line text-xs font-semibold whitespace-nowrap">
-                        {achievementLabels[a.type] ?? a.type}
-                      </Badge>
-                      {a.dog ? (
-                        <Link
-                          href={`/dog/${a.dogId}`}
-                          className="font-medium text-sm text-primary hover:underline"
-                        >
-                          {a.dog.registeredName}
-                        </Link>
-                      ) : (
-                        <span className="font-medium text-sm">Unknown dog</span>
-                      )}
-                      {a.dog?.breed && (
-                        <span className="text-xs text-muted-foreground">
-                          ({a.dog.breed.name})
-                        </span>
-                      )}
+            {/* Best Awards — every achievement the show recorded, in the
+                secretary's configured order (server-sorted via resolveTopAwards),
+                labelled with her configured name. Never gated by a hardcoded
+                type list — an award type outside that list still shows, just
+                sorted after the configured ones. */}
+            {bestAwards.length > 0 && (
+              <div>
+                <span id="top-awards" />
+                <div id="show-awards" className="rounded-lg border border-se-honey-line bg-se-honey-soft p-4 sm:p-5">
+                  <div className="mb-3 flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Trophy className="size-5 text-se-honey-deep" />
+                      <h2 className="font-serif text-lg font-semibold text-se-honey-deep">
+                        Best Awards
+                      </h2>
                     </div>
-                  ))}
+                    <ShareButton
+                      title={`${show.name} — Best Awards`}
+                      text={`Best Awards at ${show.name}\n\n${bestAwardsShareText}`}
+                      hash="show-awards"
+                      size="sm"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    {bestAwards.map((a) => (
+                      <div key={a.id} className="flex flex-wrap items-center gap-1.5 sm:gap-3">
+                        {/* min-w, never a fixed w: a configured name runs as
+                            long as "Reserve Bitch Challenge Certificate", and
+                            whitespace-nowrap would push it out of a fixed box. */}
+                        <Badge className="w-auto sm:min-w-44 justify-center bg-se-honey-soft text-se-honey-deep border-se-honey-line text-xs font-semibold whitespace-nowrap">
+                          {a.awardName ?? achievementLabels[a.type] ?? a.type}
+                        </Badge>
+                        {a.dog ? (
+                          <Link
+                            href={`/dog/${a.dogId}`}
+                            className="font-medium text-sm text-primary hover:underline"
+                          >
+                            {a.dog.registeredName}
+                          </Link>
+                        ) : (
+                          <span className="font-medium text-sm">Unknown dog</span>
+                        )}
+                        {/* On a single-breed show the breed is the same on
+                            every line — printing it 13 times is noise that
+                            pushes each award onto two rows. Only worth the
+                            space when there is more than one breed to tell
+                            apart. */}
+                        {a.dog?.breed && breedGroups.length > 1 && (
+                          <span className="text-xs text-muted-foreground">
+                            ({a.dog.breed.name})
+                          </span>
+                        )}
+                      </div>
+                    ))}
+                  </div>
                 </div>
               </div>
             )}
