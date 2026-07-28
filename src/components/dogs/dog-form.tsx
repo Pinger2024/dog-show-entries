@@ -578,8 +578,12 @@ export function DogForm({ mode, defaultValues, dogId, svSection, returnTo, isReg
         form.setError('breederName', { type: 'manual', message: "The breeder's name is required" });
         pedigreeMissing = true;
       }
+      if (!data.colour || !data.colour.trim()) {
+        form.setError('colour', { type: 'manual', message: 'The colour is required' });
+        pedigreeMissing = true;
+      }
       if (pedigreeMissing) {
-        toast.error('Please add the sire, dam and breeder — they appear in the catalogue');
+        toast.error('Please add the sire, dam, breeder and colour — they appear in the catalogue');
         return;
       }
       // Regional (SV/WUSV) shows need the full catalogue/pedigree set, or the

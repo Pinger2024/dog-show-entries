@@ -184,6 +184,15 @@ export async function makeDog(opts: Partial<typeof dogs.$inferInsert> & { ownerI
       sex: opts.sex ?? 'dog',
       dateOfBirth: opts.dateOfBirth ?? '2022-01-01',
       ownerId: opts.ownerId,
+      // A complete pedigree by default — sire, dam, breeder and colour are
+      // required to enter a show (orders.checkout), so a fixture dog without
+      // them can't be checked out and every unrelated test that pays for an
+      // entry would fail for a reason it isn't testing. Pass an explicit null
+      // to build a deliberately-incomplete dog.
+      sireName: 'Test Sire',
+      damName: 'Test Dam',
+      breederName: 'Test Breeder',
+      colour: 'Black & Tan',
       ...opts,
     })
     .returning();
