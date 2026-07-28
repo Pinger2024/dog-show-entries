@@ -60,6 +60,17 @@ export async function executeStripeRefund(
     amount: opts.amountPence,
     status: 'refunded',
     type: 'refund',
+    // Stripe does NOT return the processing fee on refund — the fee stays
+    // charged to us either way, so there is no fee to record here.
+    feePence: 0,
+    // Negative so SUM(netPence) across a show's payment rows reconciles to
+    // Stripe's true net position. We deliberately do NOT touch the original
+    // payment's netPence: on a partially-refunded payment, the original
+    // row's netPence still shows the FULL charge net, which overstates kept
+    // revenue once you also know money went back out — Stripe keeps the
+    // full original fee regardless. Any margin/reconciliation report MUST
+    // read the refund rows too, not just the original payment row.
+    netPence: -opts.amountPence,
   });
 
   // One atomic statement for both the running total and the status —

@@ -170,6 +170,80 @@ describe('POST /api/webhooks/stripe — payment_intent.succeeded', () => {
   });
 });
 
+// Task #16: we previously only ever estimated Stripe's fee at 1.5% and never
+// stored the actuals. The webhook now makes a second call to retrieve the
+// PaymentIntent expanded with latest_charge.balance_transaction (fee/net
+// live on the Charge, never on the PI itself) and stores it on the payment
+// row — but that call must NEVER be able to block the payment/entry/order
+// confirmation that already happened.
+describe('POST /api/webhooks/stripe — Stripe fee/net capture', () => {
+  it('captures fee, net, balance transaction id, and card brand/country onto the payment row', async () => {
+    const { entry } = await entryReadyForPayment();
+    const intentId = 'pi_test_fee_capture';
+    await makePayment({ entryId: entry.id, stripePaymentId: intentId });
+
+    injectStripeEvent(
+      {
+        type: 'payment_intent.succeeded',
+        data: { object: { id: intentId, metadata: { entryId: entry.id } } },
+      },
+      {
+        retrievePaymentIntent: {
+          balance_transaction: { id: 'txn_abc123', fee: 42, net: 958 },
+          payment_method_details: { card: { brand: 'mastercard', country: 'GB' } },
+        },
+      }
+    );
+
+    const res = await stripeWebhook(buildStripeWebhookRequest() as never);
+    expect(res.status).toBe(200);
+
+    const payment = await testDb.query.payments.findFirst({
+      where: eq(payments.stripePaymentId, intentId),
+    });
+    expect(payment?.status).toBe('succeeded');
+    expect(payment?.feePence).toBe(42);
+    expect(payment?.netPence).toBe(958);
+    expect(payment?.balanceTransactionId).toBe('txn_abc123');
+    expect(payment?.cardBrand).toBe('mastercard');
+    expect(payment?.cardCountry).toBe('GB');
+  });
+
+  it('still marks the payment succeeded when the fee-capture retrieve call fails (never-block guarantee)', async () => {
+    const { entry } = await entryReadyForPayment();
+    const intentId = 'pi_test_fee_capture_fails';
+    await makePayment({ entryId: entry.id, stripePaymentId: intentId });
+
+    injectStripeEvent(
+      {
+        type: 'payment_intent.succeeded',
+        data: { object: { id: intentId, metadata: { entryId: entry.id } } },
+      },
+      {
+        retrievePaymentIntent: () => {
+          throw new Error('Stripe API is down');
+        },
+      }
+    );
+
+    const res = await stripeWebhook(buildStripeWebhookRequest() as never);
+    // The webhook must still return 200 — a fee-capture failure must never
+    // fail the webhook and cause Stripe to retry the whole event (which
+    // would re-fire the exhibitor's confirmation email).
+    expect(res.status).toBe(200);
+
+    const updatedEntry = await testDb.query.entries.findFirst({ where: eq(entries.id, entry.id) });
+    expect(updatedEntry?.status).toBe('confirmed');
+
+    const payment = await testDb.query.payments.findFirst({
+      where: eq(payments.stripePaymentId, intentId),
+    });
+    expect(payment?.status).toBe('succeeded');
+    expect(payment?.feePence).toBeNull();
+    expect(payment?.netPence).toBeNull();
+  });
+});
+
 describe('POST /api/webhooks/stripe — print_order payment_intent.succeeded', () => {
   async function seedPrintOrder(status: typeof printOrders.$inferInsert['status']) {
     const [exhibitor, org, breed] = await Promise.all([

@@ -9,6 +9,50 @@ import { formatOrderRef } from '@/lib/print-products';
 import type Stripe from 'stripe';
 
 /**
+ * Best-effort capture of Stripe's ACTUAL fee/net for a succeeded PaymentIntent.
+ * The event payload's PaymentIntent never carries balance_transaction — it
+ * lives on the Charge, and the Charge may not even exist yet at delivery
+ * time — so we make a second API call to retrieve it. Never allowed to throw
+ * or block: this must run strictly AFTER the payment-status write, in its own
+ * try/catch, so a Stripe hiccup here can never fail the webhook and cause
+ * Stripe to retry the whole event (which would re-fire entry confirmation
+ * emails). A payment row with null fee/net columns is a finding for the
+ * backfill script, not an outage.
+ */
+async function captureStripeFeeDetails(paymentIntentId: string) {
+  try {
+    const stripe = getStripe();
+    const pi = await stripe.paymentIntents.retrieve(paymentIntentId, {
+      expand: ['latest_charge.balance_transaction'],
+    });
+    const charge = pi.latest_charge;
+    if (!charge || typeof charge === 'string') {
+      console.warn(`[stripe-webhook] no expanded charge for PI ${paymentIntentId}; skipping fee capture`);
+      return;
+    }
+    const balanceTransaction = charge.balance_transaction;
+    if (!balanceTransaction || typeof balanceTransaction === 'string') {
+      console.warn(`[stripe-webhook] no balance_transaction for PI ${paymentIntentId} yet; skipping fee capture`);
+      return;
+    }
+    const cardDetails = charge.payment_method_details?.card;
+
+    await db
+      .update(payments)
+      .set({
+        feePence: balanceTransaction.fee,
+        netPence: balanceTransaction.net,
+        balanceTransactionId: balanceTransaction.id,
+        cardBrand: cardDetails?.brand ?? null,
+        cardCountry: cardDetails?.country ?? null,
+      })
+      .where(eq(payments.stripePaymentId, paymentIntentId));
+  } catch (err) {
+    console.warn(`[stripe-webhook] fee capture failed for PI ${paymentIntentId}:`, err);
+  }
+}
+
+/**
  * Give freshly-confirmed entries their catalogue number. Never allowed to throw:
  * an unhandled error here fails the webhook, Stripe retries the whole event and
  * the exhibitor gets a second confirmation email. A number we can re-derive is
@@ -256,6 +300,12 @@ export async function POST(request: NextRequest) {
             notInArray(payments.status, ['refunded', 'partially_refunded'])
           )
         );
+
+      // Fee/net capture — strictly best-effort, strictly AFTER the status
+      // write above. Never awaited into the request's error path: failure
+      // here must never block the payment-status update or entry/order
+      // confirmation that already happened.
+      await captureStripeFeeDetails(paymentIntent.id);
 
       // Send confirmation email (non-blocking — don't fail the webhook).
       // Gated on first-time transition so Stripe retries don't duplicate.

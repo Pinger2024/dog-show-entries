@@ -97,6 +97,32 @@ describe('refund a full order → every secretary surface zeroes', () => {
     expect(refreshedEntry?.status).toBe('cancelled');
   });
 
+  // Task #16: Stripe never returns the processing fee on refund — it keeps
+  // the full original fee regardless of a later refund. The refund row
+  // records feePence: 0 and netPence as MINUS the refunded amount so
+  // SUM(netPence) across a show's payment rows reconciles to Stripe's true
+  // net position, while the original payment's own netPence is left
+  // untouched (it's null here, since this fixture payment predates fee
+  // capture — proving the refund path doesn't invent a value for it).
+  it('writes feePence 0 and netPence = -refundAmount on the refund row, leaving the original row untouched', async () => {
+    await createTestCaller(ctx.secretary).secretary.refundOrder({
+      orderId: ctx.order.id,
+    });
+
+    const refundRow = await testDb.query.payments.findFirst({
+      where: eq(payments.type, 'refund'),
+    });
+    expect(refundRow?.amount).toBe(2500);
+    expect(refundRow?.feePence).toBe(0);
+    expect(refundRow?.netPence).toBe(-2500);
+
+    const originalPayment = await testDb.query.payments.findFirst({
+      where: eq(payments.id, ctx.payment.id),
+    });
+    expect(originalPayment?.status).toBe('refunded');
+    expect(originalPayment?.netPence).toBeNull();
+  });
+
   it('zeroes the Overview + Financial stat cards (getShowStats)', async () => {
     await createTestCaller(ctx.secretary).secretary.refundOrder({
       orderId: ctx.order.id,
