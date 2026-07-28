@@ -49,7 +49,7 @@ async function computeInvoiceFigures(
 ) {
   const showRow = await db.query.shows.findFirst({
     where: (s, { eq: eqFn }) => eqFn(s.id, showId),
-    with: { organisation: true },
+    with: { organisation: { columns: { id: true, name: true } } },
   });
   if (!showRow) {
     throw new TRPCError({ code: 'NOT_FOUND', message: 'Show not found' });
@@ -209,7 +209,7 @@ export const adminInvoicesRouter = createTRPCRouter({
     const row = await ctx.db.query.invoices.findFirst({
       where: eq(invoices.id, input.id),
       with: {
-        organisation: true,
+        organisation: { columns: { id: true, name: true } },
         show: true,
         issuedBy: { columns: { id: true, name: true } },
       },
