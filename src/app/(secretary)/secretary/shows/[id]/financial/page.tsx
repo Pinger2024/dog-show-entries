@@ -1,8 +1,9 @@
 'use client';
 
 import { Fragment, useState, useMemo } from 'react';
+import Link from 'next/link';
 import type { LucideIcon } from 'lucide-react';
-import { Download, Loader2, RotateCcw, BookOpen, ShoppingBag } from 'lucide-react';
+import { FolderOpen, Loader2, RotateCcw, BookOpen, ShoppingBag } from 'lucide-react';
 import { toast } from 'sonner';
 import { trpc } from '@/lib/trpc';
 import { formatCurrency } from '@/lib/date-utils';
@@ -30,8 +31,6 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import {
-  entryStatusConfig,
-  downloadCsv,
   formatWholePounds,
   joinWorkings,
   dogsEnteredParts,
@@ -297,28 +296,6 @@ export default function FinancialPage() {
       }));
   }, [entryReport]);
 
-  function handleExportCsv() {
-    // Catalogues are bought as sundry items at the order level, not per
-    // entry — the legacy `catalogueRequested` column on entries is dead
-    // (always false). Resolve "did this exhibitor buy a catalogue?" via
-    // the catalogueOrders feed, which is the same source the on-screen
-    // "Catalogue Orders" card already uses.
-    const catalogueBuyerEmails = new Set<string>([
-      ...(catalogueOrders?.printed ?? []).map((o) => o.email.toLowerCase()),
-      ...(catalogueOrders?.online ?? []).map((o) => o.email.toLowerCase()),
-    ]);
-    const headers = ['Dog', 'Exhibitor', 'Status', 'Classes', 'Fee', 'Catalogue Ordered'];
-    const rows = entries.map((e) => [
-      e.dog ? formatDogName(e.dog) : 'Unknown',
-      e.exhibitor?.name ?? 'Unknown',
-      entryStatusConfig[e.status]?.label ?? e.status,
-      (e.entryClasses ?? []).map((ec) => ec.showClass?.classDefinition?.name ?? '').join('; '),
-      (e.totalFee / 100).toFixed(2),
-      e.exhibitor?.email && catalogueBuyerEmails.has(e.exhibitor.email.toLowerCase()) ? 'Yes' : 'No',
-    ]);
-    downloadCsv(headers, rows, 'financial-report');
-  }
-
   // "Entry Fees" tile workings — "74 paid £1,687 + 1 withdrawn £26".
   const entryFeesWorkings = joinWorkings([
     stats && stats.confirmedEntries > 0 ? `${stats.confirmedEntries} paid ${formatWholePounds(stats.paidThroughRemiFeesPence)}` : null,
@@ -360,13 +337,15 @@ export default function FinancialPage() {
         />
       </div>
 
-      {/* Export */}
-      <div className="flex justify-end">
-        <Button variant="outline" size="sm" onClick={handleExportCsv} disabled={entries.length === 0}>
-          <Download className="size-4" />
-          Export CSV
-        </Button>
-      </div>
+      {/* Printing and downloads moved to Documents & Reports (reports-merge) —
+          the Financial Statement CSV lives there now, always available. */}
+      <Link
+        href={`/secretary/shows/${showId}/documents`}
+        className="flex items-center gap-2 rounded-lg border bg-muted/40 px-4 py-3 text-sm font-medium text-foreground transition-colors hover:bg-muted min-h-[2.75rem]"
+      >
+        <FolderOpen className="size-4 shrink-0" />
+        Printing and downloads have moved to Documents &amp; Reports
+      </Link>
 
       {/* Per-class breakdown by sex. Gated on actual ENTRIES, not on row count:
           scheduled classes are now seeded at zero (so Mandy sees Baby Puppy

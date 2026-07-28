@@ -1,11 +1,12 @@
 'use client';
 
 import { useState, useMemo } from 'react';
+import Link from 'next/link';
 import {
   BookOpen,
   ClipboardList,
-  Download,
   FileText,
+  FolderOpen,
   History,
   Loader2,
   PoundSterling,
@@ -35,9 +36,24 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { entryStatusConfig, formatDate, downloadCsv } from '../_lib/show-utils';
+import { entryStatusConfig, formatDate } from '../_lib/show-utils';
 import { useShowId } from '../_lib/show-context';
 import type { RouterOutputs } from '@/server/trpc/router';
+
+/** Printing and downloads moved to Documents & Reports (reports-merge) —
+ * these tabs keep their on-screen tables, but every export now lives on
+ * one page, always available regardless of show phase. */
+function DownloadsMovedNote({ showId }: { showId: string }) {
+  return (
+    <Link
+      href={`/secretary/shows/${showId}/documents`}
+      className="flex items-center gap-2 rounded-lg border bg-muted/40 px-4 py-3 text-sm font-medium text-foreground transition-colors hover:bg-muted min-h-[2.75rem]"
+    >
+      <FolderOpen className="size-4 shrink-0" />
+      Downloads have moved to Documents &amp; Reports
+    </Link>
+  );
+}
 
 type ReportRow = RouterOutputs['secretary']['getPaymentReport']['rows'][number];
 
@@ -203,45 +219,11 @@ function EntryReportContent({ showId }: { showId: string }) {
     return { total: entries.length, confirmed, pending, totalRevenue, uniqueExhibitors };
   }, [entries]);
 
-  function exportCsv() {
-    if (!filtered) return;
-    const headers = [
-      'Entry Date',
-      'Status',
-      'Exhibitor',
-      'Email',
-      'Dog',
-      'Breed',
-      'Group',
-      'Sex',
-      'Classes',
-      'Fee (£)',
-      'NFC',
-    ];
-    const rows = filtered.map((e) => [
-      formatDate(e.entryDate),
-      e.status,
-      e.exhibitor?.name ?? '',
-      e.exhibitor?.email ?? '',
-      e.dog?.registeredName ?? 'Junior Handler',
-      e.dog?.breed?.name ?? '',
-      e.dog?.breed?.group?.name ?? '',
-      e.dog?.sex ?? '',
-      e.entryClasses
-        .map((ec) => ec.showClass?.classDefinition?.name ?? '')
-        .filter(Boolean)
-        .join('; '),
-      (e.totalFee / 100).toFixed(2),
-      e.isNfc ? 'Yes' : 'No',
-    ]);
-
-    downloadCsv(headers, rows, `entry-report-${showId}`);
-  }
-
   if (isLoading) return <LoadingCard />;
 
   return (
     <div className="space-y-4">
+      <DownloadsMovedNote showId={showId} />
       {/* Summary stats */}
       {stats && (
         <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
@@ -290,10 +272,6 @@ function EntryReportContent({ showId }: { showId: string }) {
               >
                 <Users className="size-4" />
                 <span className="hidden sm:inline">By Exhibitor</span>
-              </Button>
-              <Button variant="outline" size="sm" onClick={exportCsv}>
-                <Download className="size-4" />
-                <span className="hidden sm:inline">Export CSV</span>
               </Button>
             </div>
           </div>
@@ -479,36 +457,11 @@ function PaymentReportContent({ showId }: { showId: string }) {
 
   const grouped = useMemo(() => groupByOrder(filtered), [filtered]);
 
-  function exportCsv() {
-    if (!filtered) return;
-    const headers = [
-      'Exhibitor',
-      'Email',
-      'Item',
-      'Entry Fee (£)',
-      'Add-ons (£)',
-      'Total (£)',
-      'Status',
-      'Payments',
-    ];
-    const rows = filtered.map((r) => [
-      r.exhibitor?.name ?? '',
-      r.exhibitor?.email ?? '',
-      r.itemDetail ? `${r.itemLabel} (${r.itemDetail})` : r.itemLabel,
-      (r.entryFee / 100).toFixed(2),
-      (r.addons / 100).toFixed(2),
-      (r.total / 100).toFixed(2),
-      r.status,
-      r.payments.map((p) => `${p.status}: £${(p.amount / 100).toFixed(2)}`).join('; '),
-    ]);
-
-    downloadCsv(headers, rows, `payment-report-${showId}`);
-  }
-
   if (isLoading) return <LoadingCard />;
 
   return (
     <div className="space-y-4">
+      <DownloadsMovedNote showId={showId} />
       {/* Summary stats */}
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <Card>
@@ -555,10 +508,6 @@ function PaymentReportContent({ showId }: { showId: string }) {
                   className="pl-9 h-9"
                 />
               </div>
-              <Button variant="outline" size="sm" onClick={exportCsv}>
-                <Download className="size-4" />
-                <span className="hidden sm:inline">Export CSV</span>
-              </Button>
             </div>
           </div>
         </CardHeader>
@@ -738,17 +687,9 @@ function CatalogueOrdersContent({ showId }: { showId: string }) {
   const online = data?.online ?? [];
   const totalOrders = printed.length + online.length;
 
-  function exportCsv() {
-    const headers = ['Type', 'Name', 'Email', 'Quantity'];
-    const rows = [
-      ...printed.map((p) => ['Printed', p.name, p.email, String(p.quantity)]),
-      ...online.map((o) => ['Online', o.name, o.email, String(o.quantity)]),
-    ];
-    downloadCsv(headers, rows, `catalogue-orders-${showId}`);
-  }
-
   return (
     <div className="space-y-4">
+      <DownloadsMovedNote showId={showId} />
       <div className="grid grid-cols-2 gap-2 lg:grid-cols-3 lg:gap-3">
         <Card>
           <CardContent className="pt-4 pb-3">
@@ -773,19 +714,11 @@ function CatalogueOrdersContent({ showId }: { showId: string }) {
       {/* Printed Catalogues */}
       <Card>
         <CardHeader>
-          <div className="flex items-start justify-between">
-            <div>
-              <CardTitle className="text-base">Printed Catalogues ({printed.length})</CardTitle>
-              <CardDescription>
-                Exhibitors who ordered a printed catalogue
-              </CardDescription>
-            </div>
-            {totalOrders > 0 && (
-              <Button variant="outline" size="sm" onClick={exportCsv}>
-                <Download className="size-4" />
-                <span className="hidden sm:inline">Export CSV</span>
-              </Button>
-            )}
+          <div>
+            <CardTitle className="text-base">Printed Catalogues ({printed.length})</CardTitle>
+            <CardDescription>
+              Exhibitors who ordered a printed catalogue
+            </CardDescription>
           </div>
         </CardHeader>
         <CardContent>
@@ -886,49 +819,14 @@ function CatalogueOrdersContent({ showId }: { showId: string }) {
 function AbsenteeReportContent({ showId }: { showId: string }) {
   const { data: absentees, isLoading } =
     trpc.secretary.getAbsenteeList.useQuery({ showId });
-  const { data: show } = trpc.shows.getById.useQuery({ id: showId });
-  // The KC SH01 return is only for RKC championship (CC-awarding) shows.
-  const isKcChampionship = show?.showType === 'championship' && show?.showRuleset !== 'wusv';
 
   const absenteeCount = absentees?.length ?? 0;
-
-  function exportCsv() {
-    if (!absentees) return;
-    const headers = [
-      'Catalogue No',
-      'Dog Name',
-      'Breed',
-      'Sex',
-      'Classes',
-      'Owner',
-      'Exhibitor',
-      'Status',
-    ];
-    const rows = absentees.map((e) => [
-      e.catalogueNumber ?? '',
-      e.dog?.registeredName ?? 'Junior Handler',
-      e.dog?.breed?.name ?? '',
-      e.dog?.sex === 'dog' ? 'Dog' : e.dog?.sex === 'bitch' ? 'Bitch' : '',
-      (e.entryClasses ?? [])
-        .map((ec) => {
-          const num = ec.showClass?.classNumber;
-          const name = ec.showClass?.classDefinition?.name ?? '';
-          return num != null ? `${num}. ${name}` : name;
-        })
-        .filter(Boolean)
-        .join('; '),
-      e.dog?.owners?.map((o) => o.ownerName).join(' & ') ?? '',
-      e.exhibitor?.name ?? '',
-      e.status === 'withdrawn' ? 'Withdrawn' : 'Absent',
-    ]);
-
-    downloadCsv(headers, rows, `absentee-report-${showId}`);
-  }
 
   if (isLoading) return <LoadingCard />;
 
   return (
     <div className="space-y-4">
+      <DownloadsMovedNote showId={showId} />
       {/* Summary */}
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-3">
         <Card>
@@ -963,27 +861,6 @@ function AbsenteeReportContent({ showId }: { showId: string }) {
               <CardDescription>
                 All entries marked as absent or withdrawn
               </CardDescription>
-            </div>
-            <div className="flex items-center gap-2">
-              <Button variant="outline" size="sm" onClick={exportCsv} disabled={absenteeCount === 0}>
-                <Download className="size-4" />
-                <span className="hidden sm:inline">Export CSV</span>
-              </Button>
-              <Button variant="outline" size="sm" asChild disabled={absenteeCount === 0}>
-                <a href={`/api/absentee-report/${showId}`} download>
-                  <Download className="size-4" />
-                  <span className="hidden sm:inline">Download CSV</span>
-                </a>
-              </Button>
-              {isKcChampionship && (
-                <Button size="sm" asChild>
-                  <a href={`/api/reports/${showId}/sh01`} download>
-                    <Download className="size-4" />
-                    <span className="hidden sm:inline">KC Absentee Return (SH01)</span>
-                    <span className="sm:hidden">SH01</span>
-                  </a>
-                </Button>
-              )}
             </div>
           </div>
         </CardHeader>
@@ -1099,31 +976,6 @@ function AbsenteeReportContent({ showId }: { showId: string }) {
 function ExtrasSummaryContent({ showId }: { showId: string }) {
   const { data, isLoading } = trpc.secretary.getExtrasSummary.useQuery({ showId });
 
-  function exportCsv() {
-    if (!data) return;
-    const headers = ['Section', 'Name', 'Email', 'Phone', 'Detail / Quantity', 'Total'];
-    const rows: string[][] = [];
-    for (const section of data.sundrySections) {
-      for (const buyer of section.buyers) {
-        rows.push([
-          section.label,
-          buyer.name ?? '',
-          buyer.email ?? '',
-          buyer.phone ?? '',
-          `Qty ${buyer.quantity}`,
-          formatCurrency(buyer.quantity * buyer.unitPrice),
-        ]);
-      }
-    }
-    for (const sp of data.classSponsors) {
-      rows.push(['Class Sponsor', sp.sponsorName, '', '', sp.detail, sp.amountPence ? formatCurrency(sp.amountPence) : '']);
-    }
-    for (const sp of data.showSponsors) {
-      rows.push(['Show Sponsor', sp.sponsorName, sp.email ?? '', sp.phone ?? '', sp.detail, sp.amountPence ? formatCurrency(sp.amountPence) : '']);
-    }
-    downloadCsv(headers, rows, `extras-summary-${showId}`);
-  }
-
   if (isLoading) return <LoadingCard />;
   if (!data) return null;
 
@@ -1136,6 +988,7 @@ function ExtrasSummaryContent({ showId }: { showId: string }) {
 
   return (
     <div className="space-y-4">
+      <DownloadsMovedNote showId={showId} />
       {/* Top totals */}
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-3">
         <Card>
@@ -1158,13 +1011,6 @@ function ExtrasSummaryContent({ showId }: { showId: string }) {
             </p>
           </CardContent>
         </Card>
-      </div>
-
-      <div className="flex justify-end">
-        <Button variant="outline" size="sm" onClick={exportCsv} disabled={isEmpty}>
-          <Download className="size-3.5" />
-          Download CSV
-        </Button>
       </div>
 
       {isEmpty && (

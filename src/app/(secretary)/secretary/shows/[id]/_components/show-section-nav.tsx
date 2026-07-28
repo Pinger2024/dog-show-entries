@@ -57,7 +57,7 @@ const BASE_SECTIONS: Section[] = [
   { path: '/people', label: 'People', icon: Users },
   { path: '/sponsors', label: 'Sponsors', icon: Handshake },
   { path: '/adverts', label: 'Adverts', icon: ImageIcon },
-  { path: '/documents', label: 'Documents', icon: FolderOpen },
+  { path: '/documents', label: 'Documents & Reports', icon: FolderOpen },
   { path: '/print-shop', label: 'Print Shop', icon: Printer },
 ];
 
@@ -88,11 +88,11 @@ export function ShowSectionNav({ showId, isWusv = false }: { showId: string; isW
     },
     {
       label: 'Finance & Print',
-      items: ['/financial', '/catalogue', '/catalogue-settings', '/reports', '/print-shop'],
+      items: ['/financial', '/catalogue', '/catalogue-settings', '/reports', '/documents', '/print-shop'],
     },
     {
       label: 'Setup',
-      items: ['/people', '/sponsors', '/adverts', '/documents'],
+      items: ['/people', '/sponsors', '/adverts'],
     },
   ];
   const [open, setOpen] = useState(false);
