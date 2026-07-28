@@ -107,6 +107,10 @@ async function makePuppy(ownerId: string, breedId: string, dob: string) {
     dateOfBirth: dob,
     kcRegNumber: 'SZ9999',
     microchipNumber: '981000000099',
+    sireName: 'Test Sire',
+    damName: 'Test Dam',
+    breederName: 'Test Breeder',
+    colour: 'Black and Gold',
   });
 }
 

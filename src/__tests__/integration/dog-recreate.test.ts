@@ -15,6 +15,8 @@ const owners = [
   { ownerName: 'Jane Owner', ownerAddress: '1 High St', ownerEmail: 'jane@test.local', isPrimary: true },
 ];
 
+const pedigree = { sireName: 'Sire A', damName: 'Dam A', breederName: 'Breeder A', colour: 'Black & Tan' };
+
 describe('dog re-creation after soft-delete (bug-hunt #23)', () => {
   it('restores a previously-removed dog by RKC number instead of 500ing', async () => {
     const exhibitor = await makeUser({ role: 'exhibitor' });
@@ -22,12 +24,12 @@ describe('dog re-creation after soft-delete (bug-hunt #23)', () => {
     const caller = createTestCaller(exhibitor);
 
     const dog = await caller.dogs.create({
-      registeredName: 'Rex', breedId: breed.id, sex: 'dog', dateOfBirth: '2024-01-01', kcRegNumber: 'AB123456', owners,
+      registeredName: 'Rex', breedId: breed.id, sex: 'dog', dateOfBirth: '2024-01-01', kcRegNumber: 'AB123456', owners, ...pedigree,
     });
     await caller.dogs.delete({ id: dog.id });
 
     const restored = await caller.dogs.create({
-      registeredName: 'Rex Returns', breedId: breed.id, sex: 'dog', dateOfBirth: '2024-01-01', kcRegNumber: 'AB123456', owners,
+      registeredName: 'Rex Returns', breedId: breed.id, sex: 'dog', dateOfBirth: '2024-01-01', kcRegNumber: 'AB123456', owners, ...pedigree,
     });
     expect(restored.id).toBe(dog.id); // same row, restored
     expect(restored.registeredName).toBe('Rex Returns');
@@ -40,11 +42,11 @@ describe('dog re-creation after soft-delete (bug-hunt #23)', () => {
     const breed = await makeBreed();
     const caller = createTestCaller(exhibitor);
     await caller.dogs.create({
-      registeredName: 'Rex', breedId: breed.id, sex: 'dog', dateOfBirth: '2024-01-01', kcRegNumber: 'CD456789', owners,
+      registeredName: 'Rex', breedId: breed.id, sex: 'dog', dateOfBirth: '2024-01-01', kcRegNumber: 'CD456789', owners, ...pedigree,
     });
     await expect(
       caller.dogs.create({
-        registeredName: 'Dup', breedId: breed.id, sex: 'dog', dateOfBirth: '2024-01-01', kcRegNumber: 'CD456789', owners,
+        registeredName: 'Dup', breedId: breed.id, sex: 'dog', dateOfBirth: '2024-01-01', kcRegNumber: 'CD456789', owners, ...pedigree,
       })
     ).rejects.toThrow(/already registered/i);
   });

@@ -38,7 +38,7 @@ import {
 import { differenceInMonths, differenceInWeeks, format, parseISO } from 'date-fns';
 import { toast } from 'sonner';
 import { isWithinAgeRange, getAgeEligibilityDetail, handlerAgeYearsOnDate, formatCurrency } from '@/lib/date-utils';
-import { svAgeClassAllowed, svMissingRequirements, hasWorkingTitle } from '@/lib/sv-entry-readiness';
+import { svAgeClassAllowed, svMissingRequirements, hasWorkingTitle, pedigreeMissingForEntry } from '@/lib/sv-entry-readiness';
 import { SV_HEALTH_FROM_CLASSES } from '@/lib/sv-entry-validation';
 import { displayShowTypeLabel } from '@/lib/show-types';
 import { trpc } from '@/lib/trpc/client';
@@ -1545,6 +1545,33 @@ export default function EnterShowPage() {
           svStandard && !hasWorkingTitle(selectedDogSvProfile?.workingTitle);
         const svBlocked = svMissing.length > 0;
 
+        // Baseline pedigree check: sire, dam, breeder and colour all print
+        // in the catalogue, so this applies to every standard entry on
+        // every show — not just SV/WUSV — and deliberately does NOT skip
+        // NFC dogs. The SV `!isNfc` exemption above is about competition
+        // eligibility (coat type, health tests); NFC dogs still appear in
+        // the printed catalogue, so exempting them here would leave the
+        // exact catalogue hole this check exists to close.
+        const baseMissingAll =
+          cart.activeEntry?.entryType === 'standard'
+            ? pedigreeMissingForEntry({
+                sireName: selectedDog?.sireName,
+                damName: selectedDog?.damName,
+                breederName: selectedDog?.breederName,
+                colour: selectedDog?.colour,
+              })
+            : [];
+        // On an SV/WUSV standard entry the sire/dam/breeder gap is already
+        // surfaced (more strictly — it also wants registration numbers) by
+        // the SV card above; repeating it here in different words would
+        // just be more text to read. Colour isn't part of the SV check, so
+        // it still needs its own line when that card is showing.
+        const svCardShown = svStandard && !isNfc && svMissing.length > 0;
+        const baseMissing = svCardShown
+          ? baseMissingAll.filter((item) => item === 'the colour')
+          : baseMissingAll;
+        const entryBlocked = svBlocked || baseMissingAll.length > 0;
+
         const dogAgeMonths =
           selectedDog?.dateOfBirth && show?.startDate
             ? differenceInMonths(new Date(show.startDate), new Date(selectedDog.dateOfBirth))
@@ -1617,6 +1644,39 @@ export default function EnterShowPage() {
                 </p>
                 <ul className="mt-1 list-disc space-y-0.5 pl-4 text-xs">
                   {svMissing.map((item) => (
+                    <li key={item}>{item}</li>
+                  ))}
+                </ul>
+                {cart.activeEntry?.dogId && (
+                  <SEButton
+                    asChild
+                    variant="ghost"
+                    size="sm"
+                    className="mt-2 h-9 min-h-0 border border-se-honey bg-white px-3 text-xs text-se-honey-ink shadow-none hover:bg-se-honey-soft"
+                  >
+                    <Link href={`/dogs/${cart.activeEntry.dogId}/edit?returnTo=${encodeURIComponent(`/shows/${idOrSlug}/enter`)}`}>
+                      Complete {cart.activeEntry.dogName ?? 'this dog'}&apos;s profile
+                    </Link>
+                  </SEButton>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Baseline pedigree warning — every show, not just SV/WUSV.
+              Reuses the same card pattern as the SV warning above. */}
+          {baseMissing.length > 0 && (
+            <div className="flex gap-3 rounded-[14px] border border-se-honey-line bg-se-honey-soft p-3">
+              <AlertTriangle className="mt-0.5 size-4 shrink-0 text-se-honey-deep" />
+              <div className="text-sm text-se-honey-ink">
+                <p className="font-medium">
+                  {selectedDog?.registeredName ?? 'This dog'} isn&apos;t ready to enter yet
+                </p>
+                <p className="mt-0.5 text-xs">
+                  These details print in the show catalogue, so they&apos;re needed before this dog can be entered:
+                </p>
+                <ul className="mt-1 list-disc space-y-0.5 pl-4 text-xs">
+                  {baseMissing.map((item) => (
                     <li key={item}>{item}</li>
                   ))}
                 </ul>
@@ -1834,7 +1894,7 @@ export default function EnterShowPage() {
                 disabled={
                   (selectedClassIds.length === 0 && !isNfc) ||
                   (dogUnder6Months && !isNfc) ||
-                  svBlocked
+                  entryBlocked
                 }
               >
                 {cart.editingExisting ? 'Update' : 'Review entry'}

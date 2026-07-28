@@ -42,6 +42,7 @@ import {
   type RegionalFeeContext,
 } from '@/lib/regional-fee-calc';
 import { svEntryMissingRequirements, svEntryBlockedMessage } from '@/lib/sv-entry-validation';
+import { pedigreeMissingForEntry } from '@/lib/sv-entry-readiness';
 import { hasJudgingConflict } from '@/lib/judge-exhibitor-conflict';
 import { getCompetitionAgeError } from '@/lib/date-utils';
 
@@ -139,6 +140,34 @@ export const ordersRouter = createTRPCRouter({
             code: 'BAD_REQUEST',
             message: 'One or more dogs not found or not owned by you',
           });
+        }
+
+        // Baseline pedigree check — sire, dam, breeder and colour all print
+        // in the show catalogue, so no dog can check out without them. Must
+        // run before any Stripe payment intent is created below (a rejection
+        // after payment would be worse than the original bug). Junior
+        // handler entries have no dogId and skip this entirely. Deliberately
+        // applies to NFC entries too — the SV `!isNfc` exemption elsewhere is
+        // about competition eligibility (coat type, health tests); NFC dogs
+        // still appear in the printed catalogue, so the same catalogue
+        // reason applies regardless of isNfc.
+        for (const entryInput of input.entries) {
+          if (entryInput.entryType !== 'standard' || !entryInput.dogId) continue;
+          const dog = userDogs.find((d) => d.id === entryInput.dogId);
+          if (!dog) continue;
+          const missing = pedigreeMissingForEntry({
+            sireName: dog.sireName,
+            damName: dog.damName,
+            breederName: dog.breederName,
+            colour: dog.colour,
+          });
+          if (missing.length > 0) {
+            const dogName = dog.registeredName ?? 'This dog';
+            throw new TRPCError({
+              code: 'BAD_REQUEST',
+              message: `${dogName} can't be entered yet — please add ${missing.join(', ')}. These print in the show catalogue.`,
+            });
+          }
         }
 
         // Breed validation for single-breed shows.

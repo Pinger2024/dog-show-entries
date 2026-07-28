@@ -42,6 +42,7 @@ import {
 } from '@/server/services/stripe';
 import { executeStripeRefund } from '@/server/services/stripe-refunds';
 import { svEntryMissingRequirements, svEntryBlockedMessage } from '@/lib/sv-entry-validation';
+import { pedigreeMissingForEntry } from '@/lib/sv-entry-readiness';
 import { hasJudgingConflict } from '@/lib/judge-exhibitor-conflict';
 import { getCompetitionAgeError } from '@/lib/date-utils';
 
@@ -71,6 +72,28 @@ export const entriesRouter = createTRPCRouter({
         throw new TRPCError({
           code: 'BAD_REQUEST',
           message: 'Dog not found or you do not own this dog',
+        });
+      }
+
+      // Baseline pedigree check — sire, dam, breeder and colour all print in
+      // the show catalogue, so a dog can't be entered anywhere without them.
+      // This endpoint always creates a standard (dog-attached) entry — there
+      // is no Junior Handler branch here to skip. Deliberately applies to
+      // NFC entries too: NFC dogs still appear in the printed catalogue, so
+      // the catalogue-completeness reason for this check applies just the
+      // same (unlike the SV/WUSV health-and-coat gate above, which is about
+      // competition eligibility and rightly skips NFC).
+      const entryPedigreeMissing = pedigreeMissingForEntry({
+        sireName: dog.sireName,
+        damName: dog.damName,
+        breederName: dog.breederName,
+        colour: dog.colour,
+      });
+      if (entryPedigreeMissing.length > 0) {
+        const dogName = dog.registeredName ?? 'This dog';
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: `${dogName} can't be entered yet — please add ${entryPedigreeMissing.join(', ')}. These print in the show catalogue.`,
         });
       }
 

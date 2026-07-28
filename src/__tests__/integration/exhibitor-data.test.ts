@@ -47,6 +47,10 @@ describe('dogs.create', () => {
       breedId: breed.id,
       sex: 'bitch',
       dateOfBirth: '2024-01-01',
+      sireName: 'Sire A',
+      damName: 'Dam A',
+      breederName: 'Breeder A',
+      colour: 'Black & Tan',
       owners: [
         { ownerName: 'A First', ownerAddress: '1 St', ownerEmail: 'a@test.com', isPrimary: true },
         { ownerName: 'B Second', ownerAddress: '2 St', ownerEmail: 'b@test.com', isPrimary: false },

@@ -441,6 +441,29 @@ export const dogsRouter = createTRPCRouter({
     .mutation(async ({ ctx, input }) => {
       const { owners, ...dogData } = input;
 
+      // Sire, dam, breeder and colour are mandatory for every new dog — a
+      // catalogue can't be produced without them, and this is the single
+      // choke point every create path (dog form, onboarding wizard) goes
+      // through. dog-form.tsx enforces this client-side too, but the server
+      // check is the guarantee (Mandy 2026-07-27: dogs were being created
+      // with these blank via the onboarding wizard, which had no check).
+      const requiredPedigreeFields: Array<{ key: 'sireName' | 'damName' | 'breederName' | 'colour'; label: string }> = [
+        { key: 'sireName', label: "the sire's name" },
+        { key: 'damName', label: "the dam's name" },
+        { key: 'breederName', label: "the breeder's name" },
+        { key: 'colour', label: 'the colour' },
+      ];
+      const missingPedigreeFields = requiredPedigreeFields.filter(
+        (f) => !dogData[f.key] || !dogData[f.key]!.trim()
+      );
+      if (missingPedigreeFields.length > 0) {
+        const list = missingPedigreeFields.map((f) => f.label).join(', ');
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: `Please add ${list} — they're needed for the catalogue.`,
+        });
+      }
+
       // If this owner previously removed (soft-deleted) a dog with the same RKC
       // registration number, restore that row instead of inserting — the unique
       // kcRegNumber constraint would otherwise throw a raw 500 and the dog could
@@ -567,6 +590,33 @@ export const dogsRouter = createTRPCRouter({
         throw new TRPCError({
           code: 'FORBIDDEN',
           message: 'You do not own this dog',
+        });
+      }
+
+      // Cannot clear sire, dam, breeder or colour once set — a catalogue
+      // can't be produced without them. A dog that's already missing one of
+      // these must stay freely editable (including being filled in) so
+      // Mandy can repair the existing records by hand.
+      const guardedPedigreeFields: Array<{ key: 'sireName' | 'damName' | 'breederName' | 'colour'; label: string }> = [
+        { key: 'sireName', label: "the sire's name" },
+        { key: 'damName', label: "the dam's name" },
+        { key: 'breederName', label: "the breeder's name" },
+        { key: 'colour', label: 'the colour' },
+      ];
+      const clearedFields = guardedPedigreeFields.filter((f) => {
+        if (!(f.key in rest) || rest[f.key] === undefined) return false;
+        const newVal = rest[f.key];
+        const newBlank = newVal == null || !String(newVal).trim();
+        if (!newBlank) return false;
+        const oldVal = existing[f.key];
+        const oldBlank = oldVal == null || !String(oldVal).trim();
+        return !oldBlank;
+      });
+      if (clearedFields.length > 0) {
+        const list = clearedFields.map((f) => f.label).join(', ');
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: `Please don't clear ${list} — it's needed for the catalogue. You can change it to something else instead.`,
         });
       }
 

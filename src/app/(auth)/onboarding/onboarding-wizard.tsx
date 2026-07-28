@@ -750,6 +750,32 @@ function DogStep({
                 });
                 return;
               }
+              // Pedigree (sire + dam + breeder) and colour are mandatory —
+              // a catalogue can't be produced with this missing. Mirrors
+              // dog-form.tsx's create-mode check so the two forms agree
+              // (Mandy 2026-07-27: the onboarding wizard was the gap that
+              // let dogs through with these blank).
+              let pedigreeMissing = false;
+              if (!data.sireName || !data.sireName.trim()) {
+                form.setError('sireName', { type: 'manual', message: "The sire's name is required" });
+                pedigreeMissing = true;
+              }
+              if (!data.damName || !data.damName.trim()) {
+                form.setError('damName', { type: 'manual', message: "The dam's name is required" });
+                pedigreeMissing = true;
+              }
+              if (!data.breederName || !data.breederName.trim()) {
+                form.setError('breederName', { type: 'manual', message: "The breeder's name is required" });
+                pedigreeMissing = true;
+              }
+              if (!data.colour || !data.colour.trim()) {
+                form.setError('colour', { type: 'manual', message: 'The colour is required' });
+                pedigreeMissing = true;
+              }
+              if (pedigreeMissing) {
+                toast.error('Please add the sire, dam, breeder and colour — they appear in the catalogue');
+                return;
+              }
               createDog.mutate({
                 ...data,
                 owners: [
@@ -1057,12 +1083,7 @@ function DogStep({
               name="colour"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>
-                    Colour{' '}
-                    <span className="text-muted-foreground font-normal">
-                      (optional)
-                    </span>
-                  </FormLabel>
+                  <FormLabel>Colour</FormLabel>
                   <FormControl>
                     <Input
                       placeholder="e.g. Black & Tan"
@@ -1076,10 +1097,15 @@ function DogStep({
 
             {/* Pedigree (collapsed/compact) */}
             <div className="space-y-3 rounded-lg border p-3 sm:p-4">
+              {/* Say WHY it's needed, not just that it's required. This
+                  section used to be marked "(optional)", which is how dogs
+                  reached the catalogue with no sire or dam at all. If the RKC
+                  lookup doesn't respond these get typed by hand, so the
+                  reason has to be worth the typing (Mandy 2026-07-27). */}
               <p className="text-sm font-medium">
                 Pedigree{' '}
-                <span className="text-muted-foreground font-normal">
-                  (optional)
+                <span className="font-normal text-muted-foreground">
+                  — these print in the show catalogue
                 </span>
               </p>
               <FormField

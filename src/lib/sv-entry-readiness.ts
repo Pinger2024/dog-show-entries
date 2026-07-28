@@ -95,6 +95,30 @@ export function svMissingRequirements(opts: {
   return missing;
 }
 
+/** The dog's baseline pedigree fields every catalogue (not just SV) needs. */
+export type BaselinePedigree = {
+  sireName?: string | null;
+  damName?: string | null;
+  breederName?: string | null;
+  colour?: string | null;
+} | null | undefined;
+
+/**
+ * The baseline pedigree fields still missing before this dog can be entered
+ * into ANY show — sire, dam, breeder and colour all print in the catalogue,
+ * regardless of whether the show is SV/WUSV. The SV-specific gate above is
+ * stricter (it also wants registration numbers and breeder town/postcode)
+ * and stays unchanged; this is the floor every entry must clear.
+ */
+export function pedigreeMissingForEntry(dog: BaselinePedigree): string[] {
+  const missing: string[] = [];
+  if (blank(dog?.sireName)) missing.push("the sire's name");
+  if (blank(dog?.damName)) missing.push("the dam's name");
+  if (blank(dog?.breederName)) missing.push("the breeder's name");
+  if (blank(dog?.colour)) missing.push('the colour');
+  return missing;
+}
+
 /** Has the dog got a (non-blank) working title recorded? */
 export function hasWorkingTitle(workingTitle: string | null | undefined): boolean {
   return !!(workingTitle ?? '').trim();
