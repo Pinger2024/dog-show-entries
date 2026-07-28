@@ -423,6 +423,21 @@ const bestAwardsStyles = StyleSheet.create({
     textTransform: 'uppercase',
     letterSpacing: 0.3,
   },
+  // Strips only. At 7pt "Reserve Dog/Bitch Challenge Certificate" took three
+  // lines in a 28mm strip and left barely a gap above the write line to put a
+  // number in (Mandy 2026-07-28, testing the printed page). 5.5pt with tighter
+  // letter-spacing gets those onto two lines. The Judge's copy column is wide
+  // enough for one line, so it keeps the larger 7pt.
+  awardLabelStrip: {
+    fontSize: 5.5,
+    fontWeight: 'bold',
+    textTransform: 'uppercase',
+    letterSpacing: 0.15,
+    // "CHALLENGE CERTIFICATE" is wider than a 28mm strip at any legible size,
+    // so the Reserve awards will always take three lines. Tightening the line
+    // spacing is what actually buys back the writing gap.
+    lineHeight: 1,
+  },
   awardWriteLine: {
     borderBottomWidth: 1,
     borderBottomColor: '#888',
@@ -565,7 +580,15 @@ function BestAwardsColumn({
 
       {awards.map((award) => (
         <View key={award} style={bestAwardsStyles.awardRow} wrap={false}>
-          <Text style={bestAwardsStyles.awardLabel}>{award}</Text>
+          <Text
+            style={
+              variant === 'judge'
+                ? bestAwardsStyles.awardLabel
+                : bestAwardsStyles.awardLabelStrip
+            }
+          >
+            {award}
+          </Text>
           <View style={bestAwardsStyles.awardWriteLine} />
         </View>
       ))}
