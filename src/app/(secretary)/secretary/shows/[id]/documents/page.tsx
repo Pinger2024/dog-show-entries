@@ -1,7 +1,6 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useSession } from 'next-auth/react';
 import {
   Award,
   BarChart3,
@@ -20,7 +19,6 @@ import {
   Map,
   PoundSterling,
   Printer,
-  Sparkles,
   Trophy,
   UserX,
 } from 'lucide-react';
@@ -219,11 +217,6 @@ export default function DocumentsPage() {
   const { data: extrasSummary } = trpc.secretary.getExtrasSummary.useQuery({ showId });
   const { data: paymentReport } = trpc.secretary.getPaymentReport.useQuery({ showId });
   const { data: withdrawnAndAbsent } = trpc.secretary.getAbsenteeList.useQuery({ showId });
-
-  // Admin-only UI gate — only Amanda + Michael see internal Print Shop
-  // fulfilment tools like the Mixam overprint generator. Not a phase gate.
-  const { data: session } = useSession();
-  const isAdmin = session?.user?.role === 'admin';
 
   const resultsFinalised = Boolean(catalogueData?.show?.resultsPublishedAt);
   const isKcChampionship = show?.showType === 'championship' && show?.showRuleset !== 'wusv';
@@ -467,23 +460,6 @@ export default function DocumentsPage() {
               )}
               <PdfViewerButton icon={<Award className="size-4" />} label="Preview" url={prizeCardHref} variant="outline" />
             </DocRow>
-            {isAdmin && (
-              <DocRow
-                icon={<Sparkles className="size-4" />}
-                label="Mixam Overprint PDF"
-                description="5-page overprint for Mixam-preprinted blanks — admin/Print Shop use only"
-              >
-                <Button
-                  variant="outline"
-                  className="min-h-[2.75rem]"
-                  disabled={downloadingKey === 'overprint'}
-                  onClick={() => handleDownload('overprint', `/api/prize-card-overprint/${showId}`, 'Prize-Cards-Mixam-Overprint.pdf')}
-                >
-                  {downloadingKey === 'overprint' ? <Loader2 className="size-4 animate-spin" /> : <Download className="size-4" />}
-                  Download
-                </Button>
-              </DocRow>
-            )}
 
             <div className="flex flex-wrap items-end gap-4 border-t pt-4">
               <div className="space-y-1.5">
