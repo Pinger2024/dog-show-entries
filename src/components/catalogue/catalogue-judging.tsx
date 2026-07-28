@@ -315,8 +315,7 @@ const classGroupToClassLike = (g: ClassGroup) => ({
  * class-labels.ts), which runs the real `isSpecialAwardClass`/
  * `isJuniorHandler` predicates against `ClassGroup.classDefinitionType` —
  * not a `/special award/i` name regex — so this can no longer drift from
- * the Standard Catalogue, the schedule, or the printed Schedule (Michael
- * 2026-07-28).
+ * the Standard Catalogue, which buckets through the same helper.
  *
  * Exported for testing — the rendering around it is a PDF tree, but which
  * classes reach which section, and the section order, is plain logic and

@@ -77,8 +77,7 @@ describe('steward book — classes with no entries', () => {
     // Was: fell through to the Dogs bucket by elimination (the "true
     // catch-all" was Dogs itself) — sectionClasses (lib/class-labels.ts)
     // now gives the catch-all its own section, key='other', so an
-    // unrecognised class can never be mistaken for a real Dog class
-    // (Michael 2026-07-28).
+    // unrecognised class can never be mistaken for a real Dog class.
     const sections = buildJudgingSections([
       cls({ className: 'Mystery Class', sex: null, classLabel: undefined, entries: [dog] }),
     ]);

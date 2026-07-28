@@ -70,7 +70,7 @@ export interface CatalogueEntry {
     /** `classDefinition.type` ('special' | 'junior_handler' | …) — carried
      *  through so section bucketing (`sectionClasses`, lib/class-labels.ts)
      *  can use the real predicates instead of matching a regex against the
-     *  display name (Michael 2026-07-28). */
+     *  display name. */
     classDefinitionType?: string | null;
   }[];
   status: string;
@@ -106,7 +106,7 @@ export interface ShowClassInfo {
   /** `classDefinition.type` ('special' | 'junior_handler' | …) — carried
    *  through so section bucketing (`sectionClasses`, lib/class-labels.ts)
    *  can use the real predicates instead of matching a regex against the
-   *  display name (Michael 2026-07-28). */
+   *  display name. */
   classDefinitionType?: string | null;
 }
 

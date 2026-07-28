@@ -196,18 +196,23 @@ export interface ClassSection<T> {
 export type SectionableClass = ClassKindInput & { sex?: string | null };
 
 /**
- * Single source of truth for splitting a show's classes into display bands —
- * Dog, Bitch, Special Awards, Junior Handling — used everywhere a document
- * groups classes under section headings with their own judge line (Standard
- * Catalogue, Stewards' Catalogue, the public schedule's SAC filter, the
- * printed Schedule). Before this existed, all four call sites hand-rolled
- * this split, and one of them matched a `/special award/i` (or
- * `/handling|handler/i`) regex against the class NAME instead of using the
- * real `isSpecialAwardClass`/`isJuniorHandler` predicates — a club naming a
- * class differently would silently break bucketing. This is the fix: one
- * bucketing + ordering decision, driven by the real predicates, reused by
- * every consumer; each consumer keeps its own heading/judge-line/column
- * rendering (Michael 2026-07-28).
+ * Single source of truth for BUCKETING a show's classes into display bands —
+ * Dog, Bitch, Special Awards, Junior Handling — for any document that groups
+ * classes under section headings with their own judge line. The Standard
+ * Catalogue and Stewards' Catalogue used to hand-roll this split
+ * independently, and one of them matched a `/special award/i` regex against
+ * the class NAME instead of the real `isSpecialAwardClass`/`isJuniorHandler`
+ * predicates — a club naming a class differently would silently break
+ * bucketing. That's the defect this removes: one bucketing decision, driven
+ * by the real predicates, reused by every consumer.
+ *
+ * This function decides BUCKETING, not layout — it returns each section's
+ * classes keyed by `key`, and a consumer that needs its own section order or
+ * an extra leading/trailing bucket (e.g. a "Mixed" section ahead of Dog) can
+ * look sections up by key (`sections.find(s => s.key === 'jh')`) and lay
+ * them out however its document requires, same as it would with any other
+ * shared data. Only the bucketing predicates are meant to be one rule
+ * everywhere.
  *
  * TRAP this exists to avoid: Special Award classes are `sex: null` AND
  * unnumbered; Junior Handling is `sex: null` AND numbered. Never bucket on
@@ -227,9 +232,11 @@ export type SectionableClass = ClassKindInput & { sex?: string | null };
  *
  * Returns only the sections that have classes, in the fixed order
  * Dog → Bitch → Special Awards → Junior Handling → catch-all ("other") —
- * the catch-all guarantees a class of an unrecognised shape is surfaced
- * somewhere rather than silently dropped, without ever being confused for
- * a real Dog/Bitch class.
+ * Special Awards before Junior Handling is the show secretary's judging-day
+ * convention (Special Awards run in the lunch break ahead of the Junior
+ * Handling classes). The catch-all guarantees a class of an unrecognised
+ * shape is surfaced somewhere rather than silently dropped, without ever
+ * being confused for a real Dog/Bitch class.
  */
 export function sectionClasses<T>(
   classes: T[],

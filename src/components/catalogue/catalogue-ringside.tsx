@@ -443,7 +443,7 @@ export function CatalogueRingside({ show, entries, compact }: Props) {
   // the end of judging (after the breed classes), each with its judge named —
   // matching the by-class catalogue (Mandy 2026-07-20). Bucketing itself is the
   // shared `sectionClasses` (lib/class-labels.ts) so this can't drift from the
-  // Stewards' Catalogue / schedule / printed Schedule (Michael 2026-07-28).
+  // Stewards' Catalogue, which uses the same predicate-driven bucketing.
   const bucketed = sectionClasses(allClasses, classGroupToClassLike);
   const classesFor = (key: (typeof bucketed)[number]['key']) =>
     bucketed.find((b) => b.key === key)?.classes ?? [];

@@ -62,7 +62,7 @@ export default function SchedulePage({
   // pulled out of the by-breed grouping below and the dedicated SAC section
   // (sacClasses, further down) can never disagree about which classes are
   // special awards — one predicate-driven decision instead of two places
-  // independently filtering with `isSpecialAwardClass` (Michael 2026-07-28).
+  // independently filtering with `isSpecialAwardClass`.
   const sectionedClasses = useMemo(
     () => sectionClasses(show?.showClasses ?? [], (c) => c),
     [show?.showClasses],

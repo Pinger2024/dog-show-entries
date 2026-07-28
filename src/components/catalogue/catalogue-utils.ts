@@ -434,8 +434,8 @@ export interface ClassGroup {
    *  lib/class-labels.ts) can run the real `isSpecialAwardClass` /
    *  `isJuniorHandler` predicates on this group instead of a consumer
    *  matching a regex against `className` — matching a rule against a
-   *  display string is exactly how the four hand-rolled sectioning copies
-   *  drifted (Michael 2026-07-28). */
+   *  display string is exactly how the Standard Catalogue and Stewards'
+   *  Catalogue sectioning drifted apart. */
   classDefinitionType?: string | null;
   entries: CatalogueEntryBase[];
 }

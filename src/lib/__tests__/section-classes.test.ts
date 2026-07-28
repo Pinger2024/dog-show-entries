@@ -72,6 +72,21 @@ describe('sectionClasses', () => {
     expect(sections.map((s) => s.key)).toEqual(['dog', 'bitch', 'special', 'jh', 'other']);
   });
 
+  it('places Special Awards before Junior Handling — the secretary confirmed this is the correct running order', () => {
+    // Durable record of the domain decision: Special Award Classes run in
+    // the lunch break, ahead of the Junior Handling classes. The printed
+    // Schedule (show-schedule.tsx) had this backwards until the secretary
+    // flagged that it disagreed with the catalogue and steward's book,
+    // which have always had Special Awards first. Pin the order here so it
+    // can't silently regress in any consumer of this helper.
+    const sections = sectionClasses([jh('jh1'), sac('sac1')], identity);
+    const specialIdx = sections.findIndex((s) => s.key === 'special');
+    const jhIdx = sections.findIndex((s) => s.key === 'jh');
+    expect(specialIdx).toBeGreaterThanOrEqual(0);
+    expect(jhIdx).toBeGreaterThanOrEqual(0);
+    expect(specialIdx).toBeLessThan(jhIdx);
+  });
+
   it('preserves persisted order within a section', () => {
     const sections = sectionClasses(
       [dog('d3'), dog('d1'), dog('d2')],

@@ -105,13 +105,13 @@ export function ShowSchedule({
   };
 
   // Bucketing (Dog / Bitch / Special Awards / Junior Handling, plus a
-  // catch-all for anything else — Veteran and other non-JH mixed classes
-  // render at the top of the Classification page, see "Mixed" below) is
-  // the shared `sectionClasses` (lib/class-labels.ts), which runs the real
-  // `isSpecialAwardClass`/`isJuniorHandler` predicates instead of a local
-  // `classType === 'special'` name check — the same rule the Standard
-  // Catalogue, Stewards' Catalogue, and public schedule use, so this
-  // schedule can no longer drift from them (Michael 2026-07-28).
+  // catch-all for anything else) is the shared `sectionClasses` (lib/
+  // class-labels.ts), which runs the real `isSpecialAwardClass`/
+  // `isJuniorHandler` predicates instead of a local `classType === 'special'`
+  // name check. This function only decides bucketing — which classes are
+  // Dog/Bitch/Special/JH/other — not layout: this page picks its own render
+  // order (Mixed at the top, Special before Junior Handling — see below)
+  // by looking sections up by key.
   const scheduleClassToClassLike = (c: ScheduleClass) => ({
     sex: c.sex,
     classDefinition: { type: c.classType, name: c.className },
@@ -125,8 +125,8 @@ export function ShowSchedule({
   // Classification page so class 1 is visible first — this is the sectioning
   // catch-all bucket, not an unrecognised-shape safety net.
   const mixedTopClasses = classesFor('other');
-  const mixedBottomClasses = classesFor('jh');
   const sacClasses = classesFor('special');
+  const mixedBottomClasses = classesFor('jh');
   const sacJudges = judges.filter((j) => j.role === 'Special Awards Classes');
 
   const footerRender = ({ pageNumber, totalPages }: { pageNumber: number; totalPages: number }) =>
