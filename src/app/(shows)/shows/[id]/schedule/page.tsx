@@ -18,7 +18,7 @@ import {
 import { trpc } from '@/lib/trpc/client';
 import { formatCurrency, parseLocalDate } from '@/lib/date-utils';
 import { showTypeLabels } from '@/lib/show-types';
-import { buildClassLabelMap, isSpecialAwardClass } from '@/lib/class-labels';
+import { buildClassLabelMap, sectionClasses } from '@/lib/class-labels';
 import { sortOfficers } from '@/components/schedule/shared/officers';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -58,6 +58,20 @@ export default function SchedulePage({
     [show?.showClasses, show?.showRuleset],
   );
 
+  // Shared bucketing (lib/class-labels.ts) so the Special Award Classes
+  // pulled out of the by-breed grouping below and the dedicated SAC section
+  // (sacClasses, further down) can never disagree about which classes are
+  // special awards — one predicate-driven decision instead of two places
+  // independently filtering with `isSpecialAwardClass` (Michael 2026-07-28).
+  const sectionedClasses = useMemo(
+    () => sectionClasses(show?.showClasses ?? [], (c) => c),
+    [show?.showClasses],
+  );
+  const specialAwardClassIds = useMemo(
+    () => new Set((sectionedClasses.find((s) => s.key === 'special')?.classes ?? []).map((c) => c.id)),
+    [sectionedClasses],
+  );
+
   const breedGroups = useMemo(() => {
     if (!show?.showClasses) return [];
     const map = new Map<string, {
@@ -70,7 +84,7 @@ export default function SchedulePage({
 
     for (const sc of show.showClasses) {
       // SAC classes get their own dedicated section, not lumped under a breed.
-      if (isSpecialAwardClass(sc)) continue;
+      if (specialAwardClassIds.has(sc.id)) continue;
       const breedName = sc.breed?.name ?? 'Any Breed';
       if (!map.has(breedName)) {
         map.set(breedName, {
@@ -113,14 +127,14 @@ export default function SchedulePage({
           return aData.groupSortOrder - bData.groupSortOrder;
         return a.localeCompare(b);
       });
-  }, [show?.showClasses, show?.judgeAssignments]);
+  }, [show?.showClasses, show?.judgeAssignments, specialAwardClassIds]);
 
   // Special Award Classes — surface as a dedicated section after the
   // breed classes, with letter labels and the lunch-break preamble.
-  const sacClasses = useMemo(() => {
-    if (!show?.showClasses) return [];
-    return show.showClasses.filter(isSpecialAwardClass);
-  }, [show?.showClasses]);
+  const sacClasses = useMemo(
+    () => sectionedClasses.find((s) => s.key === 'special')?.classes ?? [],
+    [sectionedClasses],
+  );
 
   // The SAC judge sits in a separate assignment lane — pull names from
   // the show's judgeAssignments where the assignment is tagged as the

@@ -28,8 +28,27 @@ type ClassLike = {
   classDefinition?: { type?: string | null; name?: string | null } | null;
 };
 
-export function isJuniorHandler(cls: ClassLike): boolean {
-  return cls.classDefinition?.type === 'junior_handler';
+/**
+ * Minimal shape needed to tell whether a class is Junior Handling or a
+ * Special Award Class — deliberately looser than {@link ClassLike} (no `id`
+ * required, and no requirement that classDefinition be nested) so callers
+ * whose row shape doesn't carry an id, or flattens the definition's type/name
+ * onto the class itself (e.g. a catalogue `ClassGroup`, a schedule
+ * `ScheduleClass`), can still use the ONE canonical check instead of a local
+ * regex or flat-field copy. Every existing `ClassLike`-shaped caller already
+ * satisfies this structurally, so widening these two predicates' parameter
+ * type is backwards compatible.
+ */
+export type ClassKindInput = {
+  classDefinition?: { type?: string | null; name?: string | null } | null;
+  /** Flat fallback for callers whose class rows carry the definition's
+   *  type/name directly rather than nested under `classDefinition`. */
+  classType?: string | null;
+  className?: string | null;
+};
+
+export function isJuniorHandler(cls: ClassKindInput): boolean {
+  return (cls.classDefinition?.type ?? cls.classType ?? null) === 'junior_handler';
 }
 
 /**
@@ -150,12 +169,99 @@ export function buildSvClassNumbering(
 
 /** Special Award Classes sit outside the RKC-licensed class count too — the
  *  schedule renders them as A, B, C, … in their own dedicated section (judged
- *  in the lunch break). Amanda 2026-05-19. */
-export function isSpecialAwardClass(cls: ClassLike): boolean {
-  return (
-    cls.classDefinition?.type === 'special' &&
-    (cls.classDefinition?.name?.startsWith('Special Award Class') ?? false)
-  );
+ *  in the lunch break). Amanda 2026-05-19.
+ *
+ *  Widened to {@link ClassKindInput} (same as `isJuniorHandler`) so callers
+ *  whose row shape flattens `classDefinition.type`/`.name` onto the class
+ *  itself (a catalogue `ClassGroup`, a schedule `ScheduleClass`) can use this
+ *  ONE canonical check via `sectionClasses` instead of a local regex or
+ *  flat-field copy — this predicate never used `id`/`classNumber` anyway, so
+ *  the widening is backwards compatible with every existing caller. */
+export function isSpecialAwardClass(cls: ClassKindInput): boolean {
+  const type = cls.classDefinition?.type ?? cls.classType ?? null;
+  const name = cls.classDefinition?.name ?? cls.className ?? null;
+  return type === 'special' && (name?.startsWith('Special Award Class') ?? false);
+}
+
+export type ClassSectionKey = 'dog' | 'bitch' | 'special' | 'jh' | 'other';
+
+export interface ClassSection<T> {
+  key: ClassSectionKey;
+  classes: T[];
+}
+
+/** Minimal shape `sectionClasses` needs from each item's adapter — the same
+ *  loose {@link ClassKindInput} the predicates accept, plus `sex` for the
+ *  Dog/Bitch fallback. */
+export type SectionableClass = ClassKindInput & { sex?: string | null };
+
+/**
+ * Single source of truth for splitting a show's classes into display bands —
+ * Dog, Bitch, Special Awards, Junior Handling — used everywhere a document
+ * groups classes under section headings with their own judge line (Standard
+ * Catalogue, Stewards' Catalogue, the public schedule's SAC filter, the
+ * printed Schedule). Before this existed, all four call sites hand-rolled
+ * this split, and one of them matched a `/special award/i` (or
+ * `/handling|handler/i`) regex against the class NAME instead of using the
+ * real `isSpecialAwardClass`/`isJuniorHandler` predicates — a club naming a
+ * class differently would silently break bucketing. This is the fix: one
+ * bucketing + ordering decision, driven by the real predicates, reused by
+ * every consumer; each consumer keeps its own heading/judge-line/column
+ * rendering (Michael 2026-07-28).
+ *
+ * TRAP this exists to avoid: Special Award classes are `sex: null` AND
+ * unnumbered; Junior Handling is `sex: null` AND numbered. Never bucket on
+ * null-ness — always the explicit predicate. Order matters too: SAC is
+ * checked before JH so a special-award class can never be misread as JH
+ * (both have sex=null), and both are checked before the sex fallback so
+ * neither is ever swallowed by Dog/Bitch.
+ *
+ * `classes` must already be in persisted/display order (the order every
+ * reader sorts by — `sortOrder`/`classNumber`) — this function buckets by a
+ * single stable pass and never re-sorts, so that order is preserved within
+ * each returned section.
+ *
+ * `toClassLike` adapts the caller's item shape to the minimal shape the
+ * predicates need — callers whose items already carry a nested
+ * `classDefinition: {type, name}` and `sex` can pass the identity function.
+ *
+ * Returns only the sections that have classes, in the fixed order
+ * Dog → Bitch → Special Awards → Junior Handling → catch-all ("other") —
+ * the catch-all guarantees a class of an unrecognised shape is surfaced
+ * somewhere rather than silently dropped, without ever being confused for
+ * a real Dog/Bitch class.
+ */
+export function sectionClasses<T>(
+  classes: T[],
+  toClassLike: (item: T) => SectionableClass,
+): ClassSection<T>[] {
+  const buckets: Record<ClassSectionKey, T[]> = {
+    dog: [],
+    bitch: [],
+    special: [],
+    jh: [],
+    other: [],
+  };
+
+  for (const item of classes) {
+    const like = toClassLike(item);
+    if (isSpecialAwardClass(like)) {
+      buckets.special.push(item);
+    } else if (isJuniorHandler(like)) {
+      buckets.jh.push(item);
+    } else if (like.sex === 'dog') {
+      buckets.dog.push(item);
+    } else if (like.sex === 'bitch') {
+      buckets.bitch.push(item);
+    } else {
+      buckets.other.push(item);
+    }
+  }
+
+  const order: ClassSectionKey[] = ['dog', 'bitch', 'special', 'jh', 'other'];
+  return order
+    .filter((key) => buckets[key].length > 0)
+    .map((key) => ({ key, classes: buckets[key] }));
 }
 
 /**

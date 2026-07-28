@@ -188,6 +188,7 @@ export async function generateCataloguePdf(
     sortOrder: sc.sortOrder,
     sex: sc.sex,
     svCoatType: (sc as { svCoatType?: 'stock' | 'long_stock' | null }).svCoatType ?? null,
+    classDefinitionType: sc.classDefinition?.type ?? null,
   }));
 
   // Definitions of Classes — deduped, Junior Handling floated to the END (after
@@ -249,6 +250,7 @@ export async function generateCataloguePdf(
       sortOrder: ec.showClass?.sortOrder,
       showClassId: ec.showClassId,
       svCoatType: (ec.showClass as { svCoatType?: 'stock' | 'long_stock' | null } | undefined)?.svCoatType ?? null,
+      classDefinitionType: ec.showClass?.classDefinition?.type ?? null,
     })),
     status: entry.status,
     entryType: entry.entryType,

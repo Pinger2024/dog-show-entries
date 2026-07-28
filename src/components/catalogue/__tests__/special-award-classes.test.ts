@@ -43,16 +43,18 @@ function southWesternShape(): ClassGroup[] {
     }
   }
   // JH classes: numbered (23, 24), sex=null — schedule position BEFORE the
-  // Special Award Classes, same as the real show.
-  classes.push(cls({ className: 'JHA Handling (6-11)', classLabel: 'JHA', sex: null, classNumber: n, sortOrder: n - 1 }));
+  // Special Award Classes, same as the real show. classDefinitionType drives
+  // the real `isJuniorHandler` predicate now, not a name regex.
+  classes.push(cls({ className: 'JHA Handling (6-11)', classLabel: 'JHA', sex: null, classNumber: n, sortOrder: n - 1, classDefinitionType: 'junior_handler' }));
   n++;
-  classes.push(cls({ className: 'JHA Handling (12-16)', classLabel: 'JHB', sex: null, classNumber: n, sortOrder: n - 1 }));
+  classes.push(cls({ className: 'JHA Handling (12-16)', classLabel: 'JHB', sex: null, classNumber: n, sortOrder: n - 1, classDefinitionType: 'junior_handler' }));
   n++;
   // Special Award Classes: unnumbered, sex=null, labelled A/B/C.
+  // classDefinitionType drives the real `isSpecialAwardClass` predicate now.
   const sacNames = ['Special Award Class - Junior', 'Special Award Class - Post Graduate', 'Special Award Class - Open'];
   const sacLabels = ['A', 'B', 'C'];
   sacNames.forEach((name, i) => {
-    classes.push(cls({ className: name, classLabel: sacLabels[i], sex: null, classNumber: null, sortOrder: n - 1 + i }));
+    classes.push(cls({ className: name, classLabel: sacLabels[i], sex: null, classNumber: null, sortOrder: n - 1 + i, classDefinitionType: 'special' }));
   });
   return classes;
 }

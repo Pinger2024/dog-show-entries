@@ -12,10 +12,10 @@ import {
   displayEntryName,
   buildSponsorLines,
   ownerHeading,
-  isJuniorHandlingClass,
   formatPedigreeSireDam,
 } from './catalogue-utils';
 import type { ClassGroup } from './catalogue-utils';
+import { sectionClasses } from '@/lib/class-labels';
 import {
   CoverPage,
   FrontMatterContent,
@@ -248,13 +248,19 @@ const s = StyleSheet.create({
 });
 
 type Section = {
-  key: 'dog' | 'bitch' | 'jh' | 'special';
+  key: 'dog' | 'bitch' | 'jh' | 'special' | 'other';
   label: string;
   classes: ClassGroup[];
   /** Named beneath the section band for the Special Awards / Junior Handling
    *  competitions (their own judges, apart from the breed judge). */
   judge?: string | null;
 };
+
+/** Adapts a `ClassGroup` to the minimal shape `sectionClasses` needs. */
+const classGroupToClassLike = (g: ClassGroup) => ({
+  sex: g.sex,
+  classDefinition: { type: g.classDefinitionType, name: g.className },
+});
 
 // ── Exhibitor Index ────────────────────────────────────────────
 // Full exhibitor details: name, address, then each dog with
@@ -431,28 +437,21 @@ export function CatalogueRingside({ show, entries, compact }: Props) {
     }
   }
 
-  // Split into sections: Dogs, Bitches, Special Award Classes, Junior Handling.
+  // Split into sections: Dogs, Bitches, Special Award Classes, Junior Handling
+  // (plus a catch-all so a class of an unrecognised shape is never dropped).
   // Special Award classes and Junior Handling each become their OWN section at
   // the end of judging (after the breed classes), each with its judge named —
-  // matching the by-class catalogue (Mandy 2026-07-20). Special-award classes
-  // are pulled out before the sex routing so they never land in Dog/Bitch.
-  const dogClasses: ClassGroup[] = [];
-  const bitchClasses: ClassGroup[] = [];
-  const specialClasses: ClassGroup[] = [];
-  const jhClasses: ClassGroup[] = [];
-  for (const cls of allClasses) {
-    if (isJuniorHandlingClass(cls.className, cls.sex)) {
-      jhClasses.push(cls);
-    } else if (/special award/i.test(cls.className)) {
-      specialClasses.push(cls);
-    } else if (cls.sex === 'dog') {
-      dogClasses.push(cls);
-    } else if (cls.sex === 'bitch') {
-      bitchClasses.push(cls);
-    } else {
-      dogClasses.push(cls);
-    }
-  }
+  // matching the by-class catalogue (Mandy 2026-07-20). Bucketing itself is the
+  // shared `sectionClasses` (lib/class-labels.ts) so this can't drift from the
+  // Stewards' Catalogue / schedule / printed Schedule (Michael 2026-07-28).
+  const bucketed = sectionClasses(allClasses, classGroupToClassLike);
+  const classesFor = (key: (typeof bucketed)[number]['key']) =>
+    bucketed.find((b) => b.key === key)?.classes ?? [];
+  const dogClasses = classesFor('dog');
+  const bitchClasses = classesFor('bitch');
+  const specialClasses = classesFor('special');
+  const jhClasses = classesFor('jh');
+  const otherClasses = classesFor('other');
 
   // Each competition's judge, sourced from the "role — name" display list (same
   // parse as the by-class catalogue so the two can't drift).
@@ -471,6 +470,10 @@ export function CatalogueRingside({ show, entries, compact }: Props) {
   if (bitchClasses.length > 0) sections.push({ key: 'bitch', label: 'Bitch', classes: bitchClasses });
   if (specialClasses.length > 0) sections.push({ key: 'special', label: 'Special Awards Classes', classes: specialClasses, judge: judgeForRole(/special award/i) });
   if (jhClasses.length > 0) sections.push({ key: 'jh', label: 'Junior Handling', classes: jhClasses, judge: judgeForRole(/junior handl/i) });
+  // Safety net only — every real class is Dog/Bitch/Special/JH, so this never
+  // renders in practice. It exists so a class of an unrecognised shape is
+  // surfaced rather than silently dropped (see `sectionClasses`).
+  if (otherClasses.length > 0) sections.push({ key: 'other', label: 'Other Classes', classes: otherClasses });
 
   // Best Awards now render via the shared BestsWriteInPage (same as the
   // By-Class catalogue), so the old inline split-by-sex computation has been

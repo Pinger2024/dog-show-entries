@@ -8,6 +8,7 @@ import {
   displayEntryName,
 } from './catalogue-utils';
 import type { ClassGroup } from './catalogue-utils';
+import { sectionClasses } from '@/lib/class-labels';
 
 interface Props {
   show: CatalogueShowInfo;
@@ -262,7 +263,7 @@ const s = StyleSheet.create({
 });
 
 type Section = {
-  key: 'dog' | 'bitch' | 'special' | 'jh';
+  key: 'dog' | 'bitch' | 'special' | 'jh' | 'other';
   label: string;
   classes: ClassGroup[];
   /** Named judge for competitions that have their own, apart from the breed
@@ -272,8 +273,24 @@ type Section = {
   judge?: string | null;
 };
 
+const SECTION_LABELS: Record<Exclude<Section['key'], never>, string> = {
+  dog: 'Dogs',
+  bitch: 'Bitches',
+  special: 'Special Awards Classes',
+  jh: 'Junior Handling',
+  other: 'Other Classes',
+};
+
+/** Adapts a `ClassGroup` to the minimal shape `sectionClasses` needs. */
+const classGroupToClassLike = (g: ClassGroup) => ({
+  sex: g.sex,
+  classDefinition: { type: g.classDefinitionType, name: g.className },
+});
+
 /**
- * Split a show's classes into the steward book's FOUR sections.
+ * Split a show's classes into the steward book's sections: Dogs, Bitches,
+ * Special Awards Classes, Junior Handling — plus a final catch-all so a
+ * class of an unrecognised shape is never silently dropped.
  *
  * Classes with NO entries are kept. Mandy 2026-07-27: "steward book, can we
  * include classes with no entries ie baby puppy". A steward works down the
@@ -292,49 +309,25 @@ type Section = {
  * South Western 2026-07-28: "the stewards book should also mirror the
  * catalogue order" — the Standard Catalogue (catalogue-ringside.tsx) has
  * always given Special Awards its own section between Bitch and Junior
- * Handling; the steward book just never grew the matching bucket. Detected
- * the SAME way ringside does — a `/special award/i` match on the class
- * name — rather than the shared `isSpecialAwardClass` predicate (lib/
- * class-labels.ts), because that predicate needs `classDefinition.type`/
- * `.name`, which `ClassGroup` (this function's input, shared with ringside
- * via `groupByClass`) doesn't carry; widening `ClassGroup` to add it would
- * ripple into the Standard Catalogue too, which is out of scope for this
- * fix (Mandy's 9 Aug deadline — not refactoring three working documents to
- * fix a fourth).
+ * Handling; the steward book just never grew the matching bucket.
+ *
+ * The bucketing itself is now the shared `sectionClasses` (lib/
+ * class-labels.ts), which runs the real `isSpecialAwardClass`/
+ * `isJuniorHandler` predicates against `ClassGroup.classDefinitionType` —
+ * not a `/special award/i` name regex — so this can no longer drift from
+ * the Standard Catalogue, the schedule, or the printed Schedule (Michael
+ * 2026-07-28).
  *
  * Exported for testing — the rendering around it is a PDF tree, but which
  * classes reach which section, and the section order, is plain logic and
  * should be asserted as such.
  */
 export function buildJudgingSections(allClasses: ClassGroup[]): Section[] {
-  // JH classes have sex=null and a class name containing "handling".
-  const dogClasses: ClassGroup[] = [];
-  const bitchClasses: ClassGroup[] = [];
-  const specialClasses: ClassGroup[] = [];
-  const jhClasses: ClassGroup[] = [];
-  for (const cls of allClasses) {
-    const isJh = cls.sex == null && /handling|handler/i.test(cls.className);
-    if (isJh) {
-      jhClasses.push(cls);
-    } else if (/special award/i.test(cls.className)) {
-      specialClasses.push(cls);
-    } else if (cls.sex === 'dog') {
-      dogClasses.push(cls);
-    } else if (cls.sex === 'bitch') {
-      bitchClasses.push(cls);
-    } else {
-      // Truly unknown (neither dog, bitch, JH, nor special) — treat as dog
-      // section so it's not orphaned.
-      dogClasses.push(cls);
-    }
-  }
-
-  const sections: Section[] = [];
-  if (dogClasses.length > 0) sections.push({ key: 'dog', label: 'Dogs', classes: dogClasses });
-  if (bitchClasses.length > 0) sections.push({ key: 'bitch', label: 'Bitches', classes: bitchClasses });
-  if (specialClasses.length > 0) sections.push({ key: 'special', label: 'Special Awards Classes', classes: specialClasses });
-  if (jhClasses.length > 0) sections.push({ key: 'jh', label: 'Junior Handling', classes: jhClasses });
-  return sections;
+  return sectionClasses(allClasses, classGroupToClassLike).map((section) => ({
+    key: section.key,
+    label: SECTION_LABELS[section.key],
+    classes: section.classes,
+  }));
 }
 
 export function CatalogueJudging({ show, entries }: Props) {

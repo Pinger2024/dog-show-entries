@@ -67,6 +67,11 @@ export interface CatalogueEntry {
      *  classes. Drives the "Stock Coat" / "Long Stock Coat" class header
      *  label on the SV catalogue (Amanda 2026-05-23). */
     svCoatType?: 'stock' | 'long_stock' | null;
+    /** `classDefinition.type` ('special' | 'junior_handler' | …) — carried
+     *  through so section bucketing (`sectionClasses`, lib/class-labels.ts)
+     *  can use the real predicates instead of matching a regex against the
+     *  display name (Michael 2026-07-28). */
+    classDefinitionType?: string | null;
   }[];
   status: string;
   entryType: string;
@@ -98,6 +103,11 @@ export interface ShowClassInfo {
    *  "Stock Coat" / "Long Stock Coat" label on the SV catalogue's
    *  per-class header (Amanda 2026-05-23). Null for non-SV classes. */
   svCoatType?: 'stock' | 'long_stock' | null;
+  /** `classDefinition.type` ('special' | 'junior_handler' | …) — carried
+   *  through so section bucketing (`sectionClasses`, lib/class-labels.ts)
+   *  can use the real predicates instead of matching a regex against the
+   *  display name (Michael 2026-07-28). */
+  classDefinitionType?: string | null;
 }
 
 /** Class-level sponsorship/trophy data used by the trophies page and inline class display */

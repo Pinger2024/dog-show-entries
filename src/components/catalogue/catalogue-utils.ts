@@ -403,6 +403,9 @@ export interface CatalogueEntryBase {
     classNumber: number | null | undefined;
     classLabel?: string;
     sortOrder: number | undefined;
+    /** `classDefinition.type` ('special' | 'junior_handler' | …) — see
+     *  `ClassGroup.classDefinitionType` for why this is carried through. */
+    classDefinitionType?: string | null;
   }[];
 }
 
@@ -414,6 +417,9 @@ export interface ShowClassesInfo {
     classLabel?: string;
     sortOrder: number;
     sex: string | null;
+    /** `classDefinition.type` ('special' | 'junior_handler' | …) — see
+     *  `ClassGroup.classDefinitionType` for why this is carried through. */
+    classDefinitionType?: string | null;
   }[];
 }
 
@@ -423,6 +429,14 @@ export interface ClassGroup {
   className: string;
   sex: string | null | undefined;
   sortOrder: number | undefined;
+  /** `classDefinition.type` ('special' | 'junior_handler' | …). Carried
+   *  through from the DB row so section bucketing (`sectionClasses`,
+   *  lib/class-labels.ts) can run the real `isSpecialAwardClass` /
+   *  `isJuniorHandler` predicates on this group instead of a consumer
+   *  matching a regex against `className` — matching a rule against a
+   *  display string is exactly how the four hand-rolled sectioning copies
+   *  drifted (Michael 2026-07-28). */
+  classDefinitionType?: string | null;
   entries: CatalogueEntryBase[];
 }
 
@@ -456,6 +470,7 @@ export function groupByClass<T extends CatalogueEntryBase>(
           className: cls.name ?? 'Unknown Class',
           sex: cls.sex,
           sortOrder: cls.sortOrder,
+          classDefinitionType: cls.classDefinitionType,
           entries: [],
         });
       }
@@ -473,6 +488,7 @@ export function groupByClass<T extends CatalogueEntryBase>(
           className: sc.className,
           sex: sc.sex,
           sortOrder: sc.sortOrder,
+          classDefinitionType: sc.classDefinitionType,
           entries: [],
         });
       }

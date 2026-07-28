@@ -27,6 +27,7 @@ import { juniorHandlerFeeForSchedule } from './shared/junior-handler-fee';
 import { AdvertPage, selectAdverts } from './shared/advert-page';
 import type { ScheduleAdvert } from './shared/types';
 import { groupSvClasses, type SvClassificationGroups } from './shared/sv-classification';
+import { sectionClasses } from '@/lib/class-labels';
 
 // Re-export so existing consumers (route.ts, pdf-generation.ts, tests,
 // preview scripts) continue importing from this module path.
@@ -95,9 +96,6 @@ export function ShowSchedule({
   const variant: 'rkc' | 'sv' = isWusv ? 'sv' : 'rkc';
   const svGroups: SvClassificationGroups | null = isWusv ? groupSvClasses(classes) : null;
 
-  const isSac = (c: ScheduleClass) =>
-    c.classType === 'special' && c.className.startsWith('Special Award Class');
-
   // "Special Award Class - Junior" → "Special Award Junior" so the schedule
   // reads cleanly under its own heading. Mixed-sex SACs get a "Dog or Bitch"
   // suffix matching RKC schedule convention.
@@ -106,13 +104,29 @@ export function ShowSchedule({
     return c.sex == null ? `${base} Dog or Bitch` : base;
   };
 
-  const dogClasses = deduplicatedClasses.filter((c) => c.sex === 'dog' && !isSac(c));
-  const bitchClasses = deduplicatedClasses.filter((c) => c.sex === 'bitch' && !isSac(c));
-  const mixedClasses = deduplicatedClasses.filter((c) => c.sex !== 'dog' && c.sex !== 'bitch');
-  // SAC classes get their own section after Junior Handling (Amanda 2026-05-19).
-  const mixedTopClasses = mixedClasses.filter((c) => c.classType !== 'junior_handler' && !isSac(c));
-  const mixedBottomClasses = mixedClasses.filter((c) => c.classType === 'junior_handler');
-  const sacClasses = deduplicatedClasses.filter(isSac);
+  // Bucketing (Dog / Bitch / Special Awards / Junior Handling, plus a
+  // catch-all for anything else — Veteran and other non-JH mixed classes
+  // render at the top of the Classification page, see "Mixed" below) is
+  // the shared `sectionClasses` (lib/class-labels.ts), which runs the real
+  // `isSpecialAwardClass`/`isJuniorHandler` predicates instead of a local
+  // `classType === 'special'` name check — the same rule the Standard
+  // Catalogue, Stewards' Catalogue, and public schedule use, so this
+  // schedule can no longer drift from them (Michael 2026-07-28).
+  const scheduleClassToClassLike = (c: ScheduleClass) => ({
+    sex: c.sex,
+    classDefinition: { type: c.classType, name: c.className },
+  });
+  const bucketedClasses = sectionClasses(deduplicatedClasses, scheduleClassToClassLike);
+  const classesFor = (key: (typeof bucketedClasses)[number]['key']) =>
+    bucketedClasses.find((b) => b.key === key)?.classes ?? [];
+  const dogClasses = classesFor('dog');
+  const bitchClasses = classesFor('bitch');
+  // Mixed non-JH, non-SAC classes (Veteran, etc.) render at the TOP of the
+  // Classification page so class 1 is visible first — this is the sectioning
+  // catch-all bucket, not an unrecognised-shape safety net.
+  const mixedTopClasses = classesFor('other');
+  const mixedBottomClasses = classesFor('jh');
+  const sacClasses = classesFor('special');
   const sacJudges = judges.filter((j) => j.role === 'Special Awards Classes');
 
   const footerRender = ({ pageNumber, totalPages }: { pageNumber: number; totalPages: number }) =>

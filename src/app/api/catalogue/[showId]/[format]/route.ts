@@ -285,6 +285,7 @@ export async function GET(
       sortOrder: ec.showClass?.sortOrder,
       showClassId: ec.showClassId,
       svCoatType: (ec.showClass as { svCoatType?: 'stock' | 'long_stock' | null } | undefined)?.svCoatType ?? null,
+      classDefinitionType: ec.showClass?.classDefinition?.type ?? null,
     })),
     status: entry.status,
     entryType: entry.entryType,
@@ -310,6 +311,7 @@ export async function GET(
     sortOrder: sc.sortOrder,
     sex: sc.sex,
     svCoatType: (sc as { svCoatType?: 'stock' | 'long_stock' | null }).svCoatType ?? null,
+    classDefinitionType: sc.classDefinition?.type ?? null,
   }));
 
   // `show.scheduleData` is typed as `ScheduleData | null` by Drizzle via the
