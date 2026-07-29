@@ -41,6 +41,7 @@ import {
 } from '@/components/ui/select';
 import { downloadCsv } from '../_lib/show-utils';
 import { useShowId } from '../_lib/show-context';
+import { documentRowVisible } from '../_lib/document-eligibility';
 import { PdfViewerButton } from '../_components/pdf-viewer-button';
 import { buildAbsenteeRow, buildFinancialStatementRow } from '@/lib/report-rows';
 
@@ -209,11 +210,12 @@ export default function DocumentsPage() {
   const { data: withdrawnAndAbsent } = trpc.secretary.getAbsenteeList.useQuery({ showId });
 
   const resultsFinalised = Boolean(catalogueData?.show?.resultsPublishedAt);
-  const isKcChampionship = show?.showType === 'championship' && show?.showRuleset !== 'wusv';
   // SV / WUSV regional shows get the graded results report + spreadsheet the
   // regional group circulates after the show (Mandy 2026-06-27). RKC shows
   // use the Marked Catalogue for this instead — never show both.
   const isWusvShow = stats?.showRuleset === 'wusv';
+  const docCtx = { showRuleset: stats?.showRuleset, showType: show?.showType };
+  const isKcChampionship = documentRowVisible('sh01', docCtx);
 
   // Distinct judges (by id) so a multi-judge show can offer a separate Judge's
   // Book per judge — e.g. the breed judge's book and the Junior Handling
@@ -356,44 +358,50 @@ export default function DocumentsPage() {
             >
               <PdfViewerButton icon={<List className="size-4" />} label="View" url={`/api/catalogue/${showId}/by-class`} />
             </DocRow>
-            <DocRow
-              icon={<BookOpen className="size-4" />}
-              label="Catalogue — Standard"
-              description="RKC-format catalogue grouped by breed and sex"
-            >
-              <PdfViewerButton icon={<BookOpen className="size-4" />} label="View" url={`/api/catalogue/${showId}/standard`} />
-            </DocRow>
-            <DocRow
-              icon={<Gavel className="size-4" />}
-              label="Catalogue — Steward"
-              description="Condensed two-column format with write-in placements — minimises print cost"
-            >
-              <PdfViewerButton icon={<Gavel className="size-4" />} label="View" url={`/api/catalogue/${showId}/judging`} />
-            </DocRow>
-          </DocSection>
-
-          <DocSection title="Judge's Book" description="One page per class with exhibit numbers, placement columns, and signature area" icon={ClipboardList}>
-            {distinctJudges.length > 1 ? (
-              distinctJudges.map((j) => (
-                <DocRow
-                  key={j.id}
-                  icon={<ClipboardList className="size-4" />}
-                  label={`Judge's Book — ${j.name}`}
-                  description={`${j.name}'s classes only`}
-                >
-                  <PdfViewerButton icon={<ClipboardList className="size-4" />} label="View" url={`/api/judges-book/${showId}?judge=${j.id}`} />
-                </DocRow>
-              ))
-            ) : (
+            {documentRowVisible('catalogue-standard', docCtx) && (
               <DocRow
-                icon={<ClipboardList className="size-4" />}
-                label="Judge's Book"
-                description="All classes, one page each"
+                icon={<BookOpen className="size-4" />}
+                label="Catalogue — Standard"
+                description="RKC-format catalogue grouped by breed and sex"
               >
-                <PdfViewerButton icon={<ClipboardList className="size-4" />} label="View" url={`/api/judges-book/${showId}`} />
+                <PdfViewerButton icon={<BookOpen className="size-4" />} label="View" url={`/api/catalogue/${showId}/standard`} />
+              </DocRow>
+            )}
+            {documentRowVisible('catalogue-steward', docCtx) && (
+              <DocRow
+                icon={<Gavel className="size-4" />}
+                label="Catalogue — Steward"
+                description="Condensed two-column format with write-in placements — minimises print cost"
+              >
+                <PdfViewerButton icon={<Gavel className="size-4" />} label="View" url={`/api/catalogue/${showId}/judging`} />
               </DocRow>
             )}
           </DocSection>
+
+          {documentRowVisible('judges-book', docCtx) && (
+            <DocSection title="Judge's Book" description="One page per class with exhibit numbers, placement columns, and signature area" icon={ClipboardList}>
+              {distinctJudges.length > 1 ? (
+                distinctJudges.map((j) => (
+                  <DocRow
+                    key={j.id}
+                    icon={<ClipboardList className="size-4" />}
+                    label={`Judge's Book — ${j.name}`}
+                    description={`${j.name}'s classes only`}
+                  >
+                    <PdfViewerButton icon={<ClipboardList className="size-4" />} label="View" url={`/api/judges-book/${showId}?judge=${j.id}`} />
+                  </DocRow>
+                ))
+              ) : (
+                <DocRow
+                  icon={<ClipboardList className="size-4" />}
+                  label="Judge's Book"
+                  description="All classes, one page each"
+                >
+                  <PdfViewerButton icon={<ClipboardList className="size-4" />} label="View" url={`/api/judges-book/${showId}`} />
+                </DocRow>
+              )}
+            </DocSection>
+          )}
 
           <DocSection title="Schedule" description="Complete schedule with cover page, judges, classes, entry fees, and postal entry form" icon={Calendar}>
             <DocRow icon={<Calendar className="size-4" />} label="Show Schedule" description="Full printable schedule">
@@ -432,22 +440,28 @@ export default function DocumentsPage() {
               </Select>
               <PdfViewerButton icon={<Hash className="size-4" />} label="View" url={ringNumbersHref} />
             </DocRow>
-            <DocRow icon={<Map className="size-4" />} label="Ring Board" description="Ring assignments showing judges, breeds, and classes with entry counts">
-              <PdfViewerButton icon={<Map className="size-4" />} label="View" url={`/api/ring-board/${showId}`} />
-            </DocRow>
-            <DocRow icon={<Award className="size-4" />} label="Award Board" description="A4 landscape wipe-clean grid — laminate and re-use to record placements and best-of awards on the day">
-              <PdfViewerButton icon={<Award className="size-4" />} label="View" url={`/api/award-board/${showId}`} />
-            </DocRow>
-            <DocRow icon={<Award className="size-4" />} label="Prize Cards" description="Official A5 template for 1st, 2nd, 3rd and Reserve, with your club, show and judge details printed on">
-              {downloadingKey === 'prize-print' ? (
-                <Button disabled className="min-h-[2.75rem]"><Loader2 className="size-4 animate-spin" />Downloading…</Button>
-              ) : (
-                <Button className="min-h-[2.75rem]" onClick={() => handleDownload('prize-print', prizeCardPrintHref, 'Prize-Cards-Print.pdf')}>
-                  <Printer className="size-4" />Print
-                </Button>
-              )}
-              <PdfViewerButton icon={<Award className="size-4" />} label="Preview" url={prizeCardHref} variant="outline" />
-            </DocRow>
+            {documentRowVisible('ring-board', docCtx) && (
+              <DocRow icon={<Map className="size-4" />} label="Ring Board" description="Ring assignments showing judges, breeds, and classes with entry counts">
+                <PdfViewerButton icon={<Map className="size-4" />} label="View" url={`/api/ring-board/${showId}`} />
+              </DocRow>
+            )}
+            {documentRowVisible('award-board', docCtx) && (
+              <DocRow icon={<Award className="size-4" />} label="Award Board" description="A4 landscape wipe-clean grid — laminate and re-use to record placements and best-of awards on the day">
+                <PdfViewerButton icon={<Award className="size-4" />} label="View" url={`/api/award-board/${showId}`} />
+              </DocRow>
+            )}
+            {documentRowVisible('prize-cards', docCtx) && (
+              <DocRow icon={<Award className="size-4" />} label="Prize Cards" description="Official A5 template for 1st, 2nd, 3rd and Reserve, with your club, show and judge details printed on">
+                {downloadingKey === 'prize-print' ? (
+                  <Button disabled className="min-h-[2.75rem]"><Loader2 className="size-4 animate-spin" />Downloading…</Button>
+                ) : (
+                  <Button className="min-h-[2.75rem]" onClick={() => handleDownload('prize-print', prizeCardPrintHref, 'Prize-Cards-Print.pdf')}>
+                    <Printer className="size-4" />Print
+                  </Button>
+                )}
+                <PdfViewerButton icon={<Award className="size-4" />} label="Preview" url={prizeCardHref} variant="outline" />
+              </DocRow>
+            )}
           </DocSection>
         </div>
       </div>
@@ -458,14 +472,16 @@ export default function DocumentsPage() {
           After the Show
         </h2>
         <DocSection title="Results & Returns" description="Documents for RKC submission and show records after judging is complete" icon={Trophy}>
-          <DocRow
-            icon={<CheckSquare className="size-4" />}
-            label="Marked Catalogue"
-            description="Full catalogue with results, placements, absentees, and awards annotated — required by the RKC within 14 days for championship shows"
-            note={!resultsFinalised ? 'Will be empty until results are published' : undefined}
-          >
-            <PdfViewerButton icon={<CheckSquare className="size-4" />} label="View" url={`/api/catalogue/${showId}/marked`} />
-          </DocRow>
+          {documentRowVisible('marked-catalogue', docCtx) && (
+            <DocRow
+              icon={<CheckSquare className="size-4" />}
+              label="Marked Catalogue"
+              description="Full catalogue with results, placements, absentees, and awards annotated — required by the RKC within 14 days for championship shows"
+              note={!resultsFinalised ? 'Will be empty until results are published' : undefined}
+            >
+              <PdfViewerButton icon={<CheckSquare className="size-4" />} label="View" url={`/api/catalogue/${showId}/marked`} />
+            </DocRow>
+          )}
           <DocRow
             icon={<UserX className="size-4" />}
             label="Absentees (Catalogue PDF)"
