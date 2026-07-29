@@ -16,6 +16,8 @@ import {
   stewardAssignments,
   orders,
   payments,
+  sundryItems,
+  orderSundryItems,
   judges,
   judgeAssignments,
   achievements,
@@ -389,6 +391,7 @@ export async function makeOrder(opts: {
   exhibitorId: string;
   status?: OrderStatus;
   totalAmount?: number;
+  donationPence?: number;
   // Every real Stripe checkout has this set from the moment the
   // PaymentIntent is created — show-metrics treats "paid + no
   // stripePaymentIntentId" as an offline (postal/cash/direct-to-club)
@@ -406,6 +409,7 @@ export async function makeOrder(opts: {
       exhibitorId: opts.exhibitorId,
       status: opts.status ?? 'pending_payment',
       totalAmount: opts.totalAmount ?? 1000,
+      donationPence: opts.donationPence ?? 0,
       stripePaymentIntentId:
         opts.stripePaymentIntentId === null
           ? null
@@ -421,6 +425,9 @@ export async function makePayment(opts: {
   stripePaymentId: string;
   amount?: number;
   status?: PaymentStatus;
+  type?: 'initial' | 'adjustment' | 'refund';
+  feePence?: number | null;
+  refundAmount?: number | null;
 }) {
   const [row] = await testDb
     .insert(payments)
@@ -430,6 +437,44 @@ export async function makePayment(opts: {
       stripePaymentId: opts.stripePaymentId,
       amount: opts.amount ?? 1000,
       status: opts.status ?? 'pending',
+      type: opts.type ?? 'initial',
+      feePence: opts.feePence,
+      refundAmount: opts.refundAmount,
+    })
+    .returning();
+  return row;
+}
+
+export async function makeSundryItem(opts: {
+  showId: string;
+  name?: string;
+  priceInPence?: number;
+}) {
+  const n = seq();
+  const [row] = await testDb
+    .insert(sundryItems)
+    .values({
+      showId: opts.showId,
+      name: opts.name ?? `Sundry ${n}`,
+      priceInPence: opts.priceInPence ?? 400,
+    })
+    .returning();
+  return row;
+}
+
+export async function makeOrderSundryItem(opts: {
+  orderId: string;
+  sundryItemId: string;
+  quantity?: number;
+  unitPrice: number;
+}) {
+  const [row] = await testDb
+    .insert(orderSundryItems)
+    .values({
+      orderId: opts.orderId,
+      sundryItemId: opts.sundryItemId,
+      quantity: opts.quantity ?? 1,
+      unitPrice: opts.unitPrice,
     })
     .returning();
   return row;

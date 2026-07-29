@@ -11,7 +11,6 @@ import {
   makeShow,
   makeDog,
 } from '../helpers/factories';
-import { computeShowMetrics } from '@/server/services/show-metrics';
 
 async function adminCaller() {
   return createTestCaller(await makeUser({ role: 'admin' }));
@@ -116,7 +115,7 @@ const baseInput = (showId: string) => ({
   showId,
   packageFeePence: 5000,
   packageFeeDescription: 'Show package fee',
-  perTransactionDiscountPence: 20,
+  discount: { mode: 'perTransaction' as const, value: 20, label: 'Remi discount' },
 });
 
 describe('adminInvoices access control', () => {
@@ -161,29 +160,32 @@ describe('adminInvoices access control', () => {
 });
 
 describe('adminInvoices.preview figures', () => {
-  it('matches computeShowMetrics for the collected/offline split and sums real Stripe fees to the penny', async () => {
+  // Rewritten for the settlement-statement redesign (Michael 2026-07-29):
+  // the output is no longer a flat "income / card fee / package fee"
+  // invoice — it's an itemised statement with viaRemi/direct/free/costs
+  // sections. Order A/C/D are viaRemi (£20/£30/£10, no sundries/donations,
+  // so each entry's fee equals its order total — no discount line), order
+  // B is direct (£15). See computeSettlementItemisation.
+  it('itemises the viaRemi/direct split, sums real Stripe fees to the penny, and nets out costs', async () => {
     const { show } = await seedShowWithMixedOrders();
     const caller = await adminCaller();
 
     const preview = await caller.adminInvoices.preview(baseInput(show.id));
-    const metrics = await computeShowMetrics(testDb, show.id);
+    const { settlement } = preview;
 
-    // Reconciliation guard — preview must never diverge from the canonical
-    // show-metrics figures, incl. the partial refund + offline order.
-    expect(preview.incomeCollectedByUsPence).toBe(metrics.clubReceivablePence);
-    expect(preview.incomePaidDirectPence).toBe(metrics.offlineCollectedPence);
-    expect(preview.totalIncomePence).toBe(metrics.totalClubRevenuePence);
+    expect(settlement.viaRemi.totalPence).toBe(6000); // orders A+C+D: 2000+3000+1000
+    expect(settlement.direct.totalPence).toBe(1500); // order B
 
     // Real fees: only order A (80) and order C (110) are fee-bearing and
     // not status='refunded'. Order D's NULL fee is excluded from the sum
     // and counted separately as the capture gap.
-    expect(preview.cardFeeTotalPence).toBe(190);
-    expect(preview.feeBearingChargeCount).toBe(2);
-    expect(preview.captureGapCount).toBe(1);
+    expect(settlement.cardFeeTotalPence).toBe(190);
+    expect(settlement.feeBearingChargeCount).toBe(2);
+    expect(settlement.captureGapCount).toBe(1);
 
-    expect(preview.discountTotalPence).toBe(40); // 20p × 2
-    expect(preview.cardFeeDueTotalPence).toBe(150); // 190 - 40
-    expect(preview.totalFeeDuePence).toBe(150 + 5000);
+    expect(settlement.discountAmountPence).toBe(40); // 20p × 2
+    expect(settlement.costs.totalPence).toBe(5000 + 190 - 40); // package + card fee - discount
+    expect(settlement.netToClubPence).toBe(6000 - (5000 + 190 - 40));
   });
 
   it('does not write anything to the database', async () => {
@@ -206,9 +208,11 @@ describe('adminInvoices.issue', () => {
     expect(invoice.invoiceNumber).toMatch(/^INV-TEST-FEE-CLUB-\d{4}$/);
     expect(invoice.sequenceNumber).toBe(1);
     expect(invoice.organisationId).toBe(org.id);
-    expect(invoice.totalFeeDuePence).toBe(150 + 5000);
-    expect(Array.isArray(invoice.lineItems)).toBe(true);
-    expect(invoice.lineItems.some((l) => l.label === 'TOTAL FEE DUE')).toBe(true);
+    expect(invoice.viaRemiTotalPence).toBe(6000);
+    expect(invoice.directTotalPence).toBe(1500);
+    expect(invoice.netToClubPence).toBe(6000 - (5000 + 190 - 40));
+    expect(invoice.lineItems.viaRemi.totalLabel).toBe('Total collected via Remi');
+    expect(invoice.lineItems.costs.lines.some((l) => l.label === 'Show package fee')).toBe(true);
   });
 
   it('sequential numbering: two concurrent issue calls for the same club get distinct consecutive numbers', async () => {
@@ -236,7 +240,7 @@ describe('adminInvoices.issue', () => {
     const { show } = await seedShowWithMixedOrders();
     const caller = await adminCaller();
     const invoice = await caller.adminInvoices.issue(baseInput(show.id));
-    const originalTotal = invoice.totalFeeDuePence;
+    const originalNet = invoice.netToClubPence;
     const originalCardFeeTotal = invoice.cardFeeTotalPence;
 
     // Mutate the underlying data after issue — this must NOT move the invoice.
@@ -244,7 +248,7 @@ describe('adminInvoices.issue', () => {
     await testDb.update(payments).set({ feePence: 999999 });
 
     const refetched = await caller.adminInvoices.get({ id: invoice.id });
-    expect(refetched.totalFeeDuePence).toBe(originalTotal);
+    expect(refetched.netToClubPence).toBe(originalNet);
     expect(refetched.cardFeeTotalPence).toBe(originalCardFeeTotal);
   });
 });

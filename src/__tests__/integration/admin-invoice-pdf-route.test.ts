@@ -60,7 +60,7 @@ async function seedIssuedInvoice() {
     showId: show.id,
     packageFeePence: 5000,
     packageFeeDescription: 'Show package fee',
-    perTransactionDiscountPence: 20,
+    discount: { mode: 'perTransaction', value: 20, label: 'Remi discount' },
   });
   return { admin, org, show, invoice };
 }
