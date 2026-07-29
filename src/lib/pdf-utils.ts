@@ -5,6 +5,7 @@ import { db } from '@/server/db';
 import { and, eq } from 'drizzle-orm';
 import { memberships } from '@/server/db/schema';
 import { hasUserPurchasedCatalogue, SECRETARY_ONLY_FORMATS } from '@/lib/catalogue-utils';
+import { BoundedCache } from '@/lib/bounded-cache';
 
 /**
  * Validate a logo URL for use in @react-pdf/renderer.
@@ -12,8 +13,12 @@ import { hasUserPurchasedCatalogue, SECRETARY_ONLY_FORMATS } from '@/lib/catalog
  * react-pdf only supports PNG/JPEG — SVG crashes the renderer.
  * Results are cached for 5 minutes (1 minute on failure) to avoid
  * hitting the CDN on every PDF preview.
+ *
+ * Bounded: the key is a club-supplied logo URL, so a plain Map would grow one
+ * entry per distinct URL ever seen and never shrink — expiry marks an entry
+ * stale but nothing was removing it.
  */
-const logoCache = new Map<string, { result: string | null; expiresAt: number }>();
+const logoCache = new BoundedCache<string, { result: string | null; expiresAt: number }>(256);
 
 export async function validateRasterLogoUrl(rawUrl: string | null | undefined): Promise<string | null> {
   if (!rawUrl) return null;

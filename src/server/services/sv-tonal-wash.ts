@@ -13,6 +13,7 @@
  * reuse the same buffer.
  */
 import sharp from 'sharp';
+import { BoundedCache } from '@/lib/bounded-cache';
 
 export type WashVariant = 'cover' | 'inside';
 
@@ -27,7 +28,14 @@ const DPI = 300;
 const PX_W = Math.round((PAGE_W_MM * DPI) / 25.4);
 const PX_H = Math.round((PAGE_H_MM * DPI) / 25.4);
 
-const cache = new Map<string, Promise<Buffer>>();
+/**
+ * Bounded, because the key is derived from a club's brand colours: an
+ * unbounded Map here accumulates one full-page 1748×2480 PNG per distinct
+ * colour pair ever rendered, for the lifetime of the server process. 32 is
+ * comfortably more than any single render needs (one show uses 2 entries)
+ * while capping the worst case at tens of MB rather than unbounded.
+ */
+const cache = new BoundedCache<string, Promise<Buffer>>(32);
 
 function svg(primary: string, secondary: string, intensity: number): string {
   const rose = Math.min(0.85, 0.50 * intensity).toFixed(3);
@@ -63,6 +71,12 @@ export function getTonalWash(
   let cached = cache.get(key);
   if (!cached) {
     cached = bake(p, s, variant);
+    // Evict a failed bake so a transient sharp error doesn't poison this key
+    // for the rest of the process's life. Caching the promise (rather than the
+    // resolved buffer) is deliberate — it de-dupes concurrent renders of the
+    // same show — but it means a rejection would otherwise be replayed to
+    // every future caller.
+    cached.catch(() => cache.delete(key));
     cache.set(key, cached);
   }
   return cached;
