@@ -157,11 +157,19 @@ export interface EntryClassForAgeCheck {
  * legitimate Baby Puppy entries and shooed them into NFC (Amanda 2026-07-18,
  * North East Regional).
  *
- * Rule: age-restricted classes (type 'age' / 'sv_age' that carry their own
- * min/max window) are judged on that window; every other competition class
- * keeps the six-month floor. Returns a user-facing message for the first
- * blocking class, or null when the dog is eligible for everything entered.
+ * Rule: age-restricted classes (any class — regardless of type — that carries
+ * its own min/max window) are judged on that window; every other competition
+ * class keeps the six-month floor. Returns a user-facing message for the
+ * first blocking class, or null when the dog is eligible for everything
+ * entered.
  */
+export function isAgeRestrictedClass(c: {
+  minAgeMonths: number | null;
+  maxAgeMonths: number | null;
+}): boolean {
+  return c.minAgeMonths !== null || c.maxAgeMonths !== null;
+}
+
 export function getCompetitionAgeError(params: {
   dogName: string;
   dob: string | Date;
@@ -173,9 +181,7 @@ export function getCompetitionAgeError(params: {
   const born = typeof dob === 'string' ? parseLocalDate(dob) : dob;
   const ageMonths = differenceInMonths(show, born);
 
-  const isAgeRestricted = (c: EntryClassForAgeCheck) =>
-    (c.type === 'age' || c.type === 'sv_age') &&
-    (c.minAgeMonths !== null || c.maxAgeMonths !== null);
+  const isAgeRestricted = isAgeRestrictedClass;
 
   // Age-restricted classes are judged on their own window (Baby Puppy 4–6mo).
   for (const c of classes.filter(isAgeRestricted)) {

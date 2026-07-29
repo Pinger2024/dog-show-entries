@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { TRPCError } from '@trpc/server';
-import { and, eq, inArray, isNull, or, asc, desc, sql } from 'drizzle-orm';
+import { and, eq, inArray, isNull, isNotNull, or, asc, desc, sql } from 'drizzle-orm';
 import { protectedProcedure, publicProcedure } from '../procedures';
 import { createTRPCRouter } from '../init';
 import { dogs, dogOwners, dogTitles, dogPhotos, users, entries, entryClasses, showClasses, shows, results, classDefinitions, achievements, judgeAssignments, judges, dogSvProfile } from '@/server/db/schema';
@@ -920,7 +920,13 @@ export const dogsRouter = createTRPCRouter({
             .where(
               and(
                 eq(showClasses.showId, input.showId),
-                eq(classDefinitions.type, 'age'),
+                // Any class with an age band suggests itself, not just
+                // type: 'age' — a banded Special Award class (e.g. "Special
+                // Yearling") is just as age-restricted (see isAgeRestrictedClass).
+                or(
+                  isNotNull(classDefinitions.minAgeMonths),
+                  isNotNull(classDefinitions.maxAgeMonths),
+                ),
               )
             );
 

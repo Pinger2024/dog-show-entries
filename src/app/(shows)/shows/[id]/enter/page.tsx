@@ -37,7 +37,7 @@ import {
 } from 'lucide-react';
 import { differenceInMonths, differenceInWeeks, format, parseISO } from 'date-fns';
 import { toast } from 'sonner';
-import { isWithinAgeRange, getAgeEligibilityDetail, handlerAgeYearsOnDate, formatCurrency } from '@/lib/date-utils';
+import { isWithinAgeRange, getAgeEligibilityDetail, handlerAgeYearsOnDate, formatCurrency, isAgeRestrictedClass } from '@/lib/date-utils';
 import { svAgeClassAllowed, svMissingRequirements, hasWorkingTitle, pedigreeMissingForEntry } from '@/lib/sv-entry-readiness';
 import { SV_HEALTH_FROM_CLASSES } from '@/lib/sv-entry-validation';
 import { displayShowTypeLabel } from '@/lib/show-types';
@@ -1190,9 +1190,7 @@ export default function EnterShowPage() {
                   dob && showDate
                     ? (showClasses ?? []).find((sc) => {
                         const cd = sc.classDefinition;
-                        const restricted =
-                          (cd.type === 'age' || cd.type === 'sv_age') &&
-                          (cd.minAgeMonths !== null || cd.maxAgeMonths !== null);
+                        const restricted = isAgeRestrictedClass(cd);
                         return (
                           restricted &&
                           getAgeEligibilityDetail(
@@ -1488,9 +1486,7 @@ export default function EnterShowPage() {
             selected.length > 0 &&
             selected.every((sc) => {
               const cd = sc.classDefinition;
-              const isAgeClass =
-                (cd.type === 'age' || cd.type === 'sv_age') &&
-                (cd.minAgeMonths !== null || cd.maxAgeMonths !== null);
+              const isAgeClass = isAgeRestrictedClass(cd);
               return (
                 isAgeClass &&
                 getAgeEligibilityDetail(dob, showDay, cd.minAgeMonths, cd.maxAgeMonths).eligible
@@ -2946,16 +2942,19 @@ function ClassGroup({
 }) {
   const [showAllLocked, setShowAllLocked] = useState(false);
 
-  // Split age/sv_age classes into ones the dog is age-eligible for
+  // Split age-restricted classes into ones the dog is age-eligible for
   // (selectable, as before) and ones it isn't (shown locked-with-reason
-  // rather than silently hidden). Sex/coat/AVNSC/JH-age filtering all
-  // happen upstream (groupedClasses / availableClasses) before classes
-  // ever reach this component, so those stay completely hidden — only
-  // age-based ineligibility becomes a visible locked row here.
+  // rather than silently hidden). Any class carrying a min/max age band is
+  // age-restricted regardless of type — a banded Special Award class (e.g.
+  // "Special Yearling") is just as restricted as an 'age'/'sv_age' class
+  // (see isAgeRestrictedClass). Sex/coat/AVNSC/JH-age filtering all happen
+  // upstream (groupedClasses / availableClasses) before classes ever reach
+  // this component, so those stay completely hidden — only age-based
+  // ineligibility becomes a visible locked row here.
   const unlockedClasses: ShowClassItem[] = [];
   const lockedClasses: Array<{ sc: ShowClassItem; reason: string }> = [];
   for (const sc of classes) {
-    const isAgeType = sc.classDefinition.type === 'age' || sc.classDefinition.type === 'sv_age';
+    const isAgeType = isAgeRestrictedClass(sc.classDefinition);
     const elig = isAgeType && getAgeEligibility
       ? getAgeEligibility(sc.classDefinition.minAgeMonths, sc.classDefinition.maxAgeMonths)
       : null;

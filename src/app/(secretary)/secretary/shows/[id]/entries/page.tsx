@@ -16,7 +16,7 @@ import { toast } from 'sonner';
 import { trpc } from '@/lib/trpc';
 import { formatSvClassName } from '@/lib/class-labels';
 import { cn, formatDogName } from '@/lib/utils';
-import { formatCurrency, isAgeEligibleOnShowDay } from '@/lib/date-utils';
+import { formatCurrency, isAgeEligibleOnShowDay, isAgeRestrictedClass } from '@/lib/date-utils';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
@@ -1011,7 +1011,7 @@ function AddEntryDialog({
                       filteredBySex++;
                       return false;
                     }
-                    if (sc.classDefinition?.type === 'age' && selectedDogDob && showDate) {
+                    if (sc.classDefinition && isAgeRestrictedClass(sc.classDefinition) && selectedDogDob && showDate) {
                       const { minAgeMonths, maxAgeMonths } = sc.classDefinition;
                       if (!isAgeEligibleOnShowDay(selectedDogDob, showDate, minAgeMonths, maxAgeMonths)) {
                         filteredByAge++;

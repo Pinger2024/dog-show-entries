@@ -99,6 +99,55 @@ async function rkcBabyPuppyShow() {
   return { org, breed, show, bpClass };
 }
 
+/**
+ * An RKC single-breed show with a "Special Award Class - Special Yearling"
+ * (type: 'special', 12–24mo) alongside an unbanded special class. Regression
+ * for the bug a secretary hit rehearsing on demo: a dog over 2 years old
+ * could be entered in "Special Yearling" because the age gate only checked
+ * type 'age'/'sv_age' classes, never 'special' — even when the special class
+ * carried its own minAgeMonths/maxAgeMonths. Fixed by isAgeRestrictedClass
+ * (src/lib/date-utils.ts), which restricts on ANY class with an age band,
+ * regardless of type.
+ */
+async function specialAwardShow() {
+  const { org } = await makeSecretaryWithOrg();
+  const breed = await makeBreed({ name: 'German Shepherd Dog' });
+  const show = await makeShow({
+    organisationId: org.id,
+    breedId: breed.id,
+    showScope: 'single_breed',
+    showRuleset: 'rkc',
+    status: 'entries_open',
+    startDate: SHOW_DAY,
+    endDate: SHOW_DAY,
+  });
+  const yearlingDef = await makeClassDef({
+    name: 'Special Award Class - Special Yearling',
+    type: 'special',
+    minAgeMonths: 12,
+    maxAgeMonths: 24,
+  });
+  const yearlingClass = await makeShowClass({
+    showId: show.id,
+    classDefinitionId: yearlingDef.id,
+    breedId: breed.id,
+    entryFee: 500,
+  });
+  const unbandedDef = await makeClassDef({
+    name: 'Special Award Class - Special Beginners',
+    type: 'special',
+    minAgeMonths: null,
+    maxAgeMonths: null,
+  });
+  const unbandedClass = await makeShowClass({
+    showId: show.id,
+    classDefinitionId: unbandedDef.id,
+    breedId: breed.id,
+    entryFee: 500,
+  });
+  return { org, breed, show, yearlingClass, unbandedClass };
+}
+
 /** An SV-compliant puppy of the show breed, born on `dob`. */
 async function makePuppy(ownerId: string, breedId: string, dob: string) {
   return makeDog({
@@ -168,6 +217,108 @@ describe('Baby Puppy age eligibility — exhibitor checkout', () => {
         ],
       }),
     ).rejects.toThrow(/too old for "Baby Puppy"/);
+  });
+
+  it('rejects a dog over 2 years old entered in a banded "Special Yearling" class', async () => {
+    const { show, breed, yearlingClass } = await specialAwardShow();
+    const exhibitor = await makeUser({ role: 'exhibitor' });
+    const dog = await makePuppy(exhibitor.id, breed.id, '2023-01-01'); // >2 years on show day
+
+    await expect(
+      createTestCaller(exhibitor).orders.checkout({
+        showId: show.id,
+        entries: [
+          { entryType: 'standard', dogId: dog.id, classIds: [yearlingClass.id], isNfc: false },
+        ],
+      }),
+    ).rejects.toThrow(/too old for "Special Award Class - Special Yearling"/);
+
+    const created = await testDb.query.entries.findMany({
+      where: eq(entries.showId, show.id),
+    });
+    expect(created).toHaveLength(0);
+  });
+
+  it('accepts a young-enough dog into the banded "Special Yearling" class', async () => {
+    const { show, breed, yearlingClass } = await specialAwardShow();
+    const exhibitor = await makeUser({ role: 'exhibitor' });
+    const dog = await makePuppy(exhibitor.id, breed.id, '2025-09-05'); // exactly 12mo on show day
+
+    const result = await createTestCaller(exhibitor).orders.checkout({
+      showId: show.id,
+      entries: [
+        { entryType: 'standard', dogId: dog.id, classIds: [yearlingClass.id], isNfc: false },
+      ],
+    });
+
+    expect(result.orderId).toBeDefined();
+  });
+
+  it('accepts any adult dog into an unbanded special class (preserved behaviour)', async () => {
+    const { show, breed, unbandedClass } = await specialAwardShow();
+    const exhibitor = await makeUser({ role: 'exhibitor' });
+    const dog = await makePuppy(exhibitor.id, breed.id, '2020-01-01'); // 6+ years old
+
+    const result = await createTestCaller(exhibitor).orders.checkout({
+      showId: show.id,
+      entries: [
+        { entryType: 'standard', dogId: dog.id, classIds: [unbandedClass.id], isNfc: false },
+      ],
+    });
+
+    expect(result.orderId).toBeDefined();
+  });
+});
+
+describe('Special Award age eligibility — entries.create (owner path)', () => {
+  it('rejects a dog over 2 years old entered in a banded "Special Yearling" class', async () => {
+    const { show, breed, yearlingClass } = await specialAwardShow();
+    const owner = await makeUser({ role: 'exhibitor' });
+    const dog = await makePuppy(owner.id, breed.id, '2023-01-01'); // >2 years on show day
+
+    await expect(
+      createTestCaller(owner).entries.create({
+        dogId: dog.id,
+        showId: show.id,
+        classIds: [yearlingClass.id],
+        isNfc: false,
+      }),
+    ).rejects.toThrow(/too old for "Special Award Class - Special Yearling"/);
+
+    const created = await testDb.query.entries.findMany({
+      where: eq(entries.showId, show.id),
+    });
+    expect(created).toHaveLength(0);
+  });
+
+  it('accepts a young-enough dog into the banded "Special Yearling" class', async () => {
+    const { show, breed, yearlingClass } = await specialAwardShow();
+    const owner = await makeUser({ role: 'exhibitor' });
+    const dog = await makePuppy(owner.id, breed.id, '2025-09-05'); // exactly 12mo on show day
+
+    const entry = await createTestCaller(owner).entries.create({
+      dogId: dog.id,
+      showId: show.id,
+      classIds: [yearlingClass.id],
+      isNfc: false,
+    });
+
+    expect(entry).toBeDefined();
+  });
+
+  it('accepts any adult dog into an unbanded special class (preserved behaviour)', async () => {
+    const { show, breed, unbandedClass } = await specialAwardShow();
+    const owner = await makeUser({ role: 'exhibitor' });
+    const dog = await makePuppy(owner.id, breed.id, '2020-01-01'); // 6+ years old
+
+    const entry = await createTestCaller(owner).entries.create({
+      dogId: dog.id,
+      showId: show.id,
+      classIds: [unbandedClass.id],
+      isNfc: false,
+    });
+
+    expect(entry).toBeDefined();
   });
 });
 

@@ -9,6 +9,7 @@ import {
   isAgeEligibleOnShowDay,
   getAgeEligibilityDetail,
   getCompetitionAgeError,
+  isAgeRestrictedClass,
 } from '../date-utils';
 
 describe('formatCurrency', () => {
@@ -203,6 +204,49 @@ describe('getAgeEligibilityDetail', () => {
   });
 });
 
+describe('isAgeRestrictedClass', () => {
+  // Regression: a dog over 2 years old could be entered in "Special Award
+  // Class - Special Yearling" because the age gate only ever checked
+  // type === 'age' || 'sv_age', so a banded 'special' class was never
+  // enforced. The rule is now type-agnostic: any class with a min or max
+  // age band is age-restricted, full stop.
+  it('is restricted when a special class carries an age band', () => {
+    expect(
+      isAgeRestrictedClass({ minAgeMonths: 12, maxAgeMonths: 24 }),
+    ).toBe(true);
+  });
+
+  it('is unrestricted when a special class has no age band (Special Beginners etc.)', () => {
+    expect(
+      isAgeRestrictedClass({ minAgeMonths: null, maxAgeMonths: null }),
+    ).toBe(false);
+  });
+
+  it('is restricted when an age-type class carries an age band', () => {
+    expect(
+      isAgeRestrictedClass({ minAgeMonths: 4, maxAgeMonths: 6 }),
+    ).toBe(true);
+  });
+
+  it('is unrestricted when an age-type class has no age band', () => {
+    expect(
+      isAgeRestrictedClass({ minAgeMonths: null, maxAgeMonths: null }),
+    ).toBe(false);
+  });
+
+  it('is restricted with only a min bound set (no max)', () => {
+    expect(
+      isAgeRestrictedClass({ minAgeMonths: 84, maxAgeMonths: null }),
+    ).toBe(true);
+  });
+
+  it('is restricted with only a max bound set (no min)', () => {
+    expect(
+      isAgeRestrictedClass({ minAgeMonths: null, maxAgeMonths: 12 }),
+    ).toBe(true);
+  });
+});
+
 describe('getCompetitionAgeError', () => {
   const babyPuppy = { name: 'Baby Puppy', type: 'sv_age', minAgeMonths: 4, maxAgeMonths: 6 };
   const openClass = { name: 'Open', type: 'achievement', minAgeMonths: null, maxAgeMonths: null };
@@ -309,6 +353,59 @@ describe('getCompetitionAgeError', () => {
       classes: [babyPuppy, openClass],
     });
     expect(msg).toMatch(/at least 6 months old for competition classes/);
+  });
+
+  // Regression: a banded 'special' class (e.g. "Special Award Class -
+  // Special Yearling") must enforce its window exactly like an 'age'/'sv_age'
+  // class — the type filter that let this slip is gone.
+  it('rejects a dog over 2 years old entered in a banded "special" class', () => {
+    const specialYearling = {
+      name: 'Special Award Class - Special Yearling',
+      type: 'special',
+      minAgeMonths: 12,
+      maxAgeMonths: 24,
+    };
+    const msg = getCompetitionAgeError({
+      dogName: 'Rex',
+      dob: '2023-01-01',
+      showDate: '2026-09-05',
+      classes: [specialYearling],
+    });
+    expect(msg).toMatch(/too old for "Special Award Class - Special Yearling"/);
+  });
+
+  it('allows a young-enough dog into a banded "special" class', () => {
+    const specialYearling = {
+      name: 'Special Award Class - Special Yearling',
+      type: 'special',
+      minAgeMonths: 12,
+      maxAgeMonths: 24,
+    };
+    expect(
+      getCompetitionAgeError({
+        dogName: 'Rex',
+        dob: '2025-09-05',
+        showDate: '2026-09-05',
+        classes: [specialYearling],
+      })
+    ).toBeNull();
+  });
+
+  it('still accepts any adult dog into an unbanded "special" class', () => {
+    const unbandedSpecial = {
+      name: 'Special Award Class - Special Beginners',
+      type: 'special',
+      minAgeMonths: null,
+      maxAgeMonths: null,
+    };
+    expect(
+      getCompetitionAgeError({
+        dogName: 'Rex',
+        dob: '2018-01-01',
+        showDate: '2026-09-05',
+        classes: [unbandedSpecial],
+      })
+    ).toBeNull();
   });
 });
 
