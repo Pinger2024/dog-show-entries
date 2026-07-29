@@ -97,7 +97,7 @@ export default function AdminInvoicesPage() {
                     <p className="mt-0.5 text-sm">{inv.organisation.name}</p>
                     <p className="text-xs text-muted-foreground">{inv.show.name}</p>
                     <div className="mt-1 flex flex-wrap gap-x-3 text-xs text-muted-foreground">
-                      <span>Total fee due: {formatCurrency(inv.totalFeeDuePence)}</span>
+                      <span>Net to credit the club: {formatCurrency(inv.netToClubPence)}</span>
                       <span>Issued {format(new Date(inv.issuedAt), 'd MMM yyyy')}</span>
                     </div>
                   </div>

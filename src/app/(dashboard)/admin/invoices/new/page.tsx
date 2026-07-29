@@ -39,23 +39,30 @@ function NewInvoiceFlow() {
 
   const [showId, setShowId] = useState(searchParams.get('showId') ?? '');
   const [packageFee, setPackageFee] = useState('');
-  const [packageFeeDescription, setPackageFeeDescription] = useState('Show package fee');
+  const [packageFeeDescription, setPackageFeeDescription] = useState('Catalogue package');
   const [showAdvanced, setShowAdvanced] = useState(false);
-  const [discountPence, setDiscountPence] = useState(String(DEFAULT_DISCOUNT_PENCE));
+  const [discountMode, setDiscountMode] = useState<'perTransaction' | 'percent' | 'fixed'>('perTransaction');
+  const [discountValue, setDiscountValue] = useState(String(DEFAULT_DISCOUNT_PENCE));
+  const [discountLabel, setDiscountLabel] = useState('Remi discount');
+  const [startingNumber, setStartingNumber] = useState('');
 
   const { data: shows } = trpc.admin.listAllShows.useQuery();
   const selectedShow = shows?.find((s) => s.id === showId);
 
   const packageFeePence = poundsToPence(parseFloat(packageFee || '0'));
-  const perTransactionDiscountPence = parseInt(discountPence || '0', 10);
+  const discountValueParsed = parseInt(discountValue || '0', 10);
+  const startingNumberParsed = startingNumber.trim() === '' ? undefined : parseInt(startingNumber, 10);
 
   const previewInput =
-    showId && !Number.isNaN(packageFeePence) && !Number.isNaN(perTransactionDiscountPence)
+    showId && !Number.isNaN(packageFeePence) && !Number.isNaN(discountValueParsed)
       ? {
           showId,
           packageFeePence,
-          packageFeeDescription: packageFeeDescription || 'Show package fee',
-          perTransactionDiscountPence,
+          packageFeeDescription: packageFeeDescription || 'Catalogue package',
+          discount: { mode: discountMode, value: discountValueParsed, label: discountLabel || 'Remi discount' },
+          ...(startingNumberParsed != null && !Number.isNaN(startingNumberParsed)
+            ? { startingNumber: startingNumberParsed }
+            : {}),
         }
       : null;
 
@@ -151,30 +158,24 @@ function NewInvoiceFlow() {
               <div className="h-24 animate-pulse rounded-lg bg-muted" />
             ) : (
               <>
-                {preview.captureGapCount > 0 && (
-                  <div className="flex items-start gap-2 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
+                {preview.settlement.captureGapCount > 0 && (
+                  <div className="flex items-start gap-2 rounded-lg border border-se-honey-line bg-se-honey-soft/50 p-3 text-sm text-se-honey-deep">
                     <AlertTriangle className="mt-0.5 size-4 shrink-0" />
                     <span>
-                      {preview.captureGapCount} payment{preview.captureGapCount === 1 ? '' : 's'} missing
-                      captured fee data — figures may be incomplete.
+                      {preview.settlement.captureGapCount} payment
+                      {preview.settlement.captureGapCount === 1 ? '' : 's'} missing captured fee data — figures may
+                      be incomplete.
                     </span>
                   </div>
                 )}
-                <FigureRow label="Income collected by us" value={preview.incomeCollectedByUsPence} />
-                <FigureRow label="Income paid direct to bank" value={preview.incomePaidDirectPence} />
-                <FigureRow label="Total income" value={preview.totalIncomePence} bold />
-                <FigureRow
-                  label="Card processing fee total"
-                  value={preview.cardFeeTotalPence}
-                  sub={`${preview.feeBearingChargeCount} card payments`}
-                />
-                <FigureRow
-                  label="Remi discount"
-                  value={-preview.discountTotalPence}
-                  credit
-                  sub={`${formatCurrency(preview.perTransactionDiscountPence)} × ${preview.feeBearingChargeCount}`}
-                />
-                <FigureRow label="Total card processing fee due" value={preview.cardFeeDueTotalPence} bold />
+                <SectionRows title={preview.settlement.viaRemi.title} section={preview.settlement.viaRemi} />
+                <SectionRows title={preview.settlement.direct.title} section={preview.settlement.direct} />
+                {preview.settlement.free.lines.length > 0 && (
+                  <SectionRows title={preview.settlement.free.title} section={preview.settlement.free} />
+                )}
+                <p className="text-xs text-muted-foreground">{preview.settlement.totalEntriesLine}</p>
+                <SectionRows title={preview.settlement.costs.title} section={preview.settlement.costs} />
+                <FigureRow label="Net to credit the club" value={preview.settlement.netToClubPence} bold />
               </>
             )}
           </CardContent>
@@ -221,21 +222,66 @@ function NewInvoiceFlow() {
                 Advanced
               </Button>
               {showAdvanced && (
-                <div className="space-y-1.5 pt-2">
-                  <Label htmlFor="discount-pence">Per-transaction discount (pence)</Label>
-                  <Input
-                    id="discount-pence"
-                    type="number"
-                    min="0"
-                    inputMode="numeric"
-                    value={discountPence}
-                    onChange={(e) => setDiscountPence(e.target.value)}
-                    className="min-h-[2.75rem] max-w-[10rem]"
-                  />
-                  <p className="text-xs text-muted-foreground">
-                    Defaults to {formatCurrency(DEFAULT_DISCOUNT_PENCE)} per card payment — Remi&apos;s
-                    negotiated Stripe discount.
-                  </p>
+                <div className="space-y-3 pt-2">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="discount-mode">Discount type</Label>
+                    <Select value={discountMode} onValueChange={(v) => setDiscountMode(v as typeof discountMode)}>
+                      <SelectTrigger id="discount-mode" className="min-h-[2.75rem] w-full">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="perTransaction">Per card payment (pence)</SelectItem>
+                        <SelectItem value="percent">Percent off card fees</SelectItem>
+                        <SelectItem value="fixed">Fixed amount (pence)</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="discount-value">
+                      {discountMode === 'percent' ? 'Percent (e.g. 40)' : 'Amount (pence)'}
+                    </Label>
+                    <Input
+                      id="discount-value"
+                      type="number"
+                      min="0"
+                      inputMode="numeric"
+                      value={discountValue}
+                      onChange={(e) => setDiscountValue(e.target.value)}
+                      className="min-h-[2.75rem] max-w-[10rem]"
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      {discountMode === 'perTransaction'
+                        ? `Defaults to ${formatCurrency(DEFAULT_DISCOUNT_PENCE)} per card payment — Remi's negotiated Stripe discount.`
+                        : discountMode === 'percent'
+                          ? 'Whole-number percent off the card processing fee total.'
+                          : 'A single flat amount off the card processing fee total.'}
+                    </p>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="discount-label">Discount label on the statement</Label>
+                    <Input
+                      id="discount-label"
+                      value={discountLabel}
+                      onChange={(e) => setDiscountLabel(e.target.value)}
+                      className="min-h-[2.75rem]"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="starting-number">Starting invoice number (first issue only)</Label>
+                    <Input
+                      id="starting-number"
+                      type="number"
+                      min="1"
+                      inputMode="numeric"
+                      placeholder="1"
+                      value={startingNumber}
+                      onChange={(e) => setStartingNumber(e.target.value)}
+                      className="min-h-[2.75rem] max-w-[10rem]"
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Only applies the first time this club is issued a statement — leave blank to start at 1.
+                    </p>
+                  </div>
                 </div>
               )}
             </div>
@@ -243,8 +289,8 @@ function NewInvoiceFlow() {
             {preview && (
               <div className="rounded-lg border bg-muted/30 p-3">
                 <div className="flex items-center justify-between text-sm font-semibold">
-                  <span>Total fee due</span>
-                  <span>{formatCurrency(preview.cardFeeDueTotalPence + packageFeePence)}</span>
+                  <span>Net to credit the club</span>
+                  <span>{formatCurrency(preview.settlement.netToClubPence)}</span>
                 </div>
               </div>
             )}
@@ -264,6 +310,26 @@ function NewInvoiceFlow() {
           </CardContent>
         </Card>
       )}
+    </div>
+  );
+}
+
+function SectionRows({
+  title,
+  section,
+}: {
+  title: string;
+  section: { lines: { label: string; sub?: string; amountPence: number; isCredit?: boolean }[]; totalLabel: string; totalPence: number };
+}) {
+  return (
+    <div className="space-y-1.5 rounded-lg border p-3">
+      <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{title}</p>
+      {section.lines.map((l, i) => (
+        <FigureRow key={i} label={l.label} sub={l.sub} value={l.amountPence} credit={l.isCredit} />
+      ))}
+      <div className="border-t pt-1.5">
+        <FigureRow label={section.totalLabel} value={section.totalPence} bold />
+      </div>
     </div>
   );
 }
