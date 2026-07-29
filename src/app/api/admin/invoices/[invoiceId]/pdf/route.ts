@@ -58,6 +58,7 @@ export async function GET(
     const element = React.createElement(InvoicePdf, {
       info,
       lineItems: invoice.lineItems,
+      netToClubPence: invoice.netToClubPence,
       captureGapCount: invoice.captureGapCount,
     });
     const rawBuffer = await renderToBuffer(element as React.ReactElement<DocumentProps>);

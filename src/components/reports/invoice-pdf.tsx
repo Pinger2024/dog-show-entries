@@ -6,7 +6,7 @@ import path from 'path';
 // corrupted font tag allocation elsewhere in the print pipeline, 2026-07-10;
 // see src/lib/pdf-fonts.ts).
 import '@/lib/pdf-fonts';
-import type { InvoiceLineItem } from '@/server/db/schema';
+import type { SettlementSection, SettlementSnapshot } from '@/server/db/schema/invoices';
 
 const remiLogo: string | null = (() => {
   try {
@@ -20,6 +20,7 @@ const remiLogo: string | null = (() => {
 const C = {
   ink: '#1b241d',
   mid: '#52525b',
+  light: '#71717a',
   rule: '#d4d4d8',
   band: '#20452c',
   bandText: '#f3ecdc',
@@ -28,49 +29,74 @@ const C = {
 };
 
 const s = StyleSheet.create({
-  page: { paddingTop: 30, paddingBottom: 40, paddingHorizontal: 36, fontFamily: 'HankenGrotesk', fontSize: 9.5, color: C.ink },
-  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 18 },
-  logo: { width: 110, objectFit: 'contain' },
-  invoiceTitle: { fontSize: 20, fontWeight: 800, color: C.band, marginBottom: 2 },
-  invoiceNumber: { fontSize: 10, color: C.mid },
+  page: { paddingTop: 20, paddingBottom: 24, paddingHorizontal: 38, fontFamily: 'HankenGrotesk', fontSize: 9.5, color: C.ink },
+  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 6 },
+  logo: { width: 100, objectFit: 'contain' },
+  title: { fontSize: 20, fontWeight: 800, color: C.band, textAlign: 'right' },
+  meta: { fontSize: 8.5, color: C.mid, textAlign: 'right', marginTop: 1.5 },
 
-  partiesRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 18, gap: 24 },
-  partyBlock: { flex: 1 },
-  partyLabel: { fontSize: 7.5, fontWeight: 700, color: C.mid, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 4 },
-  partyLine: { fontSize: 9, color: C.ink, marginBottom: 1.5 },
-  partyLineMuted: { fontSize: 8, color: C.mid, marginBottom: 1.5 },
+  clubName: { fontSize: 12.5, fontWeight: 700, marginBottom: 1 },
+  showLine: { fontSize: 9, color: C.mid, marginBottom: 3, lineHeight: 1.25 },
 
-  thead: { flexDirection: 'row', justifyContent: 'space-between', backgroundColor: C.band, paddingVertical: 5, paddingHorizontal: 8, marginTop: 6 },
-  th: { color: C.bandText, fontWeight: 700, fontSize: 8 },
-  row: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 5, paddingHorizontal: 8, borderBottomWidth: 0.5, borderBottomColor: C.rule },
+  band: { flexDirection: 'row', backgroundColor: C.band, paddingVertical: 3, paddingHorizontal: 8, marginTop: 5 },
+  bandLabel: { color: C.bandText, fontWeight: 700, fontSize: 9, flex: 1 },
+  bandAmt: { color: C.bandText, fontWeight: 700, fontSize: 9, width: 80, textAlign: 'right' },
+
+  row: { flexDirection: 'row', paddingVertical: 2.5, paddingHorizontal: 8, borderBottomWidth: 0.5, borderBottomColor: C.rule },
   rowAlt: { backgroundColor: C.zebra },
-  rowLabel: { fontSize: 9.5 },
-  rowLabelBold: { fontSize: 9.5, fontWeight: 700 },
-  rowSub: { fontSize: 7.5, color: C.mid, marginTop: 1 },
-  rowAmount: { fontSize: 9.5 },
-  rowAmountBold: { fontSize: 9.5, fontWeight: 700 },
-  rowAmountCredit: { fontSize: 9.5, color: C.credit },
+  cellDesc: { flex: 1, fontSize: 9 },
+  cellSub: { fontSize: 7, color: C.light, marginTop: 0.5 },
+  cellAmt: { width: 80, textAlign: 'right', fontSize: 9 },
+  creditAmt: { width: 80, textAlign: 'right', fontSize: 9, color: C.credit },
 
-  totalRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 8, paddingHorizontal: 8, backgroundColor: C.band, marginTop: 4 },
-  totalLabel: { fontSize: 11, fontWeight: 800, color: C.bandText },
-  totalAmount: { fontSize: 12, fontWeight: 800, color: C.bandText },
+  totalRow: { flexDirection: 'row', paddingVertical: 3.5, paddingHorizontal: 8, borderTopWidth: 1.2, borderTopColor: C.ink },
+  totalLabel: { flex: 1, fontWeight: 700, fontSize: 9.5 },
+  totalAmt: { width: 80, textAlign: 'right', fontWeight: 700, fontSize: 9.5 },
 
-  settlementBox: { marginTop: 22, padding: 12, borderWidth: 1, borderColor: C.rule, borderRadius: 4, backgroundColor: '#fafaf9' },
-  settlementTitle: { fontSize: 9, fontWeight: 700, marginBottom: 4 },
-  settlementText: { fontSize: 8.5, color: C.mid, lineHeight: 1.4 },
+  entriesLine: { flexDirection: 'row', paddingVertical: 3, paddingHorizontal: 8, justifyContent: 'space-between' },
+  entriesLineLabel: { fontWeight: 700, fontSize: 8.5 },
+  entriesLineValue: { fontSize: 8.5, color: C.mid },
 
-  vatNote: { marginTop: 8, fontSize: 7.5, color: C.mid },
+  netBand: { flexDirection: 'row', backgroundColor: C.band, paddingVertical: 7, paddingHorizontal: 12, marginTop: 6, borderRadius: 3 },
+  netLabel: { color: C.bandText, fontWeight: 700, fontSize: 13, flex: 1 },
+  netAmt: { color: C.bandText, fontWeight: 700, fontSize: 13, textAlign: 'right' },
 
-  captureGap: { marginTop: 10, padding: 8, borderWidth: 1, borderColor: '#c9a227', borderRadius: 4, backgroundColor: '#fdf6e3' },
-  captureGapText: { fontSize: 8, color: '#7a5c00' },
+  footNote: { marginTop: 5, fontSize: 7, color: C.light, lineHeight: 1.3 },
 
-  footer: { position: 'absolute', bottom: 18, left: 36, right: 36, textAlign: 'center', fontSize: 7, color: C.mid },
+  captureGap: { marginTop: 5, padding: 6, borderWidth: 1, borderColor: '#c9a227', borderRadius: 4, backgroundColor: '#fdf6e3' },
+  captureGapText: { fontSize: 7.5, color: '#7a5c00' },
+
+  footer: { position: 'absolute', bottom: 12, left: 38, right: 38, textAlign: 'center', fontSize: 6.5, color: C.light, borderTopWidth: 0.5, borderTopColor: C.rule, paddingTop: 4 },
 });
 
 function money(pence: number): string {
   const sign = pence < 0 ? '-' : '';
   const abs = Math.abs(pence);
   return `${sign}£${(abs / 100).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+
+function Section({ section }: { section: SettlementSection }) {
+  return (
+    <View wrap={false}>
+      <View style={s.band}>
+        <Text style={s.bandLabel}>{section.title}</Text>
+        <Text style={s.bandAmt}>Amount</Text>
+      </View>
+      {section.lines.map((l, i) => (
+        <View key={i} style={i % 2 === 1 ? [s.row, s.rowAlt] : s.row}>
+          <View style={s.cellDesc}>
+            <Text>{l.label}</Text>
+            {l.sub ? <Text style={s.cellSub}>{l.sub}</Text> : null}
+          </View>
+          <Text style={l.isCredit ? s.creditAmt : s.cellAmt}>{money(l.amountPence)}</Text>
+        </View>
+      ))}
+      <View style={s.totalRow}>
+        <Text style={s.totalLabel}>{section.totalLabel}</Text>
+        <Text style={s.totalAmt}>{money(section.totalPence)}</Text>
+      </View>
+    </View>
+  );
 }
 
 export type InvoicePdfInfo = {
@@ -84,94 +110,76 @@ export type InvoicePdfInfo = {
 export function InvoicePdf({
   info,
   lineItems,
+  netToClubPence,
   captureGapCount,
 }: {
   info: InvoicePdfInfo;
   /** Rendered VERBATIM from the issued invoice's snapshot — never recomputed here. */
-  lineItems: InvoiceLineItem[];
+  lineItems: SettlementSnapshot;
+  netToClubPence: number;
   captureGapCount: number;
 }) {
   return (
-    <Document title={`Invoice ${info.invoiceNumber} — ${info.clubName}`} author="Remi Show Manager">
+    <Document title={`Settlement ${info.invoiceNumber} — ${info.clubName}`} author="Remi Show Manager">
       <Page size="A4" style={s.page}>
         <View style={s.header}>
+          {remiLogo ? <Image src={remiLogo} style={s.logo} /> : <Text>Remi</Text>}
           <View>
-            <Text style={s.invoiceTitle}>Invoice</Text>
-            <Text style={s.invoiceNumber}>{info.invoiceNumber}</Text>
-            <Text style={s.invoiceNumber}>{info.issuedAt}</Text>
-          </View>
-          {remiLogo ? <Image src={remiLogo} style={s.logo} /> : null}
-        </View>
-
-        <View style={s.partiesRow}>
-          <View style={s.partyBlock}>
-            <Text style={s.partyLabel}>From</Text>
-            <Text style={s.partyLine}>Remi Show Manager</Text>
-            <Text style={s.partyLineMuted}>Michael James T/A Remi Show Manager</Text>
-            <Text style={s.partyLineMuted}>William House, Mobbs Way</Text>
-            <Text style={s.partyLineMuted}>Lowestoft, NR32 3AL</Text>
-            <Text style={s.partyLineMuted}>remishowmanager.co.uk</Text>
-            <Text style={s.partyLineMuted}>ICO reg. C1920187</Text>
-          </View>
-          <View style={s.partyBlock}>
-            <Text style={s.partyLabel}>Billed to</Text>
-            <Text style={s.partyLine}>The Secretary</Text>
-            <Text style={s.partyLine}>{info.clubName}</Text>
-            <Text style={s.partyLineMuted}>{info.showName}</Text>
-            <Text style={s.partyLineMuted}>{info.showDate}</Text>
+            <Text style={s.title}>SETTLEMENT</Text>
+            <Text style={s.meta}>Statement &amp; invoice</Text>
+            <Text style={s.meta}>Date: {info.issuedAt}</Text>
+            <Text style={s.meta}>Invoice ref: {info.invoiceNumber}</Text>
           </View>
         </View>
 
-        <View style={s.thead}>
-          <Text style={s.th}>Description</Text>
-          <Text style={s.th}>Amount</Text>
+        <Text style={s.clubName}>{info.clubName}</Text>
+        <Text style={s.showLine}>
+          {info.showName}
+          {'\n'}
+          {info.showDate}
+        </Text>
+
+        <Section section={lineItems.viaRemi} />
+        <Section section={lineItems.direct} />
+        {lineItems.free.lines.length > 0 ? <Section section={lineItems.free} /> : null}
+
+        <View style={s.entriesLine}>
+          <Text style={s.entriesLineLabel}>Total entries</Text>
+          <Text style={s.entriesLineValue}>{lineItems.totalEntriesLine}</Text>
         </View>
 
-        {lineItems.map((item, i) => {
-          if (item.isTotal) {
-            return (
-              <View key={i} style={s.totalRow}>
-                <Text style={s.totalLabel}>{item.label}</Text>
-                <Text style={s.totalAmount}>{money(item.amountPence)}</Text>
-              </View>
-            );
-          }
-          return (
-            <View key={i} style={i % 2 === 1 ? [s.row, s.rowAlt] : s.row}>
-              <View>
-                <Text style={s.rowLabel}>{item.label}</Text>
-                {item.sub ? <Text style={s.rowSub}>{item.sub}</Text> : null}
-              </View>
-              <Text style={item.isCredit ? s.rowAmountCredit : s.rowAmount}>{money(item.amountPence)}</Text>
-            </View>
-          );
-        })}
+        <Section section={lineItems.costs} />
+
+        <View style={s.netBand}>
+          <Text style={s.netLabel}>Net to credit the club</Text>
+          <Text style={s.netAmt}>{money(netToClubPence)}</Text>
+        </View>
 
         {captureGapCount > 0 ? (
           <View style={s.captureGap}>
             <Text style={s.captureGapText}>
-              {captureGapCount} payment{captureGapCount === 1 ? '' : 's'} missing captured fee data — figures may be incomplete.
+              {captureGapCount} payment{captureGapCount === 1 ? '' : 's'} missing captured fee data — figures may be
+              incomplete.
             </Text>
           </View>
         ) : null}
 
-        <View style={s.settlementBox}>
-          <Text style={s.settlementTitle}>How this is settled</Text>
-          <Text style={s.settlementText}>
-            The total fee due is deducted from the entry fees Remi collected for this show before the
-            remainder is sent to you; any balance still owing is settled by bank transfer.{'\n'}
-            Reference: {info.invoiceNumber}
-          </Text>
-        </View>
-
-        <Text style={s.vatNote}>Remi Show Manager is not VAT registered — no VAT is charged on this invoice.</Text>
+        <Text style={s.footNote}>
+          The net figure above is the money Remi collected on the club&apos;s behalf ({money(lineItems.viaRemi.totalPence)})
+          less Remi&apos;s costs ({money(lineItems.costs.totalPence)}), and will be paid to the club by bank transfer
+          after the show. Costs are deducted from the amount collected, so no separate payment is needed — this
+          statement also serves as your invoice (ref {info.invoiceNumber}).
+          {lineItems.direct.totalPence > 0
+            ? ` The ${money(lineItems.direct.totalPence)} of postal/manual entries was paid directly to the club and is shown for completeness only — it is not part of the Remi transfer.`
+            : ''}
+          {' '}Card fees are the actual amounts charged by Stripe Payments UK, Ltd. — not an estimate. Remi Show
+          Manager is not VAT registered.
+        </Text>
 
         <Text
           style={s.footer}
           fixed
-          render={({ pageNumber, totalPages }) =>
-            `Produced with Remi  ·  remishowmanager.co.uk  ·  Page ${pageNumber} of ${totalPages}`
-          }
+          render={({ pageNumber, totalPages }) => `Remi  ·  remishowmanager.co.uk  ·  Page ${pageNumber} of ${totalPages}`}
         />
       </Page>
     </Document>
