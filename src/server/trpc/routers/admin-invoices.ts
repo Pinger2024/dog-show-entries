@@ -3,28 +3,42 @@ import { and, desc, eq, sql } from 'drizzle-orm';
 import { TRPCError } from '@trpc/server';
 import { adminProcedure } from '../procedures';
 import { createTRPCRouter } from '../init';
-import { invoices, organisations, orders, payments } from '@/server/db/schema';
-import type { InvoiceLineItem } from '@/server/db/schema';
-import { computeShowMetrics } from '@/server/services/show-metrics';
-import { formatCurrency } from '@/lib/date-utils';
+import { invoices, organisations } from '@/server/db/schema';
+import { computeSettlementItemisation } from '@/server/services/settlement-itemisation';
 import type { Database } from '@/server/db';
 
 /**
- * Admin club-invoice generator — replaces the one-off reconciliation
- * scripts Michael used to hand-run per show. See src/server/db/schema/invoices.ts
- * for the immutability rule: figures here are computed once at `issue` and
- * frozen forever. `preview` never writes; `issue`/`supersede` are the only
- * writes and there is deliberately NO update procedure.
+ * Admin club-SETTLEMENT generator — replaces the one-off reconciliation
+ * scripts Michael used to hand-run per show (e.g. the South Western GSD
+ * Club statement, INV-SWGSD-0004). The output IS the settlement statement
+ * a secretary uses to reconcile her bank account — it also serves as the
+ * invoice, so there is only one document per show, not two.
+ *
+ * See src/server/db/schema/invoices.ts for the immutability rule: figures
+ * here are computed once at `issue` and frozen forever. `preview` never
+ * writes; `issue`/`supersede` are the only writes and there is
+ * deliberately NO update procedure.
  */
+
+const discountConfigSchema = z.object({
+  mode: z.enum(['perTransaction', 'percent', 'fixed']),
+  value: z.number().int().min(0),
+  label: z.string().min(1).max(200),
+});
 
 const issueInputSchema = z.object({
   showId: z.string().uuid(),
   packageFeePence: z.number().int().min(0),
   packageFeeDescription: z.string().min(1).max(500),
-  // Remi's per-transaction discount off Stripe's card fee — an INPUT, not a
-  // constant, because the Stripe deal can change and past invoices must
-  // keep whatever rate applied when they were issued.
-  perTransactionDiscountPence: z.number().int().min(0).max(1000).default(20),
+  // Remi's discount off Stripe's card fee — an INPUT, not a constant,
+  // because the Stripe deal can change and past statements must keep
+  // whatever rate applied when they were issued.
+  discount: discountConfigSchema.default({ mode: 'perTransaction', value: 20, label: 'Remi discount' }),
+  // Only honoured on a club's FIRST-ever issue (its numbering counter is
+  // still untouched) — lets us pick up numbering after the hand-issued
+  // scripts (e.g. South Western's next real one is 0005, following
+  // script-issued 0001–0004 which predate this table).
+  startingNumber: z.number().int().min(1).optional(),
 });
 
 /** Uppercase alnum, hyphen-collapsed — e.g. "Clyde Valley GSD Club" -> "CLYDE-VALLEY-GSD-CLUB". */
@@ -36,15 +50,15 @@ function slugifyClubName(name: string): string {
   return slug || 'CLUB';
 }
 
-type InvoiceFigures = Awaited<ReturnType<typeof computeInvoiceFigures>>;
+type SettlementFigures = Awaited<ReturnType<typeof computeSettlementFigures>>;
 
-async function computeInvoiceFigures(
+async function computeSettlementFigures(
   db: Database,
   showId: string,
   input: {
     packageFeePence: number;
     packageFeeDescription: string;
-    perTransactionDiscountPence: number;
+    discount: { mode: 'perTransaction' | 'percent' | 'fixed'; value: number; label: string };
   },
 ) {
   const showRow = await db.query.shows.findFirst({
@@ -58,69 +72,22 @@ async function computeInvoiceFigures(
     throw new TRPCError({ code: 'NOT_FOUND', message: 'Show has no club on record' });
   }
 
-  const metrics = await computeShowMetrics(db, showId);
+  const settlement = await computeSettlementItemisation(db, showId, {
+    packageFeePence: input.packageFeePence,
+    packageFeeDescription: input.packageFeeDescription,
+    discount: input.discount,
+  });
 
-  // Real Stripe fees for this show — joined via orders.showId since
-  // payments carries no showId of its own. Refunded rows are excluded
-  // entirely; partially_refunded rows keep their fee (Stripe never returns
-  // the processing fee on a partial refund). Rows still missing captured
-  // fee data (succeeded/partially_refunded with fee_pence NULL) are
-  // counted separately as the capture gap — never silently folded into
-  // the total.
-  const [feeRow] = await db
-    .select({
-      feeTotal: sql<number>`COALESCE(SUM(${payments.feePence}), 0)::int`,
-      feeCount: sql<number>`COUNT(*) FILTER (WHERE ${payments.feePence} IS NOT NULL)::int`,
-      captureGap: sql<number>`COUNT(*) FILTER (WHERE ${payments.feePence} IS NULL AND ${payments.status} IN ('succeeded', 'partially_refunded'))::int`,
-    })
-    .from(payments)
-    .innerJoin(orders, eq(payments.orderId, orders.id))
-    .where(and(eq(orders.showId, showId), sql`${payments.status} != 'refunded'`));
-
-  const cardFeeTotalPence = feeRow?.feeTotal ?? 0;
-  const feeBearingChargeCount = feeRow?.feeCount ?? 0;
-  const captureGapCount = feeRow?.captureGap ?? 0;
-
-  const discountTotalPence = feeBearingChargeCount * input.perTransactionDiscountPence;
-  const cardFeeDueTotalPence = Math.max(0, cardFeeTotalPence - discountTotalPence);
-  const totalFeeDuePence = cardFeeDueTotalPence + input.packageFeePence;
-
-  const lineItems: InvoiceLineItem[] = [
-    { label: 'Income collected by us', amountPence: metrics.clubReceivablePence },
-    { label: 'Income paid direct to bank', amountPence: metrics.offlineCollectedPence },
-    { label: 'Total income', amountPence: metrics.totalClubRevenuePence, isTotal: true },
-    {
-      label: 'Card processing fee total',
-      amountPence: cardFeeTotalPence,
-      sub: `${feeBearingChargeCount} card payment${feeBearingChargeCount === 1 ? '' : 's'}`,
-    },
-    {
-      label: 'Remi discount',
-      amountPence: -discountTotalPence,
-      isCredit: true,
-      sub: `${formatCurrency(input.perTransactionDiscountPence)} × ${feeBearingChargeCount}`,
-    },
-    { label: 'Total card processing fee due', amountPence: cardFeeDueTotalPence, isTotal: true },
-    { label: input.packageFeeDescription, amountPence: input.packageFeePence },
-    { label: 'TOTAL FEE DUE', amountPence: totalFeeDuePence, isTotal: true },
-  ];
+  const freeEntriesCount = settlement.free.lines.reduce((sum, l) => {
+    const match = l.sub?.match(/^(\d+)/);
+    return sum + (match ? parseInt(match[1]!, 10) : 0);
+  }, 0);
 
   return {
     show: showRow,
     organisation: showRow.organisation,
-    incomeCollectedByUsPence: metrics.clubReceivablePence,
-    incomePaidDirectPence: metrics.offlineCollectedPence,
-    totalIncomePence: metrics.totalClubRevenuePence,
-    cardFeeTotalPence,
-    feeBearingChargeCount,
-    perTransactionDiscountPence: input.perTransactionDiscountPence,
-    discountTotalPence,
-    cardFeeDueTotalPence,
-    packageFeePence: input.packageFeePence,
-    packageFeeDescription: input.packageFeeDescription,
-    totalFeeDuePence,
-    captureGapCount,
-    lineItems,
+    settlement,
+    freeEntriesCount,
   };
 }
 
@@ -133,45 +100,79 @@ async function computeInvoiceFigures(
  */
 async function issueInvoiceRow(
   tx: Parameters<Database['transaction']>[0] extends (tx: infer T) => unknown ? T : never,
-  figures: InvoiceFigures,
-  input: { showId: string },
+  figures: SettlementFigures,
+  input: { showId: string; packageFeePence: number; packageFeeDescription: string; startingNumber?: number },
   issuedByUserId: string,
 ) {
   const clubSlug = slugifyClubName(figures.organisation.name);
+  const orgId = figures.organisation.id;
+  const { settlement } = figures;
 
-  const [orgRow] = await tx
-    .update(organisations)
-    .set({ nextInvoiceSequence: sql`${organisations.nextInvoiceSequence} + 1` })
-    .where(eq(organisations.id, figures.organisation.id))
-    .returning({ nextInvoiceSequence: organisations.nextInvoiceSequence });
-  if (!orgRow) throw new TRPCError({ code: 'NOT_FOUND', message: 'Club not found' });
+  let sequenceNumber: number;
+  if (input.startingNumber != null) {
+    // Only takes effect while the club's counter is still at the untouched
+    // default of 1 — i.e. this really is the club's first issue through
+    // this table. A concurrent/second issue falls through to the normal
+    // increment below.
+    const [claimed] = await tx
+      .update(organisations)
+      .set({ nextInvoiceSequence: input.startingNumber + 1 })
+      .where(and(eq(organisations.id, orgId), eq(organisations.nextInvoiceSequence, 1)))
+      .returning({ nextInvoiceSequence: organisations.nextInvoiceSequence });
+    if (claimed) {
+      sequenceNumber = input.startingNumber;
+    } else {
+      const [orgRow] = await tx
+        .update(organisations)
+        .set({ nextInvoiceSequence: sql`${organisations.nextInvoiceSequence} + 1` })
+        .where(eq(organisations.id, orgId))
+        .returning({ nextInvoiceSequence: organisations.nextInvoiceSequence });
+      if (!orgRow) throw new TRPCError({ code: 'NOT_FOUND', message: 'Club not found' });
+      sequenceNumber = orgRow.nextInvoiceSequence - 1;
+    }
+  } else {
+    const [orgRow] = await tx
+      .update(organisations)
+      .set({ nextInvoiceSequence: sql`${organisations.nextInvoiceSequence} + 1` })
+      .where(eq(organisations.id, orgId))
+      .returning({ nextInvoiceSequence: organisations.nextInvoiceSequence });
+    if (!orgRow) throw new TRPCError({ code: 'NOT_FOUND', message: 'Club not found' });
+    // The counter holds the NEXT number to hand out — the value returned is
+    // already post-increment, so this invoice takes the value one below it.
+    sequenceNumber = orgRow.nextInvoiceSequence - 1;
+  }
 
-  // The counter holds the NEXT number to hand out — the value returned is
-  // already post-increment, so this invoice takes the value one below it.
-  const sequenceNumber = orgRow.nextInvoiceSequence - 1;
   const invoiceNumber = `INV-${clubSlug}-${String(sequenceNumber).padStart(4, '0')}`;
 
   const [inserted] = await tx
     .insert(invoices)
     .values({
-      organisationId: figures.organisation.id,
+      organisationId: orgId,
       showId: input.showId,
       invoiceNumber,
       clubSlug,
       sequenceNumber,
-      incomeCollectedByUsPence: figures.incomeCollectedByUsPence,
-      incomePaidDirectPence: figures.incomePaidDirectPence,
-      totalIncomePence: figures.totalIncomePence,
-      cardFeeTotalPence: figures.cardFeeTotalPence,
-      feeBearingChargeCount: figures.feeBearingChargeCount,
-      perTransactionDiscountPence: figures.perTransactionDiscountPence,
-      discountTotalPence: figures.discountTotalPence,
-      cardFeeDueTotalPence: figures.cardFeeDueTotalPence,
-      packageFeePence: figures.packageFeePence,
-      packageFeeDescription: figures.packageFeeDescription,
-      totalFeeDuePence: figures.totalFeeDuePence,
-      captureGapCount: figures.captureGapCount,
-      lineItems: figures.lineItems,
+      viaRemiTotalPence: settlement.viaRemi.totalPence,
+      directTotalPence: settlement.direct.totalPence,
+      freeEntriesCount: figures.freeEntriesCount,
+      cardFeeTotalPence: settlement.cardFeeTotalPence,
+      feeBearingChargeCount: settlement.feeBearingChargeCount,
+      discountMode: settlement.discountMode,
+      discountValue: settlement.discountValue,
+      discountLabel: settlement.discountLabel,
+      discountTotalPence: settlement.discountAmountPence,
+      packageFeePence: input.packageFeePence,
+      packageFeeDescription: input.packageFeeDescription,
+      costsTotalPence: settlement.costs.totalPence,
+      netToClubPence: settlement.netToClubPence,
+      captureGapCount: settlement.captureGapCount,
+      lineItems: {
+        viaRemi: settlement.viaRemi,
+        direct: settlement.direct,
+        free: settlement.free,
+        totalEntriesLine: settlement.totalEntriesLine,
+        costs: settlement.costs,
+      },
       issuedByUserId,
     })
     .returning();
@@ -182,14 +183,12 @@ async function issueInvoiceRow(
 export const adminInvoicesRouter = createTRPCRouter({
   /** Computed figures, no write — drives the preview step of the generate flow. */
   preview: adminProcedure.input(issueInputSchema).query(async ({ ctx, input }) => {
-    return computeInvoiceFigures(ctx.db, input.showId, input);
+    return computeSettlementFigures(ctx.db, input.showId, input);
   }),
 
   issue: adminProcedure.input(issueInputSchema).mutation(async ({ ctx, input }) => {
-    const figures = await computeInvoiceFigures(ctx.db, input.showId, input);
-    return ctx.db.transaction((tx) =>
-      issueInvoiceRow(tx, figures, input, ctx.session.user.id),
-    );
+    const figures = await computeSettlementFigures(ctx.db, input.showId, input);
+    return ctx.db.transaction((tx) => issueInvoiceRow(tx, figures, input, ctx.session.user.id));
   }),
 
   list: adminProcedure
@@ -234,7 +233,7 @@ export const adminInvoicesRouter = createTRPCRouter({
         throw new TRPCError({ code: 'BAD_REQUEST', message: 'This invoice has already been superseded' });
       }
 
-      const figures = await computeInvoiceFigures(ctx.db, input.showId, input);
+      const figures = await computeSettlementFigures(ctx.db, input.showId, input);
 
       return ctx.db.transaction(async (tx) => {
         const replacement = await issueInvoiceRow(tx, figures, input, ctx.session.user.id);
