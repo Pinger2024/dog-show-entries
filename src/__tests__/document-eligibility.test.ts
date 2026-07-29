@@ -37,6 +37,11 @@ describe('documentRowVisible', () => {
     expect(documentRowVisible('sv-results', { showRuleset: 'rkc', showType: 'championship' })).toBe(false);
   });
 
+  it('shows Grading Cards only on a wusv show', () => {
+    expect(documentRowVisible('grading-cards', { showRuleset: 'wusv', showType: 'open' })).toBe(true);
+    expect(documentRowVisible('grading-cards', { showRuleset: 'rkc', showType: 'championship' })).toBe(false);
+  });
+
   it('shows all 8 RKC-only rows on an rkc show', () => {
     for (const key of RKC_ONLY_KEYS) {
       expect(documentRowVisible(key, { showRuleset: 'rkc', showType: 'open' }), key).toBe(true);

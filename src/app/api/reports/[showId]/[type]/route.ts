@@ -23,6 +23,8 @@ import { SvResultsReport, type SvResultsReportInfo } from '@/components/reports/
 import { loadSvResultsData } from '@/server/services/sv-results-data';
 import { buildSvResultsReport, buildSvResultsXlsxRows } from '@/lib/sv-results';
 import { buildSvResultsXlsx } from '@/lib/sv-results-xlsx';
+import { GradingCardsReport } from '@/components/reports/grading-cards-pdf';
+import { loadGradingCardsData } from '@/server/services/grading-cards-data';
 import { getPaidOrderIdsForShow } from '@/server/services/show-metrics';
 import {
   loadAbsenteeLikeEntries,
@@ -44,7 +46,7 @@ import {
 } from '@/lib/reports-xlsx';
 
 const PDF_TYPES = ['catalogue-order', 'class-breakdown', 'catalogue-orders', 'sh01'] as const;
-const SV_TYPES = ['sv-results', 'sv-results-xlsx'] as const;
+const SV_TYPES = ['sv-results', 'sv-results-xlsx', 'grading-cards'] as const;
 // Excel twins of the PDF/CSV reports above — Mandy's original ask: "the
 // option to generate on excel or pdf". Each one reuses the exact row-
 // builder or DB query its PDF/CSV sibling uses (see report-rows.ts and
@@ -136,6 +138,30 @@ export async function GET(
       console.error('SV results report generation failed:', err);
       const message = err instanceof Error ? err.message : String(err);
       return NextResponse.json({ error: 'SV results generation failed', detail: message }, { status: 500 });
+    }
+  }
+
+  // ── SV / WUSV Grading Cards — one A5-landscape double-sided card per
+  // entered dog, for the regional group's judge to grade and hand back
+  // (secretary-approved design, regional/WUSV shows only). ──
+  if (type === 'grading-cards') {
+    if (show.showRuleset !== 'wusv') {
+      return NextResponse.json(
+        { error: 'Grading cards are only available for regional (WUSV) shows.' },
+        { status: 400 },
+      );
+    }
+    const load = await loadGradingCardsData(db, showId);
+    if (!load) {
+      return NextResponse.json({ error: 'Show not found' }, { status: 404 });
+    }
+    try {
+      const element = React.createElement(GradingCardsReport, { info: load.info, entries: load.entries });
+      return await renderPdf(element, `${sanitizeFilename(show.name)}-Grading-Cards.pdf`, isPreview);
+    } catch (err) {
+      console.error('Grading cards generation failed:', err);
+      const message = err instanceof Error ? err.message : String(err);
+      return NextResponse.json({ error: 'Grading cards generation failed', detail: message }, { status: 500 });
     }
   }
 

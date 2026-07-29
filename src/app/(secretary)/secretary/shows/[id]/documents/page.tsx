@@ -358,6 +358,16 @@ export default function DocumentsPage() {
             >
               <PdfViewerButton icon={<List className="size-4" />} label="View" url={`/api/catalogue/${showId}/by-class`} />
             </DocRow>
+            {documentRowVisible('grading-cards', docCtx) && (
+              <DocRow
+                icon={<Award className="size-4" />}
+                label="Grading Cards"
+                description="One A5 double-sided card per dog — fold once for a 4-panel hand card the judge grades and hands back"
+                note={!catalogueData?.entries?.length ? 'Ring numbers will be blank until entries are confirmed' : undefined}
+              >
+                <PdfViewerButton icon={<Award className="size-4" />} label="View" url={`/api/reports/${showId}/grading-cards`} />
+              </DocRow>
+            )}
             {documentRowVisible('catalogue-standard', docCtx) && (
               <DocRow
                 icon={<BookOpen className="size-4" />}

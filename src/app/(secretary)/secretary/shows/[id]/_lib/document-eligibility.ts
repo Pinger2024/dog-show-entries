@@ -25,7 +25,8 @@ export type DocumentRowKey =
   | 'prize-cards'
   | 'marked-catalogue'
   | 'sh01'
-  | 'sv-results';
+  | 'sv-results'
+  | 'grading-cards';
 
 export interface DocumentEligibilityContext {
   showRuleset: 'rkc' | 'wusv' | null | undefined;
@@ -49,6 +50,7 @@ export function documentRowVisible(rowKey: DocumentRowKey, ctx: DocumentEligibil
 
   switch (rowKey) {
     case 'sv-results':
+    case 'grading-cards':
       return isWusv;
     case 'sh01':
       return !isWusv && ctx.showType === 'championship';
