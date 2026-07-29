@@ -39,17 +39,29 @@ import { stripUnembeddedBase14Fonts } from '@/lib/pdf-pad';
  *    deliberately nudged to sum to EXACTLY £1,483.00) on one viaRemi order
  *    — more than 3 distinct prices, so the "N entries @ £min–£max" range
  *    line applies (rule 1).
- *  - 8 viaRemi + 2 direct entries in Special Award Classes @ £3.00 — the
- *    combined JH/SAC line, detected by class type not price (rule 2).
+ *  - 8 viaRemi + 2 direct entries in JH/Special Award Classes @ £3.00 — the
+ *    combined JH/SAC line, detected by class type not price (rule 2). Split
+ *    class-type-true-to-life: 4 junior_handler-type (3 viaRemi + 1 direct),
+ *    6 special-type (5 viaRemi + 1 direct) — real South Western had both
+ *    kinds, and the "including N junior handlers" total-entries descriptor
+ *    only counts the junior_handler-type ones (see settlement-itemisation's
+ *    TaggedEntry.hasJhClass doc).
  *  - 23 "Printed Catalogue" + 1 "Club Membership" sundries, and 3×£5
  *    "Donation" sundries — grouped by name, donations combined onto one
  *    line (rules 3–4).
  *  - An order-level £9.00 discount (components sum £14.83 higher than the
  *    order total) and a £2.00 refund payment row (type='refund') — both
  *    reconciliation lines (rules 4–5... "critical" per the brief).
- *  - 4 direct £20.00 entries, 4 orderless NFC free entries.
+ *  - 4 direct £20.00 entries, 4 NFC free entries (3 on a viaRemi order, 1 on
+ *    a direct order — real dogs always sit on SOME order, even a £0 one;
+ *    truly orderless entries are a separate edge case the total-entries
+ *    line deliberately excludes from both channel buckets).
  *  - Real card fees summing to £38.69 across 3 payments, discounted 40%
  *    (£15.48) — matches the hand-built INV-SWGSD-0004 costs exactly.
+ *  - Total-entries line: 87 via Remi (76 + 8 JH/SAC + 3 free NFC) + 7 direct
+ *    (4 + 2 JH/SAC + 1 free NFC) = 94, including 4 junior handlers (the
+ *    junior_handler-type entries only, not the special-type ones) and 4
+ *    not-for-competition.
  */
 async function seedSouthWesternShapedShow() {
   const breed = await makeBreed();
@@ -60,6 +72,8 @@ async function seedSouthWesternShapedShow() {
 
   const specialAwardClassDef = await makeClassDef({ name: 'Special Award Class A', type: 'special' });
   const specialAwardClass = await makeShowClass({ showId: show.id, classDefinitionId: specialAwardClassDef.id, entryFee: 300 });
+  const jhClassDef = await makeClassDef({ name: 'Junior Handling Class A', type: 'junior_handler' });
+  const jhClass = await makeShowClass({ showId: show.id, classDefinitionId: jhClassDef.id, entryFee: 300 });
 
   // ── Order 1 (viaRemi): 76 regular entries at 13 distinct price points,
   // summing to EXACTLY £1,483.00 — computed at runtime, not hand-typed. ──
@@ -80,9 +94,14 @@ async function seedSouthWesternShapedShow() {
   }
   await makePayment({ orderId: orderEntries.id, stripePaymentId: 'pi_sw_1', amount: orderEntries.totalAmount, status: 'succeeded', feePence: 2000 });
 
-  // ── Order 2 (viaRemi): 8 Special Award Class entries @ £3.00 + the £2.00 refund. ──
+  // ── Order 2 (viaRemi): 8 JH/Special Award Class entries @ £3.00 (3 JH-type
+  // + 5 special-type) + the £2.00 refund. ──
   const orderJhViaRemi = await makeOrder({ showId: show.id, exhibitorId: exhibitor.id, status: 'paid', totalAmount: 2400 });
-  for (let i = 0; i < 8; i++) {
+  for (let i = 0; i < 3; i++) {
+    const entry = await makeEntry({ showId: show.id, dogId: dog!.id, exhibitorId: exhibitor.id, orderId: orderJhViaRemi.id, totalFee: 300 });
+    await makeEntryClass({ entryId: entry!.id, showClassId: jhClass!.id, fee: 300 });
+  }
+  for (let i = 0; i < 5; i++) {
     const entry = await makeEntry({ showId: show.id, dogId: dog!.id, exhibitorId: exhibitor.id, orderId: orderJhViaRemi.id, totalFee: 300 });
     await makeEntryClass({ entryId: entry!.id, showClassId: specialAwardClass!.id, fee: 300 });
   }
@@ -108,25 +127,38 @@ async function seedSouthWesternShapedShow() {
     await makeEntry({ showId: show.id, dogId: dog!.id, exhibitorId: exhibitor.id, orderId: orderDirectEntries.id, totalFee: 2000 });
   }
 
-  // ── Order 6 (direct): 2 Special Award Class entries @ £3.00. ──
+  // ── Order 6 (direct): 2 JH/Special Award Class entries @ £3.00 (1 JH-type + 1 special-type). ──
   const orderDirectJh = await makeOrder({ showId: show.id, exhibitorId: exhibitor.id, status: 'paid', totalAmount: 600, stripePaymentIntentId: null });
-  for (let i = 0; i < 2; i++) {
-    const entry = await makeEntry({ showId: show.id, dogId: dog!.id, exhibitorId: exhibitor.id, orderId: orderDirectJh.id, totalFee: 300 });
-    await makeEntryClass({ entryId: entry!.id, showClassId: specialAwardClass!.id, fee: 300 });
-  }
+  const directJhEntry = await makeEntry({ showId: show.id, dogId: dog!.id, exhibitorId: exhibitor.id, orderId: orderDirectJh.id, totalFee: 300 });
+  await makeEntryClass({ entryId: directJhEntry!.id, showClassId: jhClass!.id, fee: 300 });
+  const directSacEntry = await makeEntry({ showId: show.id, dogId: dog!.id, exhibitorId: exhibitor.id, orderId: orderDirectJh.id, totalFee: 300 });
+  await makeEntryClass({ entryId: directSacEntry!.id, showClassId: specialAwardClass!.id, fee: 300 });
 
-  // ── 4 orderless NFC free entries. ──
-  for (let i = 0; i < 4; i++) {
+  // ── 4 NFC free entries — every real dog sits on SOME order (even a £0
+  // one), so these attach to an existing order rather than being fully
+  // orderless: 3 on the big viaRemi entries order, 1 on the direct order.
+  // totalFee=0 means attaching them doesn't disturb either order's
+  // component-sum-vs-totalAmount discount check. ──
+  for (let i = 0; i < 3; i++) {
     await testDb.insert(entriesTable).values({
       showId: show.id,
       dogId: dog!.id,
       exhibitorId: exhibitor.id,
-      orderId: null,
+      orderId: orderEntries.id,
       status: 'confirmed',
       totalFee: 0,
       isNfc: true,
     });
   }
+  await testDb.insert(entriesTable).values({
+    showId: show.id,
+    dogId: dog!.id,
+    exhibitorId: exhibitor.id,
+    orderId: orderDirectEntries.id,
+    status: 'confirmed',
+    totalFee: 0,
+    isNfc: true,
+  });
 
   return { org, show, exhibitor };
 }
@@ -150,6 +182,9 @@ describe('adminInvoices settlement — South Western GSD reproduction (acceptanc
     expect(invoice.discountTotalPence).toBe(1_548);
     expect(invoice.costsTotalPence).toBe(18_321);
     expect(invoice.netToClubPence).toBe(142_979);
+    expect(invoice.lineItems.totalEntriesLine).toBe(
+      '87 via Remi + 7 direct = 94 (including 4 junior handlers and 4 not-for-competition)',
+    );
 
     // ── Render the real PDF (no react-pdf mock — this must actually paginate). ──
     const info: InvoicePdfInfo = {
@@ -173,7 +208,14 @@ describe('adminInvoices settlement — South Western GSD reproduction (acceptanc
     writeFileSync(pdfPath, buffer);
 
     const text = execFileSync('pdftotext', ['-layout', pdfPath, '-']).toString('utf8');
-    for (const needle of ['£1,613.00', '£86.00', '£183.21', '£1,429.79', 'Net to credit the club']) {
+    for (const needle of [
+      '£1,613.00',
+      '£86.00',
+      '£183.21',
+      '£1,429.79',
+      'Net to credit the club',
+      '87 via Remi + 7 direct = 94 (including 4 junior handlers and 4 not-for-competition)',
+    ]) {
       expect(text).toContain(needle);
     }
 

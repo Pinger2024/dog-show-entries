@@ -77,8 +77,19 @@ type SundryRow = {
   unitPrice: number;
 };
 
-/** Fee-bearing entry, tagged with whether ALL of its classes are JH/special-award classes. */
-type TaggedEntry = ConfirmedEntryRow & { jhOrSacOnly: boolean; hasClasses: boolean };
+/**
+ * Confirmed entry, tagged with:
+ *  - jhOrSacOnly: ALL of its classes are JH/special-award classes — drives
+ *    which line (regular vs. combined JH/SAC) it lands on.
+ *  - hasJhClass: it has ANY junior_handler-type class, paid or free — the
+ *    "including N junior handlers" descriptor counts this, not
+ *    `entryType` (which only flags a JH-person entry with no dog attached,
+ *    and misses a dog entered into a Special/JH class by a junior handler).
+ *  Note isNfc and hasJhClass are independent flags — a dog can be both
+ *  (NFC and shown in a junior handling class), and is counted once under
+ *  each descriptor in the total-entries line.
+ */
+type TaggedEntry = ConfirmedEntryRow & { jhOrSacOnly: boolean; hasJhClass: boolean; hasClasses: boolean };
 
 function isDonationName(name: string): boolean {
   return name.toLowerCase().includes('donation');
@@ -216,7 +227,8 @@ export async function computeSettlementItemisation(
   const taggedEntries: TaggedEntry[] = confirmedRows.map((e) => {
     const types = classTypesByEntry.get(e.id) ?? [];
     const jhOrSacOnly = types.length > 0 && types.every((t) => t === 'junior_handler' || t === 'special');
-    return { ...e, jhOrSacOnly, hasClasses: types.length > 0 };
+    const hasJhClass = types.includes('junior_handler');
+    return { ...e, jhOrSacOnly, hasJhClass, hasClasses: types.length > 0 };
   });
 
   const sundryRows =
@@ -344,13 +356,20 @@ export async function computeSettlementItemisation(
     totalPence: 0,
   };
 
-  // ── Total-entries line ──
+  // ── Total-entries line — ALL confirmed entries (fee-bearing AND free)
+  // per channel, not just the fee-bearing ones the sections above itemise.
+  // Orderless entries (no order at all — a dog never linked to a Remi
+  // checkout) have no channel to attribute to and fall outside both
+  // buckets; they still count once towards captureGap-style totals but not
+  // towards "via Remi"/"direct" specifically. ──
   const viaRemiEntryCount = taggedEntries.filter((e) => e.orderId && orderById.get(e.orderId)?.channel === 'viaRemi').length;
-  const orderlessEntryCount = taggedEntries.filter((e) => !e.orderId).length;
-  const directEntryCount =
-    taggedEntries.filter((e) => e.orderId && orderById.get(e.orderId)?.channel === 'direct').length + orderlessEntryCount;
+  const directEntryCount = taggedEntries.filter((e) => e.orderId && orderById.get(e.orderId)?.channel === 'direct').length;
   const totalConfirmed = viaRemiEntryCount + directEntryCount;
-  const jhCount = taggedEntries.filter((e) => e.entryType === 'junior_handler').length;
+  // JH = any entry with a junior_handler-type class, paid or free — NOT
+  // `entryType`, which only flags a JH-person entry with no dog and misses
+  // a dog shown in a JH class. NFC = is_nfc, paid or free. The two are
+  // independent and can overlap (see TaggedEntry.hasJhClass doc).
+  const jhCount = taggedEntries.filter((e) => e.hasJhClass).length;
   const nfcCount = taggedEntries.filter((e) => e.isNfc).length;
   const totalEntriesLine = `${viaRemiEntryCount} via Remi + ${directEntryCount} direct = ${totalConfirmed} (including ${jhCount} junior handler${jhCount === 1 ? '' : 's'} and ${nfcCount} not-for-competition)`;
 
