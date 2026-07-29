@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { auth } from '@/lib/auth';
 
 /**
  * Returns an HTML wrapper page that embeds the prize-card PDF and
@@ -9,17 +10,30 @@ import { NextRequest, NextResponse } from 'next/server';
  * An HTML page with a `window.print()` call on load sidesteps Safari's PDF
  * viewer entirely and brings up the OS print dialog directly.
  *
- * This route serves a fully static HTML shell — no DB lookup, no auth check.
- * The embedded iframe points at `/api/prize-cards/[showId]?preview=1`, which
- * does its own auth + data fetch, so anyone hitting this wrapper without a
- * valid session just gets an empty iframe. Nothing sensitive leaks from the
- * wrapper itself (it doesn't contain the show name, entries, or any PII).
+ * This route serves a fully static HTML shell — no DB lookup. Nothing
+ * sensitive leaks from the wrapper itself (it doesn't contain the show name,
+ * entries, or any PII), and the embedded iframe points at
+ * `/api/prize-cards/[showId]?preview=1`, which does its own auth + data fetch.
+ *
+ * It still enforces the same admin-only restriction as the underlying PDF
+ * route, because the Prize Cards card in the secretary Documents page is
+ * gated on role === 'admin'. A role check needs only the session, no DB
+ * query — and returning 403 here beats serving a shell whose iframe is
+ * guaranteed to come back empty.
  */
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ showId: string }> }
 ) {
   const { showId } = await params;
+
+  const session = await auth();
+  if (!session?.user?.id) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+  if (session.user.role !== 'admin') {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  }
 
   // Forward all the PDF customisation params (placements, judge, style) to
   // the underlying PDF route. `preview` ensures inline Content-Disposition

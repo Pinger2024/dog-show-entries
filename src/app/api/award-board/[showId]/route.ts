@@ -12,6 +12,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/server/db';
 import { eq } from 'drizzle-orm';
+import { publicOrgColumns } from '@/server/trpc/public-org-columns';
 import * as schema from '@/server/db/schema';
 import { renderToBuffer } from '@react-pdf/renderer';
 import { AwardBoard } from '@/components/award-board/award-board';
@@ -31,7 +32,7 @@ export async function GET(
 
   const show = await db.query.shows.findFirst({
     where: eq(schema.shows.id, showId),
-    with: { organisation: true },
+    with: { organisation: { columns: publicOrgColumns } },
   });
 
   if (!show) {

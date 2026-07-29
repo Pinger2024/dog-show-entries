@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { publicOrgColumns } from '@/server/trpc/public-org-columns';
 import { eq, and, ilike } from 'drizzle-orm';
 import { db } from '@/server/db';
 import { judgeContracts, judgeAssignments, showChecklistItems } from '@/server/db/schema';
@@ -94,7 +95,7 @@ export async function GET(
   const contract = await db.query.judgeContracts.findFirst({
     where: eq(judgeContracts.offerToken, token),
     with: {
-      show: { with: { venue: true, organisation: true } },
+      show: { with: { venue: true, organisation: { columns: publicOrgColumns } } },
       judge: true,
     },
   });
@@ -252,7 +253,7 @@ export async function POST(
   const contract = await db.query.judgeContracts.findFirst({
     where: eq(judgeContracts.offerToken, token),
     with: {
-      show: { with: { venue: true, organisation: true } },
+      show: { with: { venue: true, organisation: { columns: publicOrgColumns } } },
       judge: true,
     },
   });

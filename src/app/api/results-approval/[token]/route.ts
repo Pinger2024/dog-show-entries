@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { publicOrgColumns } from '@/server/trpc/public-org-columns';
 import { eq, and, asc, inArray } from 'drizzle-orm';
 import { db } from '@/server/db';
 import {
@@ -118,7 +119,7 @@ export async function GET(
     where: eq(judgeAssignments.approvalToken, token),
     with: {
       judge: true,
-      show: { with: { venue: true, organisation: true } },
+      show: { with: { venue: true, organisation: { columns: publicOrgColumns } } },
     },
   });
 
@@ -369,7 +370,7 @@ export async function POST(
     where: eq(judgeAssignments.approvalToken, token),
     with: {
       judge: true,
-      show: { with: { organisation: true } },
+      show: { with: { organisation: { columns: publicOrgColumns } } },
     },
   });
 
