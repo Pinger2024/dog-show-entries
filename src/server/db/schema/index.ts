@@ -154,4 +154,11 @@ export { userSvProfile, userSvProfileRelations } from './user-sv-profile';
 export { catalogueAdverts, catalogueAdvertsRelations } from './catalogue-adverts';
 export { showDiscountGroups, showDiscountGroupsRelations } from './show-discount-groups';
 export { showDonations, showDonationsRelations } from './show-donations';
-export { invoices, invoicesRelations, type InvoiceLineItem } from './invoices';
+export {
+  invoices,
+  invoicesRelations,
+  type InvoiceLineItem,
+  type SettlementLine,
+  type SettlementSection,
+  type SettlementSnapshot,
+} from './invoices';
