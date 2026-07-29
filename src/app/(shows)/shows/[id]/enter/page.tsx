@@ -1789,6 +1789,7 @@ export default function EnterShowPage() {
                       classes={groupedClasses.achievement}
                       selectedIds={selectedClassIds}
                       onToggle={toggleClass}
+                      getAgeEligibility={getAgeEligibility}
                       eligibleClassNames={winSummary?.recommendation.eligible}
                       suggestedClassName={winSummary?.recommendation.suggested}
                     />
@@ -1799,6 +1800,7 @@ export default function EnterShowPage() {
                       classes={groupedClasses.special}
                       selectedIds={selectedClassIds}
                       onToggle={toggleClass}
+                      getAgeEligibility={getAgeEligibility}
                     />
                   )}
                 </>
@@ -1820,6 +1822,7 @@ export default function EnterShowPage() {
                       classes={availableClasses}
                       selectedIds={selectedClassIds}
                       onToggle={toggleClass}
+                      getAgeEligibility={null}
                       feeOverride={show.juniorHandlerFee ?? undefined}
                     />
                   ) : (
@@ -2925,10 +2928,15 @@ function ClassGroup({
   classes: ShowClassItem[];
   selectedIds: string[];
   onToggle: (id: string) => void;
-  getAgeEligibility?: (
+  /** REQUIRED (nullable): the dog's age-eligibility checker. Pass null ONLY
+   *  when age cannot apply (e.g. Junior Handler classes, which gate on the
+   *  HANDLER'S age upstream). Optional would let a section silently skip the
+   *  age lock — that is exactly the bug the secretary caught on the Special
+   *  Classes section, so every ClassGroup must now state its choice. */
+  getAgeEligibility: ((
     min: number | null,
     max: number | null
-  ) => { ageMonths: number; eligible: boolean; failedBound: 'min' | 'max' | null } | null;
+  ) => { ageMonths: number; eligible: boolean; failedBound: 'min' | 'max' | null } | null) | null;
   eligibleClassNames?: string[];
   suggestedClassName?: string | null;
   feeOverride?: number | null;
