@@ -34,6 +34,7 @@ export interface DocumentEligibilityContext {
 
 /** Rows only relevant to RKC-format shows — hidden entirely on SV/WUSV shows. */
 const RKC_ONLY_ROWS = new Set<DocumentRowKey>([
+  'ring-numbers',
   'catalogue-standard',
   'catalogue-steward',
   'judges-book',

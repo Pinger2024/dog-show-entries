@@ -427,6 +427,7 @@ export default function DocumentsPage() {
             </DocRow>
           </DocSection>
 
+          {documentRowVisible('ring-numbers', docCtx) && (
           <DocSection title="Ring & Show Day Materials" description="Print these ahead of time to have ready on the day" icon={Hash}>
             <DocRow icon={<Hash className="size-4" />} label="Ring Numbers" description="6 cards per A4 page for home printing, or one per page for professional printing">
               <Select value={ringNumberFormat} onValueChange={(v) => setRingNumberFormat(v as 'grid' | 'single')}>
@@ -463,6 +464,7 @@ export default function DocumentsPage() {
               </DocRow>
             )}
           </DocSection>
+          )}
         </div>
       </div>
 
