@@ -49,30 +49,104 @@ function authedAs(user: { id: string; email: string; name: string | null; role: 
 }
 
 /**
- * These three routes are hidden behind `role === 'admin'` in the secretary
- * Documents page. Before this suite, all three were reachable by any
- * authenticated member of the show's organisation (and the print wrapper by
- * anyone at all) — the client gate was cosmetic. Each route is checked from
- * four angles: anonymous, org member, unrelated user, and admin.
+ * Access model, pinned deliberately (2026-07-30):
+ *
+ * - /api/prize-cards/[showId] — ORG-MEMBER access. The Prize Cards row on the
+ *   secretary Documents page is gated by documentRowVisible('prize-cards')
+ *   (ruleset only, no role check), so every secretary of an RKC show uses it.
+ *   A requireAdmin gate briefly shipped on 2026-07-30 403'd real secretaries
+ *   out of their own prize cards; the org-member cases below pin the revert.
+ *
+ * - /api/prize-cards/[showId]/print — NO auth. Static HTML shell with no data;
+ *   the embedded iframe hits the PDF route, which does its own auth.
+ *
+ * - /api/prize-card-overprint/[showId] — ADMIN-ONLY. Linked from nowhere in
+ *   the UI; its doc comment says admin-only (Print Shop fulfilment), and the
+ *   server now enforces that.
  */
 
-// [route label, handler] — driven as a table so a new admin-only PDF route
-// can be added in one line rather than a copied describe block.
-const ADMIN_ONLY_PDF_ROUTES: ReadonlyArray<
-  [string, (r: NextRequest, p: { params: Promise<{ showId: string }> }) => Promise<Response>]
-> = [
-  ['GET /api/prize-cards/[showId]', prizeCardsGET],
-  ['GET /api/prize-cards/[showId]/print', prizeCardsPrintGET],
-  ['GET /api/prize-card-overprint/[showId]', overprintGET],
-];
-
-describe.each(ADMIN_ONLY_PDF_ROUTES)('%s — admin-only enforcement', (_label, handler) => {
+describe('GET /api/prize-cards/[showId] — org-member access', () => {
   it('returns 401 when unauthenticated', async () => {
     const { org } = await makeSecretaryWithOrg();
     const show = await makeShow({ organisationId: org.id });
     vi.mocked(auth).mockResolvedValue(null);
 
-    const res = await handler(req(show.id), params(show.id));
+    const res = await prizeCardsGET(req(show.id), params(show.id));
+    expect(res.status).toBe(401);
+  });
+
+  it('allows the secretary who owns the show — the regression case', async () => {
+    const { user, org } = await makeSecretaryWithOrg();
+    const show = await makeShow({ organisationId: org.id });
+    authedAs(user);
+
+    const res = await prizeCardsGET(req(show.id), params(show.id));
+    expect(res.status).toBe(200);
+    expect(res.headers.get('content-type')).toBe('application/pdf');
+  });
+
+  it('allows an exhibitor who is a member of the owning org', async () => {
+    const org = await makeOrg();
+    const exhibitor = await makeUser({ role: 'exhibitor' });
+    await makeMembership({ userId: exhibitor.id, organisationId: org.id });
+    const show = await makeShow({ organisationId: org.id });
+    authedAs(exhibitor);
+
+    const res = await prizeCardsGET(req(show.id), params(show.id));
+    expect(res.status).toBe(200);
+  });
+
+  it('returns 403 for a secretary of an unrelated club', async () => {
+    const { org } = await makeSecretaryWithOrg();
+    const show = await makeShow({ organisationId: org.id });
+    const { user: rival } = await makeSecretaryWithOrg();
+    authedAs(rival);
+
+    const res = await prizeCardsGET(req(show.id), params(show.id));
+    expect(res.status).toBe(403);
+  });
+
+  it('allows an admin who is not a member of the owning org', async () => {
+    const { org } = await makeSecretaryWithOrg();
+    const show = await makeShow({ organisationId: org.id });
+    const admin = await makeUser({ role: 'admin' });
+    authedAs(admin);
+
+    const res = await prizeCardsGET(req(show.id), params(show.id));
+    expect(res.status).toBe(200);
+  });
+});
+
+describe('GET /api/prize-cards/[showId]/print — static shell, no auth', () => {
+  it('serves the HTML print wrapper without a session (iframe does the auth)', async () => {
+    const { org } = await makeSecretaryWithOrg();
+    const show = await makeShow({ organisationId: org.id });
+    vi.mocked(auth).mockResolvedValue(null);
+
+    const res = await prizeCardsPrintGET(req(show.id), params(show.id));
+    expect(res.status).toBe(200);
+    expect(res.headers.get('content-type')).toContain('text/html');
+    await expect(res.text()).resolves.toContain(`/api/prize-cards/${show.id}?`);
+  });
+
+  it('serves the wrapper for a secretary — the mobile print flow', async () => {
+    const { user, org } = await makeSecretaryWithOrg();
+    const show = await makeShow({ organisationId: org.id });
+    authedAs(user);
+
+    const res = await prizeCardsPrintGET(req(show.id), params(show.id));
+    expect(res.status).toBe(200);
+    expect(res.headers.get('content-type')).toContain('text/html');
+  });
+});
+
+describe('GET /api/prize-card-overprint/[showId] — admin-only enforcement', () => {
+  it('returns 401 when unauthenticated', async () => {
+    const { org } = await makeSecretaryWithOrg();
+    const show = await makeShow({ organisationId: org.id });
+    vi.mocked(auth).mockResolvedValue(null);
+
+    const res = await overprintGET(req(show.id), params(show.id));
     expect(res.status).toBe(401);
   });
 
@@ -81,7 +155,7 @@ describe.each(ADMIN_ONLY_PDF_ROUTES)('%s — admin-only enforcement', (_label, h
     const show = await makeShow({ organisationId: org.id });
     authedAs(user);
 
-    const res = await handler(req(show.id), params(show.id));
+    const res = await overprintGET(req(show.id), params(show.id));
     expect(res.status).toBe(403);
   });
 
@@ -92,7 +166,7 @@ describe.each(ADMIN_ONLY_PDF_ROUTES)('%s — admin-only enforcement', (_label, h
     const show = await makeShow({ organisationId: org.id });
     authedAs(exhibitor);
 
-    const res = await handler(req(show.id), params(show.id));
+    const res = await overprintGET(req(show.id), params(show.id));
     expect(res.status).toBe(403);
   });
 
@@ -102,7 +176,7 @@ describe.each(ADMIN_ONLY_PDF_ROUTES)('%s — admin-only enforcement', (_label, h
     const { user: rival } = await makeSecretaryWithOrg();
     authedAs(rival);
 
-    const res = await handler(req(show.id), params(show.id));
+    const res = await overprintGET(req(show.id), params(show.id));
     expect(res.status).toBe(403);
   });
 
@@ -112,31 +186,7 @@ describe.each(ADMIN_ONLY_PDF_ROUTES)('%s — admin-only enforcement', (_label, h
     const admin = await makeUser({ role: 'admin' });
     authedAs(admin);
 
-    const res = await handler(req(show.id), params(show.id));
+    const res = await overprintGET(req(show.id), params(show.id));
     expect(res.status).toBe(200);
-  });
-});
-
-describe('GET /api/prize-cards/[showId]/print — response shape', () => {
-  it('still serves the HTML print wrapper for an admin', async () => {
-    const { org } = await makeSecretaryWithOrg();
-    const show = await makeShow({ organisationId: org.id });
-    const admin = await makeUser({ role: 'admin' });
-    authedAs(admin);
-
-    const res = await prizeCardsPrintGET(req(show.id), params(show.id));
-    expect(res.status).toBe(200);
-    expect(res.headers.get('content-type')).toContain('text/html');
-    await expect(res.text()).resolves.toContain(`/api/prize-cards/${show.id}?`);
-  });
-
-  it('does not reach the wrapper HTML for a non-admin', async () => {
-    const { user, org } = await makeSecretaryWithOrg();
-    const show = await makeShow({ organisationId: org.id });
-    authedAs(user);
-
-    const res = await prizeCardsPrintGET(req(show.id), params(show.id));
-    expect(res.headers.get('content-type')).not.toContain('text/html');
-    await expect(res.text()).resolves.not.toContain('<iframe');
   });
 });

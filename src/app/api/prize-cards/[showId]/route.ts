@@ -41,9 +41,12 @@ export async function GET(
     return NextResponse.json({ error: 'Show not found' }, { status: 404 });
   }
 
-  // Admin-only: the Prize Cards card in the secretary Documents page is gated
-  // on role === 'admin', so the server must enforce the same restriction.
-  const authResult = await authenticatePdfRequest(show.organisationId, { requireAdmin: true });
+  // Org-member access, NOT admin-only. The Prize Cards row on the secretary
+  // Documents page is gated by documentRowVisible('prize-cards') — ruleset
+  // only, no role check — so every secretary of an RKC show sees and uses it.
+  // (requireAdmin was briefly shipped here on 2026-07-30 based on a stale
+  // branch's UI and 403'd secretaries out of their own prize cards.)
+  const authResult = await authenticatePdfRequest(show.organisationId);
   if (authResult instanceof NextResponse) return authResult;
 
   // Pick the "main" breed judges — same convention as
