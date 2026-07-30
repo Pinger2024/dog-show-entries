@@ -9,6 +9,7 @@ import { verifyOrgAccess } from '../verify-org-access';
 import { getBaseUrl } from '@/server/lib/utils';
 import { ACHIEVEMENT_TYPES } from '@/lib/placements';
 import { computeOrderFees, type FeeContext } from '@/lib/fee-calc';
+import { computePrizeCardCounts } from '@/lib/prize-card-counts';
 import { BRAND } from '@/lib/brand';
 import {
   shows,
@@ -922,6 +923,35 @@ export const secretaryRouter = createTRPCRouter({
       ]);
 
       return { entries: entryRows, classes: classRows };
+    }),
+
+  // "Prize cards needed" counts for the Documents page (Mandy 2026-07-30) —
+  // how many 1st/2nd/3rd/Reserve cards to actually order, instead of a full
+  // suite per class. Per show_class, count CONFIRMED (and non-deleted, same
+  // "true catalogue entry" filter as getClassBreakdownReport) entry_classes
+  // rows, then feed the per-class counts into computePrizeCardCounts, which
+  // owns the whole counting rule (min(entries, 4) per class; see that file
+  // for why 5th/VHC and Best-award cards are deliberately excluded). A
+  // show_class with zero confirmed entries never appears in these rows —
+  // computePrizeCardCounts treats an absent class the same as an explicit 0.
+  getPrizeCardCounts: secretaryProcedure
+    .input(z.object({ showId: z.string().uuid() }))
+    .query(async ({ ctx, input }) => {
+      await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId, { callerIsAdmin: ctx.callerIsAdmin });
+
+      const rows = await ctx.db
+        .select({ showClassId: entryClasses.showClassId, count: sql<number>`COUNT(*)` })
+        .from(entryClasses)
+        .innerJoin(entries, eq(entryClasses.entryId, entries.id))
+        .innerJoin(showClasses, eq(entryClasses.showClassId, showClasses.id))
+        .where(and(
+          eq(showClasses.showId, input.showId),
+          eq(entries.status, 'confirmed'),
+          isNull(entries.deletedAt)
+        ))
+        .groupBy(entryClasses.showClassId);
+
+      return computePrizeCardCounts(rows.map((r) => Number(r.count)));
     }),
 
   getPaymentReport: secretaryProcedure
