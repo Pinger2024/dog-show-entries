@@ -38,6 +38,9 @@ export function buildJudgeBreedAndClassification(
   const breedSexes = new Map<string, Set<'dog' | 'bitch' | 'both'>>();
   let hasJh = false;
   let hasSac = false;
+  // Sex-bearing breed-class assignments with no resolvable breed name (e.g. an
+  // SV/regional single-breed show whose breed isn't set on the shows row).
+  const breedlessSexes = new Set<'dog' | 'bitch' | 'both'>();
 
   // Single-breed shows (especially SV regional) store breed-class judge
   // assignments with breed_id = NULL because the breed is implicit on the
@@ -63,6 +66,14 @@ export function buildJudgeBreedAndClassification(
       breedSexes.set(effectiveBreed, set);
     } else if (a.sex === null) {
       hasJh = true;
+    } else if (showBreedNames.length === 0) {
+      // Sex set but no breed AND the show lists no breeds at all (e.g. a
+      // regional show whose breed isn't set on the shows row) — unambiguous,
+      // so don't drop it (that left only "Junior Handling" showing on the
+      // offer); record the sex so it still yields a "Dogs & Bitches classes"
+      // classification. We deliberately do NOT do this on multi-breed shows,
+      // where a null breed is genuinely ambiguous. (Mandy 2026-06-18)
+      breedlessSexes.add(a.sex === 'dog' ? 'dog' : a.sex === 'bitch' ? 'bitch' : 'both');
     }
   }
 
@@ -77,6 +88,15 @@ export function buildJudgeBreedAndClassification(
         : hasDog ? 'Dogs' : hasBitch ? 'Bitches' : '';
       classifications.add(sexLabel ? `${breed} ${sexLabel} classes` : `${breed} classes`);
     }
+  }
+  if (breedlessSexes.size > 0) {
+    const hasDog = breedlessSexes.has('dog');
+    const hasBitch = breedlessSexes.has('bitch');
+    const hasBoth = breedlessSexes.has('both');
+    const sexLabel = hasBoth || (hasDog && hasBitch)
+      ? 'Dogs & Bitches'
+      : hasDog ? 'Dogs' : hasBitch ? 'Bitches' : '';
+    classifications.add(sexLabel ? `${sexLabel} classes` : 'Breed classes');
   }
   if (hasSac) {
     const showBreed = showBreedNames[0];

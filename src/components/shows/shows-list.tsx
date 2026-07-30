@@ -871,8 +871,10 @@ function ShowCard({ show, distance }: { show: ShowListItem; distance?: number })
             </h3>
           )}
 
-          {/* Show name — secondary, descriptive */}
-          <p className={`line-clamp-2 text-xs font-medium leading-snug text-muted-foreground sm:text-[13px] ${show.organisation ? 'mt-1' : ''}`}>
+          {/* Show name — lifted to a readable foreground size so it's clearly
+              visible, but kept below the bold host-club name above it
+              (Michael, 2026-06-25). */}
+          <p className={`line-clamp-2 text-sm font-semibold leading-snug text-foreground/90 sm:text-[15px] ${show.organisation ? 'mt-0.5' : ''}`}>
             {show.name}
           </p>
 

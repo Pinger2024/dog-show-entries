@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { loadSavedState, getPaymentKey, restoreActionForStatus, type CartState } from './use-entry-cart';
+import { loadSavedState, getPaymentKey, restoreActionForStatus, cartReducer, type CartState } from './use-entry-cart';
 
 const KEY = 'remi-entry-cart-SHOW';
 const PAY_KEY = getPaymentKey('SHOW');
@@ -127,5 +127,57 @@ describe('restoreActionForStatus — canceled-PI crash loop (April/BAGSD)', () =
     expect(restoreActionForStatus('requires_payment_method')).toBe('stay');
     expect(restoreActionForStatus('requires_action')).toBe('stay');
     expect(restoreActionForStatus('requires_confirmation')).toBe('stay');
+  });
+});
+
+// A standard DOG entry was rendering the Junior Handler branch with EVERY class
+// (Mandy 2026-06-26). Root cause: SET_ENTRY_TYPE / SET_DOG advanced the wizard
+// step even when `activeEntryId` matched no entry (a stale id after a
+// rehydrate-to-cart_review, a removed entry, or a browser back) — so the user
+// reached class selection with no active entry, no selected dog, and therefore
+// no sex/coat filter. The reducer must never leave you on a per-entry step
+// without an active entry.
+describe('cartReducer — never strand a per-entry step without an active entry', () => {
+  const base: CartState = {
+    entries: [], sundryItems: [], activeEntryId: null, step: 'entry_type', editingExisting: false,
+  };
+
+  it('SET_ENTRY_TYPE with no active entry creates one (instead of silently no-opping)', () => {
+    const s = cartReducer(base, { type: 'SET_ENTRY_TYPE', entryType: 'standard' });
+    expect(s.entries).toHaveLength(1);
+    expect(s.entries[0].entryType).toBe('standard');
+    expect(s.activeEntryId).toBe(s.entries[0].id);
+    expect(s.step).toBe('select_dog');
+  });
+
+  it('SET_ENTRY_TYPE with a stale activeEntryId creates a fresh active entry of the chosen type', () => {
+    const stale: CartState = {
+      ...base,
+      entries: [{ id: 'old', entryType: 'standard', classIds: ['c1'], classNames: ['Puppy'], isNfc: false, totalFee: 1 }],
+      activeEntryId: null,
+    };
+    const s = cartReducer(stale, { type: 'SET_ENTRY_TYPE', entryType: 'junior_handler' });
+    expect(s.entries).toHaveLength(2);
+    expect(s.activeEntryId).not.toBeNull();
+    expect(s.entries.find((e) => e.id === s.activeEntryId)?.entryType).toBe('junior_handler');
+    expect(s.step).toBe('junior_handler');
+  });
+
+  it('SET_ENTRY_TYPE retypes the existing active entry when present', () => {
+    const withActive: CartState = {
+      ...base,
+      entries: [{ id: 'cart-1', entryType: 'junior_handler', classIds: [], classNames: [], isNfc: false, totalFee: 0 }],
+      activeEntryId: 'cart-1',
+    };
+    const s = cartReducer(withActive, { type: 'SET_ENTRY_TYPE', entryType: 'standard' });
+    expect(s.entries).toHaveLength(1);
+    expect(s.entries[0].entryType).toBe('standard');
+    expect(s.step).toBe('select_dog');
+  });
+
+  it('SET_DOG with no active entry is ignored (does not advance to class selection)', () => {
+    const s = cartReducer({ ...base, step: 'select_dog' }, { type: 'SET_DOG', dogId: 'd1', dogName: 'Rex', breedName: 'GSD' });
+    expect(s.step).toBe('select_dog');
+    expect(s.entries).toHaveLength(0);
   });
 });

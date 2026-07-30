@@ -1,6 +1,6 @@
 'use client';
 
-import { use } from 'react';
+import { use, useState, useEffect } from 'react';
 import Link from 'next/link';
 import { ChevronLeft, Dog, Loader2 } from 'lucide-react';
 import { trpc } from '@/lib/trpc';
@@ -15,6 +15,25 @@ export default function EditDogPage({
 }) {
   const { id } = use(params);
   const { data: dog, isLoading } = trpc.dogs.getById.useQuery({ id });
+
+  // If the exhibitor came here from an entry to fill in mandatory info, send
+  // them straight back to that show afterwards (Mandy 2026-06-26). Read the
+  // query param client-side — the codebase's pattern, avoiding a Suspense
+  // boundary for useSearchParams.
+  const [returnTo, setReturnTo] = useState<string | null>(null);
+  useEffect(() => {
+    const rt = new URLSearchParams(window.location.search).get('returnTo');
+    setReturnTo(rt && rt.startsWith('/shows/') ? rt : null);
+  }, []);
+  const returnShowId = returnTo?.match(/\/shows\/([^/]+)\/enter/)?.[1] ?? null;
+  const { data: returnShow } = trpc.shows.getById.useQuery(
+    { id: returnShowId! },
+    { enabled: !!returnShowId },
+  );
+  // When the exhibitor came here to complete a dog for an SV/WUSV regional
+  // entry, the SV/breeder fields are mandatory — flip their labels to
+  // "Required" (Mandy 2026-07-02).
+  const regionalRequired = returnShow?.showRuleset === 'wusv';
 
   if (isLoading) {
     return (
@@ -43,17 +62,28 @@ export default function EditDogPage({
     <div className="space-y-6 pb-16 md:pb-0">
       {/* Header */}
       <div>
-        <Button variant="ghost" size="sm" className="mb-2" asChild>
-          <Link href={`/dogs/${id}`}>
-            <ChevronLeft className="size-4" />
-            Back to {dog.registeredName}
-          </Link>
-        </Button>
+        {returnTo ? (
+          <Button variant="outline" size="sm" className="mb-2" asChild>
+            <Link href={returnTo}>
+              <ChevronLeft className="size-4" />
+              Back to {returnShow?.name ?? 'your entry'}
+            </Link>
+          </Button>
+        ) : (
+          <Button variant="ghost" size="sm" className="mb-2" asChild>
+            <Link href={`/dogs/${id}`}>
+              <ChevronLeft className="size-4" />
+              Back to {dog.registeredName}
+            </Link>
+          </Button>
+        )}
         <h1 className="font-serif text-2xl font-bold tracking-tight sm:text-3xl">
           Edit Dog
         </h1>
         <p className="mt-1 text-muted-foreground">
-          Update the details for {dog.registeredName}.
+          {returnTo
+            ? `Fill in the details below and save — we'll take you straight back to your entry${returnShow?.name ? ` for ${returnShow.name}` : ''}.`
+            : `Update the details for ${dog.registeredName}.`}
         </p>
       </div>
 
@@ -61,6 +91,8 @@ export default function EditDogPage({
         <DogForm
           mode="edit"
           dogId={id}
+          returnTo={returnTo ?? undefined}
+          regionalRequired={regionalRequired}
           svSection={
             /german\s+shepherd/i.test(dog.breed?.name ?? '') ? (
               <DogSvHealthCard dogId={id} isOwner={true} sex={dog.sex} />

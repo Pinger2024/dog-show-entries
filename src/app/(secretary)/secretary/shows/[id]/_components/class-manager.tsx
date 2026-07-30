@@ -958,7 +958,7 @@ export function BulkClassCreator({ showId }: { showId: string }) {
               <p className="text-xs text-muted-foreground mt-1">
                 {t.classNames.length} classes &middot;{' '}
                 {formatCurrency(t.defaultFeePence)}/class
-                {t.splitBySex ? ' &middot; Split by sex' : ''}
+                {t.splitBySex ? ' · Split by sex' : ''}
               </p>
             </button>
           ))}

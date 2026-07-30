@@ -775,6 +775,7 @@ export function ScheduleSettingsForm({ showId, onSaved }: ScheduleSettingsFormPr
                       judgingStartTime={judgingStartTime} setJudgingStartTime={setJudgingStartTime}
                       onCallVet={onCallVet} setOnCallVet={setOnCallVet}
                       firstAiders={firstAiders} setFirstAiders={setFirstAiders}
+                      isWusvShow={isWusv}
                     />
                   )}
                   {section.id === 'people' && (
@@ -815,6 +816,7 @@ export function ScheduleSettingsForm({ showId, onSaved }: ScheduleSettingsFormPr
                       futureShowDates={futureShowDates} setFutureShowDates={setFutureShowDates}
                       additionalNotes={additionalNotes} setAdditionalNotes={setAdditionalNotes}
                       outsideAttraction={outsideAttraction} setOutsideAttraction={setOutsideAttraction}
+                      isWusvShow={isWusv}
                     />
                   )}
                   {section.id === 'regulations' && (
@@ -961,12 +963,14 @@ function ShowDaySection({
   judgingStartTime, setJudgingStartTime,
   onCallVet, setOnCallVet,
   firstAiders, setFirstAiders,
+  isWusvShow,
 }: {
   showOpenTime: string; setShowOpenTime: (v: string) => void;
   latestArrivalTime: string; setLatestArrivalTime: (v: string) => void;
   judgingStartTime: string; setJudgingStartTime: (v: string) => void;
   onCallVet: string; setOnCallVet: (v: string) => void;
   firstAiders: string[]; setFirstAiders: (v: string[]) => void;
+  isWusvShow: boolean;
 }) {
   return (
     <div className="space-y-4">
@@ -982,6 +986,9 @@ function ShowDaySection({
             </SelectContent>
           </Select>
         </div>
+        {/* "Latest time dogs received" is an RKC benching concept — hidden on
+            SV/WUSV regional shows (Mandy 2026-06-18). */}
+        {!isWusvShow && (
         <div className="space-y-1.5">
           <Label className="text-xs">Latest time dogs received</Label>
           <Select value={latestArrivalTime} onValueChange={setLatestArrivalTime}>
@@ -993,6 +1000,7 @@ function ShowDaySection({
             </SelectContent>
           </Select>
         </div>
+        )}
         <div className="space-y-1.5">
           <Label className="text-xs">Judging commences <span className="text-destructive">*</span></Label>
           <Select value={judgingStartTime} onValueChange={setJudgingStartTime}>
@@ -1373,6 +1381,7 @@ function VenueSection({
   catering, setCatering, futureShowDates, setFutureShowDates,
   additionalNotes, setAdditionalNotes,
   outsideAttraction, setOutsideAttraction,
+  isWusvShow,
 }: {
   venueName: string; setVenueName: (v: string) => void;
   venueAddress: string; setVenueAddress: (v: string) => void;
@@ -1383,6 +1392,7 @@ function VenueSection({
   futureShowDates: string; setFutureShowDates: (v: string) => void;
   additionalNotes: string; setAdditionalNotes: (v: string) => void;
   outsideAttraction: boolean; setOutsideAttraction: (v: boolean) => void;
+  isWusvShow: boolean;
 }) {
   return (
     <div className="space-y-4">
@@ -1428,6 +1438,9 @@ function VenueSection({
         <Label htmlFor="additionalNotes" className="text-xs">Additional Notes</Label>
         <Textarea id="additionalNotes" value={additionalNotes} onChange={(e) => setAdditionalNotes(e.target.value)} placeholder="Any other information to include in the schedule" rows={2} />
       </div>
+      {/* Outside Attraction notice cites RKC Regulation F(1) 16H — RKC-only,
+          so hidden on SV/WUSV regional shows (Mandy 2026-06-18). */}
+      {!isWusvShow && (
       <div className="flex items-center justify-between rounded-lg border p-3">
         <div>
           <Label className="text-xs">Outside Attraction</Label>
@@ -1437,6 +1450,7 @@ function VenueSection({
         </div>
         <Switch checked={outsideAttraction} onCheckedChange={setOutsideAttraction} />
       </div>
+      )}
     </div>
   );
 }

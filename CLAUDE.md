@@ -1,207 +1,91 @@
 # Remi — Dog Show Entry Management System
 
-## Project Overview
+Dog show entry management for the UK **Royal Kennel Club (RKC)** circuit — show creation, online
+entries, Stripe payments, catalogue and document generation.
+Live https://remishowmanager.co.uk · Render `srv-d6g578a4d50c73dj4rpg` · Postgres 18.
 
-Remi is a dog show entry management platform for the UK Kennel Club show circuit. It handles show creation, online entries, payments (Stripe), and catalogue generation. Built with Next.js App Router, tRPC, Drizzle ORM (PostgreSQL), and shadcn/ui.
+## How to read this file
 
-**Live URL:** https://remishowmanager.co.uk
-**Hosting:** Render (web service `srv-d6g578a4d50c73dj4rpg`)
-**Database:** PostgreSQL on Render
-**Email:** Resend (sending from `noreply@remishowmanager.co.uk`)
-**Payments:** Stripe
-**DNS:** Cloudflare for `remishowmanager.co.uk` (zone `e8d86cbbc2aadf1aac365d637f85969e`)
+**The code is ground truth.** Where this file or a memory contradicts the code, the code is
+right and the doc is stale — trust the code, then fix the doc. Nothing here restates what the
+repo already tells you; look it up instead:
 
-## Key People
+| Want | Look at |
+|---|---|
+| Stack, versions | `package.json` |
+| Env vars | `.env.example` |
+| Layout, route groups | `ls src/app` |
+| Schema, enums, user roles | `src/server/db/schema/` |
+| Test helpers, factories | `src/__tests__/helpers/` |
+| Coverage checklist | `TESTING_MAP.md` |
+| Migrations | `drizzle.config.ts` — push mode, no migration files |
 
-- **Michael** (`michael@prometheus-it.com`) — Developer/admin. Gets notified of all feedback.
-- **Amanda** (`hundarkgsd@gmail.com`, show email: `mandy@hundarkgsd.co.uk`, Remi email: `mandy@remishowmanager.co.uk`) — Secretary of Clyde Valley GSD Club and co-founder. Primary user and source of feature requests. She emails feedback to `feedback@inbound.remishowmanager.co.uk`.
+Process rules, traps and infrastructure reference (email/DNS, money rules, mobile CSS traps,
+deploy gotchas) live in Claude's memory directory. **This file holds only what the code can't
+tell you.** Don't grow it back — every fact here that describes *state* rather than a *decision*
+will rot silently.
 
-## Feedback Loop Workflow
+## Conventions
 
-Amanda sends feedback, bug reports, and feature requests by replying to Remi emails (or emailing `feedback@inbound.remishowmanager.co.uk` directly). The pipeline:
+- **Always write "RKC"** — never "KC" or "Kennel Club".
+- Conventional commits + Co-Authored-By. Run `/simplify` after every commit.
+- UI: shadcn/ui + Tailwind, `font-serif` headings, Lucide icons.
 
-1. Outgoing emails include `replyTo: feedback@inbound.remishowmanager.co.uk`
-2. Resend receives inbound email via MX record on `inbound.remishowmanager.co.uk`
-3. Resend fires `email.received` webhook → `POST /api/webhooks/resend`
-4. Webhook verifies via svix, fetches full email body via `resend.emails.receiving.get()`, stores in `feedback` table
-5. Notification email sent to Michael at `michael@prometheus-it.com`
-6. Michael triages at `/feedback` (admin-only page)
+## Key people
 
-**The expectation:** Amanda emails in requests → Claude works on them → emails Amanda when complete. Check `/feedback` for pending items.
+- **Michael** (`michael@prometheus-it.com`) — co-founder (tech), developer/admin.
+- **Mandy** — Amanda formally, but **always call her Mandy**. Co-founder (industry), 50% partner,
+  **equal authority to Michael**. Secretary of Clyde Valley GSD Club, primary user, source of
+  most feature requests.
 
-## Important Env Vars
+## Who we build for — the most important thing in this file
 
-| Variable | Purpose |
-|----------|---------|
-| `RESEND_API_KEY` | Resend API key for sending/receiving |
-| `RESEND_WEBHOOK_SECRET` | Svix signing secret for webhook verification |
-| `FEEDBACK_EMAIL` | Reply-To address (`feedback@inbound.remishowmanager.co.uk`) |
-| `EMAIL_FROM` | Sending address (`Remi <noreply@remishowmanager.co.uk>`) |
-| `FEEDBACK_NOTIFY_EMAIL` | Who gets notified of new feedback (`michael@prometheus-it.com`) |
-| `STRIPE_WEBHOOK_SECRET` | Stripe platform webhook signing secret (payment events) |
-| `STRIPE_CONNECT_WEBHOOK_SECRET` | Stripe Connect webhook signing secret (`account.updated` etc.) |
-| `NEXT_PUBLIC_APP_URL` | Absolute base URL used for Stripe redirect return/refresh links |
+**Primarily 60+ year old women who love dogs and are not confident with computers.** Every screen
+must pass: "would this intimidate someone who didn't grow up with computers?"
 
-## Tech Stack & Patterns
+- **Simple over clever** — if it looks complex, it IS too complex. Use progressive disclosure.
+- **Less text** — cut ruthlessly. Short, plain English, no jargon.
+- **Visual calm** — whitespace, clear hierarchy, one primary action per screen.
+- **Functionality stays, complexity goes** — never remove a feature to simplify; reveal it
+  progressively.
+- **Mobile first, always** — secretaries work on phones. Nothing ships that isn't right at
+  ~375px: rows stack (`grid-cols-1` → `sm:`), never 3+ across on mobile, touch targets ≥44px
+  (`min-h-[2.75rem]`). The specific overflow traps are in memory — read them before touching
+  layout.
 
-- **Framework:** Next.js 15 App Router
-- **API:** tRPC with superjson transformer
-- **DB:** Drizzle ORM with PostgreSQL, schema in `src/server/db/schema/`
-- **Auth:** NextAuth.js with Google provider, role-based access (exhibitor, secretary, admin)
-- **UI:** shadcn/ui components, Tailwind CSS, Lucide icons
-- **Procedures:** `publicProcedure`, `protectedProcedure` (logged in), `secretaryProcedure` (secretary/admin)
+## Payments — Remi is merchant of record
 
-## Mobile First (IMPORTANT)
+Exhibitors pay **Remi's** Stripe account; Remi BACSes the net to each host club after entries
+close. No Stripe Connect, no club-side KYC.
 
-**Everything we build is mobile first.** Amanda and most secretaries use their phones. Every component, layout, and form must look great on a ~375px screen before we think about desktop.
+- Exhibitor is charged `totalAmount + platformFee` (£1 + 1%); `platform_fee_pence` on `orders`
+  records the split.
+- Club supplies sort code + account number at `/secretary/club`. **`shows.update` refuses
+  `entries_open` until all three payout fields are set** (checklist key `payout_details_set`).
+- Admin records each BACS payout at `/admin/payouts`. Chargeback liability is Remi's.
+- Club→Remi SaaS billing is separate (`/secretary/billing`); print orders separate again (Remi
+  is the buyer).
 
-Rules:
-- Design for mobile viewport first, then enhance for larger screens with `sm:` / `md:` / `lg:` breakpoints
-- Inputs, buttons, and form rows should **stack vertically on mobile** (`grid-cols-1`, then `sm:grid-cols-2` etc.)
-- Never put 3+ items in a horizontal row on mobile — use `flex-col sm:flex-row` or `grid-cols-1 sm:grid-cols-3`
-- Touch targets must be at least 44px (`min-h-[2.75rem]`)
-- Test inline action panels (checklist command center) at narrow widths — they render inside cards that are already indented
+⚠️ **Stripe Connect code exists and is DORMANT, not live** — `stripe-connect.ts`,
+`/api/stripe/connect/*`, `stripe_*` columns. Kept for a possible future marketplace model; don't
+read it as the active payment path. See `project_stripe_connect_migration.md`.
 
-## Target Users & UX Philosophy (IMPORTANT)
+> Money rules in memory are not optional reading: `show-metrics.ts` is the single source for
+> figures, Stripe payouts are account-wide, everything reconciles to the penny.
 
-**Our primary users are typically 60+ year old women who love dogs and are not confident with computers.** Think Amanda — she's brilliant at running dog shows but technology is not her comfort zone. Every screen, every form, every interaction must pass the test: "Would this intimidate someone who didn't grow up with computers?"
+## How we work
 
-Rules:
-- **Simple over clever** — if a feature looks complex, it IS too complex. Reduce visible options, use progressive disclosure (basics first, advanced behind expandable sections)
-- **Less text on screen** — every word competes for attention. Cut ruthlessly. Use short, plain English labels. No jargon, no technical terms
-- **Visual calm** — generous whitespace, clear hierarchy, one primary action per screen. Cluttered = scary
-- **Every screen should say "I can do this"** — if a user's first reaction is "this looks complicated", we've failed regardless of how powerful the feature is
-- **Guide, don't overwhelm** — step-by-step flows, clear next actions, helpful descriptions. Hand-hold without being patronising
-- **Functionality stays, complexity goes** — never remove features to simplify. Instead, present them progressively and design the UI so power is accessible without being intimidating
-
-## Project Structure
-
-```
-src/
-  app/
-    (dashboard)/     — Exhibitor pages (behind auth)
-    (shows)/         — Public show pages
-    api/webhooks/    — Stripe and Resend webhook handlers
-  server/
-    db/schema/       — Drizzle table definitions + enums
-    trpc/routers/    — tRPC route handlers
-    services/        — Email, Stripe services
-  components/
-    layout/          — DashboardShell, SecretaryShell
-    ui/              — shadcn components
-```
-
-## Payments Architecture
-
-**Remi is merchant of record for entry payments.** Exhibitors pay Remi's Stripe account; Remi BACSes the net to each host club after entries close. No Stripe Connect, no club-side KYC.
-
-**Entry payments** (exhibitor → Remi → club)
-- Platform-mode `createPaymentIntent` in `src/server/services/stripe.ts`. Money lands in Remi's Stripe balance.
-- Exhibitor charged `totalAmount + platformFee` (£1 + 1% via `calculatePlatformFee`). `platform_fee_pence` column on `orders` records the split for reconciliation.
-- Club provides sort code + account number on `/secretary/club` (saved to `organisations.payout_{account_name,sort_code,account_number}`).
-- **Gate:** `shows.update` refuses `entries_open` unless all three payout fields are set. Checklist key `payout_details_set`.
-- After entries close, admin records the BACS payout via `/admin/payouts` → inserts a `payouts` row.
-- Chargeback liability is Remi's — T&Cs need to say so.
-
-**Stripe Billing** (club → Remi SaaS subscription, separate)
-- Unchanged. `organisations.stripeCustomerId` / `stripeSubscriptionId`, plain Checkout session.
-- Lives at `/secretary/billing`.
-
-**Print orders** (Remi → Mixam, separate)
-- Platform-mode `createPaymentIntent`, landing in Remi's balance — Remi is the buyer from Mixam.
-
-**Stripe Connect code still exists** (`src/server/trpc/routers/stripe-connect.ts`, `/api/stripe/connect/*`, `/api/webhooks/stripe/connect`, `stripe_*` columns on organisations) but is dormant — kept for future use if Remi ever needs a true marketplace model. See `project_stripe_connect_migration.md` memory for the shipped-and-retired saga (2026-04-20).
-
-## User Roles
-
-- **exhibitor** — Default. Can enter shows, manage dogs.
-- **secretary** — Can create/manage shows, view entries, upload schedules.
-- **admin** — Full access including `/feedback` inbox.
-
-## Sending Emails to Amanda
-
-When sending update/notification emails to Amanda, use the Resend API with:
-- `from: "Remi <noreply@remishowmanager.co.uk>"`
-- `to: ["mandy@hundarkgsd.co.uk"]` (her show email) or `hundarkgsd@gmail.com` (her personal) or `mandy@remishowmanager.co.uk` (her Remi mailbox)
-- `reply_to: "feedback@inbound.remishowmanager.co.uk"` so her replies feed back into the system
-
-## DNS Notes
-
-`remishowmanager.co.uk` DNS is managed via **Cloudflare** (zone ID `e8d86cbbc2aadf1aac365d637f85969e`). Three email services coexist:
-
-- **Zoho Mail** owns the root MX (`mx.zoho.eu`, `mx2.zoho.eu`, `mx3.zoho.eu`) — provides personal mailboxes (`michael@`, `mandy@`)
-- **Resend inbound** owns `inbound.remishowmanager.co.uk` MX (`inbound-smtp.eu-west-1.amazonaws.com`) — provides the feedback webhook pipeline
-- **Resend sending** uses `send.remishowmanager.co.uk` for SES return path + `resend._domainkey` for DKIM — handles outbound email
-
-The lettiva.com domain is no longer used — migrated to remishowmanager.co.uk on 2026-04-10 after a DNS move broke the inbound email pipeline.
-
-## Database Migrations
-
-Use `npx drizzle-kit push` to sync schema changes to the database. No migration files — push mode.
-
-## Testing
-
-**411 integration tests across 39 files**, covering every user journey in `TESTING_MAP.md`.
-
-### Running tests
-
-```bash
-npm test              # full suite (pretest auto-pushes schema to remi_test DB)
-npx vitest run --run src/__tests__/integration/  # skip pretest hook (faster)
-npm run test:watch    # watch mode
-```
-
-### Test infrastructure
-
-- **Framework:** Vitest 3.2.4 with Postgres-backed integration tests
-- **Local DB:** Homebrew `postgresql@16` with `remi_test` database (not Docker)
-- **CI:** GitHub Actions with a Postgres service container (`.github/workflows/test.yml`)
-- **Config:** `vitest.config.ts` loads `.env.test` for test env vars; `singleFork: true` keeps all tests in one process
-
-### Test helpers (`src/__tests__/helpers/`)
-
-| File | Purpose |
-|------|---------|
-| `setup.ts` | Global mocks for Stripe, Resend, results-notifications, email senders, NextAuth. Runs `cleanDb()` before each test. |
-| `db.ts` | `testDb` (Drizzle instance against `remi_test`), `cleanDb()` (TRUNCATE CASCADE, refuses non-localhost URLs) |
-| `context.ts` | `createTestCaller(user)` — builds a tRPC caller with an injected session, bypasses NextAuth entirely |
-| `factories.ts` | `makeUser`, `makeOrg`, `makeShow`, `makeDog`, `makeEntry`, `makeResult`, `makeJudge`, `makeStewardAssignment`, `makeOrder`, `makePayment`, `makePlan`, `makeSponsor`, `makeFeedback`, `makeBacklogItem`, etc. + convenience builders like `makeSecretaryWithOrg()`, `makeSecretaryWithOrgAndBreed()` |
-| `stripe-event.ts` | `injectStripeEvent(event)`, `buildStripeWebhookRequest()` — for Stripe webhook route testing |
-| `resend-mocks.ts` | Shared `resendMocks.send` capture for email payload assertions |
-
-### Writing a new test
-
-```typescript
-const { user, org } = await makeSecretaryWithOrg();
-const show = await makeShow({ organisationId: org.id, status: 'in_progress' });
-const caller = createTestCaller(user);
-await caller.secretary.someMutation({ showId: show.id });
-expect(...).toBe(...);
-```
-
-### Testing rules
-
-- **Every bug Amanda reports becomes a test first, fix second.** The suite grows where it matters.
-- **New features include a journey test.** One test that strings multiple procedures together.
-- **Mock external services, not the DB.** Tests use real Postgres and real Drizzle queries. Stripe, Resend, S3/R2 are mocked at the service boundary.
-- **Don't mock the database.** Use transactions or `cleanDb()` between tests.
-- **Assert payload shapes, not email HTML.** For email tests, check `to`, `subject`, and key body content — not exact HTML.
-- **`TESTING_MAP.md` is the canonical coverage checklist.** Tick rows as tests land. Add new rows as features ship.
-
-## Feature Development Workflow
-
-When building new features (not bug fixes), always follow this research-first approach:
-
-1. **Research first** — Before writing any code, launch a research agent (Task tool with `subagent_type: "Explore"` or `"general-purpose"`) to investigate:
-   - How best-in-class apps solve this problem (competitors, adjacent industries)
-   - What the RKC/dog show world specifically needs (regulations, conventions, workflows)
-   - UX patterns that would make the feature innovative rather than just functional
-   - What data we already have in the schema that could make the feature richer
-
-2. **Think through the full user journey** — Before building, walk through every step a user takes. Ask: "What does Amanda do before this feature? What does she do after? Where does she expect to find it? What happens if something goes wrong?" Design the complete flow end-to-end, not just the technical piece. Features should feel finished from the user's perspective — not just functional from the developer's perspective.
-
-3. **Design for innovation** — Remi isn't just digitising paper processes. Every feature should ask: "What can we do that paper/PDFs/spreadsheets never could?" Think real-time updates, smart automation, cross-referencing data, proactive notifications, and mobile-first workflows.
-
-4. **Build and ship** — Implement, test (`npm run build`), commit, push, mark feedback completed, email Amanda.
-
-5. **Close the loop** — Always email Amanda when a feature ships, with clear instructions on how to use it and encouragement to share feedback.
+1. **Research first** — before code, investigate how the best apps solve it, what RKC/dog-show
+   convention requires, and what's already in the schema. Fan it out in a workflow with Sonnet
+   agents. **Ask Mandy the domain questions BEFORE building** — never ship "maybe, please check".
+2. **Design the whole journey** — what does Mandy do before this, and after? Where does she
+   expect to find it? What happens when it goes wrong?
+3. **Don't just digitise paper** — ask what paper and spreadsheets could never do.
+4. **Build it fully** — never an MVP, never the minimal fix. Root cause, every call site.
+5. **Test** — every bug Mandy reports becomes a test *first*, fix second; new features get a
+   journey test. **Prove the test fails** before trusting it. One vitest at a time
+   (`singleFork`), and a few tests are order-dependent so a lone green run isn't proof. Mock
+   external services, never the DB.
+6. **🚦 Demo, then get a tested OK — a green build is NOT permission to ship.** Deploy to demo,
+   use the artefact the way Mandy will, wait for Michael or Mandy to confirm, then push.
+7. **Close the loop** — email Mandy what shipped and how to use it; mark the feedback done.

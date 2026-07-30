@@ -119,9 +119,11 @@ export function AddJudgeWizard({
   const kcSearchMutation = trpc.secretary.kcJudgeSearch.useMutation();
   const kcProfileMutation = trpc.secretary.kcJudgeProfile.useMutation();
 
-  // SV regional shows draw most of their judges from overseas, so the RKC
-  // database is rarely useful — skip the auto-search + hide the RKC search
-  // affordance (Amanda 2026-05-19). Local Remi search still runs.
+  // SV regional shows draw many judges from overseas, so we skip the *auto*
+  // RKC search to avoid scraping for judges who won't be found. But some SV
+  // judges are British and ARE on the RKC database, so the manual "Search RKC
+  // Database" button stays available on regional shows too (Mandy 2026-06-18).
+  // Local Remi search still runs.
   const isWusvShow =
     (showData as { showRuleset?: 'rkc' | 'wusv' } | undefined)?.showRuleset === 'wusv';
 
@@ -457,9 +459,10 @@ export function AddJudgeWizard({
               </div>
             )}
 
-            {/* RKC search trigger — hidden for SV regional shows (most
-                SV judges are overseas and not in the RKC database). */}
-            {!isWusvShow && searchQuery.length >= 2 && (
+            {/* RKC search trigger — available on regional shows too, since some
+                SV judges are British and listed on the RKC database. Only the
+                auto-search is skipped for regionals (Mandy 2026-06-18). */}
+            {searchQuery.length >= 2 && (
               <div className="flex items-center gap-2">
                 <Button
                   size="sm"
@@ -490,8 +493,8 @@ export function AddJudgeWizard({
               </div>
             )}
 
-            {/* RKC results — hidden for SV regional shows. */}
-            {!isWusvShow && kcSearchMutation.data && (
+            {/* RKC results. */}
+            {kcSearchMutation.data && (
               <div>
                 <p className="mb-1.5 text-xs font-medium text-muted-foreground">
                   RKC Results ({kcSearchMutation.data.length})
@@ -581,15 +584,17 @@ export function AddJudgeWizard({
                         className="h-11"
                       />
                     </div>
-                    <div>
-                      <Label className="text-xs text-muted-foreground">RKC Number</Label>
-                      <Input
-                        placeholder="Optional"
-                        value={manualKc}
-                        onChange={(e) => setManualKc(e.target.value)}
-                        className="h-11"
-                      />
-                    </div>
+                    {!isWusvShow && (
+                      <div>
+                        <Label className="text-xs text-muted-foreground">RKC Number</Label>
+                        <Input
+                          placeholder="Optional"
+                          value={manualKc}
+                          onChange={(e) => setManualKc(e.target.value)}
+                          className="h-11"
+                        />
+                      </div>
+                    )}
                     <div>
                       <Label className="text-xs text-muted-foreground">Phone</Label>
                       <Input
@@ -602,7 +607,7 @@ export function AddJudgeWizard({
                       />
                     </div>
                     <div className="sm:col-span-2">
-                      <Label className="text-xs text-muted-foreground">Kennel Club Affix</Label>
+                      <Label className="text-xs text-muted-foreground">{isWusvShow ? 'Kennel Name' : 'Kennel Club Affix'}</Label>
                       <Input
                         placeholder="e.g. Sadira"
                         value={manualAffix}
@@ -764,7 +769,7 @@ export function AddJudgeWizard({
                   <p className="text-xs text-muted-foreground">Email</p>
                   <p className="text-sm">{selectedJudge.contactEmail ?? manualEmail}</p>
                 </div>
-                {selectedJudge.kcNumber && (
+                {selectedJudge.kcNumber && !isWusvShow && (
                   <div>
                     <p className="text-xs text-muted-foreground">RKC Number</p>
                     <p className="text-sm">{selectedJudge.kcNumber}</p>
@@ -773,7 +778,7 @@ export function AddJudgeWizard({
               </div>
               <div>
                 <Label htmlFor="affix-confirm" className="text-xs text-muted-foreground">
-                  Kennel Club Affix
+                  {isWusvShow ? 'Kennel Name' : 'Kennel Club Affix'}
                 </Label>
                 <Input
                   id="affix-confirm"

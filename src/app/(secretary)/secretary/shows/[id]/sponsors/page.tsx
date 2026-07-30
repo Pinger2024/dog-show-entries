@@ -2345,6 +2345,7 @@ export default function SponsorsPage() {
           <TabsTrigger value="assignments">Show Sponsors</TabsTrigger>
           <TabsTrigger value="table">Class Sponsorship</TabsTrigger>
           <TabsTrigger value="directory">Sponsor Directory</TabsTrigger>
+          <TabsTrigger value="donations">Donations</TabsTrigger>
         </TabsList>
         <TabsContent value="assignments" className="mt-4">
           <ShowSponsorAssignments
@@ -2362,7 +2363,166 @@ export default function SponsorsPage() {
         <TabsContent value="directory" className="mt-4">
           <SponsorDirectory organisationId={show.organisationId} />
         </TabsContent>
+        <TabsContent value="donations" className="mt-4">
+          <ShowDonations showId={showId} />
+        </TabsContent>
       </Tabs>
+    </div>
+  );
+}
+
+/* ─── Donations — name + optional kennel affix, no amount ─────
+   Mandy 2026-06-17: a place to thank folk who donated rather than sponsoring a
+   class. These appear in the catalogue under "With thanks for their kind
+   donations". Distinct from class/show sponsors and exhibitor checkout donations. */
+function ShowDonations({ showId }: { showId: string }) {
+  const utils = trpc.useUtils();
+  const { data: donations, isLoading } = trpc.secretary.listShowDonations.useQuery({ showId });
+
+  const [donorName, setDonorName] = useState('');
+  const [affix, setAffix] = useState('');
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editName, setEditName] = useState('');
+  const [editAffix, setEditAffix] = useState('');
+
+  const invalidate = () => utils.secretary.listShowDonations.invalidate({ showId });
+
+  const createMutation = trpc.secretary.createShowDonation.useMutation({
+    onSuccess: () => { setDonorName(''); setAffix(''); invalidate(); },
+    onError: (e) => toast.error(e.message ?? 'Could not add that donation'),
+  });
+  const updateMutation = trpc.secretary.updateShowDonation.useMutation({
+    onSuccess: () => { setEditingId(null); invalidate(); },
+    onError: (e) => toast.error(e.message ?? 'Could not save that change'),
+  });
+  const deleteMutation = trpc.secretary.deleteShowDonation.useMutation({
+    onSuccess: () => invalidate(),
+    onError: (e) => toast.error(e.message ?? 'Could not remove that donation'),
+  });
+
+  const handleAdd = () => {
+    const name = donorName.trim();
+    if (!name) return;
+    createMutation.mutate({ showId, donorName: name, affix: affix.trim() || null });
+  };
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <h3 className="font-serif text-base font-semibold">Donations</h3>
+        <p className="text-sm text-muted-foreground">
+          Record the people who kindly gave a donation rather than sponsoring a
+          class. They&apos;ll be thanked in the catalogue. Just a name and their
+          kennel affix if they have one — no amounts.
+        </p>
+      </div>
+
+      {/* Add a donor — stacks on mobile */}
+      <Card>
+        <CardContent className="pt-6">
+          <div className="grid gap-3 sm:grid-cols-[1fr_1fr_auto] sm:items-end">
+            <div className="space-y-1.5">
+              <Label htmlFor="donor-name">Name</Label>
+              <Input
+                id="donor-name"
+                value={donorName}
+                onChange={(e) => setDonorName(e.target.value)}
+                placeholder="e.g. Mandy McAteer"
+                className="h-11"
+                onKeyDown={(e) => { if (e.key === 'Enter') handleAdd(); }}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="donor-affix">
+                Kennel affix <span className="text-muted-foreground">(optional)</span>
+              </Label>
+              <Input
+                id="donor-affix"
+                value={affix}
+                onChange={(e) => setAffix(e.target.value)}
+                placeholder="e.g. Hundark"
+                className="h-11"
+                onKeyDown={(e) => { if (e.key === 'Enter') handleAdd(); }}
+              />
+            </div>
+            <Button
+              onClick={handleAdd}
+              disabled={!donorName.trim() || createMutation.isPending}
+              className="h-11 min-h-[2.75rem]"
+            >
+              {createMutation.isPending ? <Loader2 className="size-4 animate-spin" /> : <Plus className="size-4" />}
+              Add
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* List of donors */}
+      {isLoading ? (
+        <p className="py-4 text-center text-sm text-muted-foreground">Loading…</p>
+      ) : (donations?.length ?? 0) === 0 ? (
+        <EmptyState
+          icon={Handshake}
+          title="No donations yet"
+          description="Add your first donor above. They'll appear in the catalogue with a thank-you."
+          variant="card"
+        />
+      ) : (
+        <div className="space-y-2">
+          {donations!.map((d) => (
+            <Card key={d.id}>
+              <CardContent className="flex flex-col gap-3 py-3 sm:flex-row sm:items-center sm:justify-between">
+                {editingId === d.id ? (
+                  <div className="grid w-full gap-2 sm:grid-cols-[1fr_1fr_auto] sm:items-center">
+                    <Input value={editName} onChange={(e) => setEditName(e.target.value)} className="h-10" placeholder="Name" />
+                    <Input value={editAffix} onChange={(e) => setEditAffix(e.target.value)} className="h-10" placeholder="Affix (optional)" />
+                    <div className="flex gap-2">
+                      <Button
+                        size="sm"
+                        className="min-h-[2.75rem] sm:min-h-0"
+                        disabled={!editName.trim() || updateMutation.isPending}
+                        onClick={() => updateMutation.mutate({ id: d.id, donorName: editName.trim(), affix: editAffix.trim() || null })}
+                      >
+                        {updateMutation.isPending ? <Loader2 className="size-3.5 animate-spin" /> : null}
+                        Save
+                      </Button>
+                      <Button size="sm" variant="ghost" className="min-h-[2.75rem] sm:min-h-0" onClick={() => setEditingId(null)}>
+                        Cancel
+                      </Button>
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    <div className="min-w-0">
+                      <span className="font-medium">{d.donorName}</span>
+                      {d.affix && <span className="text-muted-foreground"> · {d.affix}</span>}
+                    </div>
+                    <div className="flex shrink-0 gap-1">
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="min-h-[2.75rem] sm:min-h-0"
+                        onClick={() => { setEditingId(d.id); setEditName(d.donorName); setEditAffix(d.affix ?? ''); }}
+                      >
+                        <Pencil className="size-3.5" /> Edit
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="min-h-[2.75rem] text-destructive sm:min-h-0"
+                        disabled={deleteMutation.isPending}
+                        onClick={() => deleteMutation.mutate({ id: d.id })}
+                      >
+                        <Trash2 className="size-3.5" /> Remove
+                      </Button>
+                    </div>
+                  </>
+                )}
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

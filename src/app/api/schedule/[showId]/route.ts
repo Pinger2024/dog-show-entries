@@ -310,6 +310,7 @@ export async function GET(
     juniorHandlerFee: show.juniorHandlerFee ?? null,
     multiDogThreshold: show.multiDogThreshold ?? null,
     multiDogPackagePence: show.multiDogPackagePence ?? null,
+    regionalFeeConfig: show.regionalFeeConfig ?? null,
     discountGroups: discountGroups.map((g) => ({
       label: g.label,
       firstEntryFeePence: g.firstEntryFeePence,

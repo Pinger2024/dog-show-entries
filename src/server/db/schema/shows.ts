@@ -87,6 +87,45 @@ export interface ScheduleData {
   /** ISO timestamp when the marked catalogue was submitted to RKC */
   rkcSubmittedAt?: string;
 }
+
+/** One position on the regional per-dog fee scale (pence). */
+export interface RegionalFeeTierConfig {
+  standardPence: number;
+  memberPence: number;
+}
+
+/** A self-declared membership that unlocks a discounted rate on a regional
+ *  show (taken on trust — never validated). Defaults to the BRG/League
+ *  membership; clubs can add their own. If `tiers` is set, that membership
+ *  uses its own per-dog schedule; otherwise it shares the config-level
+ *  member column (Mandy 2026-07-05). */
+export interface RegionalMembershipOption {
+  label: string;
+  /** Show a membership-number box when this option is ticked. */
+  requiresNumber?: boolean;
+  /** Optional membership-specific per-dog schedule. When absent, the member
+   *  column of the config-level tiers applies. */
+  tiers?: RegionalFeeTierConfig[];
+}
+
+/** Regional (SV/WUSV) entry-fee configuration — the BRG tiered per-dog scale
+ *  with a member column, plus first-time-exhibitor and donation options. Fully
+ *  editable per show by the club (Mandy 2026-07-02/05). Null on RKC shows.
+ *  Priced by `lib/regional-fee-calc.ts`. */
+export interface RegionalFeeConfig {
+  /** Ordered per-dog schedule; the last tier applies to its position and every
+   *  dog beyond it. */
+  tiers: RegionalFeeTierConfig[];
+  /** Membership options that unlock the member rate. Defaults to a single
+   *  BRG/League membership when omitted. */
+  memberships?: RegionalMembershipOption[];
+  /** Offer a free/flat first-time-exhibitor entry. */
+  firstTimeEnabled?: boolean;
+  /** Flat per-dog fee for a first-time exhibitor (pence). Defaults to £0. */
+  firstTimeFeePence?: number;
+  /** Let exhibitors add an optional discretionary donation at checkout. */
+  donationsEnabled?: boolean;
+}
 import { organisations } from './organisations';
 import { users } from './users';
 import { venues } from './venues';
@@ -101,6 +140,7 @@ import { showChecklistItems } from './show-checklist';
 import { sundryItems } from './sundry-items';
 import { showSponsors } from './sponsors';
 import { showDiscountGroups } from './show-discount-groups';
+import { showBreeds } from './show-breeds';
 
 export const shows = pgTable(
   'shows',
@@ -147,11 +187,19 @@ export const shows = pgTable(
     // the per-dog first-class fees are replaced by this flat package price.
     multiDogThreshold: integer('multi_dog_threshold'),
     multiDogPackagePence: integer('multi_dog_package_pence'),
+    // Regional (SV/WUSV) tiered fee config — the BRG per-dog scale + member
+    // column + first-time/donation options. Null on RKC shows, which keep the
+    // firstEntryFee/subsequentEntryFee model above. Priced by regional-fee-calc.
+    regionalFeeConfig: jsonb('regional_fee_config').$type<RegionalFeeConfig>(),
     createdAt: timestamp('created_at', { withTimezone: true })
       .defaultNow()
       .notNull(),
     resultsPublishedAt: timestamp('results_published_at', { withTimezone: true }),
     resultsLockedAt: timestamp('results_locked_at', { withTimezone: true }),
+    // Set when the secretary locks catalogue numbers for printing (or a print
+    // order is placed). While null, numbers are provisional and re-sort on every
+    // entry add/remove; once set, late entries append at the end instead.
+    catalogueNumbersLockedAt: timestamp('catalogue_numbers_locked_at', { withTimezone: true }),
     updatedAt: timestamp('updated_at', { withTimezone: true })
       .defaultNow()
       .notNull()
@@ -193,4 +241,5 @@ export const showsRelations = relations(shows, ({ one, many }) => ({
   sundryItems: many(sundryItems),
   showSponsors: many(showSponsors),
   discountGroups: many(showDiscountGroups),
+  showBreeds: many(showBreeds),
 }));

@@ -125,9 +125,30 @@ interface DogFormProps {
    *  German-Shepherd-specific data together as one visual block). Only
    *  rendered when the selected breed matches German Shepherd. */
   svSection?: React.ReactNode;
+  /** Where to go after a successful save. Used when the exhibitor came from an
+   *  entry to fill in mandatory info — send them straight back to that show's
+   *  entry instead of the dog profile (Mandy 2026-06-26). Internal paths only. */
+  returnTo?: string;
+  /** True when this dog is being completed for an SV/WUSV regional entry. Those
+   *  shows require the SV-specific fields and the full breeder line, so the
+   *  labels show "Required" instead of the "(optional)" that's only accurate for
+   *  RKC shows (Mandy 2026-07-02). Enforcement is the entry readiness gate. */
+  regionalRequired?: boolean;
 }
 
-export function DogForm({ mode, defaultValues, dogId, svSection }: DogFormProps) {
+/** Field-label suffix: a red required asterisk, or a muted "(optional)". For
+ *  regional entries the SV/breeder fields flip from optional to required. */
+function ReqMark({ required, short }: { required?: boolean; short?: boolean }) {
+  if (required) return <span className="text-destructive">*</span>;
+  return (
+    <span className="text-muted-foreground font-normal">
+      {short ? '(opt.)' : '(optional)'}
+    </span>
+  );
+}
+
+export function DogForm({ mode, defaultValues, dogId, svSection, returnTo, regionalRequired }: DogFormProps) {
+  const safeReturnTo = returnTo && returnTo.startsWith('/shows/') ? returnTo : null;
   const router = useRouter();
   const [breedOpen, setBreedOpen] = useState(false);
   const [calendarOpen, setCalendarOpen] = useState(false);
@@ -151,9 +172,11 @@ export function DogForm({ mode, defaultValues, dogId, svSection }: DogFormProps)
     onSuccess: () => {
       utils.dogs.list.invalidate();
       toast.success('Dog added successfully!', {
-        description: 'Your dog has been added to your profile.',
+        description: safeReturnTo
+          ? 'Taking you back to your entry…'
+          : 'Your dog has been added to your profile.',
       });
-      router.push('/dogs');
+      router.push(safeReturnTo ?? '/dogs');
     },
     onError: (error) => {
       toast.error('Something went wrong', {
@@ -167,9 +190,11 @@ export function DogForm({ mode, defaultValues, dogId, svSection }: DogFormProps)
       utils.dogs.list.invalidate();
       if (dogId) utils.dogs.getById.invalidate({ id: dogId });
       toast.success('Dog updated successfully!', {
-        description: 'Your changes have been saved.',
+        description: safeReturnTo
+          ? 'Taking you back to your entry…'
+          : 'Your changes have been saved.',
       });
-      router.push(`/dogs/${dogId}`);
+      router.push(safeReturnTo ?? `/dogs/${dogId}`);
     },
     onError: (error) => {
       toast.error('Something went wrong', {
@@ -434,6 +459,25 @@ export function DogForm({ mode, defaultValues, dogId, svSection }: DogFormProps)
         toast.error('Please add at least one owner');
         return;
       }
+      // Pedigree (sire + dam + breeder) is mandatory — a catalogue can't be
+      // produced with this missing (Michael 2026-06-25; breeder added 2026-06-26).
+      let pedigreeMissing = false;
+      if (!data.sireName || !data.sireName.trim()) {
+        form.setError('sireName', { type: 'manual', message: "The sire's name is required" });
+        pedigreeMissing = true;
+      }
+      if (!data.damName || !data.damName.trim()) {
+        form.setError('damName', { type: 'manual', message: "The dam's name is required" });
+        pedigreeMissing = true;
+      }
+      if (!data.breederName || !data.breederName.trim()) {
+        form.setError('breederName', { type: 'manual', message: "The breeder's name is required" });
+        pedigreeMissing = true;
+      }
+      if (pedigreeMissing) {
+        toast.error('Please add the sire, dam and breeder — they appear in the catalogue');
+        return;
+      }
       createDog.mutate(data);
     } else if (dogId) {
       const { owners: _owners, ...dogFields } = data;
@@ -500,8 +544,9 @@ export function DogForm({ mode, defaultValues, dogId, svSection }: DogFormProps)
                 // Required whenever a registration body is selected — Amanda
                 // 2026-05-20: SV regional shows demand a registration number
                 // regardless of body (RKC/SV/IKC/Other). For RKC-only dogs
-                // not registered yet, the user can leave Body blank.
-                const isRequired = !!body;
+                // not registered yet, the user can leave Body blank. Regional
+                // entries always require it (Mandy 2026-07-02).
+                const isRequired = !!body || !!regionalRequired;
                 return (
                   <FormItem>
                     <FormLabel>
@@ -908,7 +953,7 @@ export function DogForm({ mode, defaultValues, dogId, svSection }: DogFormProps)
               name="sireName"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Sire (Father)</FormLabel>
+                  <FormLabel>Sire (Father) {regionalRequired && <ReqMark required />}</FormLabel>
                   <FormControl>
                     <Input
                       placeholder="Registered name of sire"
@@ -925,7 +970,7 @@ export function DogForm({ mode, defaultValues, dogId, svSection }: DogFormProps)
               name="damName"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Dam (Mother)</FormLabel>
+                  <FormLabel>Dam (Mother) {regionalRequired && <ReqMark required />}</FormLabel>
                   <FormControl>
                     <Input
                       placeholder="Registered name of dam"
@@ -942,7 +987,7 @@ export function DogForm({ mode, defaultValues, dogId, svSection }: DogFormProps)
               name="breederName"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Breeder</FormLabel>
+                  <FormLabel>Breeder {regionalRequired && <ReqMark required />}</FormLabel>
                   <FormControl>
                     <Input
                       placeholder="Name of breeder"
@@ -964,7 +1009,7 @@ export function DogForm({ mode, defaultValues, dogId, svSection }: DogFormProps)
                 name="breederCountry"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Breeder Country <span className="text-muted-foreground font-normal">(opt.)</span></FormLabel>
+                    <FormLabel>Breeder Country <ReqMark required={regionalRequired} short /></FormLabel>
                     <FormControl>
                       <Input placeholder="e.g. Germany" {...field} />
                     </FormControl>
@@ -977,7 +1022,7 @@ export function DogForm({ mode, defaultValues, dogId, svSection }: DogFormProps)
                 name="breederCity"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Breeder City <span className="text-muted-foreground font-normal">(opt.)</span></FormLabel>
+                    <FormLabel>Breeder City <ReqMark required={regionalRequired} short /></FormLabel>
                     <FormControl>
                       <Input placeholder="e.g. Augsburg" {...field} />
                     </FormControl>
@@ -990,7 +1035,7 @@ export function DogForm({ mode, defaultValues, dogId, svSection }: DogFormProps)
                 name="breederPostcode"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Breeder Postcode <span className="text-muted-foreground font-normal">(opt.)</span></FormLabel>
+                    <FormLabel>Breeder Postcode <ReqMark required={regionalRequired} short /></FormLabel>
                     <FormControl>
                       <Input placeholder="e.g. 86150" {...field} />
                     </FormControl>
@@ -1048,7 +1093,7 @@ export function DogForm({ mode, defaultValues, dogId, svSection }: DogFormProps)
                 name="coatType"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Coat Type <span className="text-muted-foreground font-normal">(optional)</span></FormLabel>
+                    <FormLabel>Coat Type <ReqMark required={regionalRequired} /></FormLabel>
                     <Select onValueChange={(v) => field.onChange(v === 'none' ? undefined : v)} value={field.value ?? 'none'}>
                       <FormControl>
                         <SelectTrigger className="w-full">
@@ -1072,7 +1117,7 @@ export function DogForm({ mode, defaultValues, dogId, svSection }: DogFormProps)
               name="microchipNumber"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Microchip Number <span className="text-muted-foreground font-normal">(optional)</span></FormLabel>
+                  <FormLabel>Microchip Number <ReqMark required={regionalRequired} /></FormLabel>
                   <FormControl>
                     <Input placeholder="15-digit microchip number" {...field} />
                   </FormControl>
@@ -1111,7 +1156,7 @@ export function DogForm({ mode, defaultValues, dogId, svSection }: DogFormProps)
                 name="sireRegistrationNumber"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Sire Registration Number <span className="text-muted-foreground font-normal">(opt.)</span></FormLabel>
+                    <FormLabel>Sire Registration Number <ReqMark required={regionalRequired} short /></FormLabel>
                     <FormControl>
                       <Input placeholder="e.g. SZ 2355001" {...field} />
                     </FormControl>
@@ -1151,7 +1196,7 @@ export function DogForm({ mode, defaultValues, dogId, svSection }: DogFormProps)
                 name="damRegistrationNumber"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Dam Registration Number <span className="text-muted-foreground font-normal">(opt.)</span></FormLabel>
+                    <FormLabel>Dam Registration Number <ReqMark required={regionalRequired} short /></FormLabel>
                     <FormControl>
                       <Input placeholder="e.g. SZ 2344555" {...field} />
                     </FormControl>

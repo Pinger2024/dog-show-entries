@@ -11,6 +11,7 @@ import {
   Check,
   Download,
   ExternalLink,
+  FileSpreadsheet,
   FileText,
   Gavel,
   Hash,
@@ -59,7 +60,15 @@ interface DocumentLink {
   icon: React.ReactNode;
   description: string;
   badge?: string;
+  /** File type — drives the download filename + share MIME. Defaults to PDF. */
+  ext?: 'pdf' | 'xlsx';
+  mime?: string;
 }
+
+const MIME_BY_EXT: Record<'pdf' | 'xlsx', string> = {
+  pdf: 'application/pdf',
+  xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+};
 
 /**
  * True on narrow screens OR when the app is running as an installed PWA.
@@ -95,9 +104,9 @@ function useDownloadInsteadOfOpen(): boolean {
  * via a programmatic blob-URL click — so we pass the filename explicitly
  * via the `download` attribute on the temporary anchor.
  */
-function filenameFromLabel(label: string): string {
+function filenameFromLabel(label: string, ext: 'pdf' | 'xlsx' = 'pdf'): string {
   const safe = label.replace(/[^a-zA-Z0-9\- ]/g, '').replace(/\s+/g, '-');
-  return `${safe}.pdf`;
+  return `${safe}.${ext}`;
 }
 
 /**
@@ -140,11 +149,12 @@ function DocumentLinkCard({ doc }: { doc: DocumentLink }) {
     // without the right access.
     if (typeof navigator !== 'undefined' && typeof navigator.canShare === 'function') {
       try {
-        const filename = filenameFromLabel(doc.label);
+        const ext = doc.ext ?? 'pdf';
+        const filename = filenameFromLabel(doc.label, ext);
         const res = await fetch(doc.href, { credentials: 'include' });
         if (res.ok) {
           const blob = await res.blob();
-          const file = new File([blob], filename, { type: 'application/pdf' });
+          const file = new File([blob], filename, { type: doc.mime ?? MIME_BY_EXT[ext] });
           if (navigator.canShare({ files: [file] })) {
             await navigator.share({ title: doc.label, files: [file] });
             return;
@@ -180,7 +190,7 @@ function DocumentLinkCard({ doc }: { doc: DocumentLink }) {
     if (downloading) return;
     setDownloading(true);
     try {
-      await downloadBlob(doc.href, filenameFromLabel(doc.label));
+      await downloadBlob(doc.href, filenameFromLabel(doc.label, doc.ext ?? 'pdf'));
     } catch (err) {
       toast.error(`Download failed — ${(err as Error).message}`);
     } finally {
@@ -401,6 +411,32 @@ export default function DocumentsPage() {
   const prizeCardHref = `/api/prize-cards/${showId}?${prizeCardQuery}`;
   const prizeCardPrintHref = `/api/prize-cards/${showId}/print?${prizeCardQuery}`;
 
+  // SV / WUSV regional shows get the graded results report + spreadsheet the
+  // regional group circulates after the show (Mandy 2026-06-27). Hidden for
+  // standard RKC shows, which don't use SV grading.
+  const isWusv = stats?.showRuleset === 'wusv';
+  const svResultsDocuments: DocumentLink[] = isWusv
+    ? [
+        {
+          label: 'SV Graded Results (PDF)',
+          href: `/api/reports/${showId}/sv-results`,
+          icon: <Trophy className="size-4" />,
+          description:
+            'Graded results by coat and class — V/SG/G grades, placings, absentees kept in, with Best Male/Female, Most Promising, and Junior Handling',
+          ext: 'pdf',
+        },
+        {
+          label: 'SV Results Spreadsheet (Excel)',
+          href: `/api/reports/${showId}/sv-results-xlsx`,
+          icon: <FileSpreadsheet className="size-4" />,
+          description:
+            'One row per dog with full pedigree, grading and placing — the SV records format for the regional group',
+          ext: 'xlsx',
+          mime: MIME_BY_EXT.xlsx,
+        },
+      ]
+    : [];
+
   const postShowDocuments: DocumentLink[] = hasNumbers
     ? [
         {
@@ -512,6 +548,24 @@ export default function DocumentsPage() {
           </CardHeader>
           <CardContent>
             <DocumentGrid documents={postShowDocuments} />
+          </CardContent>
+        </Card>
+      )}
+
+      {/* SV Results — regional (WUSV) shows only */}
+      {svResultsDocuments.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Trophy className="size-5" />
+              SV Results
+            </CardTitle>
+            <CardDescription>
+              Graded results for the regional group — the report and spreadsheet to circulate after judging
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <DocumentGrid documents={svResultsDocuments} />
           </CardContent>
         </Card>
       )}

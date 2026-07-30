@@ -247,6 +247,7 @@
 
 <nav class="jump" aria-label="Sections">
   <ul>
+    <li><a href="#first">Start here</a></li>
     <li><a href="#verdict">Verdict</a></li>
     <li><a href="#strengths">What's world-class</a></li>
     <li><a href="#bigfive">The Big Five</a></li>
@@ -258,6 +259,33 @@
     <li><a href="#plan">90-day plan</a></li>
   </ul>
 </nav>
+
+<!-- ════════ READ THIS FIRST ════════ -->
+<section id="first" style="background:var(--green-wash)">
+  <div class="inner reveal">
+    <p class="sec-no">Before Anything Else</p>
+    <h2>Three things to hold onto while you read</h2>
+    <p class="lede">An honest review only helps if it's read the way it's meant — from a position of strength. So before any detail:</p>
+    <div class="cards" style="grid-template-columns:1fr">
+      <div class="card">
+        <h4>🌳 Remi is in genuinely strong shape</h4>
+        <p>This review looked at everything — every screen, every line of code, and what every competitor offers. The conclusion is firmly on your side: <strong>nothing else in this market comes close</strong>, and nothing else works properly on a phone at all. The warmest words in this report are about the parts shaped by real show experience — the checklist, the phase-by-phase show hub, the plain-spoken help text. The suggestions are about making the welcome mat match the house.</p>
+      </div>
+      <div class="card">
+        <h4>🔒 The handful of urgent things were fixed before this page was even shared</h4>
+        <p>Deep technical checks exist to find quiet mistakes before anyone else does — and that's exactly what happened here. Some behind-the-scenes data was being shared more widely than it should have been (the detail is in the Engine Room section). None of it was ever <em>displayed</em> on any page — spotting it took our own deliberate audit with specialist tools. It was fixed and live in production the same day it was found, and new automatic tests now stand guard so it can't creep back. <strong>There is nothing outstanding, nothing for you to do, and nothing any club needs to do.</strong></p>
+      </div>
+      <div class="card">
+        <h4>📋 Everything else is a menu, not a snag list</h4>
+        <p>Nothing in the rest of this report is broken, urgent, or a criticism of any decision — most of it is about making a newcomer's first ten minutes as good as a regular's tenth show. We choose what to do and when, at a pace that fits around real shows and real life. The 90-day plan at the end is one suggested order, not a deadline.</p>
+      </div>
+      <div class="card">
+        <h4>🛡️ None of it will be allowed anywhere near a live show</h4>
+        <p>Every idea in this report travels the same protected route before it can touch the real site. It appears on the <strong>demo site first</strong>, where we can click around with pretend shows and pretend money until we're happy. Then <strong>675 automatic rehearsals</strong> act out every journey — creating a show, entering, paying, refunds, results — and a single failure stops the release dead. <strong>Nothing ships while a show is running or entries are closing</strong> (we already hold work back this way — the catalogue tweaks are parked right now for exactly this reason). And if anything ever did slip through, the site can be <strong>wound back to the previous version in about three minutes</strong>. Your live shows sit behind all four of those locks — the boring, dependable site your exhibitors see stays boring and dependable. That's the whole point.</p>
+      </div>
+    </div>
+  </div>
+</section>
 
 <!-- ════════ VERDICT ════════ -->
 <section id="verdict">
@@ -444,10 +472,11 @@
 
     <span class="shipped">✓ Shipped to production · 12 June 2026</span>
 
-    <h3>Security — found, verified, fixed, deployed</h3>
+    <h3>Security — found by our own check, fixed the same day</h3>
+    <p>Everything in this list was discovered by our own deliberate audit — not reported by anyone outside — and every fix was live in production before this report was shared. None of this information was ever <em>displayed</em> on a page; it sat in the invisible data a page loads in the background, where only someone deliberately digging with developer tools would ever look. It shouldn't have been there, it now isn't, and automatic tests guard each fix so the same mistake can't quietly return. <b>No action is needed from you or from any club.</b></p>
     <ul class="ticks">
-      <li><b>Club bank details were publicly readable.</b> Every public show payload embedded the club's full record — including sort code and account number — and one public endpoint served it directly. Any visitor with browser dev-tools could read every active club's bank details. Now allowlisted to safe fields everywhere. <em>This was the most serious finding; it's closed and live.</em></li>
-      <li><b>Draft shows were enumerable by anyone</b> — including secretary home addresses and phone numbers, before a show was announced. Closed.</li>
+      <li><b>Club bank details were in behind-the-scenes data.</b> The background data a show page loads included the club's full record — bank sort code and account number among it. Never shown on screen, but it didn't belong there. Now trimmed to safe fields everywhere, with a new test that fails the entire build if code ever tries to include the full record again.</li>
+      <li><b>Unannounced draft shows could be looked up</b> — including secretary contact details — by someone who knew how to ask the system directly. Closed.</li>
       <li><b>Public dog profiles revealed upcoming entries</b> — a judge could see which dogs are entered in their own upcoming show (the exact pre-judging risk Remi's rules exist to prevent), plus unpublished results and critiques. Now owners-only until show day; results appear only once published.</li>
       <li><b>A forgotten legacy payment endpoint</b> skipped all entry validation and created entries the club would never have been paid for. Deleted.</li>
       <li><b>Cross-club gaps:</b> any secretary could read a rival show's revenue stats, and edit any judge's contact email (intercepting another club's contract offers). Both locked down, with new regression tests.</li>
@@ -501,7 +530,16 @@
       </div>
     </div>
 
-    <p style="margin-top:2.4rem" class="soft">One discipline ties it together: <b style="color:var(--green-deep)">once the front door is rebuilt, stop moving the furniture.</b> This audience rewards stability like no other — the platform that never surprises them is the platform they tell their friends about. And in this world, the friends all run clubs too.</p>
+    <h3 style="margin-top:3rem">The safety rules every change follows</h3>
+    <p class="soft">However much (or little) of this plan we take on, the working rules don't bend:</p>
+    <ul class="ticks">
+      <li><b>Demo first, always.</b> Every visible change lives on the demo site — pretend shows, pretend money — until Mandy has clicked through it and is happy. Nothing reaches the real site unseen.</li>
+      <li><b>675 rehearsals before every release.</b> The automatic test suite acts out every secretary and exhibitor journey, end to end, every single time. One failure and the release simply doesn't happen.</li>
+      <li><b>The show calendar outranks the roadmap.</b> No releases during a show weekend, or in the final days of an entry window. If it's a busy season, the work waits — exactly as the parked catalogue tweaks are waiting right now.</li>
+      <li><b>Money code gets the strictest handling.</b> Anything touching payments, refunds or payouts ships in its own small, heavily-tested change — never bundled with cosmetic work, never during an open entry window.</li>
+      <li><b>Three minutes to undo.</b> Every release can be rolled back to the exact previous version, near-instantly. A bad change is an inconvenience for us — never a crisis for a show.</li>
+    </ul>
+    <p style="margin-top:2.4rem" class="soft">And one discipline ties it together: <b style="color:var(--green-deep)">once the front door is rebuilt, stop moving the furniture.</b> This audience rewards stability like no other — the platform that never surprises them is the platform they tell their friends about. And in this world, the friends all run clubs too.</p>
   </div>
 </section>
 

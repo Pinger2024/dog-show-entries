@@ -19,8 +19,14 @@ import {
   type ClassBreakdownRow,
   type PrebookedCatalogueRow,
 } from '@/components/reports/show-report-pdf';
+import { SvResultsReport, type SvResultsReportInfo } from '@/components/reports/sv-results-pdf';
+import { loadSvResultsData } from '@/server/services/sv-results-data';
+import { buildSvResultsReport, buildSvResultsXlsxRows } from '@/lib/sv-results';
+import { buildSvResultsXlsx } from '@/lib/sv-results-xlsx';
 
-const TYPES = ['catalogue-order', 'class-breakdown', 'catalogue-orders'] as const;
+const PDF_TYPES = ['catalogue-order', 'class-breakdown', 'catalogue-orders'] as const;
+const SV_TYPES = ['sv-results', 'sv-results-xlsx'] as const;
+const TYPES = [...PDF_TYPES, ...SV_TYPES] as const;
 type ReportType = (typeof TYPES)[number];
 
 export async function GET(
@@ -29,7 +35,7 @@ export async function GET(
 ) {
   const { showId, type } = await params;
   if (!TYPES.includes(type as ReportType)) {
-    return NextResponse.json({ error: 'Unknown report. Use catalogue-order, class-breakdown or catalogue-orders.' }, { status: 400 });
+    return NextResponse.json({ error: `Unknown report. Use one of: ${TYPES.join(', ')}.` }, { status: 400 });
   }
   if (!db) {
     return NextResponse.json({ error: 'Database not available' }, { status: 500 });
@@ -47,6 +53,55 @@ export async function GET(
   if (authResult instanceof NextResponse) return authResult;
 
   await ensureCatalogueNumbers(db, showId);
+
+  // ── SV / WUSV graded results report + spreadsheet (regional shows only) ──
+  if (type === 'sv-results' || type === 'sv-results-xlsx') {
+    if (show.showRuleset !== 'wusv') {
+      return NextResponse.json(
+        { error: 'SV results are only available for regional (WUSV) shows.' },
+        { status: 400 },
+      );
+    }
+    const load = await loadSvResultsData(db, showId);
+    if (!load) {
+      return NextResponse.json({ error: 'Show not found' }, { status: 404 });
+    }
+    const isPreview = request.nextUrl.searchParams.has('preview');
+
+    try {
+      if (type === 'sv-results-xlsx') {
+        const xlsxRows = buildSvResultsXlsxRows(load.reportInput, {
+          venue: load.show.venueName ?? load.show.organisationName ?? '',
+          date: safeXlsxDate(load.show.startDate),
+        });
+        const buffer = await buildSvResultsXlsx(xlsxRows, { showName: load.show.name });
+        const filename = `${sanitizeFilename(show.name)}-SV-Results.xlsx`;
+        return new Response(new Uint8Array(buffer), {
+          headers: {
+            'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            'Content-Disposition': `${isPreview ? 'inline' : 'attachment'}; filename="${filename}"`,
+            'Cache-Control': 'no-cache',
+          },
+        });
+      }
+
+      const data = buildSvResultsReport(load.reportInput);
+      const svInfo: SvResultsReportInfo = {
+        orgName: load.show.organisationName,
+        showName: load.show.name,
+        showDate: safeDate(load.show.startDate),
+        generatedAt: format(new Date(), 'd MMMM yyyy'),
+      };
+      const svElement = React.createElement(SvResultsReport, { info: svInfo, data });
+      const buffer = await renderToBuffer(svElement as React.ReactElement<DocumentProps>);
+      const filename = `${sanitizeFilename(show.name)}-SV-Results.pdf`;
+      return makePdfResponse(buffer, filename, isPreview);
+    } catch (err) {
+      console.error('SV results report generation failed:', err);
+      const message = err instanceof Error ? err.message : String(err);
+      return NextResponse.json({ error: 'SV results generation failed', detail: message }, { status: 500 });
+    }
+  }
 
   const [showClasses, entries] = await Promise.all([
     db.query.showClasses.findMany({
@@ -176,6 +231,14 @@ export async function GET(
 function safeDate(iso: string): string {
   try {
     return format(parseISO(iso), 'EEEE d MMMM yyyy');
+  } catch {
+    return iso;
+  }
+}
+
+function safeXlsxDate(iso: string): string {
+  try {
+    return format(parseISO(iso), 'dd/MM/yyyy');
   } catch {
     return iso;
   }

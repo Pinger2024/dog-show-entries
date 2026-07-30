@@ -17,6 +17,7 @@ import {
   CardContent,
 } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { effectiveShowStatus } from '@/lib/show-status';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { PageHeader, PageTitle, PageDescription, PageActions } from '@/components/ui/page-header';
 import { EmptyState } from '@/components/ui/empty-state';
@@ -167,6 +168,7 @@ function ShowList({
     name: string;
     status: string;
     startDate: string;
+    entryCloseDate?: Date | string | null;
     organisation?: { name: string } | null;
     venue?: { name: string } | null;
     entryCount?: number;
@@ -195,8 +197,11 @@ function ShowList({
   return (
     <div className="space-y-3">
       {shows.map((show) => {
-        const status = statusConfig[show.status] ?? {
-          label: show.status,
+        // Derive the badge from the close date so a show whose entries have
+        // closed reads "Closed" instantly, without waiting on the daily cron.
+        const displayStatus = effectiveShowStatus(show.status, show.entryCloseDate);
+        const status = statusConfig[displayStatus] ?? {
+          label: displayStatus,
           variant: 'outline' as const,
         };
         const entryCount = show.entryCount ?? 0;

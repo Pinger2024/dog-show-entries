@@ -153,3 +153,5 @@ export { dogSvProfile, dogSvProfileRelations } from './dog-sv-profile';
 export { userSvProfile, userSvProfileRelations } from './user-sv-profile';
 export { catalogueAdverts, catalogueAdvertsRelations } from './catalogue-adverts';
 export { showDiscountGroups, showDiscountGroupsRelations } from './show-discount-groups';
+export { showBreeds, showBreedsRelations } from './show-breeds';
+export { showDonations, showDonationsRelations } from './show-donations';

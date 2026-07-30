@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
 import { fireDogConfetti } from '@/lib/confetti';
 import {
   AlertTriangle,
@@ -38,6 +39,8 @@ import {
 import type { RouterOutputs } from '@/server/trpc/router';
 import { ClassManager, BulkClassCreator } from './class-manager';
 import { DiscountsSection } from './discounts-section';
+import { RegionalFeesEditor, type RegionalFeePayload } from './regional-fees-editor';
+import type { RegionalFeeConfig } from '@/server/db/schema/shows';
 import { SectionHeading, InlineHelp } from './section-help';
 import { JudgesSection } from './judge-section';
 import { ScheduleSettingsForm } from './schedule-settings-form';
@@ -686,6 +689,14 @@ function StepDetails({
   );
   const [kcLicenceNo, setKcLicenceNo] = useState(show.kcLicenceNo ?? '');
 
+  // SV/WUSV regional shows use the tiered RegionalFeesEditor instead of the RKC
+  // first/subsequent fee model + discount groups (Mandy 2026-07-05).
+  const isWusv = (show as { showRuleset?: string }).showRuleset === 'wusv';
+  // The embedded RegionalFeesEditor reports its config here so this step's ONE
+  // "Save Details" button saves the regional fees together with the close date
+  // (no two-save-button trap that lost Mandy's close date, 2026-07-05).
+  const [regionalPayload, setRegionalPayload] = useState<RegionalFeePayload | null>(null);
+
   const utils = trpc.useUtils();
   const updateMutation = trpc.shows.update.useMutation({
     onSuccess: () => {
@@ -713,14 +724,25 @@ function StepDetails({
 
     updateMutation.mutate({
       id: showId,
-      firstEntryFee: firstEntryFee ? poundsToPence(Number(firstEntryFee)) : null,
-      subsequentEntryFee: subsequentEntryFee
-        ? poundsToPence(Number(subsequentEntryFee))
-        : null,
-      nfcEntryFee: nfcEntryFee ? poundsToPence(Number(nfcEntryFee)) : null,
-      juniorHandlerFee: juniorHandlerFee ? poundsToPence(Number(juniorHandlerFee)) : null,
-      multiDogThreshold: multiDog.threshold ? Number(multiDog.threshold) : null,
-      multiDogPackagePence: multiDog.packagePence ? poundsToPence(Number(multiDog.packagePence)) : null,
+      // On regionals the RKC fee fields are hidden; the embedded
+      // RegionalFeesEditor reports its config via regionalPayload, so this one
+      // save persists the regional fees + JH fee alongside the close date
+      // (Mandy 2026-07-05). RKC shows keep the first/subsequent model.
+      firstEntryFee: isWusv ? undefined : firstEntryFee ? poundsToPence(Number(firstEntryFee)) : null,
+      subsequentEntryFee: isWusv
+        ? undefined
+        : subsequentEntryFee
+          ? poundsToPence(Number(subsequentEntryFee))
+          : null,
+      nfcEntryFee: isWusv ? undefined : nfcEntryFee ? poundsToPence(Number(nfcEntryFee)) : null,
+      juniorHandlerFee: isWusv
+        ? regionalPayload?.juniorHandlerFeePence ?? undefined
+        : juniorHandlerFee
+          ? poundsToPence(Number(juniorHandlerFee))
+          : null,
+      regionalFeeConfig: isWusv ? regionalPayload?.config ?? undefined : undefined,
+      multiDogThreshold: isWusv ? undefined : multiDog.threshold ? Number(multiDog.threshold) : null,
+      multiDogPackagePence: isWusv ? undefined : multiDog.packagePence ? poundsToPence(Number(multiDog.packagePence)) : null,
       entryCloseDate: entryCloseDate
         ? new Date(entryCloseDate).toISOString()
         : null,
@@ -735,10 +757,23 @@ function StepDetails({
     });
   }
 
+  // SV/WUSV regional shows: the RKC first/subsequent/NFC fee inputs and RKC
+  // licence are hidden (Mandy 2026-06-18); regional fees live in the
+  // RegionalFeesEditor below instead.
+
   return (
     <div className="space-y-6">
       {/* Entry Fees */}
       <div className="space-y-3">
+        {isWusv ? (
+          <RegionalFeesEditor
+            showId={showId}
+            config={(show as { regionalFeeConfig?: RegionalFeeConfig | null }).regionalFeeConfig ?? null}
+            juniorHandlerFeePence={show.juniorHandlerFee ?? null}
+            onChange={setRegionalPayload}
+          />
+        ) : (
+        <>
         <SectionHeading
           title="Entry Fees"
           help={{
@@ -774,6 +809,7 @@ function StepDetails({
               />
             </div>
           </div>
+          {!isWusv && (
           <div className="space-y-1.5">
             <Label htmlFor="wiz-sub-fee" className="text-xs">
               Subsequent entry fee
@@ -794,6 +830,8 @@ function StepDetails({
               />
             </div>
           </div>
+          )}
+          {!isWusv && (
           <div className="space-y-1.5">
             <Label htmlFor="wiz-nfc-fee" className="text-xs">
               NFC entry fee
@@ -814,6 +852,7 @@ function StepDetails({
               />
             </div>
           </div>
+          )}
           <div className="space-y-1.5">
             <Label htmlFor="wiz-jh-fee" className="text-xs">
               Junior handler fee
@@ -841,6 +880,8 @@ function StepDetails({
           multiDog={multiDog}
           onMultiDogChange={setMultiDog}
         />
+        </>
+        )}
       </div>
 
       {/* Close Dates */}
@@ -903,7 +944,8 @@ function StepDetails({
         }}
       />
 
-      {/* RKC Licence */}
+      {/* RKC Licence — not applicable to SV/WUSV regional shows */}
+      {!isWusv && (
       <div className="space-y-1.5">
         <SectionHeading
           title="RKC Licence Number"
@@ -925,29 +967,13 @@ function StepDetails({
           onChange={(e) => setKcLicenceNo(e.target.value)}
         />
       </div>
+      )}
 
-      {/* Save + advance — single button does both so half-typed values
-          (like the multi-dog package fields) can't get left behind by a
-          Next click that doesn't save. */}
-      <Button
-        className="w-full min-h-[2.75rem] sm:w-auto"
-        onClick={handleSave}
-        disabled={updateMutation.isPending}
-      >
-        {updateMutation.isPending ? (
-          <>
-            <Loader2 className="size-4 animate-spin" />
-            Saving...
-          </>
-        ) : (
-          <>
-            Save &amp; Continue
-            <ChevronRight className="ml-1 size-3.5" />
-          </>
-        )}
-      </Button>
-
-      {/* Sundry Items */}
+      {/* Sundry Items — shown BEFORE the Save & Continue button so it's part of
+          the step the secretary actually reads, not an afterthought below the
+          primary action. It was especially easy to miss on SV regionals, where
+          the fee/licence sections above are hidden so "Continue" sat near the
+          top and the sundries fell off the bottom (Mandy 2026-06-26). */}
       <div className="space-y-3">
         <SectionHeading
           title="Sundry Items"
@@ -966,6 +992,28 @@ function StepDetails({
         />
         <SundryItemManager showId={showId} />
       </div>
+
+      {/* Save + advance — single button does both so half-typed values
+          (like the multi-dog package fields) can't get left behind by a
+          Next click that doesn't save. Sits at the foot of the step, after
+          sundries, so nothing the secretary should see is below it. */}
+      <Button
+        className="w-full min-h-[2.75rem] sm:w-auto"
+        onClick={handleSave}
+        disabled={updateMutation.isPending}
+      >
+        {updateMutation.isPending ? (
+          <>
+            <Loader2 className="size-4 animate-spin" />
+            Saving...
+          </>
+        ) : (
+          <>
+            Save &amp; Continue
+            <ChevronRight className="ml-1 size-3.5" />
+          </>
+        )}
+      </Button>
     </div>
   );
 }
@@ -1009,6 +1057,7 @@ function StepOpenEntries({ showId }: { showId: string }) {
     { staleTime: 15_000 },
   );
   const [confirmOpen, setConfirmOpen] = useState(false);
+  const router = useRouter();
   const utils = trpc.useUtils();
   const updateMutation = trpc.shows.update.useMutation({
     onSuccess: () => {
@@ -1023,6 +1072,20 @@ function StepOpenEntries({ showId }: { showId: string }) {
 
   const allBlockers = blockers?.openEntriesBlockers ?? [];
   const canOpen = blockers?.canOpenEntries ?? false;
+  const firstRequiredBlocker = allBlockers.find((b) => b.severity === 'required');
+
+  // When entries can't open yet, the button jumps the secretary straight to the
+  // first unmet required item rather than sitting greyed-out (Mandy 2026-06-18).
+  function goToFirstBlocker() {
+    if (!firstRequiredBlocker) return;
+    const p = firstRequiredBlocker.actionPath;
+    const dest = !p
+      ? `/secretary/shows/${showId}`
+      : p.startsWith('/secretary')
+        ? p
+        : `/secretary/shows/${showId}${p}`;
+    router.push(dest);
+  }
 
   function handleOpenEntries() {
     updateMutation.mutate({
@@ -1124,8 +1187,8 @@ function StepOpenEntries({ showId }: { showId: string }) {
       {/* Open Entries button */}
       <Button
         className="w-full min-h-[2.75rem] sm:w-auto"
-        disabled={!canOpen || isLoading || updateMutation.isPending}
-        onClick={() => setConfirmOpen(true)}
+        disabled={isLoading || updateMutation.isPending}
+        onClick={() => (canOpen ? setConfirmOpen(true) : goToFirstBlocker())}
       >
         {updateMutation.isPending ? (
           <>

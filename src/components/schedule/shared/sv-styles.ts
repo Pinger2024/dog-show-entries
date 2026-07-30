@@ -143,7 +143,7 @@ export const ss = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'baseline',
-    paddingVertical: 3,
+    paddingVertical: 2,
     borderBottomWidth: 0.5,
     borderBottomColor: SV.rule,
   },

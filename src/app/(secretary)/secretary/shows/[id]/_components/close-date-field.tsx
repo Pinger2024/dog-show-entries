@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { format, parse, isValid, subWeeks, isSameDay } from 'date-fns';
+import { format, parse, isValid, subWeeks, subDays, isSameDay } from 'date-fns';
 import { CalendarDays } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Calendar } from '@/components/ui/calendar';
@@ -51,6 +51,15 @@ function buildValue(date: Date | undefined, time: string): string {
   return `${format(date, 'yyyy-MM-dd')}T${time}`;
 }
 
+// The "N weeks before" presets used to land on whatever weekday the show falls
+// on, so closes drifted around (a Sunday show closed on a Sunday). Snap back to
+// the Friday on or before the N-weeks mark so every show closes on a Friday
+// night regardless of its own day (Mandy 2026-06-19).
+function fridayOnOrBefore(date: Date): Date {
+  const daysSinceFriday = (date.getDay() - 5 + 7) % 7; // Fri=0, Sat=1, Sun=2…
+  return subDays(date, daysSinceFriday);
+}
+
 export function CloseDateField({
   id,
   value,
@@ -80,7 +89,7 @@ export function CloseDateField({
   const presets = showDate
     ? [2, 3, 4].map((weeks) => ({
         weeks,
-        date: subWeeks(showDate, weeks),
+        date: fridayOnOrBefore(subWeeks(showDate, weeks)),
       })).filter((p) => !disableBefore || p.date >= disableBefore)
     : [];
 
@@ -95,7 +104,7 @@ export function CloseDateField({
               <button
                 key={p.weeks}
                 type="button"
-                onClick={() => onChange(buildValue(p.date, time))}
+                onClick={() => onChange(buildValue(p.date, '23:59'))}
                 className={cn(
                   'rounded-full border px-3 py-1 text-xs font-medium transition-colors min-h-[2rem]',
                   active

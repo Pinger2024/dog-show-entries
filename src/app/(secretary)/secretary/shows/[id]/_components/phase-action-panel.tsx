@@ -560,6 +560,9 @@ function PreShowPanel({ show, showId }: { show: Show; showId: string }) {
     : null;
 
   const hasCatalogueNumbers = !!autoDetect?.catalogue_numbers_assigned;
+  // Print Shop (catalogue-package ordering) is hidden for SV/WUSV regionals —
+  // their catalogue is handled manually, at cost, not via a package (Mandy 2026-06-27).
+  const isSvShow = (show as { showRuleset?: string }).showRuleset === 'wusv';
   const hasStewards = !!autoDetect?.stewards_assigned;
   const hasRings = !!autoDetect?.rings_created;
 
@@ -599,6 +602,7 @@ function PreShowPanel({ show, showId }: { show: Show; showId: string }) {
           accent="blue"
           badge={hasCatalogueNumbers ? 'Done' : undefined}
         />
+        {!isSvShow && (
         <ActionCard
           href={`/secretary/shows/${showId}/print-shop`}
           icon={Printer}
@@ -606,6 +610,7 @@ function PreShowPanel({ show, showId }: { show: Show; showId: string }) {
           description="Order catalogues, ring boards, prize cards, and ring numbers"
           accent="amber"
         />
+        )}
         <ActionCard
           href={`/secretary/shows/${showId}/people`}
           icon={Users}

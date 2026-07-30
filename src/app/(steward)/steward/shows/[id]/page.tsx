@@ -1,6 +1,6 @@
 'use client';
 
-import { use } from 'react';
+import { use, useState } from 'react';
 import Link from 'next/link';
 import { format, parseISO } from 'date-fns';
 import {
@@ -20,6 +20,7 @@ import {
 import { toast } from 'sonner';
 import { trpc } from '@/lib/trpc';
 import type { AchievementType } from '@/lib/placements';
+import { resolveTopAwards } from '@/lib/top-awards';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
@@ -30,6 +31,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 
 export default function StewardShowPage({
   params,
@@ -84,6 +92,13 @@ export default function StewardShowPage({
   const total = summary?.totalClasses ?? classes.length;
   const progress = total > 0 ? Math.round((judged / total) * 100) : 0;
 
+  // Public-visibility counts, from the per-class flags getShowClasses returns.
+  // A judged class isn't public until the steward taps Publish — surface how
+  // many are still waiting so nothing quietly stays hidden from exhibitors.
+  const liveCount = classes.filter((c) => c.isPublished).length;
+  const judgedCount = classes.filter((c) => c.hasResults).length;
+  const notLiveCount = Math.max(0, judgedCount - liveCount);
+
   // Group by breed
   const breedMap = new Map<
     string,
@@ -117,15 +132,25 @@ export default function StewardShowPage({
           <span className="text-muted-foreground">{progress}%</span>
         </div>
         <Progress value={progress} className="mt-2 h-2" />
+        {judgedCount > 0 && (
+          <p className="mt-1.5 text-xs text-muted-foreground">
+            {judgedCount} judged · {liveCount} live to public
+            {notLiveCount > 0 && (
+              <span className="text-amber-600"> · {notLiveCount} not yet live</span>
+            )}
+          </p>
+        )}
       </div>
 
       {/* Classes grouped by breed */}
       <div className="mt-4 sm:mt-6 space-y-4 sm:space-y-6">
         {breeds.map(([breedName, breedClasses]) => (
           <div key={breedName}>
-            <h2 className="mb-2 text-xs sm:text-sm font-semibold uppercase tracking-wider text-muted-foreground">
-              {breedName}
-            </h2>
+            {breeds.length > 1 && (
+              <h2 className="mb-2 text-xs sm:text-sm font-semibold uppercase tracking-wider text-muted-foreground">
+                {breedName}
+              </h2>
+            )}
             <div className="space-y-1">
               {breedClasses.map((sc) => (
                 <Link
@@ -159,6 +184,11 @@ export default function StewardShowPage({
                       {sc.isPublished && (
                         <Badge className="bg-green-600 text-white text-[10px] uppercase tracking-wider">
                           Live
+                        </Badge>
+                      )}
+                      {sc.hasResults && !sc.isPublished && (
+                        <Badge variant="outline" className="border-amber-300 bg-amber-50 text-amber-700 text-[10px] uppercase tracking-wider">
+                          Not published
                         </Badge>
                       )}
                       {sc.hasUnpublishedChanges && (
@@ -205,6 +235,11 @@ export default function StewardShowPage({
           showDate={showData.startDate}
           showType={showData.showType}
           showRuleset={(showData as { showRuleset?: string }).showRuleset}
+          showScope={(showData as { showScope?: string }).showScope}
+          customAwards={
+            (showData as { scheduleData?: { bestAwards?: string[] } | null })
+              .scheduleData?.bestAwards ?? []
+          }
           liveResults={liveResults}
           existingAchievements={existingAchievements ?? []}
         />
@@ -216,6 +251,7 @@ export default function StewardShowPage({
           showId={showId}
           judges={judgeApprovals}
           isLocked={lockStatus?.locked ?? false}
+          hasAnyResults={judged > 0}
         />
       )}
     </div>
@@ -286,6 +322,8 @@ interface BestOfBreedSectionProps {
   showDate: string;
   showType: string;
   showRuleset?: string;
+  showScope?: string;
+  customAwards?: string[];
   liveResults?: {
     breedGroups: {
       breedName: string;
@@ -317,6 +355,8 @@ function BestOfBreedSection({
   showDate,
   showType,
   showRuleset,
+  showScope,
+  customAwards,
   liveResults,
   existingAchievements,
 }: BestOfBreedSectionProps) {
@@ -512,6 +552,130 @@ function BestOfBreedSection({
 
   if (classWinnersByBreed.size === 0) return null;
 
+  // ── Single-breed RKC shows: config-driven Top Awards (#98) ──────────
+  // The hard-coded BoB/CC/BIS arrays don't fit clubs (like BAGSD) that award
+  // Best Dog/Bitch + reserves instead of CCs, and the show-level block used to
+  // be hidden for single-breed shows. Drive the recordable awards off the show's
+  // OWN configured Best Awards list so it always matches what the show actually
+  // gives — and flows to the results page + public + dog profiles.
+  // Gate on show SCOPE, not the live class-winner breed count: a breed-tagged
+  // class (e.g. BAGSD's Veteran = GSD, with the other classes breed-null) would
+  // push the count to 2 and flip the UI to the hard-coded multi-breed screen
+  // mid-show. Fall back to the winner count only when scope is absent.
+  const isSingleBreedShow =
+    showScope != null ? showScope === 'single_breed' : classWinnersByBreed.size === 1;
+  if (!isWusv && isSingleBreedShow) {
+    const topAwards = resolveTopAwards(showType, customAwards);
+    if (topAwards.length === 0) return null;
+
+    // ── Eligibility engine (#98 — the "beaten" rule) ──────────────────
+    // Same rule as the secretary results page: a dog is eligible for a best
+    // award unless it was beaten by another dog in the same category (sex/age)
+    // in a class they both ran in. Winning isn't required; only being beaten by
+    // an in-category rival excludes you. Reserve awards keep the runners-up.
+    type Cand = { dogId: string; dogName: string; dogSex: string | null; dogDateOfBirth: string | null; exhibitorName: string; catalogueNumber: string | null };
+    const placements = new Map<string, { key: string; placement: number }[]>();
+    const inPuppyClass = new Set<string>();
+    const inVeteranClass = new Set<string>();
+    const dogInfo = new Map<string, Cand>();
+    // Scan EVERY breed group's classes, not just breedGroups[0] — otherwise a
+    // breed-tagged class (BAGSD's Veteran, sorted after "Any Breed") never feeds
+    // the pool and Best Veteran stays empty. Keys are qualified by breed group so
+    // identically-named classes across groups aren't conflated by the matcher.
+    for (const bg of liveResults?.breedGroups ?? []) {
+      for (const cls of bg.classes) {
+        const n = cls.className.toLowerCase();
+        const isPup = n.includes('puppy') && !n.includes('baby');
+        const isVet = n.includes('veteran');
+        const key = `${bg.breedName}:::${cls.className}`;
+        for (const r of cls.results) {
+          if (!r.dogId) continue;
+          if (isPup) inPuppyClass.add(r.dogId);
+          if (isVet) inVeteranClass.add(r.dogId);
+          if (r.placement != null) {
+            if (!placements.has(r.dogId)) placements.set(r.dogId, []);
+            placements.get(r.dogId)!.push({ key, placement: r.placement });
+            if (!dogInfo.has(r.dogId)) {
+              dogInfo.set(r.dogId, {
+                dogId: r.dogId, dogName: r.dogName, dogSex: r.dogSex ?? null,
+                dogDateOfBirth: r.dogDateOfBirth ?? null, exhibitorName: r.exhibitorName,
+                catalogueNumber: r.catalogueNumber,
+              });
+            }
+          }
+        }
+      }
+    }
+    const placedDogs = Array.from(dogInfo.values());
+    const beatenByRival = (xId: string, poolIds: string[]) => {
+      const xp = placements.get(xId) ?? [];
+      return poolIds.some((yId) => {
+        if (yId === xId) return false;
+        const yp = placements.get(yId) ?? [];
+        return xp.some((xc) => {
+          const yc = yp.find((c) => c.key === xc.key);
+          return yc != null && yc.placement < xc.placement;
+        });
+      });
+    };
+    const RESERVE_TYPES: ReadonlySet<AchievementType> = new Set([
+      'reserve_best_dog', 'reserve_best_bitch', 'reserve_dog_cc', 'reserve_bitch_cc',
+      'reserve_best_in_show', 'reserve_cc', 'reserve_best_veteran_in_show',
+    ]);
+    return (
+      <div className="mt-6 sm:mt-8 space-y-4">
+        <div className="flex items-center gap-2">
+          <Trophy className="size-5 text-amber-500" />
+          <h2 className="text-sm sm:text-base font-semibold">Top Awards</h2>
+        </div>
+        <p className="text-xs text-muted-foreground">
+          At the end of judging, the judge announces these awards. Pick each winner
+          here, then tap Publish to make it public. Only dogs that weren&apos;t beaten
+          in their classes appear in each list.
+        </p>
+        <div className="rounded-lg border p-3 sm:p-4 space-y-3">
+          {topAwards.map((award) => {
+            let pool = placedDogs;
+            if (award.filter.sex) pool = pool.filter((d) => d.dogSex === award.filter.sex);
+            if (award.filter.puppy) pool = pool.filter((d) => inPuppyClass.has(d.dogId));
+            if (award.filter.veteran) pool = pool.filter((d) => inVeteranClass.has(d.dogId));
+            const poolIds = pool.map((d) => d.dogId);
+            const candidates = RESERVE_TYPES.has(award.type)
+              ? pool
+              : pool.filter((d) => !beatenByRival(d.dogId, poolIds));
+            const existing = existingAchievements.find((a) => a.type === award.type);
+            if (candidates.length === 0 && !existing) {
+              return (
+                <div key={award.type} className="flex flex-col gap-1.5 sm:flex-row sm:items-center sm:gap-3">
+                  <span className="text-xs sm:text-sm font-medium sm:w-44 sm:shrink-0 sm:truncate" title={award.name}>
+                    {award.name}
+                  </span>
+                  <p className="flex-1 text-xs italic text-muted-foreground">
+                    No eligible dogs yet — winners appear here as classes are judged.
+                  </p>
+                </div>
+              );
+            }
+            return (
+              <AwardSelect
+                key={award.type}
+                label={award.name}
+                type={award.type}
+                existingDogId={existing?.dogId}
+                isPublished={!!existing?.publishedAt}
+                candidates={candidates}
+                onRecord={(dogId, type) => recordAchievement.mutate({ showId, dogId, type, date: showDate })}
+                onRemove={(dogId, type) => removeAchievement.mutate({ showId, dogId, type })}
+                onPublish={(dogId, type) => publishAchievement.mutate({ showId, dogId, type })}
+                onUnpublish={(dogId, type) => unpublishAchievement.mutate({ showId, dogId, type })}
+              />
+            );
+          })}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="mt-6 sm:mt-8 space-y-6">
       <div className="flex items-center gap-2">
@@ -633,6 +797,7 @@ function JudgeApprovalSection({
   showId,
   judges,
   isLocked,
+  hasAnyResults,
 }: {
   showId: string;
   judges: {
@@ -646,13 +811,19 @@ function JudgeApprovalSection({
     approvalNote: string | null;
   }[];
   isLocked: boolean;
+  hasAnyResults: boolean;
 }) {
   const utils = trpc.useUtils();
+  // Which judge we're about to email — drives the confirm dialog. Emailing a
+  // judge is irreversible-ish (they get a "please confirm" mail), so it gets the
+  // same "are you sure?" treatment publishing a class does.
+  const [confirmJudge, setConfirmJudge] = useState<{ judgeId: string; judgeName: string } | null>(null);
 
   const submitApproval = trpc.steward.submitForJudgeApproval.useMutation({
     onSuccess: () => {
       utils.steward.getJudgeApprovalStatus.invalidate({ showId });
       toast.success('Approval request sent to judge');
+      setConfirmJudge(null);
     },
     onError: (err) => toast.error(err.message),
   });
@@ -709,25 +880,32 @@ function JudgeApprovalSection({
                 No email on file — ask the secretary to add one.
               </p>
             ) : !judge.approvalStatus ? (
-              <Button
-                size="sm"
-                className="h-9 w-full bg-blue-600 hover:bg-blue-700 sm:w-auto"
-                disabled={submitApproval.isPending || isLocked}
-                onClick={() =>
-                  submitApproval.mutate({ showId, judgeId: judge.judgeId })
-                }
-              >
-                <Send className="mr-1 size-3" />
-                Submit for Approval
-              </Button>
+              <>
+                <Button
+                  size="sm"
+                  className="h-9 w-full bg-blue-600 hover:bg-blue-700 sm:w-auto"
+                  disabled={submitApproval.isPending || isLocked || !hasAnyResults}
+                  onClick={() =>
+                    setConfirmJudge({ judgeId: judge.judgeId, judgeName: judge.judgeName })
+                  }
+                >
+                  <Send className="mr-1 size-3" />
+                  Submit for Approval
+                </Button>
+                {!hasAnyResults && (
+                  <p className="text-xs text-muted-foreground">
+                    Available once you&apos;ve recorded results.
+                  </p>
+                )}
+              </>
             ) : judge.approvalStatus === 'declined' ? (
               <Button
                 variant="outline"
                 size="sm"
                 className="h-9 w-full sm:w-auto"
-                disabled={submitApproval.isPending}
+                disabled={submitApproval.isPending || isLocked}
                 onClick={() =>
-                  submitApproval.mutate({ showId, judgeId: judge.judgeId })
+                  setConfirmJudge({ judgeId: judge.judgeId, judgeName: judge.judgeName })
                 }
               >
                 <Send className="mr-1 size-3" />
@@ -737,6 +915,34 @@ function JudgeApprovalSection({
           </div>
         ))}
       </div>
+
+      {/* Confirm before emailing the judge — mirrors the publish confirmation. */}
+      <Dialog open={confirmJudge != null} onOpenChange={(open) => !open && setConfirmJudge(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Send results to {confirmJudge?.judgeName} for approval?</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            This emails {confirmJudge?.judgeName} asking them to confirm the
+            results you&apos;ve recorded. Ready?
+          </p>
+          <DialogFooter className="gap-2 sm:gap-2">
+            <Button variant="outline" className="h-11" onClick={() => setConfirmJudge(null)}>
+              Cancel
+            </Button>
+            <Button
+              className="h-11 bg-blue-600 hover:bg-blue-700"
+              disabled={submitApproval.isPending}
+              onClick={() =>
+                confirmJudge && submitApproval.mutate({ showId, judgeId: confirmJudge.judgeId })
+              }
+            >
+              <Send className="mr-1 size-4" />
+              Yes, send
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

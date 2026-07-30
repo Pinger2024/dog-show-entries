@@ -9,6 +9,7 @@ import {
 import { relations } from 'drizzle-orm';
 import { achievementTypeEnum } from './enums';
 import { dogs } from './dogs';
+import { shows } from './shows';
 
 export const achievements = pgTable(
   'achievements',
@@ -46,5 +47,11 @@ export const achievementsRelations = relations(achievements, ({ one }) => ({
   dog: one(dogs, {
     fields: [achievements.dogId],
     references: [dogs.id],
+  }),
+  // Show context (type/scope) so title-tracking can tell whether a Best
+  // Dog/Bitch was a CC win — see lib/effective-achievement-type.ts.
+  show: one(shows, {
+    fields: [achievements.showId],
+    references: [shows.id],
   }),
 }));

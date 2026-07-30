@@ -3,8 +3,8 @@
  * page. Mirrors the RKC-side definitions in `rkc-class-definitions.ts`.
  *
  * Source: Sieger Editorial design brief + GSDL-BRG / WUSV reference. Baby
- * Puppy is included for completeness but flagged `excluded` because it sits
- * outside the numbered classification (numbers run from Minor Puppy upward).
+ * Puppy IS a numbered class (Class 1, per Mandy 2026-05-28 / confirmed
+ * 2026-07-02) — it is NOT flagged `excluded`.
  */
 
 export interface SvClassDefinition {
@@ -21,7 +21,6 @@ export const SV_CLASS_DEFINITIONS: SvClassDefinition[] = [
     code: 'Baby Puppy',
     age: '4 – 6 mths',
     reqs: 'No health requirements.',
-    excluded: true,
   },
   { code: 'Minor Puppy', age: '6 – 9 mths', reqs: 'No health requirements.' },
   { code: 'Puppy', age: '9 – 12 mths', reqs: 'No health requirements.' },

@@ -87,7 +87,10 @@ export function ShowSectionNav({ showId, isWusv = false }: { showId: string; isW
     },
     {
       label: 'Finance & Print',
-      items: ['/financial', '/catalogue', '/catalogue-settings', '/reports', '/print-shop'],
+      // Print Shop (catalogue-package ordering) is hidden for SV/WUSV regionals
+      // — their catalogue is handled manually, at cost, not via a package
+      // (Mandy 2026-06-27).
+      items: ['/financial', '/catalogue', '/catalogue-settings', '/reports', ...(isWusv ? [] : ['/print-shop'])],
     },
     {
       label: 'Setup',

@@ -28,6 +28,7 @@ import type { RingNumberShowInfo, RingNumberFormat } from '@/components/ring-num
 import React from 'react';
 import { uploadToR2, getPublicUrl } from '@/server/services/storage';
 import { getDockingStatementFromScheduleData } from '@/lib/rkc-compliance';
+import type { RegionalFeeConfig } from '@/server/db/schema/shows';
 import { buildClassLabelMap, isSpecialAwardClass, buildCatalogueClassDefinitions } from '@/lib/class-labels';
 import { buildScheduleJudges, aggregateJudgeAssignments } from '@/lib/schedule-judges';
 
@@ -640,6 +641,8 @@ export async function generateSchedulePdf(showId: string): Promise<Buffer> {
     juniorHandlerFee: show.juniorHandlerFee ?? null,
     multiDogThreshold: show.multiDogThreshold ?? null,
     multiDogPackagePence: show.multiDogPackagePence ?? null,
+    regionalFeeConfig:
+      (show as { regionalFeeConfig?: RegionalFeeConfig | null }).regionalFeeConfig ?? null,
     discountGroups: discountGroups.map((g) => ({
       label: g.label,
       firstEntryFeePence: g.firstEntryFeePence,

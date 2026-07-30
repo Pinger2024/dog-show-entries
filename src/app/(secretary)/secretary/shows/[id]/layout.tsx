@@ -48,6 +48,7 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { statusConfig } from './_lib/show-utils';
+import { effectiveShowStatus } from '@/lib/show-status';
 import { ShowIdProvider } from './_lib/show-context';
 import { ShowSectionNav } from './_components/show-section-nav';
 import { LifecycleBanner } from './_components/lifecycle-banner';
@@ -140,7 +141,10 @@ export default function ShowManagementLayout({
     );
   }
 
-  const showStatus = statusConfig[show.status] ?? {
+  // Badge derives from the close date so it reads "Entries Closed" the instant
+  // the deadline passes, without waiting on the daily cron. The status-change
+  // controls below still act on the real stored status.
+  const showStatus = statusConfig[effectiveShowStatus(show.status, show.entryCloseDate)] ?? {
     label: show.status,
     variant: 'outline' as const,
   };

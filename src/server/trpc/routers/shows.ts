@@ -32,8 +32,33 @@ import { publicOrgColumns } from '../public-org-columns';
 import { isUuid, generateShowSlug } from '@/lib/slugify';
 import { hasUserPurchasedCatalogue, CATALOGUE_AVAILABLE_STATUSES, CATALOGUE_NAME_PATTERN } from '@/lib/catalogue-utils';
 import { isShowDayReached } from '@/lib/date-utils';
+import { DEFAULT_REGIONAL_FEE_TIERS } from '@/lib/regional-fee-calc';
+import type { RegionalFeeConfig } from '@/server/db/schema/shows';
 import { PUBLIC_SHOW_STATUSES } from '@/lib/public-show-statuses';
 import type { Database } from '@/server/db';
+
+/** Validation for the regional (SV/WUSV) tiered fee config jsonb — mirrors the
+ *  `RegionalFeeConfig` interface in schema/shows.ts (keep the two in step). */
+const regionalTierSchema = z.object({
+  standardPence: z.number().int().min(0),
+  memberPence: z.number().int().min(0),
+});
+const regionalFeeConfigSchema = z.object({
+  tiers: z.array(regionalTierSchema).min(1).max(20),
+  memberships: z
+    .array(
+      z.object({
+        label: z.string().trim().min(1).max(120),
+        requiresNumber: z.boolean().optional(),
+        tiers: z.array(regionalTierSchema).min(1).max(20).optional(),
+      }),
+    )
+    .max(10)
+    .optional(),
+  firstTimeEnabled: z.boolean().optional(),
+  firstTimeFeePence: z.number().int().min(0).optional(),
+  donationsEnabled: z.boolean().optional(),
+});
 
 /** Resolve a show slug to its UUID (passthrough if already UUID) */
 async function resolveShowId(db: Database, idOrSlug: string): Promise<string> {
@@ -548,6 +573,19 @@ export const showsRouter = createTRPCRouter({
           subsequentEntryFee: subsequentEntryFee ?? null,
           nfcEntryFee: nfcEntryFee ?? null,
           juniorHandlerFee: juniorHandlerFee ?? null,
+          // Regional shows get the BRG tiered scale + BRG membership out of the
+          // box (editable by the club afterwards). RKC shows leave it null and
+          // use the first/subsequent fee model above.
+          regionalFeeConfig:
+            showData.showRuleset === 'wusv'
+              ? ({
+                  tiers: DEFAULT_REGIONAL_FEE_TIERS,
+                  memberships: [{ label: 'BRG/League member', requiresNumber: true }],
+                  firstTimeEnabled: false,
+                  firstTimeFeePence: 0,
+                  donationsEnabled: false,
+                } satisfies RegionalFeeConfig)
+              : null,
           // Default secretary details to the creator's account; explicit values win.
           secretaryUserId: showData.secretaryUserId ?? ctx.session.user.id,
           secretaryName: showData.secretaryName ?? (creator?.name || null),
@@ -797,6 +835,9 @@ export const showsRouter = createTRPCRouter({
         juniorHandlerFee: z.number().int().min(0).nullable().optional(),
         multiDogThreshold: z.number().int().min(2).nullable().optional(),
         multiDogPackagePence: z.number().int().min(0).nullable().optional(),
+        // Regional (SV/WUSV) tiered fee config — the club-editable per-dog scale
+        // + member column + first-time/donation options.
+        regionalFeeConfig: regionalFeeConfigSchema.nullable().optional(),
       })
     )
     .mutation(async ({ ctx, input }) => {
