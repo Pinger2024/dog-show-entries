@@ -11,7 +11,7 @@ import { sanitizeFilename } from '@/lib/slugify';
 import { authenticatePdfRequest, makePdfResponse } from '@/lib/pdf-utils';
 import { resolveJudgeForClass } from '@/lib/judge-resolution';
 import { buildPrizeCardPages, type PrizeCardClassInput } from '@/lib/prize-card-pages';
-import { sectionClasses } from '@/lib/class-labels';
+import { sectionClasses, buildClassLabelMap } from '@/lib/class-labels';
 
 // Above this, log loudly — a runaway page count (e.g. a bug that stops the
 // image-embed cache from matching, or a genuinely enormous show) should be
@@ -96,6 +96,15 @@ export async function GET(
   // schedule) uses. Do not invent a different order here.
   const showClasses = sectionClasses(showClassesRaw, (sc) => sc).flatMap((section) => section.classes);
 
+  // Class label — Mandy, South Western: "the name of the class is on them"
+  // (2026-07-30). buildClassLabelMap is the SAME canonical helper the
+  // Judge's Book uses for its "Class {label}" heading (JH → JHA/JHB…, SAC →
+  // A/B/C…, SV age → 1a/1b…, everything else → its stored classNumber) — do
+  // not hand-format the numbering. The class's own descriptive name is
+  // appended verbatim (classDefinition.name, unmodified) since that's what
+  // Mandy actually asked to see on the card.
+  const classLabelMap = buildClassLabelMap(showClassesRaw, show.showRuleset);
+
   // Per-class judge — Special Award Classes and Junior Handling classes get
   // their OWN judge here, never the breed judge (the documented trap in
   // judge-resolution.ts). Affix isn't part of resolveJudgeForClass's
@@ -114,11 +123,14 @@ export async function GET(
       (ec) => ec.entry && ec.entry.status === 'confirmed' && !ec.entry.deletedAt
     ).length;
     const judge = judgeForClass(sc);
+    const number = classLabelMap.get(sc.id);
+    const name = sc.classDefinition?.name ?? 'Unknown Class';
     return {
       confirmedCount,
       judgeId: judge?.id ?? null,
       judgeName: judge?.name ?? null,
       judgeAffix: judge ? affixByJudgeId.get(judge.id) ?? null : null,
+      classLabel: number ? `Class ${number} — ${name}` : name,
     };
   });
 

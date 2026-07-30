@@ -48,6 +48,12 @@ export type PrizeCardClassInput = {
   judgeId: string | null;
   judgeName: string | null;
   judgeAffix?: string | null;
+  /** Pre-formatted display label for this class — e.g. "Class 1 — Minor
+   *  Puppy Dog", "Class JHA — Junior Handling". Callers build this from the
+   *  canonical buildClassLabelMap (class-labels.ts) plus the class's own
+   *  name — see prize-cards/route.ts. Never hand-format the numbering
+   *  portion here; this module just passes the string through per class. */
+  classLabel: string;
 };
 
 export type Placement = 1 | 2 | 3 | 4;
@@ -57,6 +63,9 @@ export type PrizeCardPage = {
   /** Pre-formatted "Judge: Name (Affix)" line, or null when no judge is
    *  assigned to this class yet. */
   judgeLine: string | null;
+  /** This card's class label (see PrizeCardClassInput.classLabel) — Mandy,
+   *  South Western: "the name of the class is on them" (2026-07-30). */
+  classLine: string;
 };
 
 function formatJudgeLine(name: string, affix?: string | null): string {
@@ -84,7 +93,7 @@ export function buildPrizeCardPages(classesInRunningOrder: PrizeCardClassInput[]
       : null;
 
     for (let p = 1; p <= cardsNeeded; p++) {
-      pages.push({ placement: p as Placement, judgeLine });
+      pages.push({ placement: p as Placement, judgeLine, classLine: cls.classLabel });
     }
   }
 

@@ -20,7 +20,9 @@ import type { PrizeCardPage } from '@/lib/prize-card-pages';
  * Duplicate pages for the same placement/judge ARE deliberate — a print
  * shop like Doxzoo prices a single upload with N literal pages differently
  * from "one page, N copies", so the PDF must contain every card as its
- * own page.
+ * own page. Each page also carries its class's own label (Mandy, South
+ * Western: "the name of the class is on them", 2026-07-30) — built
+ * upstream via the canonical buildClassLabelMap, never hand-formatted here.
  *
  * ⚠️ react-pdf page-size trap: react-pdf collapses a Page that only
  * contains absolutely-positioned children. The template Image MUST be the
@@ -138,6 +140,13 @@ const styles = StyleSheet.create({
     color: '#555',
     letterSpacing: 0.2,
   },
+  classLine: {
+    fontFamily: 'Times',
+    fontSize: 10,
+    textAlign: 'center',
+    color: '#3a3a3a',
+    marginTop: 6,
+  },
   judgeLine: {
     fontFamily: 'Times',
     fontSize: 10,
@@ -163,7 +172,7 @@ export function PrizeCardComposite({ show, pages }: CompositeProps) {
   // until results are published" note — this route stays available before
   // it 404s the secretary out of a valid, just-empty show).
   const isEmpty = pages.length === 0;
-  const renderPages = isEmpty ? [{ placement: 1 as const, judgeLine: null }] : pages;
+  const renderPages = isEmpty ? [{ placement: 1 as const, judgeLine: null, classLine: '' }] : pages;
 
   return (
     <Document title={`Prize Cards — ${show.clubName}`} author="Remi Show Manager">
@@ -179,7 +188,10 @@ export function PrizeCardComposite({ show, pages }: CompositeProps) {
             {isEmpty ? (
               <Text style={styles.judgeLine}>No entries confirmed yet — check back closer to the show</Text>
             ) : (
-              page.judgeLine && <Text style={styles.judgeLine}>{page.judgeLine}</Text>
+              <>
+                {page.classLine && <Text style={styles.classLine}>{page.classLine}</Text>}
+                {page.judgeLine && <Text style={styles.judgeLine}>{page.judgeLine}</Text>}
+              </>
             )}
           </View>
         </Page>
