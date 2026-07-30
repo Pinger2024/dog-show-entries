@@ -35,6 +35,12 @@
  * sorted by sortOrder/classNumber, then bucketed Dog → Bitch → Special
  * Awards → Junior Handling via the shared `sectionClasses` helper in
  * class-labels.ts — see prize-cards/route.ts).
+ *
+ * Class line + sex suffix: each card also shows its class's label (Mandy,
+ * South Western: "the name of the class is on them", 2026-07-30) with the
+ * sex appended for Dog/Bitch classes — "Minor Puppy Dog", "Minor Puppy
+ * Bitch" (Mandy again, same day: "you need the sex on them"). Sexless
+ * classes (Special Award, Junior Handling) get no suffix.
  */
 
 export type PrizeCardClassInput = {
@@ -48,12 +54,18 @@ export type PrizeCardClassInput = {
   judgeId: string | null;
   judgeName: string | null;
   judgeAffix?: string | null;
-  /** Pre-formatted display label for this class — e.g. "Class 1 — Minor
-   *  Puppy Dog", "Class JHA — Junior Handling". Callers build this from the
-   *  canonical buildClassLabelMap (class-labels.ts) plus the class's own
-   *  name — see prize-cards/route.ts. Never hand-format the numbering
-   *  portion here; this module just passes the string through per class. */
+  /** Pre-formatted display label for this class, WITHOUT the sex suffix —
+   *  e.g. "Class 1 — Minor Puppy", "Class JHA — Junior Handling". Callers
+   *  build this from the canonical buildClassLabelMap (class-labels.ts)
+   *  plus the class's own name — see prize-cards/route.ts. Never
+   *  hand-format the numbering portion here. */
   classLabel: string;
+  /** show_classes.sex — class definitions are sex-neutral ("Minor
+   *  Puppy"), sex lives on the class row. Mandy, South Western: "you need
+   *  the sex on them ie minor puppy dog, minor puppy bitch" (2026-07-30).
+   *  Appended to classLabel to build classLine below; null (SAC/JH
+   *  classes, or any sexless class) appends nothing. */
+  sex?: 'dog' | 'bitch' | null;
 };
 
 export type Placement = 1 | 2 | 3 | 4;
@@ -70,6 +82,15 @@ export type PrizeCardPage = {
 
 function formatJudgeLine(name: string, affix?: string | null): string {
   return affix ? `Judge: ${name} (${affix})` : `Judge: ${name}`;
+}
+
+/** No shared name+sex formatter exists elsewhere in the codebase
+ *  (catalogue-by-breed.tsx and judges-book.tsx both append inline) — this
+ *  matches that house pattern rather than inventing a new helper. */
+function formatClassLine(classLabel: string, sex?: 'dog' | 'bitch' | null): string {
+  if (sex === 'dog') return `${classLabel} Dog`;
+  if (sex === 'bitch') return `${classLabel} Bitch`;
+  return classLabel;
 }
 
 /**
@@ -92,8 +113,10 @@ export function buildPrizeCardPages(classesInRunningOrder: PrizeCardClassInput[]
       ? formatJudgeLine(cls.judgeName, cls.judgeAffix)
       : null;
 
+    const classLine = formatClassLine(cls.classLabel, cls.sex);
+
     for (let p = 1; p <= cardsNeeded; p++) {
-      pages.push({ placement: p as Placement, judgeLine, classLine: cls.classLabel });
+      pages.push({ placement: p as Placement, judgeLine, classLine });
     }
   }
 

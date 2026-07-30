@@ -9,14 +9,14 @@ describe('buildPrizeCardPages', () => {
 
   it('a class with zero confirmed entries contributes nothing', () => {
     const classes: PrizeCardClassInput[] = [
-      { confirmedCount: 0, judgeId: 'j1', judgeName: 'Hugh De Zutter', classLabel: 'Class 1 — Minor Puppy Dog' },
+      { confirmedCount: 0, judgeId: 'j1', judgeName: 'Hugh De Zutter', classLabel: 'Class 1 — Minor Puppy', sex: 'dog' },
     ];
     expect(buildPrizeCardPages(classes)).toEqual([]);
   });
 
-  it('a class with 3 confirmed entries makes 1st/2nd/3rd cards but no Reserve, each carrying the class label', () => {
+  it('a class with 3 confirmed entries makes 1st/2nd/3rd cards but no Reserve, each carrying the class label + sex suffix', () => {
     const classes: PrizeCardClassInput[] = [
-      { confirmedCount: 3, judgeId: 'j1', judgeName: 'Hugh De Zutter', classLabel: 'Class 1 — Minor Puppy Dog' },
+      { confirmedCount: 3, judgeId: 'j1', judgeName: 'Hugh De Zutter', classLabel: 'Class 1 — Minor Puppy', sex: 'dog' },
     ];
     const pages = buildPrizeCardPages(classes);
     expect(pages.map((p) => p.placement)).toEqual([1, 2, 3]);
@@ -26,7 +26,7 @@ describe('buildPrizeCardPages', () => {
 
   it('caps at Reserve (4) — a class with 9 confirmed entries still only makes 4 cards', () => {
     const classes: PrizeCardClassInput[] = [
-      { confirmedCount: 9, judgeId: 'j1', judgeName: 'Hugh De Zutter', classLabel: 'Class 1 — Minor Puppy Dog' },
+      { confirmedCount: 9, judgeId: 'j1', judgeName: 'Hugh De Zutter', classLabel: 'Class 1 — Minor Puppy', sex: 'dog' },
     ];
     const pages = buildPrizeCardPages(classes);
     expect(pages.map((p) => p.placement)).toEqual([1, 2, 3, 4]);
@@ -34,23 +34,62 @@ describe('buildPrizeCardPages', () => {
 
   it('formats the judge line with affix when present, without when absent', () => {
     const withAffix = buildPrizeCardPages([
-      { confirmedCount: 1, judgeId: 'j1', judgeName: 'Hugh De Zutter', judgeAffix: 'Ch.', classLabel: 'Class 1 — Minor Puppy Dog' },
+      { confirmedCount: 1, judgeId: 'j1', judgeName: 'Hugh De Zutter', judgeAffix: 'Ch.', classLabel: 'Class 1 — Minor Puppy', sex: 'dog' },
     ]);
     expect(withAffix[0].judgeLine).toBe('Judge: Hugh De Zutter (Ch.)');
 
     const noAffix = buildPrizeCardPages([
-      { confirmedCount: 1, judgeId: 'j1', judgeName: 'Hugh De Zutter', classLabel: 'Class 1 — Minor Puppy Dog' },
+      { confirmedCount: 1, judgeId: 'j1', judgeName: 'Hugh De Zutter', classLabel: 'Class 1 — Minor Puppy', sex: 'dog' },
     ]);
     expect(noAffix[0].judgeLine).toBe('Judge: Hugh De Zutter');
   });
 
   it('a class with no assigned judge yields a null judge line rather than being dropped', () => {
     const pages = buildPrizeCardPages([
-      { confirmedCount: 2, judgeId: null, judgeName: null, classLabel: 'Class 1 — Minor Puppy Dog' },
+      { confirmedCount: 2, judgeId: null, judgeName: null, classLabel: 'Class 1 — Minor Puppy', sex: 'dog' },
     ]);
     expect(pages).toHaveLength(2);
     expect(pages.every((p) => p.judgeLine === null)).toBe(true);
     expect(pages.every((p) => p.classLine === 'Class 1 — Minor Puppy Dog')).toBe(true);
+  });
+
+  // Mandy, South Western, 2026-07-30: "you need the sex on them ie minor
+  // puppy dog, minor puppy bitch" — class definitions are sex-neutral
+  // ("Minor Puppy"); sex lives on the show_class row (PrizeCardClassInput.sex)
+  // and gets appended by buildPrizeCardPages itself.
+  describe('sex suffix on the class line', () => {
+    it('appends "Dog" for a dog class', () => {
+      const pages = buildPrizeCardPages([
+        { confirmedCount: 1, judgeId: 'j1', judgeName: 'Hugh De Zutter', classLabel: 'Class 1 — Minor Puppy', sex: 'dog' },
+      ]);
+      expect(pages[0].classLine).toBe('Class 1 — Minor Puppy Dog');
+    });
+
+    it('appends "Bitch" for a bitch class', () => {
+      const pages = buildPrizeCardPages([
+        { confirmedCount: 1, judgeId: 'j1', judgeName: 'Hugh De Zutter', classLabel: 'Class 14 — Puppy', sex: 'bitch' },
+      ]);
+      expect(pages[0].classLine).toBe('Class 14 — Puppy Bitch');
+    });
+
+    it('appends nothing for a sexless class (Special Award / Junior Handling) — the class name stands alone', () => {
+      const sacPages = buildPrizeCardPages([
+        { confirmedCount: 1, judgeId: 'j1', judgeName: 'Ms K Salamon', classLabel: 'Class A — Special Award Class - Open', sex: null },
+      ]);
+      expect(sacPages[0].classLine).toBe('Class A — Special Award Class - Open');
+
+      const jhPages = buildPrizeCardPages([
+        { confirmedCount: 1, judgeId: 'j2', judgeName: 'Mandy McAteer', classLabel: 'Class JHA — Junior Handling (6-11)', sex: null },
+      ]);
+      expect(jhPages[0].classLine).toBe('Class JHA — Junior Handling (6-11)');
+    });
+
+    it('appends nothing when sex is omitted entirely (optional field)', () => {
+      const pages = buildPrizeCardPages([
+        { confirmedCount: 1, judgeId: 'j1', judgeName: 'Hugh De Zutter', classLabel: 'Class 1 — Veteran' },
+      ]);
+      expect(pages[0].classLine).toBe('Class 1 — Veteran');
+    });
   });
 
   // Mandy's correction, 2026-07-30: page order is CLASS-MAJOR, not
@@ -61,9 +100,9 @@ describe('buildPrizeCardPages', () => {
   // the running order — the caller (route.ts) is responsible for sorting.
   it('orders pages CLASS-MAJOR: each class\'s own placements in sequence, in running order, each carrying its own class label', () => {
     const classes: PrizeCardClassInput[] = [
-      { confirmedCount: 2, judgeId: 'j1', judgeName: 'Class One Judge', classLabel: 'Class 1 — Minor Puppy Dog' }, // C1
-      { confirmedCount: 3, judgeId: 'j2', judgeName: 'Class Two Judge', classLabel: 'Class 2 — Puppy Dog' }, // C2
-      { confirmedCount: 0, judgeId: 'j3', judgeName: 'Class Three Judge', classLabel: 'Class 3 — Junior Dog' }, // C3 — contributes nothing
+      { confirmedCount: 2, judgeId: 'j1', judgeName: 'Class One Judge', classLabel: 'Class 1 — Minor Puppy', sex: 'dog' }, // C1
+      { confirmedCount: 3, judgeId: 'j2', judgeName: 'Class Two Judge', classLabel: 'Class 2 — Puppy', sex: 'dog' }, // C2
+      { confirmedCount: 0, judgeId: 'j3', judgeName: 'Class Three Judge', classLabel: 'Class 3 — Junior', sex: 'dog' }, // C3 — contributes nothing
     ];
     const pages = buildPrizeCardPages(classes);
     expect(pages.map((p) => p.placement)).toEqual([1, 2, 1, 2, 3]);
@@ -88,8 +127,8 @@ describe('buildPrizeCardPages', () => {
     // the dog class's cards finish completely before the bitch class starts,
     // even though a placement-major scheme would have interleaved them.
     const classes: PrizeCardClassInput[] = [
-      { confirmedCount: 2, judgeId: 'j1', judgeName: 'Hugh De Zutter', classLabel: 'Class 1 — Yearling Dog' }, // dog class: 1st, 2nd
-      { confirmedCount: 1, judgeId: 'j1', judgeName: 'Hugh De Zutter', classLabel: 'Class 2 — Yearling Bitch' }, // bitch class: 1st only
+      { confirmedCount: 2, judgeId: 'j1', judgeName: 'Hugh De Zutter', classLabel: 'Class 1 — Yearling', sex: 'dog' }, // dog class: 1st, 2nd
+      { confirmedCount: 1, judgeId: 'j1', judgeName: 'Hugh De Zutter', classLabel: 'Class 2 — Yearling', sex: 'bitch' }, // bitch class: 1st only
     ];
     const pages = buildPrizeCardPages(classes);
     expect(pages.map((p) => p.placement)).toEqual([1, 2, 1]);
@@ -101,7 +140,7 @@ describe('buildPrizeCardPages', () => {
     expect(pages).toHaveLength(3);
   });
 
-  it('SAC and JH classes attribute their cards to their OWN judge and carry their own class label, in running order', () => {
+  it('SAC and JH classes attribute their cards to their OWN judge and carry their own (sexless) class label, in running order', () => {
     // Same shape as the real trap: a single-breed show where the breed judge,
     // the SAC judge and the JH judge are three different people, and each
     // class must carry its own resolved judge (resolveJudgeForClass's job,
@@ -109,9 +148,9 @@ describe('buildPrizeCardPages', () => {
     // Running order here mirrors the standing Dog → Special Awards → JH
     // section order (sectionClasses) that route.ts is responsible for.
     const classes: PrizeCardClassInput[] = [
-      { confirmedCount: 2, judgeId: 'breed-judge', judgeName: 'Hugh De Zutter', classLabel: 'Class 1 — Yearling Dog' }, // breed class
-      { confirmedCount: 2, judgeId: 'sac-judge', judgeName: 'Ms K Salamon', classLabel: 'Class A — Special Award Class - Open' }, // Special Award Class
-      { confirmedCount: 2, judgeId: 'jh-judge', judgeName: 'Mandy McAteer', classLabel: 'Class JHA — Junior Handling' }, // Junior Handling
+      { confirmedCount: 2, judgeId: 'breed-judge', judgeName: 'Hugh De Zutter', classLabel: 'Class 1 — Yearling', sex: 'dog' }, // breed class
+      { confirmedCount: 2, judgeId: 'sac-judge', judgeName: 'Ms K Salamon', classLabel: 'Class A — Special Award Class - Open', sex: null }, // Special Award Class
+      { confirmedCount: 2, judgeId: 'jh-judge', judgeName: 'Mandy McAteer', classLabel: 'Class JHA — Junior Handling', sex: null }, // Junior Handling
     ];
     const pages = buildPrizeCardPages(classes);
     expect(pages.map((p) => p.judgeLine)).toEqual([
@@ -164,14 +203,14 @@ describe('buildPrizeCardPages composed with sectionClasses (route.ts\'s pipeline
     classLabel: string;
   };
 
-  it('reorders a DB-scrambled class list into Dog → Bitch → Special Awards → Junior Handling running order', () => {
+  it('reorders a DB-scrambled class list into Dog → Bitch → Special Awards → Junior Handling running order, with sex suffixes applied', () => {
     // Deliberately scrambled — JH first, then bitch, then SAC, then dog —
     // to prove the bucketing does the reordering, not insertion order.
     const rawClasses: FakeShowClass[] = [
       { id: 'jh', sex: null, classDefinition: { type: 'junior_handler', name: 'Junior Handling' }, confirmedCount: 1, judgeId: 'jh-judge', judgeName: 'Mandy McAteer', classLabel: 'Class JHA — Junior Handling' },
-      { id: 'bitch', sex: 'bitch', classDefinition: { type: 'age', name: 'Yearling Bitch' }, confirmedCount: 1, judgeId: 'breed-judge', judgeName: 'Hugh De Zutter', classLabel: 'Class 2 — Yearling Bitch' },
+      { id: 'bitch', sex: 'bitch', classDefinition: { type: 'age', name: 'Yearling Bitch' }, confirmedCount: 1, judgeId: 'breed-judge', judgeName: 'Hugh De Zutter', classLabel: 'Class 2 — Yearling' },
       { id: 'sac', sex: null, classDefinition: { type: 'special', name: 'Special Award Class - Open' }, confirmedCount: 1, judgeId: 'sac-judge', judgeName: 'Ms K Salamon', classLabel: 'Class A — Special Award Class - Open' },
-      { id: 'dog', sex: 'dog', classDefinition: { type: 'age', name: 'Yearling Dog' }, confirmedCount: 1, judgeId: 'breed-judge', judgeName: 'Hugh De Zutter', classLabel: 'Class 1 — Yearling Dog' },
+      { id: 'dog', sex: 'dog', classDefinition: { type: 'age', name: 'Yearling Dog' }, confirmedCount: 1, judgeId: 'breed-judge', judgeName: 'Hugh De Zutter', classLabel: 'Class 1 — Yearling' },
     ];
 
     const runningOrder = sectionClasses(rawClasses, (c) => c).flatMap((section) => section.classes);
@@ -183,6 +222,7 @@ describe('buildPrizeCardPages composed with sectionClasses (route.ts\'s pipeline
         judgeId: c.judgeId,
         judgeName: c.judgeName,
         classLabel: c.classLabel,
+        sex: c.sex,
       })),
     );
     // One 1st-place card per class, in Dog → Bitch → Special → JH order.
@@ -195,8 +235,8 @@ describe('buildPrizeCardPages composed with sectionClasses (route.ts\'s pipeline
     expect(pages.map((p) => p.classLine)).toEqual([
       'Class 1 — Yearling Dog',
       'Class 2 — Yearling Bitch',
-      'Class A — Special Award Class - Open',
-      'Class JHA — Junior Handling',
+      'Class A — Special Award Class - Open', // sexless — no suffix
+      'Class JHA — Junior Handling', // sexless — no suffix
     ]);
   });
 });

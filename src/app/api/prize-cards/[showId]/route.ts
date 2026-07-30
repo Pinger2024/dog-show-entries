@@ -131,6 +131,12 @@ export async function GET(
       judgeName: judge?.name ?? null,
       judgeAffix: judge ? affixByJudgeId.get(judge.id) ?? null : null,
       classLabel: number ? `Class ${number} — ${name}` : name,
+      // Class definitions are sex-neutral ("Minor Puppy"); sex lives on
+      // the show_class row. Mandy, South Western: "you need the sex on
+      // them ie minor puppy dog, minor puppy bitch" (2026-07-30).
+      // buildPrizeCardPages appends the Dog/Bitch suffix (see
+      // prize-card-pages.ts) — sexless classes (SAC/JH) pass sex=null.
+      sex: sc.sex ?? null,
     };
   });
 
