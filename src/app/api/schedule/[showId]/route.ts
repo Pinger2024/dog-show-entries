@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { publicOrgColumns } from '@/server/trpc/public-org-columns';
 import { db } from '@/server/db';
 import { eq, asc } from 'drizzle-orm';
 import * as schema from '@/server/db/schema';
@@ -30,7 +31,7 @@ export async function GET(
 
   const show = await db.query.shows.findFirst({
     where: eq(schema.shows.id, showId),
-    with: { organisation: true, venue: true, breed: true },
+    with: { organisation: { columns: publicOrgColumns }, venue: true, breed: true },
   });
 
   if (!show) {

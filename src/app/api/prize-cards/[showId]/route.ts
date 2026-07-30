@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { publicOrgColumns } from '@/server/trpc/public-org-columns';
 import { db } from '@/server/db';
 import { eq } from 'drizzle-orm';
 import * as schema from '@/server/db/schema';
@@ -29,7 +30,7 @@ export async function GET(
   const show = await db.query.shows.findFirst({
     where: eq(schema.shows.id, showId),
     with: {
-      organisation: true,
+      organisation: { columns: publicOrgColumns },
       judgeAssignments: {
         with: { judge: true },
       },
@@ -40,7 +41,9 @@ export async function GET(
     return NextResponse.json({ error: 'Show not found' }, { status: 404 });
   }
 
-  const authResult = await authenticatePdfRequest(show.organisationId);
+  // Admin-only: the Prize Cards card in the secretary Documents page is gated
+  // on role === 'admin', so the server must enforce the same restriction.
+  const authResult = await authenticatePdfRequest(show.organisationId, { requireAdmin: true });
   if (authResult instanceof NextResponse) return authResult;
 
   // Pick the "main" breed judges — same convention as

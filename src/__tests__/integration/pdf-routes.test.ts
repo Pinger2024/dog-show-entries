@@ -147,10 +147,13 @@ describe('GET /api/judges-book/[showId]', () => {
 });
 
 describe('GET /api/prize-cards/[showId]', () => {
-  it('returns 200 PDF for an authed org member', async () => {
-    const { user, org } = await makeSecretaryWithOrg();
+  // Admin-only, matching the client gate on the secretary Documents page.
+  // The org-member-is-forbidden cases live in pdf-routes-authz.test.ts.
+  it('returns 200 PDF for an admin', async () => {
+    const { org } = await makeSecretaryWithOrg();
     const show = await makeShow({ organisationId: org.id });
-    authedAs(user);
+    const admin = await makeUser({ role: 'admin' });
+    authedAs(admin);
     const res = await prizeCardsGET(req(show.id), params(show.id));
     expect(res.status).toBe(200);
     expect(res.headers.get('content-type')).toBe('application/pdf');

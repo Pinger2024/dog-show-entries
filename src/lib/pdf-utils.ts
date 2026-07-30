@@ -5,6 +5,7 @@ import { db } from '@/server/db';
 import { and, eq } from 'drizzle-orm';
 import { memberships } from '@/server/db/schema';
 import { hasUserPurchasedCatalogue, SECRETARY_ONLY_FORMATS } from '@/lib/catalogue-utils';
+import { BoundedCache } from '@/lib/bounded-cache';
 
 /**
  * Validate a logo URL for use in @react-pdf/renderer.
@@ -12,8 +13,12 @@ import { hasUserPurchasedCatalogue, SECRETARY_ONLY_FORMATS } from '@/lib/catalog
  * react-pdf only supports PNG/JPEG — SVG crashes the renderer.
  * Results are cached for 5 minutes (1 minute on failure) to avoid
  * hitting the CDN on every PDF preview.
+ *
+ * Bounded: the key is a club-supplied logo URL, so a plain Map would grow one
+ * entry per distinct URL ever seen and never shrink — expiry marks an entry
+ * stale but nothing was removing it.
  */
-const logoCache = new Map<string, { result: string | null; expiresAt: number }>();
+const logoCache = new BoundedCache<string, { result: string | null; expiresAt: number }>(256);
 
 export async function validateRasterLogoUrl(rawUrl: string | null | undefined): Promise<string | null> {
   if (!rawUrl) return null;
@@ -54,10 +59,14 @@ export function makePdfResponse(buffer: Buffer, filename: string, isPreview: boo
  * Admins bypass the membership check (needed for impersonation).
  * Exhibitors who purchased an online catalogue can access non-secretary formats.
  * Returns { user, isAdmin, isExhibitorAccess } on success, or a NextResponse error.
+ *
+ * `requireAdmin: true` restricts the route to admins only — use it wherever the
+ * UI hides a document behind an admin check, so the server enforces what the
+ * client asserts rather than relying on nobody guessing the URL.
  */
 export async function authenticatePdfRequest(
   organisationId: string,
-  options?: { showId?: string; format?: string }
+  options?: { showId?: string; format?: string; requireAdmin?: boolean }
 ): Promise<{ user: NonNullable<Awaited<ReturnType<typeof getCurrentUser>>>; isAdmin: boolean; isExhibitorAccess: boolean } | NextResponse> {
   const user = await getCurrentUser();
   if (!user?.id) {
@@ -69,6 +78,14 @@ export async function authenticatePdfRequest(
 
   if (isAdmin) {
     return { user, isAdmin, isExhibitorAccess: false };
+  }
+
+  // Admin-only route and the caller is not an admin — stop here. Must come
+  // after the isAdmin early-return above and before any membership or
+  // catalogue-purchase fallback, both of which would otherwise let a plain
+  // org member through.
+  if (options?.requireAdmin) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 
   if (db) {
@@ -99,5 +116,9 @@ export async function authenticatePdfRequest(
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 
-  return { user, isAdmin: false, isExhibitorAccess: false };
+  // No database handle — we cannot verify org membership, so we cannot
+  // authorise. Fail closed: a missing DB must never grant a non-admin access
+  // to every organisation's documents. (Every caller currently guards `!db`
+  // before reaching here, so this is defence in depth rather than a live path.)
+  return NextResponse.json({ error: 'Database not available' }, { status: 500 });
 }
