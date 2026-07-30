@@ -1,5 +1,6 @@
 import { Document, Page, Text, View, Image, StyleSheet, Font } from '@react-pdf/renderer';
 import path from 'path';
+import type { PrizeCardPage } from '@/lib/prize-card-pages';
 
 /**
  * Prize Card COMPOSITE — the official template design. Unlike the plain
@@ -8,11 +9,16 @@ import path from 'path';
  * artwork (public/prize-cards/*.jpg) as a full-bleed A5-landscape
  * background with the show-specific text overprinted in the cream zone.
  *
- * One page per placement (1st/2nd/3rd/Reserve — the four templates we
- * have artwork for), × one variant per distinct breed judge, grouped by
- * placement so a secretary printing multiple copies swaps judge variants
- * without re-sorting pages (same pagination convention as
- * prize-card-overprint.tsx).
+ * ONE PAGE PER PHYSICAL CARD NEEDED (Mandy 2026-07-30) — not one page per
+ * placement. The full suite of pages (e.g. 22× 1st, 17× 2nd, ...) is built
+ * upstream by buildPrizeCardPages (src/lib/prize-card-pages.ts) from
+ * per-class confirmed-entry counts and per-class judge attribution; this
+ * component just renders whatever page list it's given, in the order
+ * given (placement-major, then judge-major, repeats stacked together —
+ * see that module for why). Duplicate pages for the same
+ * placement/judge ARE deliberate — a print shop like Doxzoo prices a
+ * single upload with N literal pages differently from "one page, N
+ * copies", so the PDF must contain every card as its own page.
  *
  * ⚠️ react-pdf page-size trap: react-pdf collapses a Page that only
  * contains absolutely-positioned children. The template Image MUST be the
@@ -20,6 +26,18 @@ import path from 'path';
  * EXACTLY the page dimensions with objectFit 'fill' — that's what forces
  * the Page to claim its full canvas. The text is then layered on top in
  * an absolutely-positioned View.
+ *
+ * ✅ Verified (not assumed): pdfkit's image embedder (`_imageRegistry`,
+ * node_modules/@react-pdf/pdfkit) keys on the literal `src` string and
+ * embeds each distinct image ONCE, reusing the same XObject across every
+ * page that references it — it does not re-embed per page. A quick
+ * standalone check confirmed this: 1 page vs 30 pages of the same JPEG
+ * produced 377KB vs 393KB (not 30×), and a realistic 75-card suite
+ * (25/22/15/13 across the four templates) rendered to ~1.6MB. `src` MUST
+ * stay the exact same string (`path.join(templatesDir, TEMPLATE_FILES[n])`)
+ * for every page of a given placement so the cache key matches — the route
+ * still logs the final byte size (see route.ts) so a future regression that
+ * defeats the cache (e.g. a per-page-unique src) is visible, not silent.
  */
 
 const fontsDir = path.join(process.cwd(), 'public', 'fonts');
@@ -38,12 +56,15 @@ export interface CompositeShowInfo {
   showName: string;
   showType: string;
   date: string; // ISO yyyy-mm-dd
-  /** Main breed judges (excludes Junior Handling and other non-breed roles). */
-  judges?: { name: string; affix?: string | null }[];
 }
 
 interface CompositeProps {
   show: CompositeShowInfo;
+  /** The full ordered page list from buildPrizeCardPages — one entry per
+   *  physical card. Empty means no class has any confirmed entries yet;
+   *  the component renders a single explanatory page rather than a
+   *  zero-page (invalid) PDF in that case. */
+  pages: PrizeCardPage[];
 }
 
 const SHOW_TYPE_LABELS: Record<string, string> = {
@@ -124,7 +145,7 @@ const styles = StyleSheet.create({
   },
 });
 
-export function PrizeCardComposite({ show }: CompositeProps) {
+export function PrizeCardComposite({ show, pages }: CompositeProps) {
   const showDate = new Date(show.date).toLocaleDateString('en-GB', {
     weekday: 'long',
     day: 'numeric',
@@ -133,29 +154,19 @@ export function PrizeCardComposite({ show }: CompositeProps) {
   });
   const showTypeLabel = SHOW_TYPE_LABELS[show.showType] ?? show.showType;
 
-  const formatJudge = (j: { name: string; affix?: string | null }) =>
-    j.affix ? `${j.name} (${j.affix})` : j.name;
-
-  // Same per-judge-variant, grouped-by-placement pagination as the
-  // overprint PDF: a multi-judge show gets N variants per placement so
-  // the secretary can print each judge's set of cards together.
-  const judges = show.judges ?? [];
-  const variants: { judgeLine: string | null }[] = judges.length === 0
-    ? [{ judgeLine: null }]
-    : judges.map((j) => ({ judgeLine: `Judge: ${formatJudge(j)}` }));
-
-  const placements = [1, 2, 3, 4];
-  const pages: { placement: number; judgeLine: string | null; key: string }[] = [];
-  for (const p of placements) {
-    for (let i = 0; i < variants.length; i++) {
-      pages.push({ placement: p, judgeLine: variants[i].judgeLine, key: `${p}-${i}` });
-    }
-  }
+  // No confirmed entries anywhere yet — a zero-Page Document is invalid PDF,
+  // so render one explanatory page instead of erroring or 404ing (same
+  // "still 200, friendly message" convention as the Documents page's own
+  // "No entries yet" counts line, and the Marked Catalogue's "will be empty
+  // until results are published" note — this route stays available before
+  // it 404s the secretary out of a valid, just-empty show).
+  const isEmpty = pages.length === 0;
+  const renderPages = isEmpty ? [{ placement: 1 as const, judgeLine: null }] : pages;
 
   return (
     <Document title={`Prize Cards — ${show.clubName}`} author="Remi Show Manager">
-      {pages.map((page) => (
-        <Page key={page.key} size={[PAGE_WIDTH, PAGE_HEIGHT]} style={styles.page} wrap={false}>
+      {renderPages.map((page, i) => (
+        <Page key={i} size={[PAGE_WIDTH, PAGE_HEIGHT]} style={styles.page} wrap={false}>
           <Image src={path.join(templatesDir, TEMPLATE_FILES[page.placement])} style={styles.template} />
           <View style={styles.overprintZone}>
             <Text style={styles.clubName}>{show.clubName}</Text>
@@ -163,7 +174,11 @@ export function PrizeCardComposite({ show }: CompositeProps) {
             <Text style={styles.showMeta}>
               {showTypeLabel} · {showDate}
             </Text>
-            {page.judgeLine && <Text style={styles.judgeLine}>{page.judgeLine}</Text>}
+            {isEmpty ? (
+              <Text style={styles.judgeLine}>No entries confirmed yet — check back closer to the show</Text>
+            ) : (
+              page.judgeLine && <Text style={styles.judgeLine}>{page.judgeLine}</Text>
+            )}
           </View>
         </Page>
       ))}

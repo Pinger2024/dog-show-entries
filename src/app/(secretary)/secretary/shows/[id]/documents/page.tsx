@@ -488,13 +488,29 @@ export default function DocumentsPage() {
                 description="Official A5 template for 1st, 2nd, 3rd and Reserve, with your club, show and judge details printed on"
                 extra={prizeCardCountsLine}
               >
-                {downloadingKey === 'prize-print' ? (
+                {/* Download is the primary action — this is the real PDF
+                    (non-preview, so Content-Disposition: attachment), the
+                    file Mandy uploads to Doxzoo for printing. */}
+                {downloadingKey === 'prize-cards' ? (
                   <Button disabled className="min-h-[2.75rem]"><Loader2 className="size-4 animate-spin" />Downloading…</Button>
                 ) : (
-                  <Button className="min-h-[2.75rem]" onClick={() => handleDownload('prize-print', prizeCardPrintHref, 'Prize-Cards-Print.pdf')}>
-                    <Printer className="size-4" />Print
+                  <Button className="min-h-[2.75rem]" onClick={() => handleDownload('prize-cards', prizeCardHref, 'Prize-Cards.pdf')}>
+                    <Download className="size-4" />Download
                   </Button>
                 )}
+                {/* Print opens the mobile-print HTML wrapper in a new tab —
+                    it is NOT a PDF, so it must never go through
+                    handleDownload/blob-download (that saved the HTML bytes
+                    with a .pdf extension, giving Mandy a blank page). The
+                    wrapper embeds the real PDF in an iframe and auto-opens
+                    the browser print dialog. */}
+                <Button
+                  variant="outline"
+                  className="min-h-[2.75rem]"
+                  onClick={() => window.open(prizeCardPrintHref, '_blank')}
+                >
+                  <Printer className="size-4" />Print
+                </Button>
                 <PdfViewerButton icon={<Award className="size-4" />} label="Preview" url={prizeCardHref} variant="outline" />
               </DocRow>
             )}
