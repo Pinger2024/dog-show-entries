@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { publicOrgColumns } from '@/server/trpc/public-org-columns';
 import { db } from '@/server/db';
-import { eq } from 'drizzle-orm';
+import { asc, eq } from 'drizzle-orm';
 import * as schema from '@/server/db/schema';
 import { renderToBuffer } from '@react-pdf/renderer';
 import { PrizeCardComposite } from '@/components/prize-cards/prize-card-composite';
@@ -11,6 +11,7 @@ import { sanitizeFilename } from '@/lib/slugify';
 import { authenticatePdfRequest, makePdfResponse } from '@/lib/pdf-utils';
 import { resolveJudgeForClass } from '@/lib/judge-resolution';
 import { buildPrizeCardPages, type PrizeCardClassInput } from '@/lib/prize-card-pages';
+import { sectionClasses } from '@/lib/class-labels';
 
 // Above this, log loudly — a runaway page count (e.g. a bug that stops the
 // image-embed cache from matching, or a genuinely enormous show) should be
@@ -26,13 +27,20 @@ const LARGE_PDF_BYTES = 10 * 1024 * 1024;
  *
  * ONE PAGE PER CARD NEEDED, not one page per placement (Mandy 2026-07-30 —
  * Doxzoo prices a single upload of N literal pages differently from "one
- * page, N copies"). Per show_class: count CONFIRMED (non-deleted) entries
- * — same filter as secretary.getPrizeCardCounts — and resolve that class's
- * OWN judge via resolveJudgeForClass (Special Award Classes and Junior
- * Handling must NOT inherit the breed judge — see judge-resolution.ts).
- * buildPrizeCardPages (src/lib/prize-card-pages.ts) turns those per-class
- * records into the final ordered page list. See prize-card-composite.tsx
- * for the rendering details.
+ * page, N copies"), in CLASS-MAJOR running order (Mandy's correction, same
+ * day: "MPD 1st, 2nd followed by puppy dog 1st 2nd, 3rd, junior dog, 1st
+ * etc" — each class's own placements in sequence, before the next class).
+ * Per show_class: count CONFIRMED (non-deleted) entries — same filter as
+ * secretary.getPrizeCardCounts — and resolve that class's OWN judge via
+ * resolveJudgeForClass (Special Award Classes and Junior Handling must NOT
+ * inherit the breed judge — see judge-resolution.ts). Classes are queried
+ * in sortOrder/classNumber order (same as the Judge's Book) and rebucketed
+ * Dog → Bitch → Special Awards → Junior Handling via the shared
+ * `sectionClasses` helper (class-labels.ts) — the SAME running order every
+ * other document uses, not invented here. buildPrizeCardPages
+ * (src/lib/prize-card-pages.ts) turns those ordered per-class records into
+ * the final page list. See prize-card-composite.tsx for the rendering
+ * details.
  */
 export async function GET(
   request: NextRequest,
@@ -63,7 +71,7 @@ export async function GET(
   const authResult = await authenticatePdfRequest(show.organisationId);
   if (authResult instanceof NextResponse) return authResult;
 
-  const [showClasses, judgeAssignments] = await Promise.all([
+  const [showClassesRaw, judgeAssignments] = await Promise.all([
     db.query.showClasses.findMany({
       where: eq(schema.showClasses.showId, showId),
       with: {
@@ -72,12 +80,21 @@ export async function GET(
           with: { entry: true },
         },
       },
+      // Same running order as the Judge's Book (judges-book/[showId]/route.ts)
+      // — sectionClasses below only buckets, it never re-sorts, so this is
+      // the order every class keeps within its Dog/Bitch/Special/JH section.
+      orderBy: [asc(schema.showClasses.sortOrder), asc(schema.showClasses.classNumber)],
     }),
     db.query.judgeAssignments.findMany({
       where: eq(schema.judgeAssignments.showId, showId),
       with: { judge: true, ring: true },
     }),
   ]);
+
+  // Class running order — Dog → Bitch → Special Awards → Junior Handling,
+  // the SAME shared bucketing every other document (Judge's Book, catalogue,
+  // schedule) uses. Do not invent a different order here.
+  const showClasses = sectionClasses(showClassesRaw, (sc) => sc).flatMap((section) => section.classes);
 
   // Per-class judge — Special Award Classes and Junior Handling classes get
   // their OWN judge here, never the breed judge (the documented trap in

@@ -10,15 +10,17 @@ import type { PrizeCardPage } from '@/lib/prize-card-pages';
  * background with the show-specific text overprinted in the cream zone.
  *
  * ONE PAGE PER PHYSICAL CARD NEEDED (Mandy 2026-07-30) — not one page per
- * placement. The full suite of pages (e.g. 22× 1st, 17× 2nd, ...) is built
- * upstream by buildPrizeCardPages (src/lib/prize-card-pages.ts) from
- * per-class confirmed-entry counts and per-class judge attribution; this
- * component just renders whatever page list it's given, in the order
- * given (placement-major, then judge-major, repeats stacked together —
- * see that module for why). Duplicate pages for the same
- * placement/judge ARE deliberate — a print shop like Doxzoo prices a
- * single upload with N literal pages differently from "one page, N
- * copies", so the PDF must contain every card as its own page.
+ * placement. The full suite of pages (e.g. Minor Puppy Dog 1st/2nd, Puppy
+ * Dog 1st/2nd/3rd, Junior Dog 1st, ...) is built upstream by
+ * buildPrizeCardPages (src/lib/prize-card-pages.ts) from per-class
+ * confirmed-entry counts and per-class judge attribution; this component
+ * just renders whatever page list it's given, in the order given —
+ * CLASS-MAJOR (each class's own placements in sequence, classes in their
+ * running order), per Mandy's correction — see that module for why.
+ * Duplicate pages for the same placement/judge ARE deliberate — a print
+ * shop like Doxzoo prices a single upload with N literal pages differently
+ * from "one page, N copies", so the PDF must contain every card as its
+ * own page.
  *
  * ⚠️ react-pdf page-size trap: react-pdf collapses a Page that only
  * contains absolutely-positioned children. The template Image MUST be the

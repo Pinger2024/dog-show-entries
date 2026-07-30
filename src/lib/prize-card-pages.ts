@@ -19,15 +19,22 @@
  * resolveJudgeForClass in src/lib/judge-resolution.ts — callers MUST run
  * classes through that resolver before building this input, so Special
  * Award Classes and Junior Handling get their own judge rather than
- * silently inheriting the breed judge). Classes sharing the same judge
- * aggregate into one stack per placement so the printed set groups
- * naturally by judge, matching the pre-existing overprint/composite
- * pagination convention.
+ * silently inheriting the breed judge).
  *
- * Page order: placement-major (all 1st cards, then all 2nd, then 3rd, then
- * Reserve), and within a placement, judge-major in first-seen order, with
- * that judge's repeat cards stacked together — "22× 1st (judge A's stack,
- * then judge B's), then 17× 2nd, ..." (Mandy's own phrasing).
+ * PAGE ORDER IS CLASS-MAJOR (Mandy's correction, 2026-07-30, overriding an
+ * earlier placement-major draft): "MPD 1st, 2nd followed by puppy dog 1st
+ * 2nd, 3rd, junior dog, 1st etc" — i.e. for EACH CLASS IN ITS RUNNING
+ * ORDER, that class's own achievable placements in sequence (1st, 2nd, …
+ * up to Reserve), before moving to the next class. NOT grouped by
+ * placement or by judge across classes.
+ *
+ * `classes` MUST already be given in running order — this function does
+ * NOT sort or bucket, it only expands each class into its cards in the
+ * order it's given. The caller is responsible for supplying that order:
+ * the same running order the Judge's Book / catalogue use (show_classes
+ * sorted by sortOrder/classNumber, then bucketed Dog → Bitch → Special
+ * Awards → Junior Handling via the shared `sectionClasses` helper in
+ * class-labels.ts — see prize-cards/route.ts).
  */
 
 export type PrizeCardClassInput = {
@@ -52,54 +59,34 @@ export type PrizeCardPage = {
   judgeLine: string | null;
 };
 
-const PLACEMENTS: Placement[] = [1, 2, 3, 4];
-
-/** Key classes with no assigned judge all bucket together under one
- *  "no judge" group — there's no distinguishing detail to split them on,
- *  and the PDF just omits the judge line for that stack. */
-const NO_JUDGE_KEY = '__no_judge__';
-
 function formatJudgeLine(name: string, affix?: string | null): string {
   return affix ? `Judge: ${name} (${affix})` : `Judge: ${name}`;
 }
 
-export function buildPrizeCardPages(classes: PrizeCardClassInput[]): PrizeCardPage[] {
-  type Group = { judgeLine: string | null; countsByPlacement: [number, number, number, number] };
+/**
+ * `classesInRunningOrder` — one entry per show_class, already sorted in
+ * running order (see module doc above). Returns the flat, ordered page
+ * list: for each class in turn, its 1st..min(confirmedCount, 4) cards,
+ * each carrying that class's own judge line.
+ */
+export function buildPrizeCardPages(classesInRunningOrder: PrizeCardClassInput[]): PrizeCardPage[] {
+  const pages: PrizeCardPage[] = [];
 
-  const order: string[] = [];
-  const groups = new Map<string, Group>();
-
-  for (const cls of classes) {
+  for (const cls of classesInRunningOrder) {
     // Cap at 4 (Reserve) — no 5th/VHC template exists, and negative/NaN
     // input (shouldn't happen, but this is a public pure function) never
     // contributes cards.
     const cardsNeeded = Math.min(Math.max(0, Math.trunc(cls.confirmedCount) || 0), 4);
     if (cardsNeeded <= 0) continue;
 
-    const key = cls.judgeId ?? NO_JUDGE_KEY;
-    let group = groups.get(key);
-    if (!group) {
-      const judgeLine = cls.judgeId && cls.judgeName
-        ? formatJudgeLine(cls.judgeName, cls.judgeAffix)
-        : null;
-      group = { judgeLine, countsByPlacement: [0, 0, 0, 0] };
-      groups.set(key, group);
-      order.push(key);
-    }
-    for (let p = 0; p < cardsNeeded; p++) {
-      group.countsByPlacement[p] += 1;
+    const judgeLine = cls.judgeId && cls.judgeName
+      ? formatJudgeLine(cls.judgeName, cls.judgeAffix)
+      : null;
+
+    for (let p = 1; p <= cardsNeeded; p++) {
+      pages.push({ placement: p as Placement, judgeLine });
     }
   }
 
-  const pages: PrizeCardPage[] = [];
-  for (const placement of PLACEMENTS) {
-    for (const key of order) {
-      const group = groups.get(key)!;
-      const count = group.countsByPlacement[placement - 1];
-      for (let i = 0; i < count; i++) {
-        pages.push({ placement, judgeLine: group.judgeLine });
-      }
-    }
-  }
   return pages;
 }

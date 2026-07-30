@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { buildPrizeCardPages, type PrizeCardClassInput } from '@/lib/prize-card-pages';
+import { sectionClasses } from '@/lib/class-labels';
 
 describe('buildPrizeCardPages', () => {
   it('returns no pages for no classes', () => {
@@ -50,51 +51,62 @@ describe('buildPrizeCardPages', () => {
     expect(pages.every((p) => p.judgeLine === null)).toBe(true);
   });
 
-  it('SAC and JH classes attribute their cards to their OWN judge, not the breed judge', () => {
+  // Mandy's correction, 2026-07-30: page order is CLASS-MAJOR, not
+  // placement-major — "MPD 1st, 2nd followed by puppy dog 1st 2nd, 3rd,
+  // junior dog, 1st etc". The pinned example from her spec: classes with
+  // [2, 3, 0] confirmed entries → [C1-1st, C1-2nd, C2-1st, C2-2nd, C2-3rd].
+  // `classesInRunningOrder` is a positional array, so C1/C2/C3 below ARE
+  // the running order — the caller (route.ts) is responsible for sorting.
+  it('orders pages CLASS-MAJOR: each class\'s own placements in sequence, in running order', () => {
+    const classes: PrizeCardClassInput[] = [
+      { confirmedCount: 2, judgeId: 'j1', judgeName: 'Class One Judge' }, // C1
+      { confirmedCount: 3, judgeId: 'j2', judgeName: 'Class Two Judge' }, // C2
+      { confirmedCount: 0, judgeId: 'j3', judgeName: 'Class Three Judge' }, // C3 — contributes nothing
+    ];
+    const pages = buildPrizeCardPages(classes);
+    expect(pages.map((p) => p.placement)).toEqual([1, 2, 1, 2, 3]);
+    expect(pages.map((p) => p.judgeLine)).toEqual([
+      'Judge: Class One Judge',
+      'Judge: Class One Judge',
+      'Judge: Class Two Judge',
+      'Judge: Class Two Judge',
+      'Judge: Class Two Judge',
+    ]);
+  });
+
+  it('does NOT aggregate two classes that share the same judge — each class keeps its own contiguous block', () => {
+    // Same judge on a dog class then a bitch class: class-major order means
+    // the dog class's cards finish completely before the bitch class starts,
+    // even though a placement-major scheme would have interleaved them.
+    const classes: PrizeCardClassInput[] = [
+      { confirmedCount: 2, judgeId: 'j1', judgeName: 'Hugh De Zutter' }, // dog class: 1st, 2nd
+      { confirmedCount: 1, judgeId: 'j1', judgeName: 'Hugh De Zutter' }, // bitch class: 1st only
+    ];
+    const pages = buildPrizeCardPages(classes);
+    expect(pages.map((p) => p.placement)).toEqual([1, 2, 1]);
+    expect(pages).toHaveLength(3);
+  });
+
+  it('SAC and JH classes attribute their cards to their OWN judge, not the breed judge, in running order', () => {
     // Same shape as the real trap: a single-breed show where the breed judge,
     // the SAC judge and the JH judge are three different people, and each
     // class must carry its own resolved judge (resolveJudgeForClass's job,
     // upstream of this function) rather than falling back to the breed judge.
+    // Running order here mirrors the standing Dog → Special Awards → JH
+    // section order (sectionClasses) that route.ts is responsible for.
     const classes: PrizeCardClassInput[] = [
       { confirmedCount: 2, judgeId: 'breed-judge', judgeName: 'Hugh De Zutter' }, // breed class
       { confirmedCount: 2, judgeId: 'sac-judge', judgeName: 'Ms K Salamon' }, // Special Award Class
       { confirmedCount: 2, judgeId: 'jh-judge', judgeName: 'Mandy McAteer' }, // Junior Handling
     ];
     const pages = buildPrizeCardPages(classes);
-    const firstPlacementJudges = pages.filter((p) => p.placement === 1).map((p) => p.judgeLine);
-    expect(firstPlacementJudges).toContain('Judge: Hugh De Zutter');
-    expect(firstPlacementJudges).toContain('Judge: Ms K Salamon');
-    expect(firstPlacementJudges).toContain('Judge: Mandy McAteer');
-    // None of them collapse onto one judge — three distinct 1st-place cards.
-    expect(new Set(firstPlacementJudges).size).toBe(3);
-  });
-
-  it('aggregates multiple classes judged by the same judge into one stack per placement', () => {
-    const classes: PrizeCardClassInput[] = [
-      { confirmedCount: 2, judgeId: 'j1', judgeName: 'Hugh De Zutter' }, // dog class: 1st, 2nd
-      { confirmedCount: 1, judgeId: 'j1', judgeName: 'Hugh De Zutter' }, // bitch class: 1st only
-    ];
-    const pages = buildPrizeCardPages(classes);
-    // 1st: 2 cards (one per class), 2nd: 1 card. Total 3.
-    expect(pages.filter((p) => p.placement === 1)).toHaveLength(2);
-    expect(pages.filter((p) => p.placement === 2)).toHaveLength(1);
-    expect(pages).toHaveLength(3);
-  });
-
-  it('orders pages placement-major, then judge-major (first-seen order), with that judge\'s cards stacked together', () => {
-    const classes: PrizeCardClassInput[] = [
-      { confirmedCount: 2, judgeId: 'judge-b', judgeName: 'Judge B' }, // seen first
-      { confirmedCount: 2, judgeId: 'judge-a', judgeName: 'Judge A' }, // seen second
-    ];
-    const pages = buildPrizeCardPages(classes);
-    // All placement-1 cards before all placement-2 cards.
-    expect(pages.map((p) => p.placement)).toEqual([1, 1, 2, 2]);
-    // Within each placement, Judge B's stack (first-seen) comes before Judge A's.
     expect(pages.map((p) => p.judgeLine)).toEqual([
-      'Judge: Judge B',
-      'Judge: Judge A',
-      'Judge: Judge B',
-      'Judge: Judge A',
+      'Judge: Hugh De Zutter',
+      'Judge: Hugh De Zutter',
+      'Judge: Ms K Salamon',
+      'Judge: Ms K Salamon',
+      'Judge: Mandy McAteer',
+      'Judge: Mandy McAteer',
     ]);
   });
 
@@ -108,5 +120,53 @@ describe('buildPrizeCardPages', () => {
     ];
     // 0 + 1 + 2 + 4 + 4 = 11 — same arithmetic as computePrizeCardCounts.
     expect(buildPrizeCardPages(classes)).toHaveLength(11);
+  });
+});
+
+// route.ts's actual pipeline: query show_classes in sortOrder/classNumber
+// order, rebucket Dog → Bitch → Special Awards → Junior Handling via the
+// SHARED sectionClasses helper (never a locally-invented order), then feed
+// the flattened result into buildPrizeCardPages. This proves that
+// composition end-to-end at the pure-function level — no DB, no PDF
+// render — since pdf-lib (used by the real-render integration test) can't
+// read text back out of a rendered PDF to check page-by-page ordering
+// there; the exact sequence is pinned here instead.
+describe('buildPrizeCardPages composed with sectionClasses (route.ts\'s pipeline)', () => {
+  type FakeShowClass = {
+    id: string;
+    sex: 'dog' | 'bitch' | null;
+    classDefinition: { type: string; name: string };
+    confirmedCount: number;
+    judgeId: string;
+    judgeName: string;
+  };
+
+  it('reorders a DB-scrambled class list into Dog → Bitch → Special Awards → Junior Handling running order', () => {
+    // Deliberately scrambled — JH first, then bitch, then SAC, then dog —
+    // to prove the bucketing does the reordering, not insertion order.
+    const rawClasses: FakeShowClass[] = [
+      { id: 'jh', sex: null, classDefinition: { type: 'junior_handler', name: 'Junior Handling' }, confirmedCount: 1, judgeId: 'jh-judge', judgeName: 'Mandy McAteer' },
+      { id: 'bitch', sex: 'bitch', classDefinition: { type: 'age', name: 'Yearling Bitch' }, confirmedCount: 1, judgeId: 'breed-judge', judgeName: 'Hugh De Zutter' },
+      { id: 'sac', sex: null, classDefinition: { type: 'special', name: 'Special Award Class - Open' }, confirmedCount: 1, judgeId: 'sac-judge', judgeName: 'Ms K Salamon' },
+      { id: 'dog', sex: 'dog', classDefinition: { type: 'age', name: 'Yearling Dog' }, confirmedCount: 1, judgeId: 'breed-judge', judgeName: 'Hugh De Zutter' },
+    ];
+
+    const runningOrder = sectionClasses(rawClasses, (c) => c).flatMap((section) => section.classes);
+    expect(runningOrder.map((c) => c.id)).toEqual(['dog', 'bitch', 'sac', 'jh']);
+
+    const pages = buildPrizeCardPages(
+      runningOrder.map((c) => ({
+        confirmedCount: c.confirmedCount,
+        judgeId: c.judgeId,
+        judgeName: c.judgeName,
+      })),
+    );
+    // One 1st-place card per class, in Dog → Bitch → Special → JH order.
+    expect(pages.map((p) => p.judgeLine)).toEqual([
+      'Judge: Hugh De Zutter', // dog
+      'Judge: Hugh De Zutter', // bitch
+      'Judge: Ms K Salamon', // SAC
+      'Judge: Mandy McAteer', // JH
+    ]);
   });
 });
