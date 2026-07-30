@@ -94,12 +94,17 @@ function DocRow({
   label,
   description,
   note,
+  extra,
   children,
 }: {
   icon: React.ReactNode;
   label: string;
   description: string;
   note?: string;
+  /** Optional calm secondary detail line, below description/note — e.g. the
+   *  prize-card "needed" counts. Kept separate from `note` (which is a
+   *  warning-styled callout) so it never reads as an alert. */
+  extra?: React.ReactNode;
   children: React.ReactNode;
 }) {
   return (
@@ -111,6 +116,9 @@ function DocRow({
           <p className="text-xs text-muted-foreground">{description}</p>
           {note && (
             <p className="mt-1 text-xs font-medium text-se-honey-deep">{note}</p>
+          )}
+          {extra && (
+            <p className="mt-1 text-xs text-muted-foreground">{extra}</p>
           )}
         </div>
       </div>
@@ -208,6 +216,7 @@ export default function DocumentsPage() {
   const { data: extrasSummary } = trpc.secretary.getExtrasSummary.useQuery({ showId });
   const { data: paymentReport } = trpc.secretary.getPaymentReport.useQuery({ showId });
   const { data: withdrawnAndAbsent } = trpc.secretary.getAbsenteeList.useQuery({ showId });
+  const { data: prizeCardCounts } = trpc.secretary.getPrizeCardCounts.useQuery({ showId });
 
   const resultsFinalised = Boolean(catalogueData?.show?.resultsPublishedAt);
   // SV / WUSV regional shows get the graded results report + spreadsheet the
@@ -247,6 +256,17 @@ export default function DocumentsPage() {
   // No customisation options: the artwork and layout are fixed.
   const prizeCardHref = `/api/prize-cards/${showId}`;
   const prizeCardPrintHref = `/api/prize-cards/${showId}/print`;
+
+  // Calm one-liner so Mandy can order just what she needs instead of a full
+  // suite per class (her words, 2026-07-30). Nothing shown while the counts
+  // are still loading — this is a secondary detail, not worth a spinner.
+  const prizeCardCountsLine = !prizeCardCounts
+    ? null
+    : prizeCardCounts.total === 0
+      ? 'No entries yet — card counts appear as entries come in'
+      : `For current entries: ${prizeCardCounts.total} card${prizeCardCounts.total === 1 ? '' : 's'} — ` +
+        `${prizeCardCounts.first}× 1st · ${prizeCardCounts.second}× 2nd · ` +
+        `${prizeCardCounts.third}× 3rd · ${prizeCardCounts.reserve}× Reserve`;
 
   function exportEntryReportCsv() {
     const headers = ['Entry Date', 'Status', 'Exhibitor', 'Email', 'Dog', 'Breed', 'Group', 'Sex', 'Classes', 'Fee (£)', 'NFC'];
@@ -462,7 +482,12 @@ export default function DocumentsPage() {
               </DocRow>
             )}
             {documentRowVisible('prize-cards', docCtx) && (
-              <DocRow icon={<Award className="size-4" />} label="Prize Cards" description="Official A5 template for 1st, 2nd, 3rd and Reserve, with your club, show and judge details printed on">
+              <DocRow
+                icon={<Award className="size-4" />}
+                label="Prize Cards"
+                description="Official A5 template for 1st, 2nd, 3rd and Reserve, with your club, show and judge details printed on"
+                extra={prizeCardCountsLine}
+              >
                 {downloadingKey === 'prize-print' ? (
                   <Button disabled className="min-h-[2.75rem]"><Loader2 className="size-4 animate-spin" />Downloading…</Button>
                 ) : (
