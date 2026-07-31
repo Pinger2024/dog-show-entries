@@ -2,6 +2,7 @@ import { integer, pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core';
 import { relations } from 'drizzle-orm';
 import { judgeAssignments } from './judge-assignments';
 import { judgeContracts } from './judge-contracts';
+import { critiqueDocuments } from './critique-documents';
 
 export const judges = pgTable('judges', {
   id: uuid('id').defaultRandom().primaryKey(),
@@ -26,4 +27,5 @@ export const judges = pgTable('judges', {
 export const judgesRelations = relations(judges, ({ many }) => ({
   assignments: many(judgeAssignments),
   contracts: many(judgeContracts),
+  critiqueDocuments: many(critiqueDocuments),
 }));

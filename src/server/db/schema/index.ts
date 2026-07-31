@@ -49,6 +49,7 @@ export {
   wusvClubEnum,
   svGradeEnum,
 } from './enums';
+export { critiqueDocStatusEnum } from './critique-documents';
 
 // Tables
 export { organisations, organisationsRelations } from './organisations';
@@ -162,3 +163,10 @@ export {
   type SettlementSection,
   type SettlementSnapshot,
 } from './invoices';
+export {
+  critiqueDocuments,
+  critiqueDocumentsRelations,
+  type CritiqueBlockConfidence,
+  type CritiqueParsedBlock,
+  type CritiqueParsedJson,
+} from './critique-documents';

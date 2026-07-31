@@ -81,5 +81,48 @@ export async function runStartupMigrations() {
       ADD COLUMN IF NOT EXISTS contract_pdf_generated_at TIMESTAMPTZ;
   `);
 
+  // ── 2026-07-31: judge critique upload (Mandy) — one row per (show,
+  // judge) critique document; a token-gated magic link lets the judge
+  // submit without a login.
+  await db.execute(sql`
+    DO $$ BEGIN
+      CREATE TYPE critique_doc_status AS ENUM ('invited', 'submitted', 'published');
+    EXCEPTION
+      WHEN duplicate_object THEN NULL;
+    END $$;
+  `);
+
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS critique_documents (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      show_id UUID NOT NULL REFERENCES shows(id) ON DELETE CASCADE,
+      judge_id UUID NOT NULL REFERENCES judges(id),
+      upload_token UUID NOT NULL DEFAULT gen_random_uuid() UNIQUE,
+      status critique_doc_status NOT NULL DEFAULT 'invited',
+      invited_email TEXT,
+      invited_at TIMESTAMPTZ,
+      original_filename TEXT,
+      storage_key TEXT,
+      raw_text TEXT,
+      parsed_json JSONB,
+      overview_text TEXT,
+      submitted_at TIMESTAMPTZ,
+      published_at TIMESTAMPTZ,
+      published_by UUID REFERENCES users(id),
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `);
+
+  await db.execute(sql`
+    CREATE UNIQUE INDEX IF NOT EXISTS critique_documents_show_judge_uniq
+      ON critique_documents(show_id, judge_id);
+  `);
+
+  await db.execute(sql`
+    CREATE INDEX IF NOT EXISTS critique_documents_upload_token_idx
+      ON critique_documents(upload_token);
+  `);
+
   console.log(`[startup-migrations] done in ${Date.now() - started}ms`);
 }
