@@ -55,6 +55,7 @@ export default function JudgeCritiquePage({ params }: { params: Promise<{ token:
   // than in an effect — the `blocks === null` guard makes this a no-op on
   // every render after the first seed, so it can't loop.
   const [blocks, setBlocks] = useState<CritiqueDisplayBlock[] | null>(null);
+  const [showReupload, setShowReupload] = useState(false);
   // Only seed once an upload exists — the pre-upload fetch carries an empty
   // blocks array, and seeding that would permanently mask the real blocks
   // the refetch brings back after the upload ([] is truthy, so the
@@ -173,13 +174,31 @@ export default function JudgeCritiquePage({ params }: { params: Promise<{ token:
     );
   }
 
-  if (!data.hasUpload) {
+  if (!data.hasUpload || showReupload) {
     return (
       <div className="mx-auto w-full max-w-lg px-3 py-10 sm:px-4">
         <Header showName={data.show.name} judgeName={data.judge.name} />
         <SECard className="mt-4">
           <CardContent className="pt-6">
-            <CritiqueUploadForm token={token} onUploaded={() => refetch()} />
+            <CritiqueUploadForm
+              token={token}
+              onUploaded={() => {
+                // Reset the locally-edited copy so the fresh parse displays
+                // (a re-upload replaces the document wholesale).
+                setBlocks(null);
+                setShowReupload(false);
+                void refetch();
+              }}
+            />
+            {showReupload && (
+              <button
+                type="button"
+                className="mx-auto mt-3 block min-h-[2.75rem] text-sm text-muted-foreground underline hover:text-foreground"
+                onClick={() => setShowReupload(false)}
+              >
+                Keep what I already sent
+              </button>
+            )}
           </CardContent>
         </SECard>
       </div>
@@ -187,6 +206,11 @@ export default function JudgeCritiquePage({ params }: { params: Promise<{ token:
   }
 
   const displayBlocks = blocks ?? data.blocks;
+  // Wrong-document guard: a judge uploading last year's (or another show's)
+  // critiques gets hundreds of "needs a home" cards and no idea why. If not
+  // a single critique matched a class on this show, say so plainly up top.
+  const nothingMatched =
+    displayBlocks.length > 0 && !displayBlocks.some((b) => b.matchedEntryClassId !== null);
 
   return (
     <div className="mx-auto w-full max-w-2xl px-3 pb-28 pt-10 sm:px-4">
@@ -194,6 +218,23 @@ export default function JudgeCritiquePage({ params }: { params: Promise<{ token:
       <p className="mt-3 text-center text-sm text-muted-foreground">
         Please check these over. Green ticks are ready to go — amber ones need a quick look.
       </p>
+      {nothingMatched && (
+        <div className="mt-4 rounded-lg border border-se-honey-line bg-se-honey-soft p-4 text-sm text-se-honey-deep">
+          <p className="font-medium">None of these matched the classes at {data.show.name}.</p>
+          <p className="mt-1">
+            This usually means the wrong document was uploaded — please check it&apos;s the right
+            one and replace it.
+          </p>
+          <Button
+            type="button"
+            size="sm"
+            className="mt-3 min-h-[2.75rem]"
+            onClick={() => setShowReupload(true)}
+          >
+            Upload a different document
+          </Button>
+        </div>
+      )}
       <div className="mt-5 space-y-3">
         {displayBlocks.map((block, i) => (
           <CritiqueBlockCard

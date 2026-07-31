@@ -74,7 +74,10 @@ export async function loadShowClassRows(db: Database, showId: string): Promise<S
             ? ec.entry.juniorHandlerDetails?.handlerName
             : ec.entry.dog?.registeredName) ?? 'Unknown',
         existingCritiqueText: ec.result?.critiqueText ?? null,
-      })),
+      }))
+      // Placement order within each class — the review pickers walk this
+      // list, and a secretary expects 1st, 2nd, 3rd… (Mandy, 2026-07-31).
+      .sort((a, b) => a.placement - b.placement),
   }));
 }
 
