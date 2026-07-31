@@ -85,13 +85,27 @@ export function toClassList(rows: ShowClassRow[]): ClassListEntry[] {
   const out: ClassListEntry[] = [];
   for (const sc of rows) {
     if (sc.sex === 'dog' || sc.sex === 'bitch') {
-      out.push({ showClassId: sc.id, className: sc.className, sex: sc.sex });
+      out.push({ showClassId: sc.id, className: baseClassName(sc.className, sc.sex), sex: sc.sex });
     } else {
       out.push({ showClassId: sc.id, className: sc.className, sex: 'dog' });
       out.push({ showClassId: sc.id, className: sc.className, sex: 'bitch' });
     }
   }
   return out;
+}
+
+/** A couple of legacy class_definitions bake the sex into the name
+ *  ("Baby Puppy Dog") — reconstructing the header as `${name} ${sex}` would
+ *  demand "Baby Puppy Dog Dog" from the judge's document, which never
+ *  matches. Strip a trailing sex word that duplicates the class's own sex. */
+function baseClassName(className: string, sex: 'dog' | 'bitch'): string {
+  const suffix = sex === 'dog' ? 'dog' : 'bitch';
+  const trimmed = className.trim();
+  const lower = trimmed.toLowerCase();
+  if (lower.endsWith(' ' + suffix)) {
+    return trimmed.slice(0, trimmed.length - suffix.length - 1).trim();
+  }
+  return trimmed;
 }
 
 export function toResultsGraph(rows: ShowClassRow[]): ResultsGraphShowClass[] {
