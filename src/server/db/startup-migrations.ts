@@ -59,7 +59,10 @@ export async function runStartupMigrations() {
   // ── 2026-04-20 evening: add Paula Ingham as active member of BAGSD so
   // Amanda can set up the Monday go-live show with Paula as secretary.
   // Idempotent: the inner SELECT returns no rows if the membership
-  // already exists, so re-runs are no-ops.
+  // already exists, so re-runs are no-ops. The user/org EXISTS guards keep
+  // this prod-data-specific insert from FK-aborting the whole migration
+  // chain on databases without those rows (it took the demo DB's migrations
+  // down on 2026-07-31 — everything after this entry silently never ran).
   await db.execute(sql`
     INSERT INTO memberships (user_id, organisation_id, status)
     SELECT
@@ -70,7 +73,9 @@ export async function runStartupMigrations() {
       SELECT 1 FROM memberships
       WHERE user_id = '72293d40-8ea5-4bf3-b0b8-f458deed8e0d'::uuid
         AND organisation_id = '6f3b14d4-c0b8-4bca-bce6-706b8fc38ba5'::uuid
-    );
+    )
+    AND EXISTS (SELECT 1 FROM users WHERE id = '72293d40-8ea5-4bf3-b0b8-f458deed8e0d'::uuid)
+    AND EXISTS (SELECT 1 FROM organisations WHERE id = '6f3b14d4-c0b8-4bca-bce6-706b8fc38ba5'::uuid);
   `);
 
   // ── 2026-04-21: judge-contract PDF archive for RKC audit compliance.
