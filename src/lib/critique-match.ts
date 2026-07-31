@@ -88,10 +88,13 @@ export function matchCritiqueBlocks(
       return {
         ...block,
         matchedEntryClassId: null,
-        confidence: 'unmatched',
+        confidence: 'unmatched' as const,
         conflict: null,
         resolution: null,
-        include: true,
+        // A text-less unmatched block (an unrecognised class header on its
+        // own) carries nothing publishable — defaulting it to excluded keeps
+        // it visible in review without blocking the publish gate.
+        include: block.kind === 'overview' || block.critiqueText.trim().length > 0,
         hints,
       };
     }

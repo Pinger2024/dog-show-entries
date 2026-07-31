@@ -215,7 +215,7 @@ describe('matchCritiqueBlocks — award-mention hints (review-only, never drive 
 });
 
 describe('matchCritiqueBlocks — overview and unmatched blocks pass through unmatched', () => {
-  it('unrecognised-header blocks get confidence "unmatched", null matchedEntryClassId, include:true', () => {
+  it('text-less unrecognised-header blocks default to include:false so they never block publishing', () => {
     const classList: ClassListEntry[] = [{ showClassId: 'sc-puppy-dog', className: 'Puppy', sex: 'dog' }];
     const text = ['Not A Real Class', '', 'Puppy Dog', '', '1st, SMITH, MRS A – TEST DOG', '', 'Prose.'].join('\n');
     const parsed = parseCritiqueDocument(text, classList);
@@ -223,7 +223,16 @@ describe('matchCritiqueBlocks — overview and unmatched blocks pass through unm
     const unmatched = blocks.find((b) => b.kind === 'unmatched')!;
     expect(unmatched.confidence).toBe('unmatched');
     expect(unmatched.matchedEntryClassId).toBeNull();
-    expect(unmatched.include).toBe(true);
+    expect(unmatched.include).toBe(false);
+  });
+
+  it('unmatched blocks that carry text stay include:true — real words are never silently dropped', () => {
+    const classList: ClassListEntry[] = [{ showClassId: 'sc-puppy-dog', className: 'Puppy', sex: 'dog' }];
+    const text = ['Not A Real Class', '', 'A stray sentence that belongs to no class.', '', 'Puppy Dog', '', '1st, SMITH, MRS A – TEST DOG', '', 'Prose.'].join('\n');
+    const parsed = parseCritiqueDocument(text, classList);
+    const { blocks } = matchCritiqueBlocks(parsed, buildResultsGraph());
+    const withText = blocks.find((b) => b.kind === 'unmatched' && b.critiqueText.trim())!;
+    expect(withText.include).toBe(true);
   });
 
   it('overview blocks get confidence "unmatched" and are never matched to a results row', () => {

@@ -30,6 +30,9 @@ export type BlockPatch = Partial<{
   include: boolean;
   matchedEntryClassId: string | null;
   resolution: 'document' | 'existing' | null;
+  /** Only ever 'exact', and only meaningful on an amber block: "yes, this
+   *  is the right dog". The server accepts precisely this transition. */
+  confidence: 'exact';
 }>;
 
 /**
@@ -156,6 +159,18 @@ export function CritiqueBlockCard({
           {block.include ? 'Included' : 'Leave this one out'}
         </label>
       </div>
+
+      {needsCheck && (
+        <Button
+          type="button"
+          size="sm"
+          className="min-h-[2.75rem] sm:min-h-0"
+          onClick={() => onChange({ confidence: 'exact' })}
+        >
+          <CheckCircle2 className="size-3.5" />
+          Yes, this is the right dog
+        </Button>
+      )}
 
       {block.include && (needsHome || needsCheck || role === 'secretary') && (
         <div className="min-w-0">

@@ -101,6 +101,21 @@ function reconcileBlocks(
       }
     }
 
+    // A human confirming "yes, this IS the right dog" on an amber block —
+    // match target unchanged, stored 'check', client says 'exact'. This is
+    // the one place client confidence is trusted, and only in this narrow
+    // check→exact direction (the gate exists to force a human look; the
+    // confirmation IS the look). Never trusted on a reassignment (handled
+    // above) and never in any other direction.
+    if (
+      !reassigned &&
+      stored.confidence === 'check' &&
+      inc.confidence === 'exact' &&
+      stored.matchedEntryClassId
+    ) {
+      next.confidence = 'exact';
+    }
+
     if (opts.allowResolution) {
       next.resolution = inc.resolution;
     }

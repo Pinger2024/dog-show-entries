@@ -416,3 +416,45 @@ describe('Judge critique upload — full journey', () => {
       .rejects.toThrow(/access/i);
   });
 });
+
+describe('Judge critique upload — amber confirmation', () => {
+  it("'yes, this is the right dog' (same target, check→exact) clears the gate; no other client confidence is trusted", async () => {
+    const { show, judge } = await seedSimpleShow();
+
+    // Invite directly via the row (token is all the judge flow needs).
+    const [doc] = await testDb
+      .insert(critiqueDocuments)
+      .values({ showId: show.id, judgeId: judge.id, status: 'invited' })
+      .returning();
+
+    // Misspelled dog name → matched by class+placement but 'check'.
+    const res = await critiqueUploadPOST(
+      uploadReq(doc.uploadToken, { text: 'Open Dog\n\n1st, Owner Name - Simpel Dog\nLovely dog, good mover.' }),
+      params(doc.uploadToken),
+    );
+    expect(res.status).toBe(200);
+
+    const judgeCaller = createTestCaller(null);
+    const before = await judgeCaller.critiques.getByToken({ token: doc.uploadToken });
+    const amber = before.blocks.find((b) => b.kind === 'critique')!;
+    expect(amber.confidence).toBe('check');
+
+    // Confirm WITHOUT changing the target: only this transition is trusted.
+    await judgeCaller.critiques.saveBlocksByToken({
+      token: doc.uploadToken,
+      blocks: before.blocks.map((b) =>
+        b === amber ? { ...stripDisplay(b), confidence: 'exact' as const } : stripDisplay(b),
+      ),
+    });
+
+    const after = await judgeCaller.critiques.getByToken({ token: doc.uploadToken });
+    const confirmed = after.blocks.find((b) => b.kind === 'critique')!;
+    expect(confirmed.confidence).toBe('exact');
+    expect(confirmed.matchedEntryClassId).toBe(amber.matchedEntryClassId);
+  });
+});
+
+function stripDisplay<T extends { matchedDisplay?: unknown }>(b: T) {
+  const { matchedDisplay: _md, ...rest } = b;
+  return rest;
+}
