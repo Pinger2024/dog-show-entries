@@ -968,3 +968,128 @@ export async function sendCatalogueReadyEmail(orderId: string) {
   console.log(`[email] Catalogue-ready sent for order ${orderId} to ${exhibitor.email}`);
   return result;
 }
+
+/**
+ * Judge critique upload invite — magic link, no login required. Modelled on
+ * sendJudgeApprovalRequestEmail's "No login required" copy. Plain, warm
+ * English (the judge is often 60+ and not confident with computers) — the
+ * secretary page also offers a Copy Link button for judges who live on
+ * WhatsApp rather than email.
+ */
+export async function sendCritiqueInviteEmail(params: {
+  judgeName: string;
+  email: string;
+  showName: string;
+  showDate: string;
+  link: string;
+}) {
+  const { judgeName, email, showName, link } = params;
+  const showDateText = formatLongDate(params.showDate);
+
+  const html = `
+<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
+<body style="margin: 0; padding: 0; background-color: ${BRAND.paper}; font-family: 'Hanken Grotesk', -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
+  <div style="max-width: 600px; margin: 0 auto; padding: 24px 16px;">
+    ${emailHeader()}
+    <div style="background: #ffffff; border: 1px solid ${BRAND.line}; border-radius: 14px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+      <div style="background: ${BRAND.deep}; padding: 24px 24px 20px; text-align: center;">
+        <h2 style="margin: 0; color: ${BRAND.cream}; font-size: 22px; font-weight: 700;">Your Show Critiques</h2>
+        <p style="margin: 8px 0 0; color: rgba(243, 236, 220, 0.78); font-size: 14px;">${showName}</p>
+      </div>
+      <div style="padding: 24px;">
+        <p style="font-size: 15px; color: ${BRAND.ink}; line-height: 1.6;">Dear ${judgeName},</p>
+        <p style="font-size: 15px; color: ${BRAND.ink}; line-height: 1.6;">
+          Thank you for judging at <strong>${showName}</strong> on <strong>${showDateText}</strong>.
+          When you're ready, please send us your critiques using the button below.
+        </p>
+        <p style="font-size: 15px; color: ${BRAND.ink}; line-height: 1.6;">
+          You can upload your Word document, or simply paste the text in — whichever is easiest.
+        </p>
+        <div style="text-align: center; margin: 28px 0;">
+          ${btn(link, 'Send Your Critiques')}
+        </div>
+        <p style="font-size: 13px; color: ${BRAND.ink2}; text-align: center;">
+          No login required — simply click the button above.
+        </p>
+      </div>
+    </div>
+    ${emailFooter(showName)}
+  </div>
+</body>
+</html>`;
+
+  const result = await resend.emails.send({
+    from: FROM,
+    to: email,
+    replyTo: process.env.FEEDBACK_EMAIL ?? 'feedback@remishowmanager.co.uk',
+    subject: `Your Critiques — ${showName}`,
+    html,
+  });
+  if (result.error) {
+    console.error(`[email] Failed to send critique invite to ${email}:`, result.error);
+    throw new Error(`Failed to send critique invite to ${email}: ${result.error.message ?? 'unknown error'}`);
+  }
+  console.log(`[email] Critique invite sent to ${email}`, result);
+  return result;
+}
+
+/**
+ * Notifies the show secretary that a judge has sent their critiques and
+ * they're ready to review. Short — this is a "come and look" nudge, not a
+ * summary; the review happens on the secretary critiques page.
+ */
+export async function sendCritiqueSubmittedEmail(params: {
+  secretaryEmail: string;
+  judgeName: string;
+  showName: string;
+  showIdOrSlug: string;
+}) {
+  const { secretaryEmail, judgeName, showName, showIdOrSlug } = params;
+  const reviewUrl = `${APP_URL}/secretary/shows/${showIdOrSlug}/critiques`;
+
+  const html = `
+<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
+<body style="margin: 0; padding: 0; background-color: ${BRAND.paper}; font-family: 'Hanken Grotesk', -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
+  <div style="max-width: 600px; margin: 0 auto; padding: 24px 16px;">
+    ${emailHeader()}
+    <div style="background: #ffffff; border: 1px solid ${BRAND.line}; border-radius: 14px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+      <div style="background: ${BRAND.green}; padding: 24px; text-align: center;">
+        <h2 style="margin: 0; color: ${BRAND.cream}; font-size: 22px; font-weight: 700;">Critiques Received</h2>
+      </div>
+      <div style="padding: 24px;">
+        <p style="font-size: 15px; color: ${BRAND.ink}; line-height: 1.6;">
+          <strong>${judgeName}</strong> has sent their critiques for <strong>${showName}</strong>.
+        </p>
+        <p style="font-size: 15px; color: ${BRAND.ink}; line-height: 1.6;">
+          Please have a look, check anything flagged, and publish them to the results page when you're ready.
+        </p>
+        <div style="text-align: center; margin: 24px 0;">
+          ${btn(reviewUrl, 'Review Critiques')}
+        </div>
+      </div>
+    </div>
+    ${emailFooter()}
+  </div>
+</body>
+</html>`;
+
+  const result = await resend.emails.send({
+    from: FROM,
+    to: secretaryEmail,
+    replyTo: process.env.FEEDBACK_EMAIL ?? 'feedback@remishowmanager.co.uk',
+    subject: `Critiques Received — ${judgeName} for ${showName}`,
+    html,
+  });
+  if (result.error) {
+    console.error(`[email] Failed to notify secretary of critique submission (${secretaryEmail}):`, result.error);
+    // Best-effort by design — callers deliberately swallow this rather than
+    // fail the judge's submission over a notification email.
+    throw new Error(result.error.message ?? 'send failed');
+  }
+  console.log(`[email] Critique-submitted notification sent to ${secretaryEmail}`);
+  return result;
+}

@@ -23,6 +23,7 @@ import { timelineRouter } from './routers/timeline';
 import { followsRouter } from './routers/follows';
 import { printOrdersRouter } from './routers/print-orders';
 import { dashboardRouter } from './routers/dashboard';
+import { critiquesRouter } from './routers/critiques';
 
 export const appRouter = createTRPCRouter({
   shows: showsRouter,
@@ -49,6 +50,7 @@ export const appRouter = createTRPCRouter({
   follows: followsRouter,
   printOrders: printOrdersRouter,
   dashboard: dashboardRouter,
+  critiques: critiquesRouter,
 });
 
 export type AppRouter = typeof appRouter;
