@@ -701,12 +701,19 @@ export function DogProfileClient({ id }: { id: string }) {
                           <span className="font-medium text-foreground">
                             {cls.className}
                           </span>
-                          {cls.placement && (
+                          {cls.placement ? (
                             <Badge
                               variant="outline"
                               className={`text-xs font-semibold ${placementColors[cls.placement] ?? ''}`}
                             >
                               {getPlacementLabel(cls.placement)}
+                            </Badge>
+                          ) : (
+                            // Published result with no placing — say so
+                            // rather than leaving a bare class name that
+                            // reads like a data error (Mandy, 2026-07-31).
+                            <Badge variant="outline" className="text-xs text-muted-foreground">
+                              {cls.placementStatus === 'withheld' ? 'Withheld' : 'Unplaced'}
                             </Badge>
                           )}
                           {cls.specialAward && (

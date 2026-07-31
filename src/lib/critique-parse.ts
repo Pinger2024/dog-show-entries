@@ -153,6 +153,19 @@ function buildHeaderLookup(classList: ClassListEntry[]): Map<string, ClassListEn
   return lookup;
 }
 
+// Judges routinely number their class headings the way the schedule does —
+// "5 Junior Dog", "Class 12. Open Bitch" (Mandy's own Waikato 2023 critiques
+// do this throughout). Try the header as written first, then with a leading
+// class number stripped. Only the line side is stripped — class names
+// themselves never carry schedule numbers.
+function lookupHeader(
+  lookup: Map<string, ClassListEntry>,
+  line: string,
+): ClassListEntry | undefined {
+  const norm = normalizeHeaderText(line);
+  return lookup.get(norm) ?? lookup.get(norm.replace(/^(?:class\s+)?\d{1,3}\s+/, ''));
+}
+
 // A header-like line resembles a class header by SHAPE (short, Title Case,
 // no trailing punctuation, no digits) whether or not it's in the show's
 // actual class list — used to catch an unrecognised/mistyped class header
@@ -192,7 +205,7 @@ export function parseCritiqueDocument(
     .map((l) => l.trim());
 
   const isAnyHeaderLine = (line: string) =>
-    headerLookup.has(normalizeHeaderText(line)) || looksLikeHeaderShaped(line);
+    lookupHeader(headerLookup, line) !== undefined || looksLikeHeaderShaped(line);
 
   const blocks: ParsedBlock[] = [];
   let i = 0;
@@ -216,7 +229,7 @@ export function parseCritiqueDocument(
 
   while (i < content.length) {
     const line = content[i];
-    const matched = headerLookup.get(normalizeHeaderText(line));
+    const matched = lookupHeader(headerLookup, line);
 
     if (matched) {
       currentShowClassId = matched.showClassId;

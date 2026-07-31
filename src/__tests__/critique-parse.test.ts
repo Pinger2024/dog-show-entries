@@ -261,3 +261,35 @@ describe('parseCritiqueDocument — paste starting mid-document (no header yet)'
     expect(headed?.position).toBe(1);
   });
 });
+
+describe('parseCritiqueDocument — numbered class headings (schedule style)', () => {
+  const text = [
+    '5 Junior Dog',
+    '',
+    '1st, SMITH, MRS A – MONKSLEY ULKAN',
+    '',
+    'A promising young male.',
+    '',
+    'Class 12. Open Bitch',
+    '',
+    '1st, JONES, MR B – GREUSENBERG BIBA',
+    '',
+    'Very good type throughout.',
+  ].join('\n');
+  const { blocks } = parseCritiqueDocument(text, gsdClassList());
+
+  it('matches "5 Junior Dog" to the Junior Dog class', () => {
+    const b = blocks.find((x) => x.dogNameCleaned === 'MONKSLEY ULKAN');
+    expect(b?.matchedShowClassId).toBe('sc-2-dog');
+    expect(b?.classNameRaw).toBe('5 Junior Dog');
+  });
+
+  it('matches "Class 12. Open Bitch" to the Open Bitch class', () => {
+    const b = blocks.find((x) => x.dogNameCleaned === 'GREUSENBERG BIBA');
+    expect(b?.matchedShowClassId).toBe('sc-6-bitch');
+  });
+
+  it('placement lines are not mistaken for numbered headers', () => {
+    expect(blocks.filter((b) => b.kind === 'critique')).toHaveLength(2);
+  });
+});
