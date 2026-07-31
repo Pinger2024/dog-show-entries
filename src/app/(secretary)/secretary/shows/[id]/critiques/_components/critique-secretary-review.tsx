@@ -46,7 +46,9 @@ export function CritiqueSecretaryReview({
   if (judgeId !== seededForJudgeId) {
     setSeededForJudgeId(judgeId);
     setBlocks(null);
-  } else if (data && blocks === null) {
+  } else if (data && blocks === null && data.hasUpload) {
+    // hasUpload guard: never seed the pre-upload empty blocks array — it
+    // would permanently mask the refetched real blocks (see judge page).
     setBlocks(data.blocks);
   }
 

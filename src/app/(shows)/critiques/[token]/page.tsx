@@ -55,7 +55,11 @@ export default function JudgeCritiquePage({ params }: { params: Promise<{ token:
   // than in an effect — the `blocks === null` guard makes this a no-op on
   // every render after the first seed, so it can't loop.
   const [blocks, setBlocks] = useState<CritiqueDisplayBlock[] | null>(null);
-  if (data && blocks === null) {
+  // Only seed once an upload exists — the pre-upload fetch carries an empty
+  // blocks array, and seeding that would permanently mask the real blocks
+  // the refetch brings back after the upload ([] is truthy, so the
+  // `blocks ?? data.blocks` fallback never kicks in).
+  if (data && blocks === null && data.hasUpload) {
     setBlocks(data.blocks);
   }
 
