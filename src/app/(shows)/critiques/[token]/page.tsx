@@ -159,8 +159,10 @@ export default function JudgeCritiquePage({ params }: { params: Promise<{ token:
           <div className="mx-auto mb-2 flex size-12 items-center justify-center rounded-full bg-se-fresh-soft">
             <CheckCircle2 className="size-6 text-se-fresh-deep" />
           </div>
+          {/* Full name, never a "first name" split — judges' names start
+              with honorifics ("Mrs J Henderson" → "Thank You, Mrs"). */}
           <CardTitle className="font-serif text-lg sm:text-xl">
-            Thank You{data.judge.name ? `, ${data.judge.name.split(' ')[0]}` : ''}
+            Thank You{data.judge.name ? `, ${data.judge.name}` : ''}
           </CardTitle>
           <CardDescription>
             Your critiques for <strong>{data.show.name}</strong> have been sent to the secretary.

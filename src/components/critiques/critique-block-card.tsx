@@ -30,9 +30,12 @@ export type BlockPatch = Partial<{
   include: boolean;
   matchedEntryClassId: string | null;
   resolution: 'document' | 'existing' | null;
-  /** Only ever 'exact', and only meaningful on an amber block: "yes, this
-   *  is the right dog". The server accepts precisely this transition. */
-  confidence: 'exact';
+  /** Optimistic mirror of the server's reconcile rules so the local publish
+   *  gate updates immediately: 'exact' on an amber confirmation or a
+   *  reassignment, 'unmatched' on unassignment. The server re-derives
+   *  confidence on every save — this never overrides it, it just keeps the
+   *  banner honest between keystroke and round-trip. */
+  confidence: 'exact' | 'unmatched';
 }>;
 
 /**
@@ -179,7 +182,13 @@ export function CritiqueBlockCard({
           </p>
           <Select
             value={block.matchedEntryClassId ?? UNASSIGNED_VALUE}
-            onValueChange={(v) => onChange({ matchedEntryClassId: v === UNASSIGNED_VALUE ? null : v })}
+            onValueChange={(v) =>
+              onChange(
+                v === UNASSIGNED_VALUE
+                  ? { matchedEntryClassId: null, confidence: 'unmatched' }
+                  : { matchedEntryClassId: v, confidence: 'exact' },
+              )
+            }
           >
             <SelectTrigger className="min-h-[2.75rem] w-full max-w-[calc(100vw-4rem)]">
               <SelectValue placeholder="Choose a dog" />
