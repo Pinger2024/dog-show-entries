@@ -123,3 +123,29 @@ describe('checkOwnerRecord', () => {
     expect(issues).toHaveLength(2);
   });
 });
+
+describe('checkOwnerRecord — two people crammed into one owner slot', () => {
+  it('catches the real incident shape: "Andy & Ann Johnstone" printed as one person', () => {
+    expect(
+      checkOwnerRecord({ ownerName: 'Andy & Ann Johnstone', ownerAddress: '4 The Lane, Glasgow' }),
+    ).toContain('multiple_people_in_one_owner');
+  });
+
+  it('catches the "and" variant', () => {
+    expect(
+      checkOwnerRecord({ ownerName: 'Andy and Ann Johnstone', ownerAddress: '4 The Lane, Glasgow' }),
+    ).toContain('multiple_people_in_one_owner');
+  });
+
+  it('exempts a joint title on one name — "Mr & Mrs D Smith" prints fine as a unit', () => {
+    expect(
+      checkOwnerRecord({ ownerName: 'Mr & Mrs D Smith', ownerAddress: '4 The Lane, Glasgow' }),
+    ).not.toContain('multiple_people_in_one_owner');
+  });
+
+  it('leaves ordinary two-token names alone', () => {
+    expect(
+      checkOwnerRecord({ ownerName: 'Sandy Anderson', ownerAddress: '4 The Lane, Glasgow' }),
+    ).not.toContain('multiple_people_in_one_owner');
+  });
+});

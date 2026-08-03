@@ -13,6 +13,8 @@ type FlaggedRow = RouterOutputs['secretary']['catalogueDataChecks'][number];
 const ISSUE_LABELS: Record<OwnerCheckIssue, string> = {
   missing_name: 'No name on file',
   single_word_name: 'Only one name — catalogues print the full name',
+  multiple_people_in_one_owner:
+    'Looks like two people in one owner slot — give each person their own owner entry',
   missing_address: 'No address on file',
   name_like_address_start: 'Address looks like it starts with a name',
 };

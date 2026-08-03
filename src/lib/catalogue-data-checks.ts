@@ -21,6 +21,7 @@
 export type OwnerCheckIssue =
   | 'single_word_name'
   | 'name_like_address_start'
+  | 'multiple_people_in_one_owner'
   | 'missing_name'
   | 'missing_address';
 
@@ -43,6 +44,11 @@ export interface OwnerCheckInput {
  *  surname) apart from "4" or "12a" (a house number/name). */
 const SINGLE_ALPHA_WORD = /^[a-z'-]+$/i;
 
+/** An "&" or "and" joining what look like two separate people's names. */
+const MULTI_PERSON_RE = /\s(?:&|and)\s/i;
+/** A joint title on one name — "Mr & Mrs D Smith" — which prints fine. */
+const TITLE_PAIR_RE = /^\s*(?:mr|mrs|miss|ms|dr)\.?\s*&\s*(?:mr|mrs|miss|ms|dr)\.?\b/i;
+
 function tokenCount(value: string): number {
   return value.split(/\s+/).filter(Boolean).length;
 }
@@ -62,6 +68,13 @@ export function checkOwnerRecord(input: OwnerCheckInput): OwnerCheckIssue[] {
     // more tokens ("Mrs Smith", "Karen Smith") pass — we don't try to be
     // clever about initials ("J Smith" is fine, two tokens).
     issues.push('single_word_name');
+  } else if (MULTI_PERSON_RE.test(name) && !TITLE_PAIR_RE.test(name)) {
+    // "Andy & Ann Johnstone" in ONE owner slot — the catalogue heading
+    // treats each slot as one person, so it printed "JOHNSTONE, A" and
+    // Ann vanished (Xano, Clyde Valley, 2026-08-03). Each person needs
+    // their own owner entry. "Mr & Mrs D Smith" is exempt: a joint title
+    // on one name is fine and common — the heading prints it as a unit.
+    issues.push('multiple_people_in_one_owner');
   }
 
   // ── Address checks — skipped entirely when the address is withheld,
