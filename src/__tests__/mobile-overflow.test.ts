@@ -83,9 +83,15 @@ describe('mobile overflow protection', () => {
     }
   });
 
-  // ─── Test 3: Layout shells maintain overflow-x-hidden ─────────────
+  // ─── Test 3: Layout shells maintain a horizontal-overflow guard ────
+  //
+  // The guard is overflow-x-CLIP, not hidden: `hidden` turns the element
+  // into a scroll container, which silently disables every position:sticky
+  // descendant (the app sidebars never floated because of it — found
+  // 2026-08-03). `clip` guards against mobile horizontal overflow
+  // identically without breaking sticky.
 
-  it('should have overflow-x-hidden on layout shells', () => {
+  it('should have an overflow-x-clip guard on layout shells', () => {
     const shells = [
       'src/components/layout/dashboard-shell.tsx',
       'src/components/layout/secretary-shell.tsx',
@@ -96,29 +102,30 @@ describe('mobile overflow protection', () => {
       const filePath = path.resolve(PROJECT_ROOT, shell);
       const content = fs.readFileSync(filePath, 'utf-8');
       expect(
-        content.includes('overflow-x-hidden'),
-        `${shell} must contain overflow-x-hidden as a safety net against mobile horizontal overflow`,
+        content.includes('overflow-x-clip'),
+        `${shell} must contain overflow-x-clip as a safety net against mobile horizontal overflow (NOT overflow-x-hidden — that breaks position:sticky)`,
       ).toBe(true);
     }
   });
 
-  it('should have overflow-x: hidden on html and body in globals.css', () => {
+  it('should guard html and body with overflow-x hidden fallback + clip override', () => {
     const filePath = path.resolve(PROJECT_ROOT, 'src/app/globals.css');
     const content = fs.readFileSync(filePath, 'utf-8');
 
-    // Check html block has overflow-x: hidden
-    const htmlBlock = content.match(/html\s*\{[^}]*\}/s);
-    expect(
-      htmlBlock && htmlBlock[0].includes('overflow-x: hidden'),
-      'globals.css html {} must contain overflow-x: hidden',
-    ).toBe(true);
-
-    // Check body block has overflow-x: hidden
-    const bodyBlock = content.match(/body\s*\{[^}]*\}/s);
-    expect(
-      bodyBlock && bodyBlock[0].includes('overflow-x: hidden'),
-      'globals.css body {} must contain overflow-x: hidden',
-    ).toBe(true);
+    for (const selector of ['html', 'body'] as const) {
+      const block = content.match(new RegExp(`${selector}\\s*\\{[^}]*\\}`, 's'));
+      // Old-browser fallback: keeps the guard where `clip` is unknown.
+      expect(
+        block && block[0].includes('overflow-x: hidden'),
+        `globals.css ${selector} {} must keep the overflow-x: hidden fallback`,
+      ).toBe(true);
+      // The real guard: clips without creating a scroll container, so
+      // position:sticky keeps working. Must come AFTER the hidden line.
+      expect(
+        block && block[0].indexOf('overflow-x: clip') > block[0].indexOf('overflow-x: hidden'),
+        `globals.css ${selector} {} must override with overflow-x: clip after the hidden fallback`,
+      ).toBe(true);
+    }
   });
 
   // ─── Test 4: No overflow-x-auto combined with negative margins ────
