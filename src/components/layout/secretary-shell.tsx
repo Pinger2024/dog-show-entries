@@ -81,7 +81,7 @@ export function SecretaryShell({ user, children }: SecretaryShellProps) {
   const showOrgSwitcher = organisations.length > 1;
 
   return (
-    <div className="flex min-h-screen overflow-x-hidden">
+    <div className="flex min-h-screen overflow-x-clip">
       {/* Desktop Sidebar */}
       <aside className="hidden w-64 shrink-0 border-r bg-sidebar lg:flex lg:flex-col sticky top-0 h-screen overflow-y-auto">
         <div className="flex h-[4.5rem] items-center gap-3 border-b px-5">
