@@ -211,7 +211,11 @@ export function SecretaryShell({ user, children }: SecretaryShellProps) {
         )}
 
         <main className="flex-1 overflow-y-auto">
-          <div className="mx-auto max-w-7xl px-2 py-4 pb-28 sm:px-4 sm:py-6 sm:pb-28 lg:pb-8 lg:px-8">
+          {/* Full available width — no centred cap; the sidebar already eats
+              its share and secretaries on wide screens want the room
+              (Michael, 2026-08-03). Mobile is untouched: caps only ever bit
+              on large screens. */}
+          <div className="px-2 py-4 pb-28 sm:px-4 sm:py-6 sm:pb-28 lg:pb-8 lg:px-8">
             {children}
           </div>
         </main>
