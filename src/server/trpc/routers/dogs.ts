@@ -570,10 +570,26 @@ export const dogsRouter = createTRPCRouter({
         sireRegistrationNumber: z.string().nullable().optional(),
         damRegistrationBody: z.enum(['kc', 'sv', 'ikc', 'other']).nullable().optional(),
         damRegistrationNumber: z.string().nullable().optional(),
+        // Full owner-row replace — shape mirrors `create`'s `owners` input
+        // exactly. Omit entirely to leave the dog's existing dog_owners rows
+        // untouched (every caller before 2026-08-03 does this — Edit Dog had
+        // no way to fix a mis-entered owner, e.g. "Andy & Ann Johnstone"
+        // crammed into one slot; Mandy asked for this the same day).
+        owners: z.array(z.object({
+          ownerTitle: z.string().optional(),
+          ownerName: z.string().min(1, 'Owner name is required'),
+          ownerAddress: z.string().min(1, 'Owner address is required'),
+          ownerEmail: z.string().email(),
+          ownerPhone: z.string().optional(),
+          isPrimary: z.boolean().default(false),
+        }))
+          .min(1, 'At least one owner with name and address is required')
+          .max(4, 'Up to 4 owners are allowed')
+          .optional(),
       })
     )
     .mutation(async ({ ctx, input }) => {
-      const { id, kcRegNumber, ...rest } = input;
+      const { id, kcRegNumber, owners, ...rest } = input;
 
       const existing = await ctx.db.query.dogs.findFirst({
         where: and(eq(dogs.id, id), isNull(dogs.deletedAt)),
@@ -625,13 +641,45 @@ export const dogsRouter = createTRPCRouter({
         ...(kcRegNumber !== undefined ? { kcRegNumber: kcRegNumber || null } : {}),
       };
 
-      const [updated] = await ctx.db
-        .update(dogs)
-        .set(data)
-        .where(eq(dogs.id, id))
-        .returning();
+      // Dog-field update and owner-row replace happen in one transaction —
+      // unlike `create`'s plain insert, this is a delete-then-insert, and an
+      // interruption between the two would leave the dog with ZERO owner
+      // rows. That's real data loss, not just a partial write.
+      const updated = await ctx.db.transaction(async (tx) => {
+        let row = existing;
+        if (Object.keys(data).length > 0) {
+          const [updatedRow] = await tx
+            .update(dogs)
+            .set(data)
+            .where(eq(dogs.id, id))
+            .returning();
+          row = updatedRow!;
+        }
 
-      return updated!;
+        if (owners) {
+          await tx.delete(dogOwners).where(eq(dogOwners.dogId, id));
+          await tx.insert(dogOwners).values(
+            owners.map((o, i) => ({
+              dogId: id,
+              // Row 0 keeps the account link — same rule as `create`, and
+              // `existing.ownerId` is guaranteed to equal the caller here
+              // (the FORBIDDEN check above already enforced it).
+              userId: i === 0 ? existing.ownerId : null,
+              ownerTitle: o.ownerTitle || null,
+              ownerName: o.ownerName,
+              ownerAddress: o.ownerAddress,
+              ownerEmail: o.ownerEmail,
+              ownerPhone: o.ownerPhone ?? null,
+              isPrimary: o.isPrimary || i === 0,
+              sortOrder: i,
+            }))
+          );
+        }
+
+        return row;
+      });
+
+      return updated;
     }),
 
   delete: protectedProcedure

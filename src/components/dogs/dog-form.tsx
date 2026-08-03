@@ -63,11 +63,13 @@ const ownerSchema = z.object({
   isPrimary: z.boolean(),
 });
 
-// Owners are required at create-time (RKC catalogue listing), but in edit
-// mode the form only updates top-level dog fields — the submit handler
-// strips `owners` before mutating. Baking `.min(1)` into the schema silently
-// blocked edit saves when the form loaded with no owners. We enforce the
-// create-mode requirement at submission time instead.
+// Owners are required in both create and edit mode (RKC catalogue listing).
+// We still don't bake `.min(1)` into the schema below: in edit mode the
+// `owners` array starts empty and is only populated once the saved dog's
+// owner rows have loaded (see the hydration effect further down) — a
+// schema-level min would let the zodResolver block submission during that
+// brief window before real data arrives. "At least one owner" is instead
+// enforced by hand in onSubmit, once the live form value is in hand.
 const dogFormSchema = z.object({
   registeredName: z
     .string()
@@ -512,6 +514,38 @@ export function DogForm({ mode, defaultValues, dogId, svSection, returnTo, isReg
     }
   }, [mode, userProfile, form]);
 
+  // Populate the owners field array from the dog's SAVED rows in edit mode —
+  // previously edit mode never loaded them at all, so a joint owner crammed
+  // into one slot (e.g. "Andy & Ann Johnstone") could never be split out or
+  // corrected (Mandy 2026-08-03). Guarded by a ref so this runs exactly once
+  // — without it, re-renders after the user starts editing would stomp their
+  // in-progress changes back to the server snapshot. It only fires once
+  // `dogData.owners` has real rows, so an empty pre-load array can never
+  // seed (and therefore never autosave-overwrite; owners aren't part of the
+  // autosave payload at all — see AUTOSAVE_FIELDS above).
+  const ownersHydrated = useRef(false);
+  useEffect(() => {
+    if (
+      mode === 'edit' &&
+      dogData?.owners &&
+      dogData.owners.length > 0 &&
+      !ownersHydrated.current
+    ) {
+      ownersHydrated.current = true;
+      form.setValue(
+        'owners',
+        dogData.owners.map((o) => ({
+          ownerTitle: o.ownerTitle ?? '',
+          ownerName: o.ownerName,
+          ownerAddress: o.ownerAddress,
+          ownerEmail: o.ownerEmail,
+          ownerPhone: o.ownerPhone ?? '',
+          isPrimary: o.isPrimary,
+        }))
+      );
+    }
+  }, [mode, dogData, form]);
+
   // When breeds load after a RKC lookup already stashed a breed name, apply it
   useEffect(() => {
     if (breeds && pendingBreedName.current && !form.getValues('breedId')) {
@@ -554,15 +588,28 @@ export function DogForm({ mode, defaultValues, dogId, svSection, returnTo, isReg
     !lookupApplied;
 
   function onSubmit(data: DogFormValues) {
+    // "At least one owner" and "up to 4" are enforced here rather than in
+    // the schema — see the comment above dogFormSchema for why. Checked for
+    // both modes: the UI already blocks removing Owner 1 and hides "Add
+    // Joint Owner" past 4, so these are a backstop, not the primary gate.
+    if (!data.owners || data.owners.length === 0) {
+      form.setError('owners', {
+        type: 'manual',
+        message: 'At least one owner with name and address is required',
+      });
+      toast.error('Please add at least one owner');
+      return;
+    }
+    if (data.owners.length > 4) {
+      form.setError('owners', {
+        type: 'manual',
+        message: 'Up to 4 owners are allowed',
+      });
+      toast.error('Up to 4 owners are allowed');
+      return;
+    }
+
     if (mode === 'create') {
-      if (!data.owners || data.owners.length === 0) {
-        form.setError('owners', {
-          type: 'manual',
-          message: 'At least one owner with name and address is required',
-        });
-        toast.error('Please add at least one owner');
-        return;
-      }
       // Pedigree (sire + dam + breeder) is mandatory — a catalogue can't be
       // produced with this missing (Michael 2026-06-25; breeder added 2026-06-26).
       let pedigreeMissing = false;
@@ -619,8 +666,7 @@ export function DogForm({ mode, defaultValues, dogId, svSection, returnTo, isReg
       }
       createDog.mutate(data);
     } else if (dogId) {
-      const { owners: _owners, ...dogFields } = data;
-      updateDog.mutate({ id: dogId, ...dogFields });
+      updateDog.mutate({ id: dogId, ...data });
     }
   }
 
@@ -1417,11 +1463,25 @@ export function DogForm({ mode, defaultValues, dogId, svSection, returnTo, isReg
             <CardDescription>
               {/* Mandy 2026-07-11: copy must name the button that actually
                   exists — it said "Add New Owner" while the button reads
-                  "Add Joint Owner". */}
-              <strong>You&apos;re already saved as Owner 1.</strong> If the dog
-              is jointly owned with a partner, family member or co-breeder,
-              tap <em>Add Joint Owner</em> below — every name will appear
-              together on the show catalogue. Up to 4 owners.
+                  "Add Joint Owner". Edit mode gets its own copy (Mandy
+                  2026-08-03): "you're already saved as Owner 1" is wrong once
+                  Owner 1 is an editable saved row that might not even be the
+                  viewer. */}
+              {mode === 'create' ? (
+                <>
+                  <strong>You&apos;re already saved as Owner 1.</strong> If the dog
+                  is jointly owned with a partner, family member or co-breeder,
+                  tap <em>Add Joint Owner</em> below — every name will appear
+                  together on the show catalogue. Up to 4 owners.
+                </>
+              ) : (
+                <>
+                  These names appear on the show catalogue exactly as
+                  written — one entry per person. Correct a name below, or
+                  tap <em>Add Joint Owner</em> to split a joint entry into
+                  separate people. Up to 4 owners.
+                </>
+              )}
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -1429,7 +1489,9 @@ export function DogForm({ mode, defaultValues, dogId, svSection, returnTo, isReg
               <div key={field.id} className="space-y-3 rounded-lg border p-4">
                 <div className="flex items-center justify-between">
                   <span className="text-sm font-medium">
-                    {index === 0 ? 'Owner 1 — You' : `Joint Owner ${index + 1}`}
+                    {index === 0
+                      ? mode === 'create' ? 'Owner 1 — You' : 'Owner 1'
+                      : `Joint Owner ${index + 1}`}
                   </span>
                   {index > 0 && (
                     <Button
