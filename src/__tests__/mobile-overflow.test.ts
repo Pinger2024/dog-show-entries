@@ -108,24 +108,35 @@ describe('mobile overflow protection', () => {
     }
   });
 
-  it('should guard html and body with overflow-x hidden fallback + clip override', () => {
+  it('guards html with hidden ONLY and body with hidden fallback + clip override', () => {
     const filePath = path.resolve(PROJECT_ROOT, 'src/app/globals.css');
     const content = fs.readFileSync(filePath, 'utf-8');
 
-    for (const selector of ['html', 'body'] as const) {
-      const block = content.match(new RegExp(`${selector}\\s*\\{[^}]*\\}`, 's'));
-      // Old-browser fallback: keeps the guard where `clip` is unknown.
-      expect(
-        block && block[0].includes('overflow-x: hidden'),
-        `globals.css ${selector} {} must keep the overflow-x: hidden fallback`,
-      ).toBe(true);
-      // The real guard: clips without creating a scroll container, so
-      // position:sticky keeps working. Must come AFTER the hidden line.
-      expect(
-        block && block[0].indexOf('overflow-x: clip') > block[0].indexOf('overflow-x: hidden'),
-        `globals.css ${selector} {} must override with overflow-x: clip after the hidden fallback`,
-      ).toBe(true);
-    }
+    // html: `hidden` only. `clip` on the root broke position:fixed on iOS
+    // Safari — the mobile bottom nav detached and drifted mid-page
+    // (Mandy's phone, 2026-08-03). html's overflow value has no effect on
+    // sticky (measured live), so hidden costs nothing there.
+    const htmlBlock = content.match(/html\s*\{[^}]*\}/s);
+    expect(
+      htmlBlock && htmlBlock[0].includes('overflow-x: hidden'),
+      'globals.css html {} must keep overflow-x: hidden',
+    ).toBe(true);
+    expect(
+      htmlBlock && !htmlBlock[0].includes('overflow-x: clip'),
+      'globals.css html {} must NOT use overflow-x: clip — it breaks position:fixed on iOS Safari',
+    ).toBe(true);
+
+    // body: hidden fallback then clip override — `hidden` makes body a
+    // scroll container and disables every position:sticky descendant.
+    const bodyBlock = content.match(/body\s*\{[^}]*\}/s);
+    expect(
+      bodyBlock && bodyBlock[0].includes('overflow-x: hidden'),
+      'globals.css body {} must keep the overflow-x: hidden fallback',
+    ).toBe(true);
+    expect(
+      bodyBlock && bodyBlock[0].indexOf('overflow-x: clip') > bodyBlock[0].indexOf('overflow-x: hidden'),
+      'globals.css body {} must override with overflow-x: clip after the hidden fallback',
+    ).toBe(true);
   });
 
   // ─── Test 4: No overflow-x-auto combined with negative margins ────
