@@ -140,15 +140,17 @@
   * {
     @apply border-border outline-ring/50;
   }
-  /* Horizontal-overflow guard (mobile CSS traps). `hidden` creates a scroll
-     container, which silently disables EVERY position:sticky descendant —
-     that's why the app sidebars never floated. `clip` guards identically
-     without becoming a scroll container; the `hidden` line stays first as
-     the fallback for old browsers that don't know `clip` (they keep the
-     guard, and sticky stays off for them — graceful, not broken). */
+  /* Horizontal-overflow guard (mobile CSS traps).
+     BODY must be `clip`: `hidden` makes body a scroll container, which
+     silently disables EVERY position:sticky descendant — that's why the
+     app sidebars never floated (found 2026-08-03). The `hidden` line stays
+     first as the old-browser fallback.
+     HTML must stay `hidden`, NOT clip: `clip` on the root broke
+     position:fixed on iOS Safari — Mandy's phone bottom nav detached and
+     drifted mid-page while scrolling (2026-08-03). Measured live: body is
+     the only element whose overflow value affects sticky; html's doesn't. */
   html {
     overflow-x: hidden;
-    overflow-x: clip;
   }
   body {
     @apply bg-background text-foreground;
