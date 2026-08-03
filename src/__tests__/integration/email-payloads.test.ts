@@ -188,7 +188,7 @@ describe('sendPrintOrderConfirmationEmail', () => {
 });
 
 describe('sendJudgeApprovalRequestEmail', () => {
-  it('sends to the judge with the show + breed list and approval link', async () => {
+  it('sends to the judge with the breed/classification lines and approval link', async () => {
     await sendJudgeApprovalRequestEmail({
       judge: { name: 'Judge Bob', email: 'bob@example.test' },
       show: {
@@ -199,7 +199,8 @@ describe('sendJudgeApprovalRequestEmail', () => {
         organisation: { name: 'Test Society' },
       },
       approvalToken: 'token-abc-123',
-      breeds: ['00000000-0000-0000-0000-000000000010'],
+      breedLine: 'German Shepherd Dog',
+      classificationLine: 'German Shepherd Dog Dogs & Bitches classes',
     });
 
     expect(resendMocks.send).toHaveBeenCalledTimes(1);
@@ -208,5 +209,29 @@ describe('sendJudgeApprovalRequestEmail', () => {
     const html = String(payload.html ?? '');
     expect(html).toContain('token-abc-123');
     expect(html).toContain('Test Show');
+    expect(html).toContain('German Shepherd Dog Dogs & Bitches classes');
+  });
+
+  it('renders a Junior Handling judge as Junior Handling, never "All breeds"', async () => {
+    // The 2026-08-03 regression shape: a JH judge (breed-null assignment)
+    // used to be told they were judging "All breeds".
+    await sendJudgeApprovalRequestEmail({
+      judge: { name: 'Mrs A McAteer', email: 'jh@example.test' },
+      show: {
+        name: 'North East Regional',
+        startDate: '2026-09-05',
+        slug: 'ne-regional',
+        id: '00000000-0000-0000-0000-000000000002',
+        organisation: { name: 'North East GSD Regional Group' },
+      },
+      approvalToken: 'token-jh-456',
+      breedLine: 'German Shepherd Dog',
+      classificationLine: 'Junior Handling',
+    });
+
+    const payload = resendMocks.send.mock.calls.at(-1)?.[0] as Record<string, unknown>;
+    const html = String(payload.html ?? '');
+    expect(html).toContain('Junior Handling');
+    expect(html).not.toContain('All breeds');
   });
 });

@@ -1,7 +1,7 @@
 import { Resend } from 'resend';
 import { db } from '@/server/db';
-import { and, eq, inArray } from 'drizzle-orm';
-import { orders, memberships, users, printOrders, breeds, showClasses } from '@/server/db/schema';
+import { and, eq } from 'drizzle-orm';
+import { orders, memberships, users, printOrders, showClasses } from '@/server/db/schema';
 import { formatOrderRef, PRINT_PAYMENT_METHODS } from '@/lib/print-products';
 import { isCatalogueItem } from '@/lib/catalogue-utils';
 import { buildClassLabelMap } from '@/lib/class-labels';
@@ -822,9 +822,15 @@ export async function sendJudgeApprovalRequestEmail(params: {
     organisation: { name: string } | null;
   };
   approvalToken: string;
-  breeds: string[];
+  // Derived by callers via buildJudgeBreedAndClassification — the ONE
+  // builder for what a judge judges. This email used to take breed ids
+  // and fall back to "All breeds", which is what a Junior Handling judge
+  // (breed-null assignment) got told they were judging (Mandy, North East
+  // Regional, 2026-08-03).
+  breedLine: string;
+  classificationLine: string;
 }) {
-  const { judge, show, approvalToken } = params;
+  const { judge, show, approvalToken, breedLine, classificationLine } = params;
   const orgName = show.organisation?.name ?? 'the Show Society';
 
   const showDate = new Date(show.startDate).toLocaleDateString('en-GB', {
@@ -834,18 +840,6 @@ export async function sendJudgeApprovalRequestEmail(params: {
     year: 'numeric',
   });
 
-  // Fetch breed names if we have IDs
-  let breedNames: string[] = [];
-  if (params.breeds.length > 0) {
-    const breedRows = await db.query.breeds.findMany({
-      where: inArray(breeds.id, params.breeds),
-      columns: { id: true, name: true },
-    });
-    const breedMap = new Map(breedRows.map((b) => [b.id, b.name]));
-    breedNames = params.breeds.map((id) => breedMap.get(id) ?? 'Unknown').filter(Boolean);
-  }
-
-  const breedsText = breedNames.length > 0 ? breedNames.join(', ') : 'All breeds';
   const approvalUrl = `${APP_URL}/api/results-approval/${approvalToken}`;
 
   const html = `
@@ -868,7 +862,8 @@ export async function sendJudgeApprovalRequestEmail(params: {
         <table style="width: 100%; border-collapse: collapse; margin: 16px 0;">
           <tr><td style="padding: 8px 12px; border-bottom: 1px solid ${BRAND.line}; font-weight: 600; color: ${BRAND.ink}; width: 100px;">Show</td><td style="padding: 8px 12px; border-bottom: 1px solid ${BRAND.line};">${show.name}</td></tr>
           <tr><td style="padding: 8px 12px; border-bottom: 1px solid ${BRAND.line}; font-weight: 600; color: ${BRAND.ink};">Date</td><td style="padding: 8px 12px; border-bottom: 1px solid ${BRAND.line};">${showDate}</td></tr>
-          <tr><td style="padding: 8px 12px; border-bottom: 1px solid ${BRAND.line}; font-weight: 600; color: ${BRAND.ink};">Breeds</td><td style="padding: 8px 12px; border-bottom: 1px solid ${BRAND.line};">${breedsText}</td></tr>
+          <tr><td style="padding: 8px 12px; border-bottom: 1px solid ${BRAND.line}; font-weight: 600; color: ${BRAND.ink};">Breed</td><td style="padding: 8px 12px; border-bottom: 1px solid ${BRAND.line};">${breedLine}</td></tr>
+          <tr><td style="padding: 8px 12px; border-bottom: 1px solid ${BRAND.line}; font-weight: 600; color: ${BRAND.ink};">Classification</td><td style="padding: 8px 12px; border-bottom: 1px solid ${BRAND.line};">${classificationLine}</td></tr>
         </table>
         <p style="font-size: 15px; color: ${BRAND.ink}; line-height: 1.6;">
           Please click the button below to review the results and confirm they are correct.
