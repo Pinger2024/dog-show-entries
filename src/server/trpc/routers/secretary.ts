@@ -11,6 +11,7 @@ import { ACHIEVEMENT_TYPES } from '@/lib/placements';
 import { computeOrderFees, type FeeContext } from '@/lib/fee-calc';
 import { computePrizeCardCounts } from '@/lib/prize-card-counts';
 import { BRAND } from '@/lib/brand';
+import { checkOwnerRecord, type OwnerCheckIssue } from '@/lib/catalogue-data-checks';
 import {
   shows,
   entries,
@@ -842,6 +843,94 @@ export const secretaryRouter = createTRPCRouter({
       });
 
       return { show, entries: catalogueEntries };
+    }),
+
+  // "Check before print" — a glance-list of owner records worth a second
+  // look, surfaced on the catalogue page BEFORE printing. Deliberately not a
+  // gate at entry time (Mandy: no new friction) — see catalogue-data-checks.ts
+  // for the rules and the real incident that prompted this.
+  catalogueDataChecks: secretaryProcedure
+    .input(z.object({ showId: z.string().uuid() }))
+    .query(async ({ ctx, input }) => {
+      await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId, { callerIsAdmin: ctx.callerIsAdmin });
+
+      const catalogueEntries = await ctx.db.query.entries.findMany({
+        where: and(
+          eq(entries.showId, input.showId),
+          eq(entries.status, 'confirmed'),
+          isNull(entries.deletedAt)
+        ),
+        columns: {
+          catalogueNumber: true,
+          // Withheld entries never print an address (catalogue render
+          // substitutes "address withheld") — the flag lives on the entry,
+          // not the owner, since one person can hold entries with different
+          // publication choices.
+          withholdFromPublication: true,
+        },
+        with: {
+          dog: {
+            columns: { registeredName: true },
+            with: {
+              owners: { orderBy: [asc(dogOwners.sortOrder)] },
+            },
+          },
+        },
+        orderBy: [asc(entries.catalogueNumber)],
+      });
+
+      interface FlaggedOwnerRow {
+        dogName: string;
+        catalogueNumber: string | null;
+        ownerName: string | null;
+        ownerAddress: string | null;
+        issues: OwnerCheckIssue[];
+        dogCount: number;
+      }
+
+      // Same owner can appear on several dogs (a member entering more than
+      // one dog) — collapse to one row with a dog count rather than repeating
+      // the same person down the list. Prefer the linked user account as the
+      // identity key when there is one; fall back to the name+address text
+      // for guest/legacy owner rows with no `userId`.
+      const flaggedByOwner = new Map<string, FlaggedOwnerRow>();
+
+      for (const entry of catalogueEntries) {
+        const dogName = entry.dog?.registeredName;
+        if (!dogName) continue; // Junior Handling entries have no dog.
+
+        for (const owner of entry.dog?.owners ?? []) {
+          const issues = checkOwnerRecord({
+            ownerName: owner.ownerName,
+            ownerAddress: owner.ownerAddress,
+            addressWithheld: entry.withholdFromPublication,
+          });
+          if (issues.length === 0) continue;
+
+          const key = owner.userId
+            ? `user:${owner.userId}`
+            : `text:${(owner.ownerName ?? '').trim().toLowerCase()}|${(owner.ownerAddress ?? '').trim().toLowerCase()}`;
+
+          const existing = flaggedByOwner.get(key);
+          if (existing) {
+            existing.dogCount += 1;
+            for (const issue of issues) {
+              if (!existing.issues.includes(issue)) existing.issues.push(issue);
+            }
+          } else {
+            flaggedByOwner.set(key, {
+              dogName,
+              catalogueNumber: entry.catalogueNumber,
+              ownerName: owner.ownerName,
+              ownerAddress: owner.ownerAddress,
+              issues,
+              dogCount: 1,
+            });
+          }
+        }
+      }
+
+      return Array.from(flaggedByOwner.values());
     }),
 
   getAbsenteeList: secretaryProcedure
