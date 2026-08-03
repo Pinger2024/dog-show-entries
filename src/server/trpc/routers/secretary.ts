@@ -4722,7 +4722,7 @@ export const secretaryRouter = createTRPCRouter({
       const contract = await ctx.db.query.judgeContracts.findFirst({
         where: eq(judgeContracts.id, input.contractId),
         with: {
-          show: { with: { venue: true, organisation: true } },
+          show: { with: { venue: true, organisation: true, breed: true } },
           judge: true,
         },
       });
@@ -4749,13 +4749,22 @@ export const secretaryRouter = createTRPCRouter({
         with: { breed: true, ring: true },
       });
 
-      const breedNames = assignments.filter((a) => a.breed).map((a) => a.breed!.name);
-      const breedsText = breedNames.length > 0 ? breedNames.join(', ') : 'All breeds';
+      const show = contract.show;
+
+      // Same Breed/Classification derivation as the offer email and the
+      // signed contract PDF — this confirmation used to hand-roll a breeds
+      // list that rendered a Junior Handling judge (breed-null assignment)
+      // as "All breeds" (Mandy's own JH appointment, North East Regional,
+      // 2026-08-03). One rule, one builder.
+      const { breedLine, classificationLine } = buildJudgeBreedAndClassification(
+        assignments,
+        show.breed ? [show.breed.name] : [],
+        show.name,
+      );
 
       const ringNums = assignments.filter((a) => a.ring).map((a) => `Ring ${a.ring!.number}`);
       const ringsText = ringNums.length > 0 ? ringNums.join(', ') : 'TBC';
 
-      const show = contract.show;
       const orgName = show.organisation?.name ?? 'the Show Society';
 
       const showDate = new Date(show.startDate).toLocaleDateString('en-GB', {
@@ -4765,8 +4774,17 @@ export const secretaryRouter = createTRPCRouter({
         year: 'numeric',
       });
 
+      // Venue strings arrive with stray commas in the data ("Outpaw
+      // Pursuits, , St Aidens…", "Durham,,") — normalise by splitting on
+      // commas and dropping empty segments rather than trusting each field.
       const venue = show.venue
-        ? `${show.venue.name}${show.venue.address ? `, ${show.venue.address}` : ''}${show.venue.postcode ? `, ${show.venue.postcode}` : ''}`
+        ? [show.venue.name, show.venue.address, show.venue.postcode]
+            .filter(Boolean)
+            .join(', ')
+            .split(',')
+            .map((s) => s.trim())
+            .filter(Boolean)
+            .join(', ')
         : 'Venue TBC';
 
       // Update contract stage
@@ -4830,7 +4848,8 @@ export const secretaryRouter = createTRPCRouter({
           <tr><td style="padding: 10px 12px; border-bottom: 1px solid ${BRAND.line}; font-weight: 600; color: ${BRAND.ink}; width: 120px;">Show</td><td style="padding: 10px 12px; border-bottom: 1px solid ${BRAND.line}; color: ${BRAND.ink};">${show.name}</td></tr>
           <tr><td style="padding: 10px 12px; border-bottom: 1px solid ${BRAND.line}; font-weight: 600; color: ${BRAND.ink};">Date</td><td style="padding: 10px 12px; border-bottom: 1px solid ${BRAND.line}; color: ${BRAND.ink};">${showDate}</td></tr>
           <tr><td style="padding: 10px 12px; border-bottom: 1px solid ${BRAND.line}; font-weight: 600; color: ${BRAND.ink};">Venue</td><td style="padding: 10px 12px; border-bottom: 1px solid ${BRAND.line}; color: ${BRAND.ink};">${venue}</td></tr>
-          <tr><td style="padding: 10px 12px; border-bottom: 1px solid ${BRAND.line}; font-weight: 600; color: ${BRAND.ink};">Breeds</td><td style="padding: 10px 12px; border-bottom: 1px solid ${BRAND.line}; color: ${BRAND.ink};">${breedsText}</td></tr>
+          <tr><td style="padding: 10px 12px; border-bottom: 1px solid ${BRAND.line}; font-weight: 600; color: ${BRAND.ink};">Breed</td><td style="padding: 10px 12px; border-bottom: 1px solid ${BRAND.line}; color: ${BRAND.ink};">${breedLine}</td></tr>
+          <tr><td style="padding: 10px 12px; border-bottom: 1px solid ${BRAND.line}; font-weight: 600; color: ${BRAND.ink};">Classification</td><td style="padding: 10px 12px; border-bottom: 1px solid ${BRAND.line}; color: ${BRAND.ink};">${classificationLine}</td></tr>
           <tr><td style="padding: 10px 12px; border-bottom: 1px solid ${BRAND.line}; font-weight: 600; color: ${BRAND.ink};">Ring(s)</td><td style="padding: 10px 12px; border-bottom: 1px solid ${BRAND.line}; color: ${BRAND.ink};">${ringsText}</td></tr>
         </table>
         <p style="font-size: 15px; color: ${BRAND.ink}; line-height: 1.6;">
@@ -6767,7 +6786,7 @@ export const secretaryRouter = createTRPCRouter({
 
       const show = await ctx.db.query.shows.findFirst({
         where: eq(shows.id, input.showId),
-        with: { organisation: true },
+        with: { organisation: true, breed: true },
       });
 
       if (!show) throw new TRPCError({ code: 'NOT_FOUND', message: 'Show not found' });
@@ -6777,6 +6796,7 @@ export const secretaryRouter = createTRPCRouter({
           eq(judgeAssignments.showId, input.showId),
           eq(judgeAssignments.judgeId, input.judgeId)
         ),
+        with: { breed: true },
       });
 
       if (assignments.length === 0) {
@@ -6803,7 +6823,13 @@ export const secretaryRouter = createTRPCRouter({
             organisation: show.organisation,
           },
           approvalToken: sharedToken,
-          breeds: assignments.filter((a) => a.breedId).map((a) => a.breedId!),
+          // One builder for what a judge judges — the breed-id filter told a
+          // Junior Handling judge they judged "All breeds" (2026-08-03).
+          ...buildJudgeBreedAndClassification(
+            assignments,
+            show.breed ? [show.breed.name] : [],
+            show.name,
+          ),
         });
       } catch (error) {
         throw new TRPCError({

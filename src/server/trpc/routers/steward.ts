@@ -24,6 +24,7 @@ import {
   critiqueDocuments,
 } from '@/server/db/schema';
 import { isUuid } from '@/lib/slugify';
+import { buildJudgeBreedAndClassification } from '@/lib/judge-breed-classification';
 import { publicOrgColumns } from '../public-org-columns';
 import { sendJudgeApprovalRequestEmail } from '@/server/services/email';
 import { deriveTopAwardJudge } from '@/server/services/derive-award-judge';
@@ -1285,6 +1286,7 @@ export const stewardRouter = createTRPCRouter({
           eq(judgeAssignments.showId, input.showId),
           eq(judgeAssignments.judgeId, input.judgeId)
         ),
+        with: { breed: true },
       });
 
       if (assignments.length === 0) {
@@ -1327,7 +1329,7 @@ export const stewardRouter = createTRPCRouter({
       // Get show details for the email
       const show = await ctx.db.query.shows.findFirst({
         where: eq(shows.id, input.showId),
-        with: { organisation: true, venue: true },
+        with: { organisation: true, venue: true, breed: true },
       });
 
       if (!show) {
@@ -1337,6 +1339,15 @@ export const stewardRouter = createTRPCRouter({
       // Generate a shared approval token for all assignments
       const crypto = await import('crypto');
       const sharedToken = crypto.randomUUID();
+
+      // One builder for what a judge judges — a breed-id filter here told a
+      // Junior Handling judge (breed-null assignment) they judged "All
+      // breeds" (Mandy, 2026-08-03).
+      const { breedLine, classificationLine } = buildJudgeBreedAndClassification(
+        assignments,
+        show.breed ? [show.breed.name] : [],
+        show.name,
+      );
 
       // Send approval email FIRST — if it fails, DB stays clean and steward can retry
       try {
@@ -1350,9 +1361,8 @@ export const stewardRouter = createTRPCRouter({
             organisation: show.organisation,
           },
           approvalToken: sharedToken,
-          breeds: assignments
-            .filter((a) => a.breedId)
-            .map((a) => a.breedId!),
+          breedLine,
+          classificationLine,
         });
       } catch (error) {
         throw new TRPCError({
