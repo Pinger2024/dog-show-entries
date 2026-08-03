@@ -218,7 +218,7 @@ export function ShowSectionNav({ showId, isWusv = false }: { showId: string; isW
       </div>
 
       {/* ─── Desktop: vertical sidebar nav ─── */}
-      <nav className="hidden w-48 shrink-0 lg:block">
+      <nav className="hidden w-48 shrink-0 lg:sticky lg:top-6 lg:block lg:max-h-[calc(100vh-3rem)] lg:self-start lg:overflow-y-auto">
         <div className="sticky top-24 space-y-4">
           {sectionGroups.map((group) => (
             <div key={group.label}>

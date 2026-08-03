@@ -98,7 +98,7 @@ export function DashboardShell({ user, children }: DashboardShellProps) {
   const mobileTitle = getMobileTitle(pathname);
 
   return (
-    <div className="flex min-h-screen overflow-x-hidden">
+    <div className="flex min-h-screen overflow-x-clip">
       {/* Desktop Sidebar */}
       <aside className="hidden w-64 shrink-0 border-r bg-sidebar md:flex md:flex-col sticky top-0 h-screen overflow-y-auto">
         {/* Sidebar header */}
