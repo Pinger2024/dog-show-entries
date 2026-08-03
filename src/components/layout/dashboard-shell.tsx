@@ -290,7 +290,9 @@ export function DashboardShell({ user, children }: DashboardShellProps) {
 
         {/* Page content */}
         <main className="flex-1 overflow-y-auto">
-          <div className="mx-auto max-w-7xl px-2 py-4 pb-28 sm:px-4 sm:py-6 md:pb-8 lg:px-8">
+          {/* Full available width — matches secretary-shell; no centred cap
+              on the work surfaces (Michael, 2026-08-03). */}
+          <div className="px-2 py-4 pb-28 sm:px-4 sm:py-6 md:pb-8 lg:px-8">
             {children}
           </div>
         </main>
