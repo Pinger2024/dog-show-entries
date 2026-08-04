@@ -47,6 +47,7 @@ import {
 const COMMON_SUNDRY_PRESETS = [
   { name: 'Printed Catalogue', description: 'Receive a printed show catalogue on the day', maxPerOrder: 1 },
   { name: 'Online Catalogue', description: 'Access to the digital show catalogue', maxPerOrder: 1 },
+  { name: 'Pre-paid Parking Pass', description: 'Car parking at the venue. Your pass is emailed a week before the show.', maxPerOrder: 1 },
   { name: 'Donation', description: 'Support the club with a voluntary donation' },
   { name: 'Club Membership — Sole', description: 'Annual single membership', maxPerOrder: 1 },
   { name: 'Club Membership — Joint', description: 'Annual joint membership', maxPerOrder: 1 },
