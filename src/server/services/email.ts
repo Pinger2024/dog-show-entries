@@ -4,6 +4,7 @@ import { and, eq } from 'drizzle-orm';
 import { orders, memberships, users, printOrders, showClasses } from '@/server/db/schema';
 import { formatOrderRef, PRINT_PAYMENT_METHODS } from '@/lib/print-products';
 import { isCatalogueItem } from '@/lib/catalogue-utils';
+import { generateParkingPassPdf } from '@/server/services/parking-pass-pdf';
 import { buildClassLabelMap } from '@/lib/class-labels';
 import { BRAND } from '@/lib/brand';
 
@@ -962,4 +963,78 @@ export async function sendCatalogueReadyEmail(orderId: string) {
   }
   console.log(`[email] Catalogue-ready sent for order ${orderId} to ${exhibitor.email}`);
   return result;
+}
+
+/**
+ * Pre-paid parking pass email. Fired by the cron a week before the show (and
+ * on the next hourly tick for anyone who bought it late inside that window),
+ * once per order — never resends. Mandy 2026-08-04: the pass shows name +
+ * show details, no car registration capture, and must be readable printed
+ * or on a phone at the gate.
+ *
+ * Generates the attached PDF via generateParkingPassPdf(orderId) — the SAME
+ * helper the download route uses via renderToBuffer, so the emailed PDF and
+ * the one an exhibitor downloads from their account can never drift apart.
+ *
+ * Returns `true` only when an email was genuinely sent (so the cron only
+ * stamps `parkingPassEmailedAt` and counts a send on a real success) and
+ * `false` when the order turns out to have no parking sundry or no
+ * exhibitor email — a silent no-op, not an error.
+ */
+export async function sendParkingPassEmail(orderId: string): Promise<boolean> {
+  const generated = await generateParkingPassPdf(orderId);
+  if (!generated) return false;
+
+  const { buffer, filename, order } = generated;
+  const exhibitor = order.exhibitor;
+  if (!exhibitor?.email) {
+    console.error(`[email] Cannot send parking pass: order ${orderId} has no exhibitor email`);
+    return false;
+  }
+
+  const show = order.show;
+  const downloadUrl = `${APP_URL}/api/parking-pass/${orderId}`;
+
+  const html = `
+<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
+<body style="margin: 0; padding: 0; background-color: ${BRAND.paper}; font-family: 'Hanken Grotesk', -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
+  <div style="max-width: 560px; margin: 0 auto; padding: 24px 16px;">
+    ${emailHeader()}
+    <div style="background: #ffffff; border: 1px solid ${BRAND.line}; border-radius: 14px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+      <div style="padding: 28px 24px; text-align: center;">
+        <h2 style="margin: 0 0 12px; font-family: 'Hanken Grotesk', -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-weight: 800; letter-spacing: -0.015em; font-size: 22px; color: ${BRAND.ink};">${show.name}</h2>
+        <p style="margin: 0 0 20px; font-size: 15px; color: ${BRAND.ink}; line-height: 1.5;">
+          Good news${exhibitor.name ? `, ${exhibitor.name.split(' ')[0]}` : ''} — your parking pass is attached.
+          Print it out or just show it on your phone at the gate.
+        </p>
+        <div style="margin: 0 0 16px;">
+          ${btn(downloadUrl, 'Download Your Pass')}
+        </div>
+        <p style="margin: 0; font-size: 13px; color: ${BRAND.ink2};">
+          You can come back and download it again any time from your Remi account.
+        </p>
+      </div>
+    </div>
+    ${emailFooter()}
+  </div>
+</body>
+</html>`;
+
+  const result = await resend.emails.send({
+    from: FROM,
+    to: exhibitor.email,
+    replyTo: process.env.FEEDBACK_EMAIL ?? 'feedback@remishowmanager.co.uk',
+    subject: `Your parking pass — ${show.name}`,
+    html,
+    attachments: [{ filename, content: buffer }],
+  });
+
+  if (result.error) {
+    console.error(`[email] Failed parking pass email to ${exhibitor.email}:`, result.error);
+    throw new Error(result.error.message ?? 'send failed');
+  }
+  console.log(`[email] Parking pass sent for order ${orderId} to ${exhibitor.email}`);
+  return true;
 }
