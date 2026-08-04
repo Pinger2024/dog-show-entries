@@ -45,6 +45,7 @@ import { svEntryMissingRequirements, svEntryBlockedMessage } from '@/lib/sv-entr
 import { pedigreeMissingForEntry } from '@/lib/sv-entry-readiness';
 import { hasJudgingConflict } from '@/lib/judge-exhibitor-conflict';
 import { getCompetitionAgeError } from '@/lib/date-utils';
+import { isParkingSundry } from '@/lib/parking-utils';
 
 const cartEntrySchema = z.object({
   entryType: z.enum(['standard', 'junior_handler']).default('standard'),
@@ -1043,4 +1044,42 @@ export const ordersRouter = createTRPCRouter({
             : null,
       };
     }),
+
+  // Parking passes the calling exhibitor has purchased, for the entries
+  // page's "Extras" row (Mandy 2026-08-04). Scoped to ctx.session.user.id —
+  // never a public/organisation-wide query. Grouped by order (not show) so
+  // the quantity always matches what /api/parking-pass/[orderId] would
+  // actually render, even in the rare case of two separate paid orders for
+  // the same show.
+  myParkingPasses: protectedProcedure.query(async ({ ctx }) => {
+    const rows = await ctx.db
+      .select({
+        orderId: orderSundryItems.orderId,
+        showId: orders.showId,
+        quantity: orderSundryItems.quantity,
+        sundryName: sundryItems.name,
+      })
+      .from(orderSundryItems)
+      .innerJoin(sundryItems, eq(orderSundryItems.sundryItemId, sundryItems.id))
+      .innerJoin(orders, eq(orderSundryItems.orderId, orders.id))
+      .where(
+        and(
+          eq(orders.exhibitorId, ctx.session.user.id),
+          eq(orders.status, 'paid'),
+        )
+      );
+
+    const byOrder = new Map<string, { orderId: string; showId: string; quantity: number }>();
+    for (const row of rows) {
+      if (!isParkingSundry(row.sundryName)) continue;
+      const existing = byOrder.get(row.orderId);
+      if (existing) {
+        existing.quantity += row.quantity;
+      } else {
+        byOrder.set(row.orderId, { orderId: row.orderId, showId: row.showId, quantity: row.quantity });
+      }
+    }
+
+    return Array.from(byOrder.values());
+  }),
 });
