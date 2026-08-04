@@ -12,6 +12,8 @@ import {
   ChevronDown,
   Loader2,
   MapPin,
+  Car,
+  Download,
 } from 'lucide-react';
 import { trpc } from '@/lib/trpc/client';
 import { formatCurrency } from '@/lib/date-utils';
@@ -86,6 +88,16 @@ export default function EntriesPage() {
     () => new Map(cataloguePurchases?.map((p) => [p.showId, p])),
     [cataloguePurchases]
   );
+  const { data: parkingPasses } = trpc.orders.myParkingPasses.useQuery();
+  const parkingMap = useMemo(() => {
+    const map = new Map<string, ParkingPass[]>();
+    for (const pass of parkingPasses ?? []) {
+      const existing = map.get(pass.showId);
+      if (existing) existing.push(pass);
+      else map.set(pass.showId, [pass]);
+    }
+    return map;
+  }, [parkingPasses]);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
   const [collapsedPast, setCollapsedPast] = useState(true);
 
@@ -242,7 +254,7 @@ export default function EntriesPage() {
           </h2>
           <div className="space-y-4">
             {upcoming.map((group) => (
-              <ShowGroupCard key={group.showId} group={group} catalogueMap={catalogueMap} />
+              <ShowGroupCard key={group.showId} group={group} catalogueMap={catalogueMap} parkingMap={parkingMap} />
             ))}
           </div>
         </section>
@@ -262,7 +274,7 @@ export default function EntriesPage() {
           {!collapsedPast && (
             <div className="space-y-4">
               {past.map((group) => (
-                <ShowGroupCard key={group.showId} group={group} isPast catalogueMap={catalogueMap} />
+                <ShowGroupCard key={group.showId} group={group} isPast catalogueMap={catalogueMap} parkingMap={parkingMap} />
               ))}
             </div>
           )}
@@ -273,9 +285,21 @@ export default function EntriesPage() {
 }
 
 type CataloguePurchase = RouterOutputs['shows']['getMyCataloguePurchases'][number];
+type ParkingPass = RouterOutputs['orders']['myParkingPasses'][number];
 
-function ShowGroupCard({ group, isPast, catalogueMap }: { group: ShowGroup; isPast?: boolean; catalogueMap?: Map<string, CataloguePurchase> }) {
+function ShowGroupCard({
+  group,
+  isPast,
+  catalogueMap,
+  parkingMap,
+}: {
+  group: ShowGroup;
+  isPast?: boolean;
+  catalogueMap?: Map<string, CataloguePurchase>;
+  parkingMap?: Map<string, ParkingPass[]>;
+}) {
   const catalogue = catalogueMap?.get(group.showId);
+  const parkingPasses = parkingMap?.get(group.showId) ?? [];
 
   return (
     <Card className={isPast ? 'opacity-70' : ''}>
@@ -323,6 +347,33 @@ function ShowGroupCard({ group, isPast, catalogueMap }: { group: ShowGroup; isPa
             <BookOpen className="size-4" />
             {catalogue.isAvailable ? 'View Online Catalogue' : 'Catalogue — available soon'}
           </Link>
+        </div>
+      )}
+
+      {/* Extras — pre-paid parking pass(es) purchased at checkout */}
+      {parkingPasses.length > 0 && (
+        <div className="border-t bg-muted/30 px-3 py-2.5 sm:px-4">
+          <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+            Extras
+          </p>
+          <div className="space-y-2">
+            {parkingPasses.map((pass) => (
+              <div key={pass.orderId} className="flex items-center justify-between gap-3">
+                <div className="flex min-w-0 flex-1 items-center gap-2 text-sm font-medium">
+                  <Car className="size-4 shrink-0 text-muted-foreground" />
+                  <span className="truncate">
+                    Parking pass{pass.quantity > 1 ? ` × ${pass.quantity}` : ''}
+                  </span>
+                </div>
+                <Button asChild size="sm" variant="outline" className="min-h-[2.75rem] shrink-0">
+                  <a href={`/api/parking-pass/${pass.orderId}`}>
+                    <Download className="size-4" />
+                    Download
+                  </a>
+                </Button>
+              </div>
+            ))}
+          </div>
         </div>
       )}
     </Card>

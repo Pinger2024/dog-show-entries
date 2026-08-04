@@ -8,7 +8,6 @@
  */
 import { eq } from 'drizzle-orm';
 import { renderToBuffer } from '@react-pdf/renderer';
-import React from 'react';
 import { db } from '@/server/db';
 import { orders } from '@/server/db/schema';
 import { publicOrgColumns } from '@/server/trpc/public-org-columns';
@@ -74,7 +73,14 @@ export async function generateParkingPassPdf(orderId: string): Promise<Generated
     quantity,
   };
 
-  const rawBuffer = await renderToBuffer(React.createElement(ParkingPassPdf, { data }));
+  // Call the component as a plain function (like generateJudgeContractPdf
+  // does) rather than React.createElement — that returns the raw <Document>
+  // element the function's body produces, which types cleanly against
+  // renderToBuffer's ReactElement<DocumentProps> signature. Wrapping via
+  // createElement instead produces a FunctionComponentElement<Props> that
+  // TypeScript can't reconcile with DocumentProps (a pre-existing mismatch
+  // visible throughout pdf-generation.ts).
+  const rawBuffer = await renderToBuffer(ParkingPassPdf({ data }));
   const buffer = Buffer.from(await stripUnembeddedBase14Fonts(rawBuffer));
   const filename = `${sanitizeFilename(order.show.name)}-Parking-Pass.pdf`;
 
