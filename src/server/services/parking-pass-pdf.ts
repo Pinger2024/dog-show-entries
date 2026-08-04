@@ -19,12 +19,8 @@ import { ParkingPassPdf, type ParkingPassPdfData } from '@/components/parking-pa
 export type GeneratedParkingPass = {
   buffer: Buffer;
   filename: string;
-  quantity: number;
-  order: {
-    id: string;
-    exhibitor: { name: string | null; email: string | null } | null;
-    show: { id: string; name: string; slug: string | null };
-  };
+  exhibitor: { name: string | null; email: string | null } | null;
+  showName: string;
 };
 
 /**
@@ -54,6 +50,10 @@ export async function generateParkingPassPdf(orderId: string): Promise<Generated
 
   if (!order) return null;
 
+  // Filter + sum inline against the already-loaded relation rows — the same
+  // shape exists in orders.myParkingPasses over its own (multi-order, flat)
+  // query rows. isParkingSundry() is the one shared rule; the two-line sum
+  // is not worth a helper that both callers would have to adapt to.
   const quantity = (order.orderSundryItems ?? [])
     .filter((osi) => osi.sundryItem?.name && isParkingSundry(osi.sundryItem.name))
     .reduce((sum, osi) => sum + osi.quantity, 0);
@@ -87,11 +87,7 @@ export async function generateParkingPassPdf(orderId: string): Promise<Generated
   return {
     buffer,
     filename,
-    quantity,
-    order: {
-      id: order.id,
-      exhibitor: order.exhibitor,
-      show: { id: order.show.id, name: order.show.name, slug: order.show.slug },
-    },
+    exhibitor: order.exhibitor,
+    showName: order.show.name,
   };
 }

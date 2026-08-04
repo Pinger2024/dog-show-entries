@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { TRPCError } from '@trpc/server';
-import { and, eq, isNull, inArray, desc, sql, asc } from 'drizzle-orm';
+import { and, eq, isNull, inArray, desc, sql, asc, ilike, or } from 'drizzle-orm';
 import { differenceInWeeks } from 'date-fns';
 import { protectedProcedure } from '../procedures';
 import { createTRPCRouter } from '../init';
@@ -45,7 +45,7 @@ import { svEntryMissingRequirements, svEntryBlockedMessage } from '@/lib/sv-entr
 import { pedigreeMissingForEntry } from '@/lib/sv-entry-readiness';
 import { hasJudgingConflict } from '@/lib/judge-exhibitor-conflict';
 import { getCompetitionAgeError } from '@/lib/date-utils';
-import { isParkingSundry } from '@/lib/parking-utils';
+import { isParkingSundry, PARKING_NAME_PATTERNS } from '@/lib/parking-utils';
 
 const cartEntrySchema = z.object({
   entryType: z.enum(['standard', 'junior_handler']).default('standard'),
@@ -1066,6 +1066,9 @@ export const ordersRouter = createTRPCRouter({
         and(
           eq(orders.exhibitorId, ctx.session.user.id),
           eq(orders.status, 'paid'),
+          // Coarse SQL prefilter (same convention as getMyCataloguePurchases);
+          // isParkingSundry() below stays the authoritative word-boundary check.
+          or(...PARKING_NAME_PATTERNS.map((p) => ilike(sundryItems.name, p))),
         )
       );
 

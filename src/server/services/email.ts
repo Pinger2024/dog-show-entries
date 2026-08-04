@@ -985,14 +985,12 @@ export async function sendParkingPassEmail(orderId: string): Promise<boolean> {
   const generated = await generateParkingPassPdf(orderId);
   if (!generated) return false;
 
-  const { buffer, filename, order } = generated;
-  const exhibitor = order.exhibitor;
+  const { buffer, filename, exhibitor, showName } = generated;
   if (!exhibitor?.email) {
     console.error(`[email] Cannot send parking pass: order ${orderId} has no exhibitor email`);
     return false;
   }
 
-  const show = order.show;
   // Button goes to the entries PAGE, not the session-gated API route — a
   // logged-out tap on /api/parking-pass/{id} lands on raw 401 JSON, and
   // every exhibitor-facing email links pages. The pass itself is attached;
@@ -1008,7 +1006,7 @@ export async function sendParkingPassEmail(orderId: string): Promise<boolean> {
     ${emailHeader()}
     <div style="background: #ffffff; border: 1px solid ${BRAND.line}; border-radius: 14px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
       <div style="padding: 28px 24px; text-align: center;">
-        <h2 style="margin: 0 0 12px; font-family: 'Hanken Grotesk', -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-weight: 800; letter-spacing: -0.015em; font-size: 22px; color: ${BRAND.ink};">${show.name}</h2>
+        <h2 style="margin: 0 0 12px; font-family: 'Hanken Grotesk', -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-weight: 800; letter-spacing: -0.015em; font-size: 22px; color: ${BRAND.ink};">${showName}</h2>
         <p style="margin: 0 0 20px; font-size: 15px; color: ${BRAND.ink}; line-height: 1.5;">
           Good news${exhibitor.name ? `, ${exhibitor.name.split(' ')[0]}` : ''} — your parking pass is attached.
           Print it out or just show it on your phone at the gate.
@@ -1030,7 +1028,7 @@ export async function sendParkingPassEmail(orderId: string): Promise<boolean> {
     from: FROM,
     to: exhibitor.email,
     replyTo: process.env.FEEDBACK_EMAIL ?? 'feedback@remishowmanager.co.uk',
-    subject: `Your parking pass — ${show.name}`,
+    subject: `Your parking pass — ${showName}`,
     html,
     attachments: [{ filename, content: buffer }],
   });

@@ -18,12 +18,7 @@ describe('orders.myParkingPasses', () => {
     const parkingItem = await makeSundryItem({ showId: show.id, name: 'Pre-paid Parking Pass' });
     await makeOrderSundryItem({ orderId: order.id, sundryItemId: parkingItem.id, quantity: 2, unitPrice: 300 });
 
-    const caller = createTestCaller({
-      id: exhibitor.id,
-      email: exhibitor.email!,
-      name: exhibitor.name!,
-      role: 'exhibitor',
-    });
+    const caller = createTestCaller(exhibitor);
 
     const result = await caller.orders.myParkingPasses();
     expect(result).toHaveLength(1);
@@ -38,12 +33,7 @@ describe('orders.myParkingPasses', () => {
     const catalogueItem = await makeSundryItem({ showId: show.id, name: 'Online Catalogue' });
     await makeOrderSundryItem({ orderId: order.id, sundryItemId: catalogueItem.id, quantity: 1, unitPrice: 500 });
 
-    const caller = createTestCaller({
-      id: exhibitor.id,
-      email: exhibitor.email!,
-      name: exhibitor.name!,
-      role: 'exhibitor',
-    });
+    const caller = createTestCaller(exhibitor);
 
     const result = await caller.orders.myParkingPasses();
     expect(result).toHaveLength(0);
@@ -57,12 +47,7 @@ describe('orders.myParkingPasses', () => {
     const parkingItem = await makeSundryItem({ showId: show.id, name: 'Pre-paid Parking Pass' });
     await makeOrderSundryItem({ orderId: order.id, sundryItemId: parkingItem.id, quantity: 1, unitPrice: 300 });
 
-    const caller = createTestCaller({
-      id: exhibitor.id,
-      email: exhibitor.email!,
-      name: exhibitor.name!,
-      role: 'exhibitor',
-    });
+    const caller = createTestCaller(exhibitor);
 
     const result = await caller.orders.myParkingPasses();
     expect(result).toHaveLength(0);
@@ -77,12 +62,7 @@ describe('orders.myParkingPasses', () => {
     const parkingItem = await makeSundryItem({ showId: show.id, name: 'Pre-paid Parking Pass' });
     await makeOrderSundryItem({ orderId: order.id, sundryItemId: parkingItem.id, quantity: 1, unitPrice: 300 });
 
-    const caller = createTestCaller({
-      id: stranger.id,
-      email: stranger.email!,
-      name: stranger.name!,
-      role: 'exhibitor',
-    });
+    const caller = createTestCaller(stranger);
 
     const result = await caller.orders.myParkingPasses();
     expect(result).toHaveLength(0);
@@ -96,12 +76,7 @@ describe('orders.myParkingPasses', () => {
     const wineItem = await makeSundryItem({ showId: show.id, name: 'Sparking Wine' });
     await makeOrderSundryItem({ orderId: order.id, sundryItemId: wineItem.id, quantity: 1, unitPrice: 800 });
 
-    const caller = createTestCaller({
-      id: exhibitor.id,
-      email: exhibitor.email!,
-      name: exhibitor.name!,
-      role: 'exhibitor',
-    });
+    const caller = createTestCaller(exhibitor);
 
     const result = await caller.orders.myParkingPasses();
     expect(result).toHaveLength(0);
