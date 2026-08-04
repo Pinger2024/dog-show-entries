@@ -73,6 +73,13 @@ export const orders = pgTable(
     catalogueReadyEmailedAt: timestamp('catalogue_ready_emailed_at', {
       withTimezone: true,
     }),
+    // Pre-paid parking pass "here's your pass" notification (Mandy
+    // 2026-08-04). Stamped by the cron the first time it sends the
+    // parking-pass email for this order so subsequent cron ticks don't
+    // double-send — same shape as catalogueReadyEmailedAt above.
+    parkingPassEmailedAt: timestamp('parking_pass_emailed_at', {
+      withTimezone: true,
+    }),
     createdAt: timestamp('created_at', { withTimezone: true })
       .defaultNow()
       .notNull(),
