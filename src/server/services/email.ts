@@ -993,7 +993,11 @@ export async function sendParkingPassEmail(orderId: string): Promise<boolean> {
   }
 
   const show = order.show;
-  const downloadUrl = `${APP_URL}/api/parking-pass/${orderId}`;
+  // Button goes to the entries PAGE, not the session-gated API route — a
+  // logged-out tap on /api/parking-pass/{id} lands on raw 401 JSON, and
+  // every exhibitor-facing email links pages. The pass itself is attached;
+  // the entries page carries the same download button.
+  const entriesUrl = `${APP_URL}/entries`;
 
   const html = `
 <!DOCTYPE html>
@@ -1010,10 +1014,10 @@ export async function sendParkingPassEmail(orderId: string): Promise<boolean> {
           Print it out or just show it on your phone at the gate.
         </p>
         <div style="margin: 0 0 16px;">
-          ${btn(downloadUrl, 'Download Your Pass')}
+          ${btn(entriesUrl, 'View Your Entries')}
         </div>
         <p style="margin: 0; font-size: 13px; color: ${BRAND.ink2};">
-          You can come back and download it again any time from your Remi account.
+          You can download the pass again any time from your entries page.
         </p>
       </div>
     </div>
