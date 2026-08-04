@@ -30,9 +30,15 @@ import {
   X,
 } from 'lucide-react';
 import Link from 'next/link';
-import { format, addDays } from 'date-fns';
+import { format, addDays, subDays } from 'date-fns';
 import { trpc } from '@/lib/trpc';
 import { poundsToPence, formatCurrency, parseLocalDate } from '@/lib/date-utils';
+import {
+  isCloseDateWithinFloor,
+  latestPermissibleCloseDate,
+  entryCloseFloorMessage,
+  entryCloseHint,
+} from '@/lib/entry-close-rules';
 import { CLASS_TEMPLATES, getRelevantTemplates } from '@/lib/class-templates';
 import { AllBreedClassSetup, type AllBreedClassData } from '@/components/shows/all-breed-class-setup';
 import { Button } from '@/components/ui/button';
@@ -171,15 +177,27 @@ const createShowSchema = z.object({
     return true;
   },
   { message: 'End date must be on or after the start date', path: ['endDate'] }
-).refine(
-  (data) => {
-    if (data.entryCloseDate && data.startDate) {
-      return new Date(data.startDate) >= new Date(data.entryCloseDate);
-    }
-    return true;
-  },
-  { message: 'Entry close date must be before the show start date', path: ['entryCloseDate'] }
-);
+).superRefine((data, ctx) => {
+  // Mandy's hard rule (2026-08-04): entries — and postal entries — must
+  // close at least 13 calendar days before the show ("two weeks give or
+  // take a day"). Same helper + message the server uses, via superRefine
+  // (not .refine) because the message needs the show's own date — the
+  // client can never drift from what the server accepts.
+  if (data.entryCloseDate && data.startDate && !isCloseDateWithinFloor(data.entryCloseDate, data.startDate)) {
+    ctx.addIssue({
+      code: 'custom',
+      message: entryCloseFloorMessage(data.startDate, 'entry close date'),
+      path: ['entryCloseDate'],
+    });
+  }
+  if (data.postalCloseDate && data.startDate && !isCloseDateWithinFloor(data.postalCloseDate, data.startDate)) {
+    ctx.addIssue({
+      code: 'custom',
+      message: entryCloseFloorMessage(data.startDate, 'postal close date'),
+      path: ['postalCloseDate'],
+    });
+  }
+});
 
 type CreateShowValues = z.infer<typeof createShowSchema>;
 
@@ -954,29 +972,34 @@ export default function NewShowPage() {
                   <DatePickerField control={form.control} name="entriesOpenDate" label="Entries Open" placeholder="Optional" />
                   <div className="hidden sm:block" />
                   <div>
-                    <DatePickerField control={form.control} name="entryCloseDate" label="Entries Close" placeholder="Optional" disableBefore={watchedEntriesOpen ? parseLocalDate(watchedEntriesOpen) : undefined} disableAfter={watchedStartDate ? parseLocalDate(watchedStartDate) : undefined} />
+                    {/* disableAfter is the latest date the 13-day floor allows —
+                        Mandy's rule (2026-08-04) — not the show date itself, so
+                        the calendar picker physically can't offer a non-compliant
+                        date (learn the rule while picking, not on save-reject). */}
+                    <DatePickerField control={form.control} name="entryCloseDate" label="Entries Close" placeholder="Optional" disableBefore={watchedEntriesOpen ? parseLocalDate(watchedEntriesOpen) : undefined} disableAfter={watchedStartDate ? latestPermissibleCloseDate(watchedStartDate) : undefined} />
                     {watchedStartDate && (
-                      <div className="mt-1.5 flex flex-wrap gap-1">
-                        {[
-                          { label: '1 week before', days: 7 },
-                          { label: '2 weeks before', days: 14 },
-                          { label: '1 month before', days: 30 },
-                        ].map((opt) => {
-                          const closeDate = new Date(parseLocalDate(watchedStartDate));
-                          closeDate.setDate(closeDate.getDate() - opt.days);
-                          const dateStr = closeDate.toISOString().split('T')[0]!;
-                          return (
-                            <button
-                              key={opt.days}
-                              type="button"
-                              onClick={() => form.setValue('entryCloseDate', dateStr, { shouldValidate: true, shouldDirty: true })}
-                              className="min-h-[2.75rem] rounded-full border px-3 py-2 text-xs text-muted-foreground transition-colors hover:border-primary hover:text-primary active:bg-primary/10 active:border-primary active:text-primary"
-                            >
-                              {opt.label}
-                            </button>
-                          );
-                        })}
-                      </div>
+                      <>
+                        <p className="mt-1.5 text-xs text-muted-foreground">{entryCloseHint(watchedStartDate)}</p>
+                        <div className="mt-1.5 flex flex-wrap gap-1">
+                          {[
+                            { label: 'Latest allowed', date: latestPermissibleCloseDate(watchedStartDate) },
+                            { label: '3 weeks before', date: subDays(parseLocalDate(watchedStartDate), 21) },
+                            { label: '1 month before', date: subDays(parseLocalDate(watchedStartDate), 30) },
+                          ].map((opt) => {
+                            const dateStr = format(opt.date, 'yyyy-MM-dd');
+                            return (
+                              <button
+                                key={opt.label}
+                                type="button"
+                                onClick={() => form.setValue('entryCloseDate', dateStr, { shouldValidate: true, shouldDirty: true })}
+                                className="min-h-[2.75rem] rounded-full border px-3 py-2 text-xs text-muted-foreground transition-colors hover:border-primary hover:text-primary active:bg-primary/10 active:border-primary active:text-primary"
+                              >
+                                {opt.label}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </>
                     )}
                   </div>
                 </div>
@@ -999,7 +1022,12 @@ export default function NewShowPage() {
                 />
 
                 {watchedAcceptsPostal && (
-                  <DatePickerField control={form.control} name="postalCloseDate" label="Postal Close Date" placeholder="Pick a date" disableBefore={watchedEntriesOpen ? parseLocalDate(watchedEntriesOpen) : undefined} disableAfter={watchedStartDate ? parseLocalDate(watchedStartDate) : undefined} />
+                  <div>
+                    <DatePickerField control={form.control} name="postalCloseDate" label="Postal Close Date" placeholder="Pick a date" disableBefore={watchedEntriesOpen ? parseLocalDate(watchedEntriesOpen) : undefined} disableAfter={watchedStartDate ? latestPermissibleCloseDate(watchedStartDate) : undefined} />
+                    {watchedStartDate && (
+                      <p className="mt-1.5 text-xs text-muted-foreground">{entryCloseHint(watchedStartDate)}</p>
+                    )}
+                  </div>
                 )}
 
                     </AccordionContent>

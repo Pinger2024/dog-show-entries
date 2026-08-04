@@ -4,6 +4,7 @@ import {
   latestPermissibleCloseDate,
   isCloseDateWithinFloor,
   entryCloseFloorMessage,
+  entryCloseHint,
 } from '@/lib/entry-close-rules';
 
 // All fixture dates below sit in January/February — outside British Summer
@@ -86,5 +87,22 @@ describe('entryCloseFloorMessage', () => {
     const message = entryCloseFloorMessage('2026-01-31', 'postal close date');
     expect(message).toContain('postal close date');
     expect(message).not.toContain('entry close date first');
+  });
+});
+
+describe('entryCloseHint', () => {
+  it('states both dates by day-of-week + day + month, no year', () => {
+    // 31 Jan 2026 is a Saturday; 13 calendar days earlier, 18 Jan 2026, is a Sunday.
+    expect(entryCloseHint('2026-01-31')).toBe(
+      'For a show on Saturday 31 January, entries must close by Sunday 18 January.',
+    );
+  });
+
+  it('is a proactive statement, not phrased as a rejection', () => {
+    // Distinct from entryCloseFloorMessage: no "must be at least"/"update your"
+    // — this is shown before any date has been picked, so it can't scold.
+    const hint = entryCloseHint('2026-01-31');
+    expect(hint).not.toContain('update your');
+    expect(hint).not.toContain('at least');
   });
 });

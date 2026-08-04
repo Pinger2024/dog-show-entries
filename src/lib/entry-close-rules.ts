@@ -72,3 +72,18 @@ export function entryCloseFloorMessage(
   const latestLabel = format(latestPermissibleCloseDate(startDate), 'd MMMM yyyy');
   return `Entries must close at least two weeks before the show. For a show on ${showStartLabel} the latest ${field} is ${latestLabel} — update your ${field} first.`;
 }
+
+/**
+ * Proactive, non-error hint naming the concrete latest permissible close
+ * date for a show starting on `startDate` — shown near the entry-close /
+ * postal-close date pickers so a secretary learns the floor while filling
+ * in the form, before ever reaching the reject-on-save error above. Same
+ * underlying date ({@link latestPermissibleCloseDate}), softer voice.
+ * Day-of-week + day + month, no year — e.g. "For a show on Saturday 29
+ * August, entries must close by Sunday 16 August."
+ */
+export function entryCloseHint(startDate: string): string {
+  const showStartLabel = format(parseLocalDate(startDate), 'EEEE d MMMM');
+  const latestLabel = format(latestPermissibleCloseDate(startDate), 'EEEE d MMMM');
+  return `For a show on ${showStartLabel}, entries must close by ${latestLabel}.`;
+}

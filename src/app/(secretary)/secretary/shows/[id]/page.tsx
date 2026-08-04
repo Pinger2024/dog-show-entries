@@ -21,7 +21,14 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { trpc } from '@/lib/trpc';
+import { format } from 'date-fns';
 import { formatDateRange, poundsToPence } from '@/lib/date-utils';
+import {
+  isCloseDateWithinFloor,
+  latestPermissibleCloseDate,
+  entryCloseFloorMessage,
+  entryCloseHint,
+} from '@/lib/entry-close-rules';
 import { showTypeLabels, displayShowTypeLabel } from '@/lib/show-types';
 import { cn } from '@/lib/utils';
 import { Label } from '@/components/ui/label';
@@ -535,13 +542,15 @@ function EditShowDetailsDialog({
   });
 
   function handleSave() {
-    // Validate close dates are before show start date
-    if (entryCloseDate && startDate && new Date(entryCloseDate) >= new Date(startDate)) {
-      toast.error('Entry close date must be before the show start date');
+    // Mandy's hard rule (2026-08-04): entries — and postal entries — must
+    // close at least two weeks before the show. Same helper + message the
+    // server uses, so this can never drift from what the server accepts.
+    if (entryCloseDate && startDate && !isCloseDateWithinFloor(entryCloseDate, startDate)) {
+      toast.error(entryCloseFloorMessage(startDate, 'entry close date'));
       return;
     }
-    if (postalCloseDate && startDate && new Date(postalCloseDate) >= new Date(startDate)) {
-      toast.error('Postal close date must be before the show start date');
+    if (postalCloseDate && startDate && !isCloseDateWithinFloor(postalCloseDate, startDate)) {
+      toast.error(entryCloseFloorMessage(startDate, 'postal close date'));
       return;
     }
     updateMutation.mutate({
@@ -882,33 +891,27 @@ function EditShowDetailsDialog({
                     const newStartDate = e.target.value;
                     setStartDate(newStartDate);
 
-                    // If entry close date is on or after the new start date, auto-adjust
-                    if (newStartDate && entryCloseDate) {
-                      const closeDate = new Date(entryCloseDate);
-                      const showDate = new Date(newStartDate);
-                      if (closeDate >= showDate) {
-                        // Set entry close to 7 days before the new start date at 23:59
-                        const adjusted = new Date(showDate);
-                        adjusted.setDate(adjusted.getDate() - 7);
-                        const adjustedStr = adjusted.toISOString().slice(0, 11) + '23:59';
-                        setEntryCloseDate(adjustedStr);
-                        const displayDate = adjusted.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
-                        toast.info(`Entry close date adjusted to ${displayDate} — it can't be after the show date`);
-                      }
+                    // Mandy's hard rule (2026-08-04): entries must close at
+                    // least two weeks before the show. If moving the start
+                    // date puts the entry close date inside that floor,
+                    // auto-adjust it to the latest date the floor still
+                    // allows rather than let the secretary save an invalid
+                    // gap and hit the error on Save instead.
+                    if (newStartDate && entryCloseDate && !isCloseDateWithinFloor(entryCloseDate, newStartDate)) {
+                      const adjusted = latestPermissibleCloseDate(newStartDate);
+                      setEntryCloseDate(`${format(adjusted, 'yyyy-MM-dd')}T23:59`);
+                      toast.info(
+                        `Entry close date adjusted to ${format(adjusted, 'd MMMM yyyy')} — entries must close at least two weeks before the show`
+                      );
                     }
 
-                    // Also check postal close date
-                    if (newStartDate && postalCloseDate) {
-                      const postalDate = new Date(postalCloseDate);
-                      const showDate = new Date(newStartDate);
-                      if (postalDate >= showDate) {
-                        const adjusted = new Date(showDate);
-                        adjusted.setDate(adjusted.getDate() - 10);
-                        const adjustedStr = adjusted.toISOString().slice(0, 11) + '23:59';
-                        setPostalCloseDate(adjustedStr);
-                        const displayDate = adjusted.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
-                        toast.info(`Postal close date adjusted to ${displayDate} — it can't be after the show date`);
-                      }
+                    // Same floor applies to the postal close date.
+                    if (newStartDate && postalCloseDate && !isCloseDateWithinFloor(postalCloseDate, newStartDate)) {
+                      const adjusted = latestPermissibleCloseDate(newStartDate);
+                      setPostalCloseDate(`${format(adjusted, 'yyyy-MM-dd')}T23:59`);
+                      toast.info(
+                        `Postal close date adjusted to ${format(adjusted, 'd MMMM yyyy')} — entries must close at least two weeks before the show`
+                      );
                     }
                   }}
                 />
@@ -926,6 +929,9 @@ function EditShowDetailsDialog({
             {/* Separate date + time inputs (Mandy 2026-07-23): closes default
                 to 11:59pm on the chosen date. A combined datetime-local can't
                 deliver that on iOS — the wheel starts at an arbitrary time. */}
+            {startDate && (
+              <p className="text-xs text-muted-foreground">{entryCloseHint(startDate)}</p>
+            )}
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-1.5">
                 <Label htmlFor="edit-entry-close">Entry Close Date</Label>
@@ -935,13 +941,13 @@ function EditShowDetailsDialog({
                     type="date"
                     className="flex-1"
                     value={entryCloseDate.slice(0, 10)}
-                    max={startDate || undefined}
+                    max={startDate ? format(latestPermissibleCloseDate(startDate), 'yyyy-MM-dd') : undefined}
                     onChange={(e) => {
                       const newClose = e.target.value
                         ? `${e.target.value}T23:59`
                         : '';
-                      if (newClose && startDate && new Date(newClose) >= new Date(startDate)) {
-                        toast.error('Entry close date must be before the show date');
+                      if (newClose && startDate && !isCloseDateWithinFloor(newClose, startDate)) {
+                        toast.error(entryCloseFloorMessage(startDate, 'entry close date'));
                         return;
                       }
                       setEntryCloseDate(newClose);
@@ -968,13 +974,13 @@ function EditShowDetailsDialog({
                     type="date"
                     className="flex-1"
                     value={postalCloseDate.slice(0, 10)}
-                    max={startDate || undefined}
+                    max={startDate ? format(latestPermissibleCloseDate(startDate), 'yyyy-MM-dd') : undefined}
                     onChange={(e) => {
                       const newClose = e.target.value
                         ? `${e.target.value}T23:59`
                         : '';
-                      if (newClose && startDate && new Date(newClose) >= new Date(startDate)) {
-                        toast.error('Postal close date must be before the show date');
+                      if (newClose && startDate && !isCloseDateWithinFloor(newClose, startDate)) {
+                        toast.error(entryCloseFloorMessage(startDate, 'postal close date'));
                         return;
                       }
                       setPostalCloseDate(newClose);
