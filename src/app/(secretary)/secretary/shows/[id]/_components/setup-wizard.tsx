@@ -15,15 +15,14 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { trpc } from '@/lib/trpc';
-import { format } from 'date-fns';
 import { penceToPoundsString, poundsToPence } from '@/lib/date-utils';
 import {
   MIN_DAYS_BEFORE_SHOW_START,
   isCloseDateWithinFloor,
-  latestPermissibleCloseDate,
+  latestPermissibleCloseDateInputValue,
   entryCloseFloorMessage,
-  entryCloseHint,
 } from '@/lib/entry-close-rules';
+import { EntryCloseHint } from '@/components/shows/entry-close-hint';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -868,9 +867,7 @@ function StepDetails({
             tip: 'You can extend a close date later if you need more entries. Just come back and change it.',
           }}
         />
-        {show.startDate && (
-          <p className="text-xs text-muted-foreground">{entryCloseHint(show.startDate)}</p>
-        )}
+        {show.startDate && <EntryCloseHint startDate={show.startDate} />}
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <div className="space-y-1.5">
             <Label htmlFor="wiz-close-date" className="text-xs">
@@ -886,14 +883,18 @@ function StepDetails({
                 type="date"
                 className="min-h-[2.75rem] flex-1"
                 value={entryCloseDate.slice(0, 10)}
-                max={show.startDate ? format(latestPermissibleCloseDate(show.startDate), 'yyyy-MM-dd') : undefined}
-                onChange={(e) =>
-                  setEntryCloseDate(
-                    e.target.value
-                      ? `${e.target.value}T23:59`
-                      : '',
-                  )
-                }
+                max={show.startDate ? latestPermissibleCloseDateInputValue(show.startDate) : undefined}
+                onChange={(e) => {
+                  const newClose = e.target.value ? `${e.target.value}T23:59` : '';
+                  // Mandy's hard rule (2026-08-04): same floor guard as Save
+                  // (handleSave above), but on change — immediate feedback
+                  // rather than a surprise on the eventual save.
+                  if (newClose && show.startDate && !isCloseDateWithinFloor(newClose, show.startDate)) {
+                    toast.error(entryCloseFloorMessage(show.startDate, 'entry close date'));
+                    return;
+                  }
+                  setEntryCloseDate(newClose);
+                }}
               />
               <Input
                 aria-label="Closing time"
@@ -919,14 +920,16 @@ function StepDetails({
                   type="date"
                   className="min-h-[2.75rem] flex-1"
                   value={postalCloseDate.slice(0, 10)}
-                  max={show.startDate ? format(latestPermissibleCloseDate(show.startDate), 'yyyy-MM-dd') : undefined}
-                  onChange={(e) =>
-                    setPostalCloseDate(
-                      e.target.value
-                        ? `${e.target.value}T23:59`
-                        : '',
-                    )
-                  }
+                  max={show.startDate ? latestPermissibleCloseDateInputValue(show.startDate) : undefined}
+                  onChange={(e) => {
+                    const newClose = e.target.value ? `${e.target.value}T23:59` : '';
+                    // Same floor guard as the entry close date above.
+                    if (newClose && show.startDate && !isCloseDateWithinFloor(newClose, show.startDate)) {
+                      toast.error(entryCloseFloorMessage(show.startDate, 'postal close date'));
+                      return;
+                    }
+                    setPostalCloseDate(newClose);
+                  }}
                 />
                 <Input
                   aria-label="Postal closing time"

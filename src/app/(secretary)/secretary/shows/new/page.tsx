@@ -37,8 +37,8 @@ import {
   isCloseDateWithinFloor,
   latestPermissibleCloseDate,
   entryCloseFloorMessage,
-  entryCloseHint,
 } from '@/lib/entry-close-rules';
+import { EntryCloseHint } from '@/components/shows/entry-close-hint';
 import { CLASS_TEMPLATES, getRelevantTemplates } from '@/lib/class-templates';
 import { AllBreedClassSetup, type AllBreedClassData } from '@/components/shows/all-breed-class-setup';
 import { Button } from '@/components/ui/button';
@@ -503,6 +503,10 @@ export default function NewShowPage() {
   const watchedEndDate = form.watch('endDate');
   const watchedAcceptsPostal = form.watch('acceptsPostalEntries');
   const watchedEntriesOpen = form.watch('entriesOpenDate');
+
+  // Mandy's 13-day floor (2026-08-04) — computed once per render rather than
+  // separately at each of the three JSX sites below that need it.
+  const latestCloseDate = watchedStartDate ? latestPermissibleCloseDate(watchedStartDate) : undefined;
 
   // SV/WUSV regionals always run separate Dog + Bitch — force the form
   // value if the secretary flips the ruleset after starting the wizard.
@@ -976,13 +980,13 @@ export default function NewShowPage() {
                         Mandy's rule (2026-08-04) — not the show date itself, so
                         the calendar picker physically can't offer a non-compliant
                         date (learn the rule while picking, not on save-reject). */}
-                    <DatePickerField control={form.control} name="entryCloseDate" label="Entries Close" placeholder="Optional" disableBefore={watchedEntriesOpen ? parseLocalDate(watchedEntriesOpen) : undefined} disableAfter={watchedStartDate ? latestPermissibleCloseDate(watchedStartDate) : undefined} />
+                    <DatePickerField control={form.control} name="entryCloseDate" label="Entries Close" placeholder="Optional" disableBefore={watchedEntriesOpen ? parseLocalDate(watchedEntriesOpen) : undefined} disableAfter={latestCloseDate} />
                     {watchedStartDate && (
                       <>
-                        <p className="mt-1.5 text-xs text-muted-foreground">{entryCloseHint(watchedStartDate)}</p>
+                        <EntryCloseHint startDate={watchedStartDate} className="mt-1.5" />
                         <div className="mt-1.5 flex flex-wrap gap-1">
                           {[
-                            { label: 'Latest allowed', date: latestPermissibleCloseDate(watchedStartDate) },
+                            { label: 'Latest allowed', date: latestCloseDate! },
                             { label: '3 weeks before', date: subDays(parseLocalDate(watchedStartDate), 21) },
                             { label: '1 month before', date: subDays(parseLocalDate(watchedStartDate), 30) },
                           ].map((opt) => {
@@ -1023,9 +1027,9 @@ export default function NewShowPage() {
 
                 {watchedAcceptsPostal && (
                   <div>
-                    <DatePickerField control={form.control} name="postalCloseDate" label="Postal Close Date" placeholder="Pick a date" disableBefore={watchedEntriesOpen ? parseLocalDate(watchedEntriesOpen) : undefined} disableAfter={watchedStartDate ? latestPermissibleCloseDate(watchedStartDate) : undefined} />
+                    <DatePickerField control={form.control} name="postalCloseDate" label="Postal Close Date" placeholder="Pick a date" disableBefore={watchedEntriesOpen ? parseLocalDate(watchedEntriesOpen) : undefined} disableAfter={latestCloseDate} />
                     {watchedStartDate && (
-                      <p className="mt-1.5 text-xs text-muted-foreground">{entryCloseHint(watchedStartDate)}</p>
+                      <EntryCloseHint startDate={watchedStartDate} className="mt-1.5" />
                     )}
                   </div>
                 )}

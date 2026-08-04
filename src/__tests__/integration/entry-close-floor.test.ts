@@ -145,6 +145,33 @@ describe('shows.update — entry-close floor', () => {
     const res = await caller.shows.update({ id: show.id, startDate: '2030-06-25' });
     expect(res.startDate).toBe('2030-06-25');
   });
+
+  it('does not block an unrelated field update on a show whose STORED dates already breach the floor', async () => {
+    // Root-cause guard for shows.update fetching `storedShow` unconditionally
+    // (2026-08-05 refactor): the floor re-check must stay scoped to calls
+    // that actually touch startDate/entryCloseDate/postalCloseDate/status,
+    // not fire as a side effect of fetching the row. Otherwise a real show
+    // created before this rule shipped — North Eastern GSD Club Championship
+    // Show 2026, start 11 Oct / close 2 Oct, a 9-day gap — would become
+    // uneditable for EVERY field, not just the dates, until someone fixes
+    // the dates first.
+    const { user, org } = await makeSecretaryWithOrg();
+    const show = await makeShow({
+      organisationId: org.id,
+      startDate: '2030-06-11',
+      endDate: '2030-06-11',
+      entryCloseDate: new Date('2030-06-02T12:00:00.000Z'), // 9-day gap — already breaches the floor
+      status: 'draft',
+    });
+    const caller = createTestCaller(user);
+
+    const res = await caller.shows.update({ id: show.id, name: 'North Eastern GSD Club Show (renamed)' });
+    expect(res.name).toBe('North Eastern GSD Club Show (renamed)');
+
+    const reloaded = await testDb.query.shows.findFirst({ where: eq(shows.id, show.id) });
+    expect(reloaded?.name).toBe('North Eastern GSD Club Show (renamed)');
+    expect(reloaded?.entryCloseDate?.toISOString()).toBe('2030-06-02T12:00:00.000Z'); // untouched
+  });
 });
 
 describe('shows.update — entries_open transition vs the entry-close floor', () => {

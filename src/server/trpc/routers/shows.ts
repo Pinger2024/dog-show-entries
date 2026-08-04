@@ -70,6 +70,21 @@ async function resolveShowId(db: Database, idOrSlug: string): Promise<string> {
   return show.id;
 }
 
+/**
+ * Resolves the effective value of a nullable update-input field against its
+ * stored counterpart: `undefined` means the field wasn't sent this call
+ * (fall back to whatever's already stored), `null` means it was explicitly
+ * cleared (no value, don't fall back). Used in `shows.update` for the
+ * entry-close / postal-close floor check, which has to reason about dates
+ * this call isn't itself touching. Two independent type params — not one —
+ * because the wire value (`entryCloseDate`: ISO string) and the stored DB
+ * value (`storedShow.entryCloseDate`: Date, a `timestamp` column) are
+ * different types; `isCloseDateWithinFloor` already accepts either.
+ */
+function effectiveOrStored<S, T>(sent: S | null | undefined, stored: T | null | undefined): S | T | null {
+  return sent !== undefined ? sent : (stored ?? null);
+}
+
 export const showsRouter = createTRPCRouter({
   list: publicProcedure
     .input(
@@ -842,39 +857,28 @@ export const showsRouter = createTRPCRouter({
 
       await verifyShowAccess(ctx.db, ctx.session.user.id, id, { callerIsAdmin: ctx.callerIsAdmin });
 
-      // Load the stored show row once, whenever this update might need to
-      // cross-reference values it isn't itself sending: opening entries needs
-      // the org's payout details (below), and the entry-close floor check
-      // needs whichever of startDate/entryCloseDate/postalCloseDate this call
-      // ISN'T providing — Mandy's 2026-08-04 rule must still catch e.g. an
-      // update that only moves startDate closer, leaving a stored close date
-      // that no longer clears the floor.
-      const needsStoredShow =
-        input.status === 'entries_open' ||
-        rest.startDate !== undefined ||
-        entryCloseDate !== undefined ||
-        postalCloseDate !== undefined;
-
-      const storedShow = needsStoredShow
-        ? await ctx.db.query.shows.findFirst({
-            where: eq(shows.id, id),
+      // Always load the stored show row — it's an indexed single-row lookup
+      // on a human-triggered save, and conditionally fetching it was a
+      // silent-bug trap: a future validation that needs storedShow but
+      // forgets to extend the fetch condition just gets `null` and no-ops.
+      const storedShow = await ctx.db.query.shows.findFirst({
+        where: eq(shows.id, id),
+        columns: {
+          organisationId: true,
+          startDate: true,
+          entryCloseDate: true,
+          postalCloseDate: true,
+        },
+        with: {
+          organisation: {
             columns: {
-              organisationId: true,
-              startDate: true,
-              entryCloseDate: true,
-              postalCloseDate: true,
+              payoutSortCode: true,
+              payoutAccountNumber: true,
+              payoutAccountName: true,
             },
-            with: {
-              organisation: {
-                columns: {
-                  payoutSortCode: true,
-                  payoutAccountNumber: true,
-                  payoutAccountName: true,
-                },
-              },
-            },
-          })
-        : null;
+          },
+        },
+      });
 
       // Gate: can't open entries unless the host club has saved their
       // payout bank details. Remi is merchant of record, so clubs don't
@@ -896,40 +900,50 @@ export const showsRouter = createTRPCRouter({
 
       // Mandy's hard rule (2026-08-04, "two weeks give or take a day"):
       // entries — and postal entries — must close at least 13 calendar days
-      // before the show starts. Validate EFFECTIVE values: whichever date
-      // this call is setting, falling back to what's already stored for any
-      // date it isn't sending. `entryCloseDate`/`postalCloseDate` are
-      // `| null | undefined` on the input — undefined means "not sent this
-      // call" (fall back to stored), null means "explicitly cleared" (no
-      // close date to check). Opening entries against a stored close date
-      // that already breaches the floor is a PRECONDITION_FAILED, same as
-      // the payout-details gate above; editing dates into a breach on any
-      // other update is a plain BAD_REQUEST.
-      const effectiveStartDate = rest.startDate ?? storedShow?.startDate;
-      const effectiveEntryCloseDate =
-        entryCloseDate !== undefined ? entryCloseDate : (storedShow?.entryCloseDate ?? null);
-      const effectivePostalCloseDate =
-        postalCloseDate !== undefined ? postalCloseDate : (storedShow?.postalCloseDate ?? null);
-      const closeDateErrorCode = input.status === 'entries_open' ? 'PRECONDITION_FAILED' : 'BAD_REQUEST';
+      // before the show starts. Only re-validate when THIS call actually
+      // touches one of the three dates it depends on, or transitions to
+      // entries_open (which re-checks whatever is already stored) — never as
+      // a side effect of an unrelated save. Without that scoping, a
+      // pre-existing show whose stored dates already breach the floor (e.g.
+      // North Eastern GSD Club Championship Show 2026, created before this
+      // rule shipped — see entry-close-floor.test.ts) would become
+      // uneditable for EVERY field, not just the dates, now that storedShow
+      // is fetched unconditionally above.
+      const touchesCloseDateFloorInputs =
+        input.status === 'entries_open' ||
+        rest.startDate !== undefined ||
+        entryCloseDate !== undefined ||
+        postalCloseDate !== undefined;
 
-      if (effectiveStartDate) {
-        if (
-          effectiveEntryCloseDate &&
-          !isCloseDateWithinFloor(effectiveEntryCloseDate, effectiveStartDate)
-        ) {
-          throw new TRPCError({
-            code: closeDateErrorCode,
-            message: entryCloseFloorMessage(effectiveStartDate, 'entry close date'),
-          });
-        }
-        if (
-          effectivePostalCloseDate &&
-          !isCloseDateWithinFloor(effectivePostalCloseDate, effectiveStartDate)
-        ) {
-          throw new TRPCError({
-            code: closeDateErrorCode,
-            message: entryCloseFloorMessage(effectiveStartDate, 'postal close date'),
-          });
+      if (touchesCloseDateFloorInputs) {
+        // startDate isn't nullable on this input (`z.string().optional()`,
+        // not `.nullable()`), so a plain `??` fallback to the stored value is
+        // exact — unlike the two close-date fields below, `undefined` is the
+        // only "not sent" case here, there's no "explicitly cleared" null.
+        const effectiveStartDate = rest.startDate ?? storedShow?.startDate;
+        const effectiveEntryCloseDate = effectiveOrStored(entryCloseDate, storedShow?.entryCloseDate);
+        const effectivePostalCloseDate = effectiveOrStored(postalCloseDate, storedShow?.postalCloseDate);
+        const closeDateErrorCode = input.status === 'entries_open' ? 'PRECONDITION_FAILED' : 'BAD_REQUEST';
+
+        if (effectiveStartDate) {
+          if (
+            effectiveEntryCloseDate &&
+            !isCloseDateWithinFloor(effectiveEntryCloseDate, effectiveStartDate)
+          ) {
+            throw new TRPCError({
+              code: closeDateErrorCode,
+              message: entryCloseFloorMessage(effectiveStartDate, 'entry close date'),
+            });
+          }
+          if (
+            effectivePostalCloseDate &&
+            !isCloseDateWithinFloor(effectivePostalCloseDate, effectiveStartDate)
+          ) {
+            throw new TRPCError({
+              code: closeDateErrorCode,
+              message: entryCloseFloorMessage(effectiveStartDate, 'postal close date'),
+            });
+          }
         }
       }
 

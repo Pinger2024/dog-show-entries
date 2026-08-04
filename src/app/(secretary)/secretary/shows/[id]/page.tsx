@@ -26,9 +26,11 @@ import { formatDateRange, poundsToPence } from '@/lib/date-utils';
 import {
   isCloseDateWithinFloor,
   latestPermissibleCloseDate,
+  latestPermissibleCloseDateInputValue,
   entryCloseFloorMessage,
-  entryCloseHint,
+  entryCloseAdjustedMessage,
 } from '@/lib/entry-close-rules';
+import { EntryCloseHint } from '@/components/shows/entry-close-hint';
 import { showTypeLabels, displayShowTypeLabel } from '@/lib/show-types';
 import { cn } from '@/lib/utils';
 import { Label } from '@/components/ui/label';
@@ -439,6 +441,26 @@ function VenueImageUpload({
 }
 
 // ── Edit Show Details Dialog ──────────────────────────────
+
+/**
+ * Mandy's hard rule (2026-08-04): entries — and postal entries — must close
+ * at least two weeks before the show. Shared by the start-date onChange
+ * handler below for both the entry-close and postal-close fields: if moving
+ * the start date puts `closeDate` inside the floor, auto-adjust it to the
+ * latest date the floor still allows, rather than let the secretary save an
+ * invalid gap and hit the error on Save instead.
+ */
+function adjustCloseDateForFloor(
+  closeDate: string,
+  setCloseDate: (value: string) => void,
+  newStartDate: string,
+  field: 'entry close date' | 'postal close date',
+) {
+  if (!newStartDate || !closeDate || isCloseDateWithinFloor(closeDate, newStartDate)) return;
+  const adjusted = latestPermissibleCloseDate(newStartDate);
+  setCloseDate(`${format(adjusted, 'yyyy-MM-dd')}T23:59`);
+  toast.info(entryCloseAdjustedMessage(field, adjusted));
+}
 
 function EditShowDetailsDialog({
   show,
@@ -890,29 +912,8 @@ function EditShowDetailsDialog({
                   onChange={(e) => {
                     const newStartDate = e.target.value;
                     setStartDate(newStartDate);
-
-                    // Mandy's hard rule (2026-08-04): entries must close at
-                    // least two weeks before the show. If moving the start
-                    // date puts the entry close date inside that floor,
-                    // auto-adjust it to the latest date the floor still
-                    // allows rather than let the secretary save an invalid
-                    // gap and hit the error on Save instead.
-                    if (newStartDate && entryCloseDate && !isCloseDateWithinFloor(entryCloseDate, newStartDate)) {
-                      const adjusted = latestPermissibleCloseDate(newStartDate);
-                      setEntryCloseDate(`${format(adjusted, 'yyyy-MM-dd')}T23:59`);
-                      toast.info(
-                        `Entry close date adjusted to ${format(adjusted, 'd MMMM yyyy')} — entries must close at least two weeks before the show`
-                      );
-                    }
-
-                    // Same floor applies to the postal close date.
-                    if (newStartDate && postalCloseDate && !isCloseDateWithinFloor(postalCloseDate, newStartDate)) {
-                      const adjusted = latestPermissibleCloseDate(newStartDate);
-                      setPostalCloseDate(`${format(adjusted, 'yyyy-MM-dd')}T23:59`);
-                      toast.info(
-                        `Postal close date adjusted to ${format(adjusted, 'd MMMM yyyy')} — entries must close at least two weeks before the show`
-                      );
-                    }
+                    adjustCloseDateForFloor(entryCloseDate, setEntryCloseDate, newStartDate, 'entry close date');
+                    adjustCloseDateForFloor(postalCloseDate, setPostalCloseDate, newStartDate, 'postal close date');
                   }}
                 />
               </div>
@@ -929,9 +930,7 @@ function EditShowDetailsDialog({
             {/* Separate date + time inputs (Mandy 2026-07-23): closes default
                 to 11:59pm on the chosen date. A combined datetime-local can't
                 deliver that on iOS — the wheel starts at an arbitrary time. */}
-            {startDate && (
-              <p className="text-xs text-muted-foreground">{entryCloseHint(startDate)}</p>
-            )}
+            {startDate && <EntryCloseHint startDate={startDate} />}
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-1.5">
                 <Label htmlFor="edit-entry-close">Entry Close Date</Label>
@@ -941,7 +940,7 @@ function EditShowDetailsDialog({
                     type="date"
                     className="flex-1"
                     value={entryCloseDate.slice(0, 10)}
-                    max={startDate ? format(latestPermissibleCloseDate(startDate), 'yyyy-MM-dd') : undefined}
+                    max={startDate ? latestPermissibleCloseDateInputValue(startDate) : undefined}
                     onChange={(e) => {
                       const newClose = e.target.value
                         ? `${e.target.value}T23:59`
@@ -974,7 +973,7 @@ function EditShowDetailsDialog({
                     type="date"
                     className="flex-1"
                     value={postalCloseDate.slice(0, 10)}
-                    max={startDate ? format(latestPermissibleCloseDate(startDate), 'yyyy-MM-dd') : undefined}
+                    max={startDate ? latestPermissibleCloseDateInputValue(startDate) : undefined}
                     onChange={(e) => {
                       const newClose = e.target.value
                         ? `${e.target.value}T23:59`

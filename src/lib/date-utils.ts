@@ -220,17 +220,28 @@ export function handlerAgeYearsOnDate(handlerDob: string, showDate: string): num
 }
 
 /**
- * Returns today's date in Europe/London as a YYYY-MM-DD string.
- * Comparing this to `shows.startDate` (also YYYY-MM-DD) avoids every UTC/BST
- * edge case that arises from constructing Date objects from date-only strings.
+ * Converts any instant to the Europe/London calendar date it falls on, as a
+ * YYYY-MM-DD string. {@link todayInLondon} delegates here for "now"; callers
+ * with an arbitrary instant (e.g. entry-close-rules.ts, comparing a close
+ * TIME rather than the current moment) use it directly so a BST/GMT boundary
+ * can never shift which calendar day an instant lands on.
  */
-export function todayInLondon(): string {
+export function londonCalendarDateStr(instant: Date): string {
   return new Intl.DateTimeFormat('en-CA', {
     timeZone: 'Europe/London',
     year: 'numeric',
     month: '2-digit',
     day: '2-digit',
-  }).format(new Date());
+  }).format(instant);
+}
+
+/**
+ * Returns today's date in Europe/London as a YYYY-MM-DD string.
+ * Comparing this to `shows.startDate` (also YYYY-MM-DD) avoids every UTC/BST
+ * edge case that arises from constructing Date objects from date-only strings.
+ */
+export function todayInLondon(): string {
+  return londonCalendarDateStr(new Date());
 }
 
 /**

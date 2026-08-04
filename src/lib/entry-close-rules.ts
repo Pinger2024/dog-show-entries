@@ -1,5 +1,5 @@
 import { differenceInCalendarDays, format, subDays } from 'date-fns';
-import { parseLocalDate } from './date-utils';
+import { parseLocalDate, londonCalendarDateStr } from './date-utils';
 
 /**
  * Mandy's hard rule (2026-08-04, "two weeks give or take a day"): a show's entry
@@ -10,28 +10,23 @@ import { parseLocalDate } from './date-utils';
 export const MIN_DAYS_BEFORE_SHOW_START = 13;
 
 /**
- * Converts an entry-close / postal-close instant to the UK calendar date it
- * falls on. Same Europe/London convention as {@link todayInLondon} in
- * date-utils.ts, applied to an arbitrary instant rather than "now" — so a
- * BST/GMT boundary can never shift which calendar day a close time lands on,
- * and a raw UTC 'Z' timestamp near midnight doesn't get miscounted.
- */
-function londonCalendarDateStr(instant: Date): string {
-  return new Intl.DateTimeFormat('en-CA', {
-    timeZone: 'Europe/London',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  }).format(instant);
-}
-
-/**
  * The latest entry-close (or postal-close) calendar date permitted for a show
  * starting on `startDate` (a YYYY-MM-DD show date, London wall-clock) — i.e.
  * `startDate` minus {@link MIN_DAYS_BEFORE_SHOW_START} calendar days.
  */
 export function latestPermissibleCloseDate(startDate: string): Date {
   return subDays(parseLocalDate(startDate), MIN_DAYS_BEFORE_SHOW_START);
+}
+
+/**
+ * {@link latestPermissibleCloseDate}, formatted as YYYY-MM-DD for native
+ * `<input type="date" max="">` attributes — the four close-date pickers
+ * (new-show wizard, setup wizard, edit-show dialog) all want this exact
+ * string form so the calendar UI physically can't offer a non-compliant
+ * date.
+ */
+export function latestPermissibleCloseDateInputValue(startDate: string): string {
+  return format(latestPermissibleCloseDate(startDate), 'yyyy-MM-dd');
 }
 
 /**
@@ -86,4 +81,21 @@ export function entryCloseHint(startDate: string): string {
   const showStartLabel = format(parseLocalDate(startDate), 'EEEE d MMMM');
   const latestLabel = format(latestPermissibleCloseDate(startDate), 'EEEE d MMMM');
   return `For a show on ${showStartLabel}, entries must close by ${latestLabel}.`;
+}
+
+/**
+ * Toast copy for an auto-adjust: shown when moving a show's start date pulls
+ * an already-set close date inside the floor, so the form nudges it back to
+ * {@link latestPermissibleCloseDate} rather than silently leaving an invalid
+ * gap for the secretary to discover on Save. One canonical wording (shared by
+ * the entry-close and postal-close fields, which previously hand-wrote this
+ * string twice and could drift).
+ */
+export function entryCloseAdjustedMessage(
+  field: 'entry close date' | 'postal close date',
+  adjustedDate: Date,
+): string {
+  const fieldLabel = field === 'entry close date' ? 'Entry close date' : 'Postal close date';
+  const dateLabel = format(adjustedDate, 'd MMMM yyyy');
+  return `${fieldLabel} adjusted to ${dateLabel} — entries must close at least two weeks before the show`;
 }

@@ -1,10 +1,13 @@
 import { describe, it, expect } from 'vitest';
+import { format } from 'date-fns';
 import {
   MIN_DAYS_BEFORE_SHOW_START,
   latestPermissibleCloseDate,
+  latestPermissibleCloseDateInputValue,
   isCloseDateWithinFloor,
   entryCloseFloorMessage,
   entryCloseHint,
+  entryCloseAdjustedMessage,
 } from '@/lib/entry-close-rules';
 
 // All fixture dates below sit in January/February — outside British Summer
@@ -104,5 +107,35 @@ describe('entryCloseHint', () => {
     const hint = entryCloseHint('2026-01-31');
     expect(hint).not.toContain('update your');
     expect(hint).not.toContain('at least');
+  });
+});
+
+describe('latestPermissibleCloseDateInputValue', () => {
+  it('formats the floor date as yyyy-MM-dd, for native <input type="date" max=""> attributes', () => {
+    // Saturday 31 Jan 2026 → latest close is Sunday 18 Jan 2026 (13 days).
+    expect(latestPermissibleCloseDateInputValue('2026-01-31')).toBe('2026-01-18');
+  });
+
+  it('agrees with latestPermissibleCloseDate + format — same underlying date, string form', () => {
+    const startDate = '2026-10-31';
+    expect(latestPermissibleCloseDateInputValue(startDate)).toBe(
+      format(latestPermissibleCloseDate(startDate), 'yyyy-MM-dd'),
+    );
+  });
+});
+
+describe('entryCloseAdjustedMessage', () => {
+  it('builds the entry-close auto-adjust toast copy', () => {
+    const adjusted = latestPermissibleCloseDate('2026-01-31'); // 18 Jan 2026
+    expect(entryCloseAdjustedMessage('entry close date', adjusted)).toBe(
+      'Entry close date adjusted to 18 January 2026 — entries must close at least two weeks before the show',
+    );
+  });
+
+  it('builds the postal-close auto-adjust toast copy', () => {
+    const adjusted = latestPermissibleCloseDate('2026-01-31'); // 18 Jan 2026
+    expect(entryCloseAdjustedMessage('postal close date', adjusted)).toBe(
+      'Postal close date adjusted to 18 January 2026 — entries must close at least two weeks before the show',
+    );
   });
 });
