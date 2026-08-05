@@ -81,5 +81,12 @@ export async function runStartupMigrations() {
       ADD COLUMN IF NOT EXISTS contract_pdf_generated_at TIMESTAMPTZ;
   `);
 
+  // ── 2026-08-05: pre-paid parking pass (Mandy) — the cron stamps the
+  // order once its week-before email has gone so ticks never double-send ──
+  await db.execute(sql`
+    ALTER TABLE orders
+      ADD COLUMN IF NOT EXISTS parking_pass_emailed_at TIMESTAMPTZ;
+  `);
+
   console.log(`[startup-migrations] done in ${Date.now() - started}ms`);
 }
