@@ -39,6 +39,7 @@ async function makeParkingOrder(opts: {
   showStartDate: string;
   orderStatus?: 'paid' | 'pending_payment';
   withParkingSundry?: boolean;
+  showStatus?: 'cancelled';
 }) {
   const { org } = await makeSecretaryWithOrg();
   const exhibitor = await makeUser({ role: 'exhibitor' });
@@ -46,6 +47,7 @@ async function makeParkingOrder(opts: {
     organisationId: org.id,
     startDate: opts.showStartDate,
     endDate: opts.showStartDate,
+    ...(opts.showStatus ? { status: opts.showStatus } : {}),
   });
   const order = await makeOrder({
     showId: show.id,
@@ -112,6 +114,15 @@ describe('cron: pre-paid parking pass email (week-before branch)', () => {
 
   it('never sends for an unpaid order', async () => {
     await makeParkingOrder({ showStartDate: PLUS_6_DAYS, orderStatus: 'pending_payment' });
+
+    const res = await cronGET(cronReq());
+    const body = await res.json();
+    expect(body.parkingPassEmailsSent).toBe(0);
+    expect(resendMocks.send).not.toHaveBeenCalled();
+  });
+
+  it('never sends for a cancelled show, even with a paid parking order in the window', async () => {
+    await makeParkingOrder({ showStartDate: PLUS_6_DAYS, showStatus: 'cancelled' });
 
     const res = await cronGET(cronReq());
     const body = await res.json();

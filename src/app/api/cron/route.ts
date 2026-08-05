@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { requireCronSecret } from '@/server/lib/cron-auth';
 import { db } from '@/server/db';
 import { shows, orders, orderSundryItems, sundryItems } from '@/server/db/schema';
-import { and, eq, or, ilike, isNull, lte, gte, lt, isNotNull, sql } from 'drizzle-orm';
+import { and, eq, ne, or, ilike, isNull, lte, gte, lt, isNotNull, sql } from 'drizzle-orm';
 import { syncCatalogueNumbers } from '@/server/services/catalogue-numbering';
 import { sendCatalogueReadyEmail, sendParkingPassEmail } from '@/server/services/email';
 import { CATALOGUE_NAME_PATTERN } from '@/lib/catalogue-utils';
@@ -174,6 +174,9 @@ export async function GET(request: Request) {
       .where(
         and(
           eq(orders.status, 'paid'),
+          // A cancelled show must never email parking passes, however the
+          // order was paid before cancellation.
+          ne(shows.status, 'cancelled'),
           gte(shows.startDate, todayStr),
           lte(shows.startDate, windowEnd),
           isNull(orders.parkingPassEmailedAt),
