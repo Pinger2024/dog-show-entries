@@ -1,6 +1,6 @@
 'use client';
 
-import { use, useCallback, useEffect } from 'react';
+import { use, useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { format, parseISO } from 'date-fns';
@@ -14,6 +14,8 @@ import {
   Award,
   Share2,
   Check,
+  Quote,
+  ChevronDown,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { trpc } from '@/lib/trpc';
@@ -26,6 +28,37 @@ import { cn } from '@/lib/utils';
 
 function slugify(text: string) {
   return text.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
+}
+
+const CRITIQUE_OVERVIEW_COLLAPSE_LENGTH = 320;
+
+/** A published judge's opening remarks — collapsed by default when long so
+ *  it doesn't push the actual results below the fold. */
+function JudgeCritiqueOverview({ judgeName, overviewText }: { judgeName: string; overviewText: string }) {
+  const isLong = overviewText.length > CRITIQUE_OVERVIEW_COLLAPSE_LENGTH;
+  const [expanded, setExpanded] = useState(!isLong);
+
+  return (
+    <div className="rounded-lg border bg-card p-4 sm:p-5">
+      <div className="mb-2 flex items-center gap-2">
+        <Quote className="size-4 text-primary/60" />
+        <h2 className={cn(SE_H, 'text-base sm:text-lg')}>Judge&apos;s Critique — {judgeName}</h2>
+      </div>
+      <p className={cn('whitespace-pre-line text-sm leading-relaxed text-muted-foreground', !expanded && 'line-clamp-4')}>
+        {overviewText}
+      </p>
+      {isLong && (
+        <button
+          type="button"
+          className="mt-2 flex min-h-[2.75rem] items-center gap-1 text-sm text-primary hover:underline sm:min-h-0"
+          onClick={() => setExpanded((v) => !v)}
+        >
+          <ChevronDown className={cn('size-4 transition-transform', expanded && 'rotate-180')} />
+          {expanded ? 'Show less' : 'Read more'}
+        </button>
+      )}
+    </div>
+  );
 }
 
 /** Share via native share sheet on mobile, copy to clipboard on desktop */
@@ -139,7 +172,7 @@ export default function LiveResultsPage({
     );
   }
 
-  const { show, breedGroups } = data;
+  const { show, breedGroups, critiqueOverviews } = data;
   const isLive = show.status === 'in_progress';
   const isCompleted = show.status === 'completed';
   const isPublished = !!show.resultsPublishedAt;
@@ -285,6 +318,17 @@ export default function LiveResultsPage({
           </div>
         ) : (
           <div className="space-y-8">
+            {/* Judge's opening remarks — only for critique documents the
+                secretary has explicitly published (see critiques.publish).
+                Shown above the class results per the design. */}
+            {critiqueOverviews.length > 0 && (
+              <div className="space-y-4">
+                {critiqueOverviews.map((c, i) => (
+                  <JudgeCritiqueOverview key={`${c.judgeName}-${i}`} judgeName={c.judgeName} overviewText={c.overviewText} />
+                ))}
+              </div>
+            )}
+
             {/* SV/WUSV regional top awards — the only 4 (no BoB/CC/BIS) */}
             {svAwards.length > 0 && (
               <div id="top-awards" className="rounded-lg border border-se-honey-line bg-se-honey-soft p-4 sm:p-5">

@@ -15,12 +15,13 @@ const RKC_ONLY_KEYS = [
   'award-board',
   'prize-cards',
   'marked-catalogue',
+  'judge-critiques',
 ] as const;
 
 const ALWAYS_VISIBLE_KEYS = ['catalogue-by-class', 'schedule'] as const;
 
 describe('documentRowVisible', () => {
-  it('hides all 8 RKC-only rows on a wusv show', () => {
+  it('hides all RKC-only rows on a wusv show', () => {
     for (const key of RKC_ONLY_KEYS) {
       expect(documentRowVisible(key, { showRuleset: 'wusv', showType: 'open' }), key).toBe(false);
     }
@@ -42,7 +43,7 @@ describe('documentRowVisible', () => {
     expect(documentRowVisible('grading-cards', { showRuleset: 'rkc', showType: 'championship' })).toBe(false);
   });
 
-  it('shows all 8 RKC-only rows on an rkc show', () => {
+  it('shows all RKC-only rows on an rkc show', () => {
     for (const key of RKC_ONLY_KEYS) {
       expect(documentRowVisible(key, { showRuleset: 'rkc', showType: 'open' }), key).toBe(true);
     }

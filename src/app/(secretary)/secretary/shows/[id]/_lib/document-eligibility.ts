@@ -26,7 +26,8 @@ export type DocumentRowKey =
   | 'marked-catalogue'
   | 'sh01'
   | 'sv-results'
-  | 'grading-cards';
+  | 'grading-cards'
+  | 'judge-critiques';
 
 export interface DocumentEligibilityContext {
   showRuleset: 'rkc' | 'wusv' | null | undefined;
@@ -43,6 +44,9 @@ const RKC_ONLY_ROWS = new Set<DocumentRowKey>([
   'award-board',
   'prize-cards',
   'marked-catalogue',
+  // SV critiques are a different per-dog model (grading, not this
+  // upload-a-Word-doc flow) — v1 is RKC only.
+  'judge-critiques',
 ]);
 
 export function documentRowVisible(rowKey: DocumentRowKey, ctx: DocumentEligibilityContext): boolean {

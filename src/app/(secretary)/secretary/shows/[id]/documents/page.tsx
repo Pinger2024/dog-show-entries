@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import Link from 'next/link';
 import {
   Award,
   BarChart3,
@@ -17,6 +18,7 @@ import {
   ListOrdered,
   Loader2,
   Map,
+  MessageSquare,
   PoundSterling,
   Printer,
   Trophy,
@@ -525,6 +527,20 @@ export default function DocumentsPage() {
           After the Show
         </h2>
         <DocSection title="Results & Returns" description="Documents for RKC submission and show records after judging is complete" icon={Trophy}>
+          {documentRowVisible('judge-critiques', docCtx) && (
+            <DocRow
+              icon={<MessageSquare className="size-4" />}
+              label="Judge critiques"
+              description="Invite the judge to send their critiques, check them, and publish to the results page"
+            >
+              <Button className="min-h-[2.75rem]" asChild>
+                <Link href={`/secretary/shows/${showId}/critiques`}>
+                  <MessageSquare className="size-4" />
+                  Open
+                </Link>
+              </Button>
+            </DocRow>
+          )}
           {documentRowVisible('marked-catalogue', docCtx) && (
             <DocRow
               icon={<CheckSquare className="size-4" />}

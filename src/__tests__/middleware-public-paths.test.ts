@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { config } from '@/middleware';
+import { config, isPublicRoute } from '@/middleware';
 
 /**
  * Regression guard: paths that must reach Next.js untouched by the auth middleware.
@@ -57,4 +57,28 @@ describe('middleware matcher excludes SEO/well-known/static paths', () => {
       expect(re.test(p)).toBe(true);
     });
   }
+});
+
+/**
+ * Judge critique upload (2026-07-31): the judge never logs in — the review
+ * page and its upload route are authenticated purely by the magic-link
+ * token, so they must be public prefixes, not just excluded from the
+ * matcher above. Regression guard for the "results-approval route missing
+ * from the allowlist" bug this feature was told not to repeat.
+ */
+describe('isPublicRoute allows the token-gated critique pages', () => {
+  const mustBePublic = [
+    '/critiques/11111111-1111-1111-1111-111111111111',
+    '/api/critique-upload/11111111-1111-1111-1111-111111111111',
+  ];
+
+  for (const p of mustBePublic) {
+    it(`treats ${p} as public (no login redirect)`, () => {
+      expect(isPublicRoute(p)).toBe(true);
+    });
+  }
+
+  it('still protects the secretary critiques page', () => {
+    expect(isPublicRoute('/secretary/shows/abc-123/critiques')).toBe(false);
+  });
 });

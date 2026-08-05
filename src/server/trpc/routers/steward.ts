@@ -21,6 +21,7 @@ import {
   judges,
   judgeAssignments,
   memberships,
+  critiqueDocuments,
 } from '@/server/db/schema';
 import { isUuid } from '@/lib/slugify';
 import { buildJudgeBreedAndClassification } from '@/lib/judge-breed-classification';
@@ -1147,6 +1148,21 @@ export const stewardRouter = createTRPCRouter({
         a.breedName.localeCompare(b.breedName)
       );
 
+      // Published judge critique overviews ("opening remarks") — the
+      // secretary's Publish Critiques action IS the public-visibility gate
+      // here (a separate document per judge, published independently of the
+      // steward's own results-publish flow). Per-placement critique text
+      // rides the existing results.publishedAt gate above and needs no
+      // change. No organisation columns — this is a public procedure.
+      const publishedCritiqueDocs = await ctx.db.query.critiqueDocuments.findMany({
+        where: and(eq(critiqueDocuments.showId, showId), eq(critiqueDocuments.status, 'published')),
+        columns: { overviewText: true },
+        with: { judge: { columns: { name: true } } },
+      });
+      const critiqueOverviews = publishedCritiqueDocs
+        .filter((d) => d.overviewText?.trim())
+        .map((d) => ({ judgeName: d.judge.name, overviewText: d.overviewText!.trim() }));
+
       // For public users: if no results are visible, show unpublished message
       const hasVisibleResults = sortedGroups.some((g) => g.classes.length > 0);
       if (!isPrivileged && !hasVisibleResults) {
@@ -1164,6 +1180,9 @@ export const stewardRouter = createTRPCRouter({
           },
           breedGroups: [],
           achievements: [],
+          // A judge's opening remarks can name winners — they must never
+          // show to the public before the results themselves are published.
+          critiqueOverviews: [],
           unpublished: true as const,
         };
       }
@@ -1192,6 +1211,7 @@ export const stewardRouter = createTRPCRouter({
             dogName: a.dog?.registeredName ?? 'Unknown',
             details: a.details as Record<string, unknown> | null,
           })),
+        critiqueOverviews,
         unpublished: false as const,
       };
     }),

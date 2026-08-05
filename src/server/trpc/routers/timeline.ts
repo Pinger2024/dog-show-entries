@@ -92,6 +92,7 @@ export const timelineRouter = createTRPCRouter({
               className: ec.showClass.classDefinition.name,
               classNumber: ec.showClass.classNumber,
               placement: ec.result?.placement ?? null,
+              placementStatus: ec.result?.placementStatus ?? null,
               specialAward: ec.result?.specialAward ?? null,
               critiqueText: ec.result?.critiqueText ?? null,
             })),

@@ -59,7 +59,10 @@ export async function runStartupMigrations() {
   // ── 2026-04-20 evening: add Paula Ingham as active member of BAGSD so
   // Amanda can set up the Monday go-live show with Paula as secretary.
   // Idempotent: the inner SELECT returns no rows if the membership
-  // already exists, so re-runs are no-ops.
+  // already exists, so re-runs are no-ops. The user/org EXISTS guards keep
+  // this prod-data-specific insert from FK-aborting the whole migration
+  // chain on databases without those rows (it took the demo DB's migrations
+  // down on 2026-07-31 — everything after this entry silently never ran).
   await db.execute(sql`
     INSERT INTO memberships (user_id, organisation_id, status)
     SELECT
@@ -70,7 +73,9 @@ export async function runStartupMigrations() {
       SELECT 1 FROM memberships
       WHERE user_id = '72293d40-8ea5-4bf3-b0b8-f458deed8e0d'::uuid
         AND organisation_id = '6f3b14d4-c0b8-4bca-bce6-706b8fc38ba5'::uuid
-    );
+    )
+    AND EXISTS (SELECT 1 FROM users WHERE id = '72293d40-8ea5-4bf3-b0b8-f458deed8e0d'::uuid)
+    AND EXISTS (SELECT 1 FROM organisations WHERE id = '6f3b14d4-c0b8-4bca-bce6-706b8fc38ba5'::uuid);
   `);
 
   // ── 2026-04-21: judge-contract PDF archive for RKC audit compliance.
@@ -79,6 +84,49 @@ export async function runStartupMigrations() {
     ALTER TABLE judge_contracts
       ADD COLUMN IF NOT EXISTS contract_pdf_key TEXT,
       ADD COLUMN IF NOT EXISTS contract_pdf_generated_at TIMESTAMPTZ;
+  `);
+
+  // ── 2026-07-31: judge critique upload (Mandy) — one row per (show,
+  // judge) critique document; a token-gated magic link lets the judge
+  // submit without a login.
+  await db.execute(sql`
+    DO $$ BEGIN
+      CREATE TYPE critique_doc_status AS ENUM ('invited', 'submitted', 'published');
+    EXCEPTION
+      WHEN duplicate_object THEN NULL;
+    END $$;
+  `);
+
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS critique_documents (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      show_id UUID NOT NULL REFERENCES shows(id) ON DELETE CASCADE,
+      judge_id UUID NOT NULL REFERENCES judges(id),
+      upload_token UUID NOT NULL DEFAULT gen_random_uuid() UNIQUE,
+      status critique_doc_status NOT NULL DEFAULT 'invited',
+      invited_email TEXT,
+      invited_at TIMESTAMPTZ,
+      original_filename TEXT,
+      storage_key TEXT,
+      raw_text TEXT,
+      parsed_json JSONB,
+      overview_text TEXT,
+      submitted_at TIMESTAMPTZ,
+      published_at TIMESTAMPTZ,
+      published_by UUID REFERENCES users(id),
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `);
+
+  await db.execute(sql`
+    CREATE UNIQUE INDEX IF NOT EXISTS critique_documents_show_judge_uniq
+      ON critique_documents(show_id, judge_id);
+  `);
+
+  await db.execute(sql`
+    CREATE INDEX IF NOT EXISTS critique_documents_upload_token_idx
+      ON critique_documents(upload_token);
   `);
 
   console.log(`[startup-migrations] done in ${Date.now() - started}ms`);
