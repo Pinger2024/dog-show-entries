@@ -2,11 +2,12 @@ import { NextResponse } from 'next/server';
 import { requireCronSecret } from '@/server/lib/cron-auth';
 import { db } from '@/server/db';
 import { shows, orders, orderSundryItems, sundryItems } from '@/server/db/schema';
-import { and, eq, ilike, isNull, lte, lt, isNotNull, sql } from 'drizzle-orm';
+import { and, eq, ne, or, ilike, isNull, lte, gte, lt, isNotNull, sql } from 'drizzle-orm';
 import { syncCatalogueNumbers } from '@/server/services/catalogue-numbering';
-import { sendCatalogueReadyEmail } from '@/server/services/email';
+import { sendCatalogueReadyEmail, sendParkingPassEmail } from '@/server/services/email';
 import { CATALOGUE_NAME_PATTERN } from '@/lib/catalogue-utils';
-import { todayInLondon } from '@/lib/date-utils';
+import { PARKING_NAME_PATTERNS } from '@/lib/parking-utils';
+import { todayInLondon, londonDateOffset } from '@/lib/date-utils';
 
 /** Wall-clock hour:minute in Europe/London — used to gate the catalogue-ready
  *  email to "morning of the show, on or after 8:30 am". The cron ticks hourly
@@ -146,6 +147,60 @@ export async function GET(request: Request) {
     }
   }
 
+  // Pre-paid parking pass emails — one week before the show, and on the next
+  // hourly tick for anyone who bought it late inside that window (Mandy
+  // 2026-08-04). Same idempotent stamp-after-send shape as the
+  // catalogue-ready branch above, gated on the same 8:30am wall-clock floor.
+  // Window is inclusive of the show morning itself: today <= startDate <=
+  // today + 7 days — nothing sends once startDate has passed.
+  let parkingPassEmailsSent = 0;
+  const parkingPassEmailErrors: string[] = [];
+
+  if (isAfter830London) {
+    const windowEnd = londonDateOffset(7);
+
+    // The ILIKE patterns are a coarse DB-level pre-filter only — they have
+    // no word-boundary support, so a club's "Sparking Wine" sundry could
+    // slip through here. sendParkingPassEmail re-derives the genuine
+    // parking quantity via isParkingSundry() (the authoritative matcher)
+    // before ever sending, so a false-positive candidate is a safe no-op:
+    // it's simply skipped below, not stamped, not counted.
+    const pendingParkingOrders = await db
+      .selectDistinct({ orderId: orders.id })
+      .from(orders)
+      .innerJoin(shows, eq(orders.showId, shows.id))
+      .innerJoin(orderSundryItems, eq(orderSundryItems.orderId, orders.id))
+      .innerJoin(sundryItems, eq(orderSundryItems.sundryItemId, sundryItems.id))
+      .where(
+        and(
+          eq(orders.status, 'paid'),
+          // A cancelled show must never email parking passes, however the
+          // order was paid before cancellation.
+          ne(shows.status, 'cancelled'),
+          gte(shows.startDate, todayStr),
+          lte(shows.startDate, windowEnd),
+          isNull(orders.parkingPassEmailedAt),
+          or(...PARKING_NAME_PATTERNS.map((pattern) => ilike(sundryItems.name, pattern))),
+        ),
+      );
+
+    for (const { orderId } of pendingParkingOrders) {
+      try {
+        const sent = await sendParkingPassEmail(orderId);
+        if (sent) {
+          await db
+            .update(orders)
+            .set({ parkingPassEmailedAt: new Date(), updatedAt: new Date() })
+            .where(eq(orders.id, orderId));
+          parkingPassEmailsSent += 1;
+        }
+      } catch (err) {
+        console.error(`[cron] parking-pass email failed for order ${orderId}:`, err);
+        parkingPassEmailErrors.push(orderId);
+      }
+    }
+  }
+
   return NextResponse.json({
     ok: true,
     closed: closedShows.length,
@@ -157,6 +212,8 @@ export async function GET(request: Request) {
     numberedShows,
     catalogueEmailsSent,
     catalogueEmailErrors,
+    parkingPassEmailsSent,
+    parkingPassEmailErrors,
     checkedAt: now.toISOString(),
   });
 }

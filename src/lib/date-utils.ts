@@ -234,6 +234,18 @@ export function todayInLondon(): string {
 }
 
 /**
+ * YYYY-MM-DD string for `days` from today, computed on the Europe/London
+ * calendar date (not a raw UTC/wall-clock offset) — the timezone-safe way to
+ * build a comparison bound against DATE columns like shows.start_date, e.g.
+ * "is this show within the next 7 days". Companion to todayInLondon().
+ */
+export function londonDateOffset(days: number): string {
+  const parts = todayInLondon().split('-').map(Number);
+  const [y, m, d] = parts as [number, number, number];
+  return new Date(Date.UTC(y, m - 1, d + days)).toISOString().slice(0, 10);
+}
+
+/**
  * True once it's the morning of the show (UK time) or later.
  * Gates exhibit visibility for stewards and the public dog-photo feed —
  * admins and host-club secretaries always bypass this check at the call site.
