@@ -16,6 +16,13 @@ import {
 import { toast } from 'sonner';
 import { trpc } from '@/lib/trpc';
 import { penceToPoundsString, poundsToPence } from '@/lib/date-utils';
+import {
+  MIN_DAYS_BEFORE_SHOW_START,
+  isCloseDateWithinFloor,
+  latestPermissibleCloseDateInputValue,
+  entryCloseFloorMessage,
+} from '@/lib/entry-close-rules';
+import { EntryCloseHint } from '@/components/shows/entry-close-hint';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -683,12 +690,15 @@ function StepDetails({
   });
 
   function handleSave() {
-    if (entryCloseDate && show.startDate && new Date(entryCloseDate) >= new Date(show.startDate)) {
-      toast.error('Entry close date must be before the show start date');
+    // Mandy's hard rule (2026-08-04): entries — and postal entries — must
+    // close at least two weeks before the show. Same helper + message the
+    // server uses, so this can never drift from what the server accepts.
+    if (entryCloseDate && show.startDate && !isCloseDateWithinFloor(entryCloseDate, show.startDate)) {
+      toast.error(entryCloseFloorMessage(show.startDate, 'entry close date'));
       return;
     }
-    if (postalCloseDate && show.startDate && new Date(postalCloseDate) >= new Date(show.startDate)) {
-      toast.error('Postal close date must be before the show start date');
+    if (postalCloseDate && show.startDate && !isCloseDateWithinFloor(postalCloseDate, show.startDate)) {
+      toast.error(entryCloseFloorMessage(show.startDate, 'postal close date'));
       return;
     }
 
@@ -851,12 +861,13 @@ function StepDetails({
             todo: [
               'Pick the date and time online entries should close. This is usually a couple of weeks before the show.',
               'If you accept postal entries, set the postal close date too. It can be the same as the online date, or different.',
-              'Both dates must be before the show day. We will warn you if they are not.',
+              `Both dates must be at least ${MIN_DAYS_BEFORE_SHOW_START} calendar days before the show day — see the exact latest date below.`,
             ],
             benefit: 'We close entries automatically at the exact date and time you set. No more checking the inbox at midnight, no more deciding whether a late entry that arrived in the post a day late should be accepted. The deadline is fair, firm, and out of your hands.',
             tip: 'You can extend a close date later if you need more entries. Just come back and change it.',
           }}
         />
+        {show.startDate && <EntryCloseHint startDate={show.startDate} />}
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <div className="space-y-1.5">
             <Label htmlFor="wiz-close-date" className="text-xs">
@@ -872,13 +883,18 @@ function StepDetails({
                 type="date"
                 className="min-h-[2.75rem] flex-1"
                 value={entryCloseDate.slice(0, 10)}
-                onChange={(e) =>
-                  setEntryCloseDate(
-                    e.target.value
-                      ? `${e.target.value}T23:59`
-                      : '',
-                  )
-                }
+                max={show.startDate ? latestPermissibleCloseDateInputValue(show.startDate) : undefined}
+                onChange={(e) => {
+                  const newClose = e.target.value ? `${e.target.value}T23:59` : '';
+                  // Mandy's hard rule (2026-08-04): same floor guard as Save
+                  // (handleSave above), but on change — immediate feedback
+                  // rather than a surprise on the eventual save.
+                  if (newClose && show.startDate && !isCloseDateWithinFloor(newClose, show.startDate)) {
+                    toast.error(entryCloseFloorMessage(show.startDate, 'entry close date'));
+                    return;
+                  }
+                  setEntryCloseDate(newClose);
+                }}
               />
               <Input
                 aria-label="Closing time"
@@ -904,13 +920,16 @@ function StepDetails({
                   type="date"
                   className="min-h-[2.75rem] flex-1"
                   value={postalCloseDate.slice(0, 10)}
-                  onChange={(e) =>
-                    setPostalCloseDate(
-                      e.target.value
-                        ? `${e.target.value}T23:59`
-                        : '',
-                    )
-                  }
+                  max={show.startDate ? latestPermissibleCloseDateInputValue(show.startDate) : undefined}
+                  onChange={(e) => {
+                    const newClose = e.target.value ? `${e.target.value}T23:59` : '';
+                    // Same floor guard as the entry close date above.
+                    if (newClose && show.startDate && !isCloseDateWithinFloor(newClose, show.startDate)) {
+                      toast.error(entryCloseFloorMessage(show.startDate, 'postal close date'));
+                      return;
+                    }
+                    setPostalCloseDate(newClose);
+                  }}
                 />
                 <Input
                   aria-label="Postal closing time"
