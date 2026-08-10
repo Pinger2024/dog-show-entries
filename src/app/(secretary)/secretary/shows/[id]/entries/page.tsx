@@ -1371,6 +1371,7 @@ function RegistrationFlagsDialog({
     naf: entry.naf ?? false,
     taf: entry.taf ?? false,
     cnaf: entry.cnaf ?? false,
+    atcNumber: entry.atcNumber ?? '',
   });
   const utils = trpc.useUtils();
 
@@ -1427,7 +1428,15 @@ function RegistrationFlagsDialog({
             <Button
               className="min-h-[2.75rem]"
               disabled={update.isPending}
-              onClick={() => update.mutate({ entryId: entry.id, ...flags })}
+              onClick={() =>
+                update.mutate({
+                  entryId: entry.id,
+                  naf: flags.naf,
+                  taf: flags.taf,
+                  cnaf: flags.cnaf,
+                  atcNumber: flags.atcNumber.trim() || undefined,
+                })
+              }
             >
               {update.isPending && <Loader2 className="mr-2 size-4 animate-spin" />}
               Save

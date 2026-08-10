@@ -869,6 +869,7 @@ export default function EnterShowPage() {
             naf: e.naf ?? false,
             taf: e.taf ?? false,
             cnaf: e.cnaf ?? false,
+            atcNumber: e.atcNumber || undefined,
             handlerName: e.handlerName,
             handlerDob: e.handlerDob,
             handlerKcNumber: e.handlerKcNumber,
@@ -2022,6 +2023,7 @@ export default function EnterShowPage() {
                         naf: entry.naf ?? false,
                         taf: entry.taf ?? false,
                         cnaf: entry.cnaf ?? false,
+                        atcNumber: entry.atcNumber ?? '',
                       }}
                       onChange={(next) => cart.setRegistrationFlags(entry.id, next)}
                     />

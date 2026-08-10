@@ -9,6 +9,7 @@ import { verifyOrgAccess } from '../verify-org-access';
 import { getBaseUrl } from '@/server/lib/utils';
 import { ACHIEVEMENT_TYPES } from '@/lib/placements';
 import { computeOrderFees, type FeeContext } from '@/lib/fee-calc';
+import { formatAtcNumber } from '@/lib/registration-flags';
 import { computePrizeCardCounts } from '@/lib/prize-card-counts';
 import { BRAND } from '@/lib/brand';
 import { checkOwnerRecord, type OwnerCheckIssue } from '@/lib/catalogue-data-checks';
@@ -1519,6 +1520,7 @@ export const secretaryRouter = createTRPCRouter({
         naf: z.boolean(),
         taf: z.boolean(),
         cnaf: z.boolean(),
+        atcNumber: z.string().max(32).optional(),
       })
     )
     .mutation(async ({ ctx, input }) => {
@@ -1537,13 +1539,20 @@ export const secretaryRouter = createTRPCRouter({
 
       const [updated] = await ctx.db
         .update(entries)
-        .set({ naf: input.naf, taf: input.taf, cnaf: input.cnaf, updatedAt: new Date() })
+        .set({
+          naf: input.naf,
+          taf: input.taf,
+          cnaf: input.cnaf,
+          atcNumber: formatAtcNumber(input.atcNumber),
+          updatedAt: new Date(),
+        })
         .where(eq(entries.id, input.entryId))
         .returning({
           id: entries.id,
           naf: entries.naf,
           taf: entries.taf,
           cnaf: entries.cnaf,
+          atcNumber: entries.atcNumber,
         });
 
       return updated;
@@ -3396,6 +3405,7 @@ export const secretaryRouter = createTRPCRouter({
         naf: z.boolean().default(false),
         taf: z.boolean().default(false),
         cnaf: z.boolean().default(false),
+        atcNumber: z.string().max(32).optional(),
         paymentMethod: z.enum(['postal', 'cash', 'bank_transfer', 'online']).default('bank_transfer'),
         sundryItems: z
           .array(z.object({ sundryItemId: z.string().uuid(), quantity: z.number().int().min(1) }))
@@ -3591,6 +3601,7 @@ export const secretaryRouter = createTRPCRouter({
           naf: input.naf,
           taf: input.taf,
           cnaf: input.cnaf,
+          atcNumber: formatAtcNumber(input.atcNumber),
           totalFee: classFee,
           orderId: order!.id,
           status: 'confirmed',

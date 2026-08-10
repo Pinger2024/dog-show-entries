@@ -162,7 +162,8 @@ export async function runStartupMigrations() {
     ALTER TABLE entries
       ADD COLUMN IF NOT EXISTS naf BOOLEAN NOT NULL DEFAULT FALSE,
       ADD COLUMN IF NOT EXISTS taf BOOLEAN NOT NULL DEFAULT FALSE,
-      ADD COLUMN IF NOT EXISTS cnaf BOOLEAN NOT NULL DEFAULT FALSE;
+      ADD COLUMN IF NOT EXISTS cnaf BOOLEAN NOT NULL DEFAULT FALSE,
+      ADD COLUMN IF NOT EXISTS atc_number TEXT;
   `);
 
   console.log(`[startup-migrations] done in ${Date.now() - started}ms`);

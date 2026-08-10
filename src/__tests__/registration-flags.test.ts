@@ -60,3 +60,35 @@ describe('appendRegistrationFlags', () => {
     expect(appendRegistrationFlags('', { naf: true })).toBe('');
   });
 });
+
+// ── ATC (Authority to Compete) — overseas dogs, Mandy 2026-08-10 ────────
+// Granted rather than pending, so it carries a NUMBER rather than being a
+// tick; the number itself already starts with "ATC".
+describe('ATC number', () => {
+  it('prints the number after any flags', () => {
+    expect(registrationFlagSuffix({ atcNumber: 'ATC01234SWE' })).toBe(' ATC01234SWE');
+    expect(registrationFlagSuffix({ taf: true, atcNumber: 'ATC01234SWE' })).toBe(
+      ' TAF ATC01234SWE'
+    );
+  });
+
+  it('adds the ATC prefix when the exhibitor typed only the digits', () => {
+    expect(registrationFlagSuffix({ atcNumber: '01234SWE' })).toBe(' ATC01234SWE');
+  });
+
+  it('normalises case and stray spaces', () => {
+    expect(registrationFlagSuffix({ atcNumber: ' atc01234swe ' })).toBe(' ATC01234SWE');
+  });
+
+  it('ignores an empty or whitespace-only number', () => {
+    expect(registrationFlagSuffix({ atcNumber: '' })).toBe('');
+    expect(registrationFlagSuffix({ atcNumber: '   ' })).toBe('');
+    expect(registrationFlagSuffix({ atcNumber: null })).toBe('');
+  });
+
+  it('appends to a dog name alongside the other flags', () => {
+    expect(
+      appendRegistrationFlags('SOME OVERSEAS DOG', { naf: true, atcNumber: 'ATC9999NOR' })
+    ).toBe('SOME OVERSEAS DOG NAF ATC9999NOR');
+  });
+});

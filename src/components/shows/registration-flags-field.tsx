@@ -4,10 +4,19 @@ import { useState } from 'react';
 import { FileClock } from 'lucide-react';
 import { registrationFlagSuffix } from '@/lib/registration-flags';
 
-export type RegistrationFlagValues = { naf: boolean; taf: boolean; cnaf: boolean };
+export type RegistrationFlagValues = {
+  naf: boolean;
+  taf: boolean;
+  cnaf: boolean;
+  /** Authority to Compete number for an overseas dog, e.g. ATC01234SWE. */
+  atcNumber: string;
+};
+
+/** Only the pending-paperwork ticks — ATC is a number, handled separately. */
+type FlagKey = 'naf' | 'taf' | 'cnaf';
 
 const OPTIONS: ReadonlyArray<{
-  key: keyof RegistrationFlagValues;
+  key: FlagKey;
   short: string;
   label: string;
   hint: string;
@@ -50,7 +59,7 @@ export function RegistrationFlagsField({
   onChange: (next: RegistrationFlagValues) => void;
   idPrefix: string;
 }) {
-  const anySet = value.naf || value.taf || value.cnaf;
+  const anySet = value.naf || value.taf || value.cnaf || value.atcNumber.trim() !== '';
   const [open, setOpen] = useState(anySet);
 
   if (!open) {
@@ -109,8 +118,33 @@ export function RegistrationFlagsField({
         })}
       </div>
 
+      {/* ATC is different in kind from the three above — it is GRANTED, not
+          pending, and carries a number — so it gets a field, not a tick. */}
+      <div className="mt-3 border-t border-se-line pt-3">
+        <label
+          htmlFor={`${idPrefix}-atc`}
+          className="block text-sm font-medium text-se-ink"
+        >
+          Authority to Compete number (ATC)
+        </label>
+        <p className="mt-0.5 text-xs text-se-ink3">
+          Only for a dog living outside the UK. Leave blank otherwise.
+        </p>
+        <input
+          id={`${idPrefix}-atc`}
+          type="text"
+          inputMode="text"
+          autoCapitalize="characters"
+          spellCheck={false}
+          placeholder="e.g. ATC01234SWE"
+          value={value.atcNumber}
+          onChange={(e) => onChange({ ...value, atcNumber: e.target.value })}
+          className="mt-1.5 min-h-[2.75rem] w-full rounded-md border border-se-line bg-white px-3 py-2 text-sm text-se-ink placeholder:text-se-ink3 focus:border-se-green focus:outline-none"
+        />
+      </div>
+
       {anySet && (
-        <p className="mt-2 text-xs font-medium text-se-ink2">
+        <p className="mt-3 text-xs font-medium text-se-ink2">
           Will print as: <span className="font-semibold">Dog&apos;s name{registrationFlagSuffix(value)}</span>
         </p>
       )}

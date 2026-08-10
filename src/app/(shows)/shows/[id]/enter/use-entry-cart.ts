@@ -18,6 +18,8 @@ export interface CartEntry {
   naf?: boolean;
   taf?: boolean;
   cnaf?: boolean;
+  /** Authority to Compete number for an overseas dog, e.g. ATC01234SWE. */
+  atcNumber?: string;
   // Junior handler fields
   handlerName?: string;
   handlerDob?: string;
@@ -112,7 +114,7 @@ export type CartAction =
   | { type: 'SET_DOG'; dogId: string; dogName: string; breedName: string }
   | { type: 'SET_JH_DETAILS'; handlerName: string; handlerDob: string; handlerKcNumber?: string }
   | { type: 'SET_CLASSES'; classIds: string[]; classNames: string[]; totalFee: number; isNfc: boolean }
-  | { type: 'SET_REGISTRATION_FLAGS'; entryId: string; naf: boolean; taf: boolean; cnaf: boolean }
+  | { type: 'SET_REGISTRATION_FLAGS'; entryId: string; naf: boolean; taf: boolean; cnaf: boolean; atcNumber: string }
   | { type: 'EDIT_ENTRY'; entryId: string }
   | { type: 'REMOVE_ENTRY'; entryId: string }
   | { type: 'SET_SUNDRY_ITEM'; item: CartSundryItem }
@@ -262,7 +264,7 @@ export function cartReducer(state: CartState, action: CartAction): CartState {
         ...state,
         entries: state.entries.map((e) =>
           e.id === action.entryId
-            ? { ...e, naf: action.naf, taf: action.taf, cnaf: action.cnaf }
+            ? { ...e, naf: action.naf, taf: action.taf, cnaf: action.cnaf, atcNumber: action.atcNumber }
             : e
         ),
       };
@@ -516,7 +518,7 @@ export function useEntryCart(showId?: string) {
     []
   );
   const setRegistrationFlags = useCallback(
-    (entryId: string, flags: { naf: boolean; taf: boolean; cnaf: boolean }) =>
+    (entryId: string, flags: { naf: boolean; taf: boolean; cnaf: boolean; atcNumber: string }) =>
       dispatch({ type: 'SET_REGISTRATION_FLAGS', entryId, ...flags }),
     []
   );

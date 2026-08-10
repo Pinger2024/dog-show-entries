@@ -78,6 +78,26 @@ describe('orders.checkout — RKC registration flags persist', () => {
     expect(row?.cnaf).toBe(false);
   });
 
+  it('stores an ATC number for an overseas dog, normalised', async () => {
+    const { exhibitor, show, showClass, dog } = await flagShow();
+
+    await createTestCaller(exhibitor).orders.checkout({
+      showId: show.id,
+      entries: [
+        {
+          entryType: 'standard',
+          dogId: dog.id,
+          classIds: [showClass.id],
+          isNfc: false,
+          atcNumber: ' atc01234swe ',
+        },
+      ],
+    });
+
+    const [row] = await testDb.select().from(entries).where(eq(entries.showId, show.id));
+    expect(row?.atcNumber).toBe('ATC01234SWE');
+  });
+
   it('defaults every flag to false when the exhibitor leaves it alone', async () => {
     const { exhibitor, show, showClass, dog } = await flagShow();
 

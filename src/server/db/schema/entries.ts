@@ -54,6 +54,12 @@ export const entries = pgTable(
     naf: boolean('naf').notNull().default(false),
     taf: boolean('taf').notNull().default(false),
     cnaf: boolean('cnaf').notNull().default(false),
+    /** Authority to Compete number for a dog resident outside the UK
+     *  (e.g. "ATC01234SWE") — required before an overseas dog can be entered
+     *  in RKC events, and printed after its name. Granted rather than pending,
+     *  so unlike the three above it carries a number. Kept alongside them per
+     *  show at Mandy's request (2026-08-10). */
+    atcNumber: text('atc_number'),
     absent: boolean('absent').notNull().default(false),
     svMembershipNumber: text('sv_membership_number'),
     totalFee: integer('total_fee').notNull(),

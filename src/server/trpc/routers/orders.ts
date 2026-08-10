@@ -46,6 +46,7 @@ import { pedigreeMissingForEntry } from '@/lib/sv-entry-readiness';
 import { hasJudgingConflict } from '@/lib/judge-exhibitor-conflict';
 import { getCompetitionAgeError } from '@/lib/date-utils';
 import { isParkingSundry, PARKING_NAME_PATTERNS } from '@/lib/parking-utils';
+import { formatAtcNumber } from '@/lib/registration-flags';
 
 const cartEntrySchema = z.object({
   entryType: z.enum(['standard', 'junior_handler']).default('standard'),
@@ -57,6 +58,7 @@ const cartEntrySchema = z.object({
   naf: z.boolean().default(false),
   taf: z.boolean().default(false),
   cnaf: z.boolean().default(false),
+  atcNumber: z.string().max(32).optional(),
   // Junior handler fields
   handlerName: z.string().optional(),
   handlerDob: z.string().optional(),
@@ -827,6 +829,7 @@ export const ordersRouter = createTRPCRouter({
             naf: entryInput.naf,
             taf: entryInput.taf,
             cnaf: entryInput.cnaf,
+            atcNumber: formatAtcNumber(entryInput.atcNumber),
           })
           .returning();
 
