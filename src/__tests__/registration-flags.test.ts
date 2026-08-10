@@ -66,18 +66,18 @@ describe('appendRegistrationFlags', () => {
 // tick; the number itself already starts with "ATC".
 describe('ATC number', () => {
   it('prints the number after any flags', () => {
-    expect(registrationFlagSuffix({ atcNumber: 'ATC01234SWE' })).toBe(' ATC01234SWE');
+    expect(registrationFlagSuffix({ atcNumber: 'ATC01234SWE' })).toBe(' (ATC01234SWE)');
     expect(registrationFlagSuffix({ taf: true, atcNumber: 'ATC01234SWE' })).toBe(
-      ' TAF ATC01234SWE'
+      ' TAF (ATC01234SWE)'
     );
   });
 
   it('adds the ATC prefix when the exhibitor typed only the digits', () => {
-    expect(registrationFlagSuffix({ atcNumber: '01234SWE' })).toBe(' ATC01234SWE');
+    expect(registrationFlagSuffix({ atcNumber: '01234SWE' })).toBe(' (ATC01234SWE)');
   });
 
   it('normalises case and stray spaces', () => {
-    expect(registrationFlagSuffix({ atcNumber: ' atc01234swe ' })).toBe(' ATC01234SWE');
+    expect(registrationFlagSuffix({ atcNumber: ' atc01234swe ' })).toBe(' (ATC01234SWE)');
   });
 
   it('ignores an empty or whitespace-only number', () => {
@@ -89,6 +89,6 @@ describe('ATC number', () => {
   it('appends to a dog name alongside the other flags', () => {
     expect(
       appendRegistrationFlags('SOME OVERSEAS DOG', { naf: true, atcNumber: 'ATC9999NOR' })
-    ).toBe('SOME OVERSEAS DOG NAF ATC9999NOR');
+    ).toBe('SOME OVERSEAS DOG NAF (ATC9999NOR)');
   });
 });

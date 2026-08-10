@@ -52,8 +52,12 @@ export function formatAtcNumber(raw: string | null | undefined): string | null {
 
 /**
  * The suffix to print after a dog's name, INCLUDING its leading space —
- * `" NAF TAF ATC01234SWE"` — or an empty string when nothing is set, so
+ * `" NAF TAF (ATC01234SWE)"` — or an empty string when nothing is set, so
  * callers can concatenate unconditionally without risking a trailing space.
+ *
+ * The ATC number is bracketed here (Mandy 2026-08-10) but stored unbracketed:
+ * brackets are presentation, so `entries.atc_number` stays a clean number that
+ * can be searched and compared.
  */
 export function registrationFlagSuffix(
   flags: RegistrationFlags | null | undefined
@@ -61,7 +65,7 @@ export function registrationFlagSuffix(
   if (!flags) return '';
   const parts = FLAG_ORDER.filter(([key]) => flags[key] === true).map(([, label]) => label);
   const atc = formatAtcNumber(flags.atcNumber);
-  if (atc) parts.push(atc);
+  if (atc) parts.push(`(${atc})`);
   return parts.length > 0 ? ` ${parts.join(' ')}` : '';
 }
 
