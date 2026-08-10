@@ -13,6 +13,8 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { trpc } from '@/lib/trpc';
+import { formatDogName } from '@/lib/utils';
+import { appendRegistrationFlags } from '@/lib/registration-flags';
 import { Button } from '@/components/ui/button';
 import {
   Card,
@@ -210,7 +212,11 @@ export default function CataloguePage() {
                     #{entry.catalogueNumber ?? '—'}
                   </span>
                   <div className="min-w-0 flex-1">
-                    <p className="font-medium truncate">{entry.dog?.registeredName ?? '—'}</p>
+                    <p className="font-medium truncate">
+                      {entry.dog
+                        ? appendRegistrationFlags(formatDogName(entry.dog), entry)
+                        : '—'}
+                    </p>
                     <p className="text-xs text-muted-foreground truncate">
                       {entry.dog?.breed?.name ?? '—'} &middot; {entry.exhibitor?.name ?? '—'}
                     </p>
@@ -236,7 +242,9 @@ export default function CataloguePage() {
                         {entry.catalogueNumber ?? '—'}
                       </TableCell>
                       <TableCell>
-                        {entry.dog?.registeredName ?? '—'}
+                        {entry.dog
+                          ? appendRegistrationFlags(formatDogName(entry.dog), entry)
+                          : '—'}
                       </TableCell>
                       <TableCell>{entry.dog?.breed?.name ?? '—'}</TableCell>
                       <TableCell>{entry.exhibitor?.name ?? '—'}</TableCell>
