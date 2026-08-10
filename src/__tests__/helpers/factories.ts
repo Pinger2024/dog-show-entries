@@ -210,6 +210,9 @@ export async function makeEntry(opts: {
   totalFee?: number;
   isNfc?: boolean;
   entryType?: 'standard' | 'junior_handler';
+  naf?: boolean;
+  taf?: boolean;
+  cnaf?: boolean;
 }) {
   const [row] = await testDb
     .insert(entries)
@@ -222,6 +225,9 @@ export async function makeEntry(opts: {
       totalFee: opts.totalFee ?? 500,
       isNfc: opts.isNfc ?? false,
       entryType: opts.entryType ?? 'standard',
+      naf: opts.naf ?? false,
+      taf: opts.taf ?? false,
+      cnaf: opts.cnaf ?? false,
     })
     .returning();
   return row;

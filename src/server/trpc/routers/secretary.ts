@@ -1504,6 +1504,51 @@ export const secretaryRouter = createTRPCRouter({
       };
     }),
 
+  // ── RKC registration flags (NAF/TAF/CNAF) ──────────────────
+
+  /**
+   * Set or clear a single entry's RKC registration flags. Separate from
+   * `updateDog` because these are PER SHOW, not properties of the dog —
+   * exhibitors ring up after entering to say the paperwork has come through
+   * (or hasn't), and the catalogue must reflect the position at closing date.
+   */
+  updateEntryRegistrationFlags: secretaryProcedure
+    .input(
+      z.object({
+        entryId: z.string().uuid(),
+        naf: z.boolean(),
+        taf: z.boolean(),
+        cnaf: z.boolean(),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      const entry = await ctx.db.query.entries.findFirst({
+        where: eq(entries.id, input.entryId),
+        columns: { id: true, showId: true, deletedAt: true },
+      });
+
+      if (!entry || entry.deletedAt) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'Entry not found' });
+      }
+
+      await verifyShowAccess(ctx.db, ctx.session.user.id, entry.showId, {
+        callerIsAdmin: ctx.callerIsAdmin,
+      });
+
+      const [updated] = await ctx.db
+        .update(entries)
+        .set({ naf: input.naf, taf: input.taf, cnaf: input.cnaf, updatedAt: new Date() })
+        .where(eq(entries.id, input.entryId))
+        .returning({
+          id: entries.id,
+          naf: entries.naf,
+          taf: entries.taf,
+          cnaf: entries.cnaf,
+        });
+
+      return updated;
+    }),
+
   // ── Class transfer ─────────────────────────────────────────
 
   transferClass: secretaryProcedure

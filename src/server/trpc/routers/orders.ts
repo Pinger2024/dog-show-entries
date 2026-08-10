@@ -52,6 +52,11 @@ const cartEntrySchema = z.object({
   dogId: z.string().uuid().optional(),
   classIds: z.array(z.string().uuid()),
   isNfc: z.boolean().default(false),
+  // RKC registration flags — per entry, because the status is judged as at
+  // the entry closing date (see entries.naf/taf/cnaf).
+  naf: z.boolean().default(false),
+  taf: z.boolean().default(false),
+  cnaf: z.boolean().default(false),
   // Junior handler fields
   handlerName: z.string().optional(),
   handlerDob: z.string().optional(),
@@ -817,6 +822,11 @@ export const ordersRouter = createTRPCRouter({
             totalFee: entryFee,
             catalogueRequested: input.catalogueRequested,
             withholdFromPublication: input.withholdFromPublication,
+            // Per-entry (not per-order like the two above): each dog has its
+            // own RKC paperwork position.
+            naf: entryInput.naf,
+            taf: entryInput.taf,
+            cnaf: entryInput.cnaf,
           })
           .returning();
 
