@@ -115,7 +115,12 @@ const s = StyleSheet.create({
   entryCell: {
     width: '50%',
     flexDirection: 'row',
-    alignItems: 'baseline',
+    // Top, not baseline: a long name — or one carrying NAF/TAF/ATC flags —
+    // wraps to a second line, and baseline alignment then levelled the
+    // catalogue number with the LAST line, so "1" looked like it belonged to
+    // the wrapped fragment. The number must sit with the first line of its
+    // own dog's name.
+    alignItems: 'flex-start',
     paddingRight: 6,
     paddingVertical: 1,
   },
