@@ -508,7 +508,7 @@ export default function LiveResultsPage({
                             </Badge>
                           )}
                           <span className="text-xs text-muted-foreground">
-                            ({cls.dogsForward} forward)
+                            ({cls.dogsForward} presented / {cls.entriesCount} entered)
                           </span>
                         </div>
                         <div className="space-y-1.5">

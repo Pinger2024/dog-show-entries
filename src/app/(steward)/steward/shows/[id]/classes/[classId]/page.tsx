@@ -334,7 +334,7 @@ export default function StewardClassResultsPage({
         <div className="mt-1 flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
           {showClass.breed && <span>{showClass.breed.name}</span>}
           <span>{entries.length} {entries.length === 1 ? 'entry' : 'entries'}</span>
-          <span className="font-medium text-foreground">· {dogsForward} forward</span>
+          <span className="font-medium text-foreground">· {dogsForward} presented</span>
           {entries.length - dogsForward > 0 && (
             <span className="text-se-honey-deep">({entries.length - dogsForward} absent)</span>
           )}

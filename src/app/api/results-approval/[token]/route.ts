@@ -257,7 +257,7 @@ export async function GET(
     const classNum = sc.classNumber != null ? `#${sc.classNumber} ` : '';
 
     breedGroupMap.get(breedName)!.classesHtml.push(`
-      <div class="class-header">${classNum}${sc.classDefinition.name}${sexLabel} <span style="color: ${BRAND.ink2}; font-weight: normal; font-size: 12px;">(${confirmed.length} entered, ${dogsForward} forward)</span></div>
+      <div class="class-header">${classNum}${sc.classDefinition.name}${sexLabel} <span style="color: ${BRAND.ink2}; font-weight: normal; font-size: 12px;">(${dogsForward} presented / ${confirmed.length} entered)</span></div>
       ${resultRows ? `<table class="class-table"><thead><tr><th>Cat #</th><th>Dog</th><th>Place</th><th>Award</th></tr></thead><tbody>${resultRows}</tbody></table>` : '<p style="padding: 4px 10px; font-size: 13px; color: ${BRAND.ink2};">No results recorded</p>'}
     `);
 

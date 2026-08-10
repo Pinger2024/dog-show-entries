@@ -981,7 +981,7 @@ export default function SecretaryResultsPage() {
                         </Badge>
                       )}
                       <span className="text-xs text-muted-foreground">
-                        {cls.entriesCount} entered · {cls.dogsForward} forward
+                        {cls.dogsForward} presented / {cls.entriesCount} entered
                       </span>
                       {cls.results.length > 0 && (
                         <ClassPublishButton showId={showId} showClassId={cls.classId} results={cls.results} />
