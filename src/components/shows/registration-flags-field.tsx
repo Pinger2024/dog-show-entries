@@ -61,14 +61,21 @@ export function RegistrationFlagsField({
         className="flex min-h-[2.75rem] items-center gap-2 text-left text-sm font-medium text-se-ink2 underline underline-offset-4 hover:text-se-ink"
       >
         <FileClock className="size-4 shrink-0" />
-        Waiting on RKC paperwork?
+        {/* The letters are the hook: an exhibitor whose paperwork is pending is
+            already thinking "NAF" and will scan for it, not for "paperwork". */}
+        <span>
+          Waiting on RKC paperwork?{' '}
+          <span className="whitespace-nowrap font-semibold">NAF / TAF</span>
+        </span>
       </button>
     );
   }
 
   return (
     <div className="rounded-lg border border-se-line bg-se-paper2/50 p-3">
-      <p className="text-sm font-semibold text-se-ink">Waiting on RKC paperwork?</p>
+      <p className="text-sm font-semibold text-se-ink">
+        Waiting on RKC paperwork? <span className="text-se-ink3">(NAF / TAF / CNAF)</span>
+      </p>
       <p className="mt-0.5 text-xs text-se-ink3">
         Only tick these if you&apos;ve sent something to the RKC and it hasn&apos;t come back yet.
         It prints after the dog&apos;s name in this show&apos;s catalogue, and applies to this
