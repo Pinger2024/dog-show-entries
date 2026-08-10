@@ -155,5 +155,15 @@ export async function runStartupMigrations() {
     CREATE INDEX IF NOT EXISTS show_breeds_show_id_idx ON show_breeds(show_id);
   `);
 
+  // ── 2026-08-10: RKC registration flags on entries (Mandy) — NAF/TAF/CNAF
+  // printed after the dog's name in the catalogue. Per ENTRY, not per dog:
+  // the RKC judges the status as at the entry closing date. ──
+  await db.execute(sql`
+    ALTER TABLE entries
+      ADD COLUMN IF NOT EXISTS naf BOOLEAN NOT NULL DEFAULT FALSE,
+      ADD COLUMN IF NOT EXISTS taf BOOLEAN NOT NULL DEFAULT FALSE,
+      ADD COLUMN IF NOT EXISTS cnaf BOOLEAN NOT NULL DEFAULT FALSE;
+  `);
+
   console.log(`[startup-migrations] done in ${Date.now() - started}ms`);
 }

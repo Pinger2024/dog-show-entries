@@ -12,6 +12,7 @@ import { db } from '@/server/db';
 import { and, eq, isNull, asc, sql, inArray } from 'drizzle-orm';
 import * as schema from '@/server/db/schema';
 import { formatDogName, formatDogNameForCatalogue } from '@/lib/utils';
+import { appendRegistrationFlags } from '@/lib/registration-flags';
 import { renderToBuffer, Document, Page, Text, StyleSheet } from '@react-pdf/renderer';
 import { CatalogueRingside } from '@/components/catalogue/catalogue-ringside';
 import { CatalogueByClass } from '@/components/catalogue/catalogue-by-class';
@@ -202,9 +203,15 @@ export async function generateCataloguePdf(
 
   const catalogueEntries: CatalogueEntry[] = entries.map((entry) => ({
     catalogueNumber: entry.catalogueNumber,
-    dogName: entry.dog
-      ? (useKCFormat ? formatDogNameForCatalogue(entry.dog) : formatDogName(entry.dog))
-      : null,
+    // RKC registration flags (NAF/TAF/CNAF) print after the dog's name. Must
+    // stay identical to the twin expression in the catalogue HTTP route —
+    // these are the two render paths that have to produce the same output.
+    dogName: appendRegistrationFlags(
+      entry.dog
+        ? (useKCFormat ? formatDogNameForCatalogue(entry.dog) : formatDogName(entry.dog))
+        : null,
+      entry
+    ),
     breed: entry.dog?.breed?.name,
     breedId: entry.dog?.breed?.id,
     group: entry.dog?.breed?.group?.name,

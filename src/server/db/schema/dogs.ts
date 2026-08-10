@@ -44,7 +44,11 @@ export const dogs = pgTable(
     breederCity: text('breeder_city'),
     breederPostcode: text('breeder_postcode'),
     colour: text('colour'),
-    registrationStatus: text('registration_status'), // null=registered, 'naf', 'taf', 'cnaf'
+    /** ⚠️ DEAD — never wired up, NULL on every row. Do NOT build on this.
+     *  NAF/TAF/CNAF are per-SHOW facts (judged as at the entry closing date),
+     *  so they live on `entries.naf/taf/cnaf` with formatting in
+     *  `lib/registration-flags.ts`. Kept only to avoid a needless drop. */
+    registrationStatus: text('registration_status'),
     bio: text('bio'),
     feedPrivate: boolean('feed_private').default(false).notNull(),
     ownerId: uuid('owner_id')

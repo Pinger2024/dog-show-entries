@@ -44,6 +44,16 @@ export const entries = pgTable(
      *  and address withheld from the catalogue. When true, catalogue rendering
      *  displays "Owner withheld" in place of owner name/address. */
     withholdFromPublication: boolean('withhold_from_publication').notNull().default(false),
+    /** RKC registration flags printed after the dog's name — NAF "name applied
+     *  for", TAF "transfer applied for", CNAF "change of name applied for".
+     *  Any combination may apply at once, hence independent booleans.
+     *  Deliberately PER ENTRY, not on the dog (Mandy 2026-08-09): the RKC
+     *  judges the status as at the entry closing date, and an exhibitor would
+     *  never go back and clear a flag set on their dog, so it would haunt
+     *  every later catalogue. Formatting lives in `lib/registration-flags.ts`. */
+    naf: boolean('naf').notNull().default(false),
+    taf: boolean('taf').notNull().default(false),
+    cnaf: boolean('cnaf').notNull().default(false),
     absent: boolean('absent').notNull().default(false),
     svMembershipNumber: text('sv_membership_number'),
     totalFee: integer('total_fee').notNull(),

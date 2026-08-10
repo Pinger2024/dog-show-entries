@@ -6,6 +6,7 @@ import { getPaidOrderIdsForShow } from '@/server/services/show-metrics';
 import { paidConfirmedAbsentNonJhWhere } from '@/server/services/report-queries';
 import * as schema from '@/server/db/schema';
 import { formatDogName, formatDogNameForCatalogue } from '@/lib/utils';
+import { appendRegistrationFlags } from '@/lib/registration-flags';
 import { renderToBuffer } from '@react-pdf/renderer';
 import { CatalogueAbsentees } from '@/components/catalogue/catalogue-absentees';
 import { CatalogueByClass } from '@/components/catalogue/catalogue-by-class';
@@ -231,9 +232,16 @@ export async function GET(
 
   const catalogueEntries: CatalogueEntry[] = entries.map((entry) => ({
     catalogueNumber: entry.catalogueNumber,
-    dogName: entry.dog
-      ? (useKCFormat ? formatDogNameForCatalogue(entry.dog) : formatDogName(entry.dog))
-      : null,
+    // RKC registration flags (NAF/TAF/CNAF) print after the dog's name. Applied
+    // here rather than inside the six format components, which all consume
+    // `dogName` as an opaque string — and the twin of this expression in
+    // pdf-generation.ts must stay identical (two render paths, one output).
+    dogName: appendRegistrationFlags(
+      entry.dog
+        ? (useKCFormat ? formatDogNameForCatalogue(entry.dog) : formatDogName(entry.dog))
+        : null,
+      entry
+    ),
     breed: entry.dog?.breed?.name,
     breedId: entry.dog?.breed?.id,
     group: entry.dog?.breed?.group?.name,
