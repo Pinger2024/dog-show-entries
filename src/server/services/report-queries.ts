@@ -106,6 +106,14 @@ export async function loadEntryReportEntries(db: Database, showId: string, paidO
         },
       },
       payments: true,
+      // What the exhibitor claimed at checkout to unlock a member rate —
+      // the regional membership option + number they gave, or the RKC
+      // discount group they picked. The Entry Report shows it so the
+      // membership secretary can verify claims (Mandy 2026-08-10).
+      order: {
+        columns: { regionalMembership: true, regionalMembershipNumber: true },
+        with: { discountGroup: { columns: { label: true } } },
+      },
     },
     orderBy: [asc(entries.entryDate)],
   });

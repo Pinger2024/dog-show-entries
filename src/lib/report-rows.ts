@@ -64,6 +64,29 @@ export function buildCatalogueOrderRows(
     });
 }
 
+// ── Membership claim (Entry Report) ─────────────────────────────────────
+
+export interface MembershipClaimOrder {
+  regionalMembership: string | null;
+  regionalMembershipNumber: string | null;
+  discountGroup: { label: string | null } | null;
+}
+
+/** What the exhibitor claimed at checkout to unlock a member rate — the
+ *  regional membership option (+ the number they typed), or the RKC
+ *  discount group label. Empty string = no claim, they paid the standard
+ *  rate. Shown on the Entry Report so the membership secretary can verify
+ *  claims against the club's records (Mandy 2026-08-10). */
+export function membershipClaimLabel(order: MembershipClaimOrder | null | undefined): string {
+  if (!order) return '';
+  if (order.regionalMembership) {
+    return order.regionalMembershipNumber
+      ? `${order.regionalMembership} (${order.regionalMembershipNumber})`
+      : order.regionalMembership;
+  }
+  return order.discountGroup?.label ?? '';
+}
+
 // ── Class Breakdown ─────────────────────────────────────────────────────
 
 export interface ClassBreakdownClassInput {

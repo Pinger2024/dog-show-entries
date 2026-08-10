@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { trpc } from '@/lib/trpc';
 import { formatCurrency } from '@/lib/date-utils';
+import { membershipClaimLabel } from '@/lib/report-rows';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
@@ -309,6 +310,11 @@ function EntryReportContent({ showId }: { showId: string }) {
                             {entry.isNfc && (
                               <Badge variant="outline" className="text-xs">NFC</Badge>
                             )}
+                            {membershipClaimLabel(entry.order) && (
+                              <Badge variant="outline" className="text-xs">
+                                {membershipClaimLabel(entry.order)}
+                              </Badge>
+                            )}
                             <Badge
                               variant={entryStatusConfig[entry.status]?.variant ?? 'outline'}
                               className="text-xs"
@@ -352,6 +358,11 @@ function EntryReportContent({ showId }: { showId: string }) {
                         <p className="text-xs text-muted-foreground truncate">
                           {entry.exhibitor?.name ?? '—'} · {entry.dog?.breed?.name ?? '—'}
                         </p>
+                        {membershipClaimLabel(entry.order) && (
+                          <p className="text-xs text-muted-foreground truncate">
+                            {membershipClaimLabel(entry.order)}
+                          </p>
+                        )}
                       </div>
                       <Badge
                         variant={entryStatusConfig[entry.status]?.variant ?? 'outline'}
@@ -399,6 +410,11 @@ function EntryReportContent({ showId }: { showId: string }) {
                           <div>
                             <p className="font-medium">{entry.exhibitor?.name ?? '—'}</p>
                             <p className="text-xs text-muted-foreground">{entry.exhibitor?.email ?? ''}</p>
+                            {membershipClaimLabel(entry.order) && (
+                              <p className="text-xs text-muted-foreground">
+                                {membershipClaimLabel(entry.order)}
+                              </p>
+                            )}
                           </div>
                         </TableCell>
                         <TableCell>

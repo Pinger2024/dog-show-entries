@@ -407,6 +407,9 @@ export async function makeOrder(opts: {
   // Pass `stripePaymentIntentId: null` explicitly to model an offline
   // (manual/postal/cash) order instead.
   stripePaymentIntentId?: string | null;
+  regionalMembership?: string;
+  regionalMembershipNumber?: string;
+  discountGroupId?: string;
 }) {
   const [row] = await testDb
     .insert(orders)
@@ -420,6 +423,9 @@ export async function makeOrder(opts: {
         opts.stripePaymentIntentId === null
           ? null
           : opts.stripePaymentIntentId ?? `pi_test_${randomUUID()}`,
+      regionalMembership: opts.regionalMembership,
+      regionalMembershipNumber: opts.regionalMembershipNumber,
+      discountGroupId: opts.discountGroupId,
     })
     .returning();
   return row;

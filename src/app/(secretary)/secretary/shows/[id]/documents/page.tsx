@@ -45,7 +45,7 @@ import { downloadCsv } from '../_lib/show-utils';
 import { useShowId } from '../_lib/show-context';
 import { documentRowVisible } from '../_lib/document-eligibility';
 import { PdfViewerButton } from '../_components/pdf-viewer-button';
-import { buildAbsenteeRow, buildFinancialStatementRow } from '@/lib/report-rows';
+import { buildAbsenteeRow, buildFinancialStatementRow, membershipClaimLabel } from '@/lib/report-rows';
 
 /**
  * Fetch a same-origin file and kick off a download via a temporary anchor +
@@ -271,7 +271,7 @@ export default function DocumentsPage() {
         `${prizeCardCounts.third}× 3rd · ${prizeCardCounts.reserve}× Reserve`;
 
   function exportEntryReportCsv() {
-    const headers = ['Entry Date', 'Status', 'Exhibitor', 'Email', 'Dog', 'Breed', 'Group', 'Sex', 'Classes', 'Fee (£)', 'NFC'];
+    const headers = ['Entry Date', 'Status', 'Exhibitor', 'Email', 'Dog', 'Breed', 'Group', 'Sex', 'Classes', 'Fee (£)', 'NFC', 'Membership'];
     const rows = (entryReport ?? []).map((e) => [
       e.entryDate ? new Date(e.entryDate).toLocaleDateString('en-GB') : '',
       e.status,
@@ -284,6 +284,7 @@ export default function DocumentsPage() {
       e.entryClasses.map((ec) => ec.showClass?.classDefinition?.name ?? '').filter(Boolean).join('; '),
       (e.totalFee / 100).toFixed(2),
       e.isNfc ? 'Yes' : 'No',
+      membershipClaimLabel(e.order),
     ]);
     downloadCsv(headers, rows, `entry-report-${showId}`);
   }
