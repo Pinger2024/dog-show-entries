@@ -62,6 +62,7 @@ import {
   CardTitle,
 } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
+import { RegistrationFlagsField } from '@/components/shows/registration-flags-field';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
@@ -865,6 +866,9 @@ export default function EnterShowPage() {
             dogId: e.dogId,
             classIds: e.classIds,
             isNfc: e.isNfc,
+            naf: e.naf ?? false,
+            taf: e.taf ?? false,
+            cnaf: e.cnaf ?? false,
             handlerName: e.handlerName,
             handlerDob: e.handlerDob,
             handlerKcNumber: e.handlerKcNumber,
@@ -2009,6 +2013,18 @@ export default function EnterShowPage() {
                   )}
                   {entry.isNfc && (
                     <p className="text-xs font-semibold text-se-honey-deep">NOT FOR COMPETITION</p>
+                  )}
+                  {/* RKC paperwork still pending — this dog, this show only */}
+                  {entry.entryType === 'standard' && (
+                    <RegistrationFlagsField
+                      idPrefix={`regflags-${entry.id}`}
+                      value={{
+                        naf: entry.naf ?? false,
+                        taf: entry.taf ?? false,
+                        cnaf: entry.cnaf ?? false,
+                      }}
+                      onChange={(next) => cart.setRegistrationFlags(entry.id, next)}
+                    />
                   )}
                   <p className="font-bold text-se-ink">{formatCurrency(entry.totalFee)}</p>
                 </div>

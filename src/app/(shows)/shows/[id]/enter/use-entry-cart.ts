@@ -13,6 +13,11 @@ export interface CartEntry {
   classNames: string[]; // human-readable class names for cart review
   isNfc: boolean;
   totalFee: number;
+  /** RKC paperwork pending for THIS show — see lib/registration-flags.ts.
+   *  Per entry, not per dog: the RKC judges the position at closing date. */
+  naf?: boolean;
+  taf?: boolean;
+  cnaf?: boolean;
   // Junior handler fields
   handlerName?: string;
   handlerDob?: string;
@@ -107,6 +112,7 @@ export type CartAction =
   | { type: 'SET_DOG'; dogId: string; dogName: string; breedName: string }
   | { type: 'SET_JH_DETAILS'; handlerName: string; handlerDob: string; handlerKcNumber?: string }
   | { type: 'SET_CLASSES'; classIds: string[]; classNames: string[]; totalFee: number; isNfc: boolean }
+  | { type: 'SET_REGISTRATION_FLAGS'; entryId: string; naf: boolean; taf: boolean; cnaf: boolean }
   | { type: 'EDIT_ENTRY'; entryId: string }
   | { type: 'REMOVE_ENTRY'; entryId: string }
   | { type: 'SET_SUNDRY_ITEM'; item: CartSundryItem }
@@ -246,6 +252,19 @@ export function cartReducer(state: CartState, action: CartAction): CartState {
             : e
         ),
         step: 'cart_review',
+      };
+    }
+
+    case 'SET_REGISTRATION_FLAGS': {
+      // Targets a specific cart row by id (not activeEntryId) — these are set
+      // on the cart-review screen, where several dogs are listed at once.
+      return {
+        ...state,
+        entries: state.entries.map((e) =>
+          e.id === action.entryId
+            ? { ...e, naf: action.naf, taf: action.taf, cnaf: action.cnaf }
+            : e
+        ),
       };
     }
 
@@ -496,6 +515,11 @@ export function useEntryCart(showId?: string) {
       dispatch({ type: 'SET_CLASSES', classIds, classNames, totalFee, isNfc }),
     []
   );
+  const setRegistrationFlags = useCallback(
+    (entryId: string, flags: { naf: boolean; taf: boolean; cnaf: boolean }) =>
+      dispatch({ type: 'SET_REGISTRATION_FLAGS', entryId, ...flags }),
+    []
+  );
   const editEntry = useCallback(
     (entryId: string) => dispatch({ type: 'EDIT_ENTRY', entryId }),
     []
@@ -538,6 +562,7 @@ export function useEntryCart(showId?: string) {
     setDog,
     setJHDetails,
     setClasses,
+    setRegistrationFlags,
     editEntry,
     removeEntry,
     setSundryItem,
