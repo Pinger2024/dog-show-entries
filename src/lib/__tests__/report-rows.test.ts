@@ -134,3 +134,52 @@ describe('buildFinancialStatementRow — Financial Statement', () => {
     expect(row.exhibitor).toBe('Unknown');
   });
 });
+
+// ── RKC registration flags on paperwork ────────────────────────────────
+// Mandy asked for NAF/TAF on "the catalogue and results paperwork", so the
+// exported reports must word it exactly as the catalogue does — same helper.
+describe('registration flags on report rows', () => {
+  it('appends the flags to the exhibitor-list name', () => {
+    const [row] = buildCatalogueOrderRows(
+      [
+        {
+          catalogueNumber: '1',
+          naf: true,
+          taf: true,
+          dog: { registeredName: 'SPRINGFIELD CYCLONE', breed: { name: 'GSD' }, sex: 'dog', owners: null },
+          exhibitor: { name: 'A Exhibitor' },
+          entryClasses: [],
+        },
+      ],
+      new Map()
+    );
+    expect(row?.name).toBe('SPRINGFIELD CYCLONE NAF TAF');
+  });
+
+  it('leaves an unflagged name untouched', () => {
+    const [row] = buildCatalogueOrderRows(
+      [
+        {
+          catalogueNumber: '2',
+          dog: { registeredName: 'SPRINGFIELD TORNADO', breed: { name: 'GSD' }, sex: 'dog', owners: null },
+          exhibitor: { name: 'A Exhibitor' },
+          entryClasses: [],
+        },
+      ],
+      new Map()
+    );
+    expect(row?.name).toBe('SPRINGFIELD TORNADO');
+  });
+
+  it('appends the flags on the absentee row too', () => {
+    const row = buildAbsenteeRow({
+      catalogueNumber: '3',
+      status: 'withdrawn',
+      cnaf: true,
+      dog: { registeredName: 'DONAPARK HAWK', breed: { name: 'GSD' }, sex: 'bitch', owners: null },
+      exhibitor: { name: 'B Exhibitor' },
+      entryClasses: [],
+    });
+    expect(row.dogName).toBe('DONAPARK HAWK CNAF');
+  });
+});

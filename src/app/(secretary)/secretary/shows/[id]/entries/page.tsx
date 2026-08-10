@@ -14,7 +14,7 @@ import {
   X,
 } from 'lucide-react';
 import { RegistrationFlagsField } from '@/components/shows/registration-flags-field';
-import { registrationFlagSuffix } from '@/lib/registration-flags';
+import { appendRegistrationFlags, registrationFlagSuffix } from '@/lib/registration-flags';
 import { toast } from 'sonner';
 import { trpc } from '@/lib/trpc';
 import { formatSvClassName } from '@/lib/class-labels';
@@ -180,7 +180,8 @@ export default function EntriesPage() {
     const rows = entries.map((e) => [
       e.exhibitor?.name ?? '',
       e.exhibitor?.email ?? '',
-      e.dog?.registeredName ?? '',
+      // Carries the RKC paperwork flags, same as the catalogue does.
+      e.dog?.registeredName ? appendRegistrationFlags(e.dog.registeredName, e) : '',
       e.dog?.breed?.name ?? '',
       e.entryClasses
         .map((ec) => formatClassWithSex(ec))

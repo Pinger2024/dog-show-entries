@@ -12,10 +12,14 @@
  * formats it differently.
  */
 import type { CatalogueOrderRow, ClassBreakdownRow } from '@/components/reports/show-report-pdf';
+import {
+  appendRegistrationFlags,
+  type RegistrationFlags,
+} from '@/lib/registration-flags';
 
 // ── Exhibitor List ──────────────────────────────────────────────────────
 
-export interface CatalogueOrderEntryInput {
+export interface CatalogueOrderEntryInput extends RegistrationFlags {
   catalogueNumber: string | null;
   dog: {
     registeredName: string | null;
@@ -47,7 +51,11 @@ export function buildCatalogueOrderRows(
         .join(', ');
       return {
         catalogueNumber: e.catalogueNumber ?? '—',
-        name: e.dog?.registeredName ?? 'Junior Handler',
+        // RKC paperwork flags print after the name here exactly as in the
+        // catalogue — same helper, so the two can never word it differently.
+        name: e.dog?.registeredName
+          ? appendRegistrationFlags(e.dog.registeredName, e)!
+          : 'Junior Handler',
         breed: e.dog?.breed?.name ?? null,
         sex: e.dog?.sex ?? null,
         owner,
@@ -90,7 +98,7 @@ export function buildClassBreakdownRows(
 // builders). Never merge the three lists — they exist because Mandy asked
 // three different questions of the same entries table.
 
-export interface AbsenteeEntryInput {
+export interface AbsenteeEntryInput extends RegistrationFlags {
   catalogueNumber: string | null;
   status: string;
   dog: {
@@ -119,7 +127,9 @@ export interface AbsenteeRow {
 export function buildAbsenteeRow(entry: AbsenteeEntryInput): AbsenteeRow {
   return {
     catalogueNumber: entry.catalogueNumber ?? '',
-    dogName: entry.dog?.registeredName ?? 'Junior Handler',
+    dogName: entry.dog?.registeredName
+      ? appendRegistrationFlags(entry.dog.registeredName, entry)!
+      : 'Junior Handler',
     breed: entry.dog?.breed?.name ?? '',
     sex: entry.dog?.sex === 'dog' ? 'Dog' : entry.dog?.sex === 'bitch' ? 'Bitch' : '',
     classes: entry.entryClasses
@@ -140,6 +150,9 @@ export function buildAbsenteeRow(entry: AbsenteeEntryInput): AbsenteeRow {
 
 export interface FinancialStatementEntryInput {
   dog: { registeredName: string | null } | null;
+  naf?: boolean | null;
+  taf?: boolean | null;
+  cnaf?: boolean | null;
   exhibitor: { name: string | null; email: string | null } | null;
   status: string;
   entryClasses: { showClass: { classDefinition: { name: string | null } | null } | null }[];
@@ -160,7 +173,9 @@ export function buildFinancialStatementRow(
   catalogueBuyerEmails: Set<string>,
 ): FinancialStatementRow {
   return {
-    dog: entry.dog?.registeredName ?? 'Unknown',
+    dog: entry.dog?.registeredName
+      ? appendRegistrationFlags(entry.dog.registeredName, entry)!
+      : 'Unknown',
     exhibitor: entry.exhibitor?.name ?? 'Unknown',
     status: entry.status,
     classes: entry.entryClasses.map((ec) => ec.showClass?.classDefinition?.name ?? '').join('; '),
