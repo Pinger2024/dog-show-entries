@@ -6,12 +6,15 @@ import {
   ArrowRight,
   Download,
   Edit3,
+  FileClock,
   Loader2,
   Plus,
   Search,
   Ticket,
   X,
 } from 'lucide-react';
+import { RegistrationFlagsField } from '@/components/shows/registration-flags-field';
+import { registrationFlagSuffix } from '@/lib/registration-flags';
 import { toast } from 'sonner';
 import { trpc } from '@/lib/trpc';
 import { formatSvClassName } from '@/lib/class-labels';
@@ -115,6 +118,7 @@ export default function EntriesPage() {
 
   const [search, setSearch] = useState('');
   const [editingEntry, setEditingEntry] = useState<EntryItem | null>(null);
+  const [flagsEntry, setFlagsEntry] = useState<EntryItem | null>(null);
   const [transferringEntry, setTransferringEntry] = useState<EntryItem | null>(null);
   const [showAddEntry, setShowAddEntry] = useState(false);
 
@@ -365,6 +369,15 @@ export default function EntriesPage() {
                               <Edit3 className="size-4" />
                             </button>
                           )}
+                          {entry.dog && (
+                            <button
+                              onClick={() => setFlagsEntry(entry)}
+                              className="flex size-9 items-center justify-center rounded-md text-se-ink3 hover:bg-se-paper2 hover:text-se-ink"
+                              title="RKC paperwork (NAF / TAF / CNAF)"
+                            >
+                              <FileClock className="size-4" />
+                            </button>
+                          )}
                         </div>
                       </div>
                       <div className="flex items-center justify-between">
@@ -465,6 +478,15 @@ export default function EntriesPage() {
                                 <Edit3 className="size-4" />
                               </button>
                             )}
+                            {entry.dog && (
+                              <button
+                                onClick={() => setFlagsEntry(entry)}
+                                className="flex size-9 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
+                                title="RKC paperwork (NAF / TAF / CNAF)"
+                              >
+                                <FileClock className="size-4" />
+                              </button>
+                            )}
                           </div>
                         </TableCell>
                       </TableRow>
@@ -482,6 +504,14 @@ export default function EntriesPage() {
             entry={editingEntry}
             showId={showId}
             onClose={() => setEditingEntry(null)}
+          />
+        )}
+
+        {flagsEntry && (
+          <RegistrationFlagsDialog
+            entry={flagsEntry}
+            showId={showId}
+            onClose={() => setFlagsEntry(null)}
           />
         )}
 
@@ -1316,5 +1346,94 @@ function TransferClassDialog({
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  );
+}
+
+/**
+ * Set an entry's RKC paperwork flags after the fact — exhibitors ring up to
+ * say the transfer has come through, or that it hasn't yet.
+ *
+ * Deliberately NOT part of EditDogDialog: that one edits the DOG (permanent,
+ * and demands a reason for the audit log), whereas these are per-show and
+ * change as the RKC processes the paperwork.
+ */
+function RegistrationFlagsDialog({
+  entry,
+  showId,
+  onClose,
+}: {
+  entry: EntryItem;
+  showId: string;
+  onClose: () => void;
+}) {
+  const [flags, setFlags] = useState({
+    naf: entry.naf ?? false,
+    taf: entry.taf ?? false,
+    cnaf: entry.cnaf ?? false,
+  });
+  const utils = trpc.useUtils();
+
+  const update = trpc.secretary.updateEntryRegistrationFlags.useMutation({
+    onSuccess: () => {
+      toast.success('RKC paperwork updated');
+      utils.entries.getForShow.invalidate({ showId });
+      onClose();
+    },
+    onError: (err) => toast.error(err.message ?? 'Could not update the paperwork flags'),
+  });
+
+  const dogName = entry.dog?.registeredName ?? 'this dog';
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 p-0 sm:items-center sm:p-4">
+      <Card className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-t-2xl sm:rounded-xl">
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <CardTitle>RKC paperwork</CardTitle>
+            <button
+              onClick={onClose}
+              className="flex size-11 items-center justify-center rounded-md text-muted-foreground hover:bg-muted"
+              aria-label="Close"
+            >
+              <X className="size-4" />
+            </button>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <p className="text-sm text-muted-foreground">
+            For <span className="font-semibold text-foreground">{dogName}</span> at this show
+            only. It prints after the dog&apos;s name in the catalogue.
+          </p>
+
+          <RegistrationFlagsField
+            idPrefix={`sec-regflags-${entry.id}`}
+            value={flags}
+            onChange={setFlags}
+          />
+
+          <p className="text-sm">
+            Will print as{' '}
+            <span className="font-semibold">
+              {dogName}
+              {registrationFlagSuffix(flags)}
+            </span>
+          </p>
+
+          <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
+            <Button variant="outline" className="min-h-[2.75rem]" onClick={onClose}>
+              Cancel
+            </Button>
+            <Button
+              className="min-h-[2.75rem]"
+              disabled={update.isPending}
+              onClick={() => update.mutate({ entryId: entry.id, ...flags })}
+            >
+              {update.isPending && <Loader2 className="mr-2 size-4 animate-spin" />}
+              Save
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
   );
 }

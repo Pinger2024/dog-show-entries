@@ -3392,6 +3392,10 @@ export const secretaryRouter = createTRPCRouter({
         exhibitorEmail: z.string().email(),
         handlerName: z.string().optional(),
         isNfc: z.boolean().default(false),
+        // RKC registration flags — per show, same as the exhibitor checkout.
+        naf: z.boolean().default(false),
+        taf: z.boolean().default(false),
+        cnaf: z.boolean().default(false),
         paymentMethod: z.enum(['postal', 'cash', 'bank_transfer', 'online']).default('bank_transfer'),
         sundryItems: z
           .array(z.object({ sundryItemId: z.string().uuid(), quantity: z.number().int().min(1) }))
@@ -3584,6 +3588,9 @@ export const secretaryRouter = createTRPCRouter({
           dogId: input.dogId,
           exhibitorId,
           isNfc: input.isNfc,
+          naf: input.naf,
+          taf: input.taf,
+          cnaf: input.cnaf,
           totalFee: classFee,
           orderId: order!.id,
           status: 'confirmed',
