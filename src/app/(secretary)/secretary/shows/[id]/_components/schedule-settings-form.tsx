@@ -402,7 +402,9 @@ export function ScheduleSettingsForm({ showId, onSaved }: ScheduleSettingsFormPr
       firstAiders: firstAiders.filter((n) => n.trim()).length > 0
         ? firstAiders.filter((n) => n.trim()).map((n) => n.trim())
         : undefined,
-      bestAwards,
+      // Regionals never send bestAwards — omission means "leave alone"
+      // server-side, so a hidden picker can't overwrite a configured list.
+      ...(isWusvShow ? {} : { bestAwards }),
       awardsDescription: awardsDescription || undefined,
       prizeMoney: prizeMoney || undefined,
       what3words: what3words || undefined,
@@ -470,7 +472,7 @@ export function ScheduleSettingsForm({ showId, onSaved }: ScheduleSettingsFormPr
   }, [
     hasLoaded, country, publicAdmission, wetWeather, isBenched, benchingRemovalTime,
     acceptsNfc, judgedOnGroupSystem, latestArrivalTime, showOpenTime, judgingStartTime,
-    onCallVet, what3words, showManager, officers, firstAiders, bestAwards, awardsDescription, prizeMoney,
+    onCallVet, what3words, showManager, officers, firstAiders, bestAwards, isWusvShow, awardsDescription, prizeMoney,
     directions, catering, futureShowDates, additionalNotes, welcomeNote,
     outsideAttraction, hasBestVeteranInShow, bestVeteranInShowEligibility, customStatements,
   ]);
@@ -550,7 +552,9 @@ export function ScheduleSettingsForm({ showId, onSaved }: ScheduleSettingsFormPr
       firstAiders: firstAiders.filter((n) => n.trim()).length > 0
         ? firstAiders.filter((n) => n.trim()).map((n) => n.trim())
         : undefined,
-      bestAwards,
+      // Regionals never send bestAwards — omission means "leave alone"
+      // server-side, so a hidden picker can't overwrite a configured list.
+      ...(isWusvShow ? {} : { bestAwards }),
       awardsDescription: awardsDescription || undefined,
       prizeMoney: prizeMoney || undefined,
       what3words: what3words || undefined,
@@ -580,7 +584,7 @@ export function ScheduleSettingsForm({ showId, onSaved }: ScheduleSettingsFormPr
     effectiveExisting, country, publicAdmission, wetWeather, isBenched,
     benchingRemovalTime, acceptsNfc, judgedOnGroupSystem, latestArrivalTime,
     showOpenTime, judgingStartTime, onCallVet, what3words, showManager,
-    officers, firstAiders, bestAwards, awardsDescription, prizeMoney, directions, catering,
+    officers, firstAiders, bestAwards, isWusvShow, awardsDescription, prizeMoney, directions, catering,
     futureShowDates, additionalNotes, welcomeNote, outsideAttraction,
     hasBestVeteranInShow, bestVeteranInShowEligibility,
     customStatements, showId,
@@ -1312,13 +1316,18 @@ function AwardsSection({
 
   return (
     <div className="space-y-4">
-      <div className="space-y-1.5">
-        <Label className="text-xs">Which awards are you giving?</Label>
-        <p className="text-xs text-muted-foreground">
-          Tick the awards your show gives out. This is what the sponsors table and results recording page use.
-        </p>
-        <AwardsPicker value={bestAwards} onChange={setBestAwards} showType={showType} />
-      </div>
+      {/* Regional (SV/WUSV) shows have a fixed award structure (Best Dog/
+          Bitch, Most Promising) — no tick-list needed there (Mandy
+          2026-08-11); their configured lists still render everywhere. */}
+      {!isWusvShow && (
+        <div className="space-y-1.5">
+          <Label className="text-xs">Which awards are you giving?</Label>
+          <p className="text-xs text-muted-foreground">
+            Tick the awards your show gives out. This is what the sponsors table and results recording page use.
+          </p>
+          <AwardsPicker value={bestAwards} onChange={setBestAwards} showType={showType} />
+        </div>
+      )}
       <div className="space-y-1.5">
         <Label htmlFor="awards" className="text-xs">Awards description text for the schedule</Label>
         <p className="text-xs text-muted-foreground">The rosettes/trophies wording printed in the schedule — separate from the awards list above.</p>

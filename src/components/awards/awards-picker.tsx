@@ -121,13 +121,17 @@ export function AwardsPicker({
             Tick awards below to add them here.
           </p>
         ) : (
-          <div className="space-y-1.5">
+          /* Mobile keeps 44px touch targets stacked vertically; from sm up the
+             rows compact hard (32px controls, side-by-side arrows, two
+             columns) — the first laptop review filled the whole screen with
+             eight awards (Mandy 2026-08-11). */
+          <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2 lg:grid-cols-3">
             {value.map((award, idx) => (
-              <div key={`${award}-${idx}`} className="flex items-center gap-1 rounded-lg border bg-card px-2 py-1">
-                <div className="flex shrink-0 flex-col">
+              <div key={`${award}-${idx}`} className="flex items-center gap-1 rounded-lg border bg-card px-2 py-1 sm:py-0.5">
+                <div className="flex shrink-0 flex-col sm:flex-row">
                   <button
                     type="button"
-                    className="flex size-11 items-center justify-center rounded text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-30"
+                    className="flex size-11 items-center justify-center rounded text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-30 sm:size-8"
                     disabled={idx === 0}
                     onClick={() => handleMoveUp(idx)}
                     aria-label={`Move ${award} up`}
@@ -136,7 +140,7 @@ export function AwardsPicker({
                   </button>
                   <button
                     type="button"
-                    className="flex size-11 items-center justify-center rounded text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-30"
+                    className="flex size-11 items-center justify-center rounded text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-30 sm:size-8"
                     disabled={idx === value.length - 1}
                     onClick={() => handleMoveDown(idx)}
                     aria-label={`Move ${award} down`}
@@ -150,7 +154,7 @@ export function AwardsPicker({
                 </div>
                 <button
                   type="button"
-                  className="flex size-11 shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+                  className="flex size-11 shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-destructive/10 hover:text-destructive sm:size-8"
                   onClick={() => handleRemove(idx)}
                   aria-label={`Remove ${award}`}
                 >
@@ -165,11 +169,11 @@ export function AwardsPicker({
       {/* Usually awarded */}
       <div className="space-y-1.5">
         <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Usually awarded</p>
-        <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2 lg:grid-cols-3">
           {usualAwards.map((award) => (
             <label
               key={award}
-              className="flex min-h-[2.75rem] cursor-pointer items-center gap-2 rounded-lg border px-3 text-sm hover:bg-muted/50"
+              className="flex min-h-[2.75rem] cursor-pointer items-center gap-2 rounded-lg border px-3 text-sm hover:bg-muted/50 sm:min-h-9"
             >
               <Checkbox
                 checked={valueSet.has(canon(award))}
@@ -193,11 +197,11 @@ export function AwardsPicker({
             <ChevronDown className={cn('size-4 shrink-0 transition-transform', showMore && 'rotate-180')} />
           </button>
           {showMore && (
-            <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
+            <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2 lg:grid-cols-3">
               {moreAwards.map((award) => (
                 <label
                   key={award}
-                  className="flex min-h-[2.75rem] cursor-pointer items-center gap-2 rounded-lg border px-3 text-sm hover:bg-muted/50"
+                  className="flex min-h-[2.75rem] cursor-pointer items-center gap-2 rounded-lg border px-3 text-sm hover:bg-muted/50 sm:min-h-9"
                 >
                   <Checkbox
                     checked={valueSet.has(canon(award))}

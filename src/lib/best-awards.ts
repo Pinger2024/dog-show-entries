@@ -67,8 +67,9 @@ export const OPTIONAL_AWARDS: string[] = [
   'Best Long Coat Adult',
   'Best Long Coat Puppy',
   'Best Baby Puppy',
-  'Most Promising Dog',
-  'Most Promising Bitch',
+  // Most Promising Dog/Bitch deliberately absent — regional-only awards
+  // (Mandy 2026-08-11), and regional shows don't get the picker at all.
+  // They stay recordable via awardNameToType for regionals' configured lists.
   'Dog Challenge Certificate',
   'Reserve Dog Challenge Certificate',
   'Bitch Challenge Certificate',
