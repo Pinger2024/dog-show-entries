@@ -254,21 +254,23 @@ export function SvClassificationPage({ show }: { show: CatalogueShowInfo }) {
       <TonalWash variant="inside" buffer={show.svWashes?.inside} />
       <Topper num={3} subject="Classification &amp; points" />
 
-      <View style={{ marginTop: 12 }}>
+      {/* Tightened 2026-08-11 (Mandy): with 7 age rows + JH + BRG points the
+          page spilled its last points row onto a second page. */}
+      <View style={{ marginTop: 9 }}>
         <Text style={{ fontFamily: SV_FONTS.serif, fontStyle: 'italic', fontSize: 10, color: SV.ink3 }}>
           The running order —
         </Text>
-        <Text style={{ fontFamily: SV_FONTS.serif, fontSize: 26, lineHeight: 1, marginTop: 2 }}>
+        <Text style={{ fontFamily: SV_FONTS.serif, fontSize: 23, lineHeight: 1, marginTop: 2 }}>
           classification.
         </Text>
-        <Text style={{ fontFamily: SV_FONTS.sans, fontSize: 8, color: SV.ink3, marginTop: 4, maxWidth: '85%' }}>
+        <Text style={{ fontFamily: SV_FONTS.sans, fontSize: 8, color: SV.ink3, marginTop: 3, maxWidth: '85%' }}>
           Verbal critiques will be given after the judging of each class. Both
           coat types in each class present their individual stand at the same
           time, then separately in final movement judging.
         </Text>
       </View>
 
-      <View style={{ marginTop: 10 }}>
+      <View style={{ marginTop: 8 }}>
         {pairs.map((pair, idx) => {
           const head = pair[0];
           if (!head) return null;
@@ -277,7 +279,7 @@ export function SvClassificationPage({ show }: { show: CatalogueShowInfo }) {
               key={idx}
               style={{
                 flexDirection: 'row',
-                paddingVertical: 3.5,
+                paddingVertical: 2.8,
                 borderTopWidth: idx === 0 ? 1 : 0.5,
                 borderTopColor: idx === 0 ? SV.ink : SV.rule,
               }}
@@ -329,8 +331,8 @@ export function SvClassificationPage({ show }: { show: CatalogueShowInfo }) {
         {jh.length > 0 && (
           <View
             style={{
-              marginTop: 8,
-              padding: 8,
+              marginTop: 6,
+              padding: 6,
               backgroundColor: SV.accentSoft,
               flexDirection: 'row',
               flexWrap: 'wrap',
@@ -367,7 +369,7 @@ export function SvClassificationPage({ show }: { show: CatalogueShowInfo }) {
           2026-05-26 (Amanda asked to save a front-matter page). The
           points table is small enough to share the page with the
           classification grid. */}
-      <View style={{ marginTop: 10 }}>
+      <View style={{ marginTop: 7 }}>
         <SectionTitle title="BRG points system" />
         <Text style={{ fontFamily: SV_FONTS.sans, fontSize: 7.5, color: SV.ink2, lineHeight: 1.45, marginBottom: 4 }}>
           Points toward the British Gold Medal (25 points lifetime, including
