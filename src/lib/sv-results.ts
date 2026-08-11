@@ -188,10 +188,13 @@ const AGE_RANGE: Record<string, string> = {
   Working: '2 years +',
 };
 
-/** Coat-section ordering + headings for the PDF (Short Coat first). */
+/** Coat-section ordering + headings for the PDF — Long Coats first, matching
+ *  the 1a Long / 1b Short class convention the regional groups adopted
+ *  2026-08-11 (Mandy: "flip the results page too so everything matches";
+ *  previously Short-first, mirroring the League's old results sheet). */
 const COAT_ORDER: { coat: SvCoat | null; title: string | null }[] = [
-  { coat: 'stock', title: 'Short Coat' },
   { coat: 'long_stock', title: 'Long Coats' },
+  { coat: 'stock', title: 'Short Coat' },
   { coat: null, title: null },
 ];
 

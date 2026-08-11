@@ -170,14 +170,16 @@ describe('SV graded results report — end to end', () => {
 
     const report = buildSvResultsReport(load!.reportInput);
 
-    expect(report.coatSections.map((s) => s.title)).toEqual(['Short Coat', 'Long Coats']);
-    expect(report.coatSections[0].classes.map((c) => c.label)).toEqual([
+    expect(report.coatSections.map((s) => s.title)).toEqual(['Long Coats', 'Short Coat']);
+    // By title, not index — section order flipped Long-first 2026-08-11.
+    const shortCoatSection = report.coatSections.find((s) => s.title === 'Short Coat')!;
+    expect(shortCoatSection.classes.map((c) => c.label)).toEqual([
       'Working Male (2 years +)',
       'Working Female (2 years +)',
       'Minor Puppy Bitch (6-9 months)',
     ]);
 
-    const workingMale = report.coatSections[0].classes[0];
+    const workingMale = shortCoatSection.classes[0];
     expect(workingMale.rows).toEqual([
       { grade: 'V', placement: '1', name: 'Anton Vom Haus Garyn', sire: 'Grimm Della Valcuvia', dam: "Rover Du Val D'Anzin", absent: false },
       { grade: 'Abs', placement: '90', name: 'Tornado', sire: '', dam: '', absent: true },

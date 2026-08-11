@@ -251,12 +251,13 @@ describe('computeClassMembers', () => {
 describe('buildSvResultsReport', () => {
   const report = buildSvResultsReport(buildFixture());
 
-  it('groups by coat (Short Coat then Long Coats)', () => {
-    expect(report.coatSections.map((s) => s.title)).toEqual(['Short Coat', 'Long Coats']);
+  it('groups by coat (Long Coats then Short Coat — matches the 1a/1b class order since 2026-08-11)', () => {
+    expect(report.coatSections.map((s) => s.title)).toEqual(['Long Coats', 'Short Coat']);
   });
 
   it('orders classes oldest-first, male before female', () => {
-    const shortCoat = report.coatSections[0];
+    // Select by title, not index — section order flipped Long-first 2026-08-11.
+    const shortCoat = report.coatSections.find((s) => s.title === 'Short Coat')!;
     expect(shortCoat.classes.map((c) => c.label)).toEqual([
       'Working Male (2 years +)',
       'Working Female (2 years +)',
@@ -265,7 +266,7 @@ describe('buildSvResultsReport', () => {
   });
 
   it('renders graded rows and keeps absentees as Abs 90+', () => {
-    const workingMale = report.coatSections[0].classes[0];
+    const workingMale = report.coatSections.find((s) => s.title === 'Short Coat')!.classes[0];
     expect(workingMale.rows).toEqual([
       { grade: 'V', placement: '1', name: 'Anton', sire: 'Grimm', dam: 'Rover', absent: false },
       { grade: 'V', placement: '2', name: 'Zandamor', sire: 'Sire One', dam: 'Dam One', absent: false },
