@@ -50,6 +50,31 @@ describe('awardNameToType', () => {
   it('returns null for a bespoke trophy name we do not record', () => {
     expect(awardNameToType('The Smith Memorial Trophy')).toBeNull();
   });
+
+  // Live-show audit 2026-08-11 (Mandy: "how do we ensure these awards are on
+  // the awards page and not just the sponsor page"): clubs write these in
+  // spellings/word orders the strict lookup missed, so the awards printed in
+  // the catalogue but were silently unrecordable in results.
+  it('accepts the spellings clubs actually type', () => {
+    // "Longcoat" as one word, with or without hyphens (Clyde Valley schedule).
+    expect(awardNameToType('Best Longcoat in Show')).toBe('best_long_coat_in_show');
+    expect(awardNameToType('Best Long-Coat in Show')).toBe('best_long_coat_in_show');
+    expect(awardNameToType('Best Longcoat Adult')).toBe('best_long_coat_adult');
+    expect(awardNameToType('Best Longcoat Puppy')).toBe('best_long_coat_puppy');
+    // Sex-first word orders (North Eastern Championship 2026).
+    expect(awardNameToType('Bitch Reserve Challenge Certificate')).toBe('reserve_bitch_cc');
+    expect(awardNameToType('Dog Reserve Challenge Certificate')).toBe('reserve_dog_cc');
+    expect(awardNameToType('Dog Best Long Coat')).toBe('best_long_coat_dog');
+    expect(awardNameToType('Bitch Best Long Coat')).toBe('best_long_coat_bitch');
+  });
+
+  it('still refuses names that need a human decision', () => {
+    // GSD Scotland's "Best Challenge Certificate" is a typo (Bitch CC?) — it
+    // must stay unrecognised so the setup warning surfaces it, not guessed at.
+    expect(awardNameToType('Best Challenge Certificate')).toBeNull();
+    // Bare "Best Puppy" is ambiguous (in breed vs in show) until Mandy rules.
+    expect(awardNameToType('Best Puppy')).toBeNull();
+  });
 });
 
 describe('awardFilter', () => {

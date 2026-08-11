@@ -23,6 +23,7 @@ import Link from 'next/link';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { formatSvClassName } from '@/lib/class-labels';
+import { awardNameToType } from '@/lib/top-awards';
 import { trpc } from '@/lib/trpc';
 import { uploadImage } from '@/lib/upload';
 import { SE_H } from '@/components/show-experience/tokens';
@@ -1437,12 +1438,14 @@ function EditAwardsDialog({
                   <ArrowDown className="size-3.5" />
                 </button>
               </div>
-              <Input
-                value={award}
-                onChange={(e) => handleChange(idx, e.target.value)}
-                placeholder="Award name"
-                className="flex-1"
-              />
+              <div className="min-w-0 flex-1">
+                <Input
+                  value={award}
+                  onChange={(e) => handleChange(idx, e.target.value)}
+                  placeholder="Award name"
+                />
+                <NotRecordableHint award={award} />
+              </div>
               <button
                 type="button"
                 className="rounded p-1.5 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
@@ -1473,6 +1476,20 @@ function EditAwardsDialog({
         </div>
       </DialogContent>
     </Dialog>
+  );
+}
+
+/** Soft heads-up when an award name isn't one the results side can record —
+ *  the award still prints in the catalogue/sponsor table, so a bespoke
+ *  memorial trophy is fine, but a misspelt "Best Longcoat…"-style name would
+ *  otherwise silently never reach the awards recording page (Mandy
+ *  2026-08-11, found live on two shows). */
+function NotRecordableHint({ award }: { award: string }) {
+  if (!award.trim() || awardNameToType(award)) return null;
+  return (
+    <p className="mt-0.5 text-xs font-normal normal-case text-se-honey-deep">
+      Won&apos;t be recordable in results — check the spelling (fine if it&apos;s a bespoke trophy)
+    </p>
   );
 }
 
@@ -2097,12 +2114,13 @@ function ClassSponsorshipTable({
                 <div className="grid grid-cols-[minmax(140px,1.2fr)_minmax(120px,1fr)_minmax(100px,0.8fr)_minmax(100px,0.8fr)_36px]">
                   {/* Award label cell — spans all sponsorship rows */}
                   <div
-                    className="flex items-start border-b border-r px-2 py-2 text-sm font-medium"
+                    className="border-b border-r px-2 py-2 text-sm font-medium"
                     style={{
                       gridRow: `1 / span ${entries.length + 1}`,
                     }}
                   >
                     {award}
+                    <NotRecordableHint award={award} />
                   </div>
 
                   {/* Existing award sponsorship rows */}
@@ -2141,6 +2159,7 @@ function ClassSponsorshipTable({
               <div key={award} className="rounded-lg border bg-card">
                 <div className="border-b bg-se-honey-soft/50 px-3 py-2">
                   <p className="text-sm font-medium">{award}</p>
+                  <NotRecordableHint award={award} />
                 </div>
                 <div className="space-y-2 p-2">
                   {entries.map((entry, localIdx) => (

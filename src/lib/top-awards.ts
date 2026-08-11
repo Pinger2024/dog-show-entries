@@ -64,7 +64,32 @@ const NAME_TO_TYPE: Record<string, AchievementType> = {
 };
 
 export function awardNameToType(name: string): AchievementType | null {
-  return NAME_TO_TYPE[name.trim().toLowerCase()] ?? null;
+  // Clubs write "Longcoat"/"Long-Coat" as freely as "Long Coat" — normalise
+  // before looking up so the spelling never decides whether an award records
+  // (live-show audit 2026-08-11: Clyde Valley's "Best Longcoat in Show").
+  const canon = name
+    .trim()
+    .toLowerCase()
+    .replace(/[-\s]+/g, ' ')
+    .replace(/\blongcoat\b/g, 'long coat');
+  const direct = NAME_TO_TYPE[canon];
+  if (direct) return direct;
+
+  // Sex-first word orders — "Bitch Reserve Challenge Certificate", "Dog Best
+  // Long Coat" (North Eastern Championship 2026). Reorder to the canonical
+  // form and retry; anything still unmatched stays null so the setup warning
+  // can surface it rather than the code guessing.
+  const sexFirst = canon.match(/^(dog|bitch) (.+)$/);
+  if (sexFirst) {
+    const [, sex, rest] = sexFirst;
+    const suffixForm = NAME_TO_TYPE[`${rest} ${sex}`];
+    if (suffixForm) return suffixForm;
+    if (rest.startsWith('reserve ')) {
+      const reserveForm = NAME_TO_TYPE[`reserve ${sex} ${rest.slice('reserve '.length)}`];
+      if (reserveForm) return reserveForm;
+    }
+  }
+  return null;
 }
 
 /** Candidate-filtering metadata for an award type. */
