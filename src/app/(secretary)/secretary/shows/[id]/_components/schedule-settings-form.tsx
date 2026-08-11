@@ -57,6 +57,8 @@ import {
 import type { ScheduleData } from '@/server/db/schema/shows';
 import { RKC_STATEMENTS, RKC_STATEMENT_CATEGORIES } from '@/lib/rkc-statements';
 import { SHOW_TIMES } from '@/lib/show-times';
+import { buildBestAwards } from '@/lib/best-awards';
+import { AwardsPicker } from '@/components/awards/awards-picker';
 import { InlineHelp, type SectionHelpContent } from './section-help';
 import { SE_H } from '@/components/show-experience/tokens';
 
@@ -247,6 +249,7 @@ export function ScheduleSettingsForm({ showId, onSaved }: ScheduleSettingsFormPr
   const [what3words, setWhat3words] = useState('');
   const [showManager, setShowManager] = useState('');
   const [officers, setOfficers] = useState<OfficerWithGuarantor[]>([]);
+  const [bestAwards, setBestAwards] = useState<string[]>([]);
   const [awardsDescription, setAwardsDescription] = useState('');
   const [prizeMoney, setPrizeMoney] = useState('');
   const [directions, setDirections] = useState('');
@@ -304,6 +307,17 @@ export function ScheduleSettingsForm({ showId, onSaved }: ScheduleSettingsFormPr
     );
 
     setFirstAiders(sd?.firstAiders ?? []);
+    // Which awards are given — pre-fill with the show-type canonical
+    // defaults (src/lib/best-awards.ts, same source the catalogue/judges
+    // book/results page draw from) so a never-configured show arrives with
+    // the usual list already ticked, exactly what Mandy asked for
+    // (2026-08-11). A previous show's saved list (via `sd` falling back to
+    // previousData) wins when there is one, same as every other field here.
+    setBestAwards(
+      sd?.bestAwards && sd.bestAwards.length > 0
+        ? sd.bestAwards
+        : buildBestAwards(showData.showType, [])
+    );
     setAwardsDescription(sd?.awardsDescription ?? '');
     setPrizeMoney(sd?.prizeMoney ?? '');
     setDirections(sd?.directions ?? '');
@@ -388,6 +402,7 @@ export function ScheduleSettingsForm({ showId, onSaved }: ScheduleSettingsFormPr
       firstAiders: firstAiders.filter((n) => n.trim()).length > 0
         ? firstAiders.filter((n) => n.trim()).map((n) => n.trim())
         : undefined,
+      bestAwards,
       awardsDescription: awardsDescription || undefined,
       prizeMoney: prizeMoney || undefined,
       what3words: what3words || undefined,
@@ -455,7 +470,7 @@ export function ScheduleSettingsForm({ showId, onSaved }: ScheduleSettingsFormPr
   }, [
     hasLoaded, country, publicAdmission, wetWeather, isBenched, benchingRemovalTime,
     acceptsNfc, judgedOnGroupSystem, latestArrivalTime, showOpenTime, judgingStartTime,
-    onCallVet, what3words, showManager, officers, firstAiders, awardsDescription, prizeMoney,
+    onCallVet, what3words, showManager, officers, firstAiders, bestAwards, awardsDescription, prizeMoney,
     directions, catering, futureShowDates, additionalNotes, welcomeNote,
     outsideAttraction, hasBestVeteranInShow, bestVeteranInShowEligibility, customStatements,
   ]);
@@ -535,6 +550,7 @@ export function ScheduleSettingsForm({ showId, onSaved }: ScheduleSettingsFormPr
       firstAiders: firstAiders.filter((n) => n.trim()).length > 0
         ? firstAiders.filter((n) => n.trim()).map((n) => n.trim())
         : undefined,
+      bestAwards,
       awardsDescription: awardsDescription || undefined,
       prizeMoney: prizeMoney || undefined,
       what3words: what3words || undefined,
@@ -564,7 +580,7 @@ export function ScheduleSettingsForm({ showId, onSaved }: ScheduleSettingsFormPr
     effectiveExisting, country, publicAdmission, wetWeather, isBenched,
     benchingRemovalTime, acceptsNfc, judgedOnGroupSystem, latestArrivalTime,
     showOpenTime, judgingStartTime, onCallVet, what3words, showManager,
-    officers, firstAiders, awardsDescription, prizeMoney, directions, catering,
+    officers, firstAiders, bestAwards, awardsDescription, prizeMoney, directions, catering,
     futureShowDates, additionalNotes, welcomeNote, outsideAttraction,
     hasBestVeteranInShow, bestVeteranInShowEligibility,
     customStatements, showId,
@@ -799,6 +815,8 @@ export function ScheduleSettingsForm({ showId, onSaved }: ScheduleSettingsFormPr
                   )}
                   {section.id === 'awards' && (
                     <AwardsSection
+                      bestAwards={bestAwards} setBestAwards={setBestAwards}
+                      showType={showData?.showType}
                       awardsDescription={awardsDescription} setAwardsDescription={setAwardsDescription}
                       prizeMoney={prizeMoney} setPrizeMoney={setPrizeMoney}
                       hasBestVeteranInShow={hasBestVeteranInShow} setHasBestVeteranInShow={setHasBestVeteranInShow}
@@ -1274,11 +1292,14 @@ function PeopleSection({
 // ── Awards Section ───────────────────────────────────
 
 function AwardsSection({
+  bestAwards, setBestAwards, showType,
   awardsDescription, setAwardsDescription, prizeMoney, setPrizeMoney,
   hasBestVeteranInShow, setHasBestVeteranInShow,
   bestVeteranInShowEligibility, setBestVeteranInShowEligibility,
   showId, isWusvShow,
 }: {
+  bestAwards: string[]; setBestAwards: (v: string[]) => void;
+  showType: string | null | undefined;
   awardsDescription: string; setAwardsDescription: (v: string) => void;
   prizeMoney: string; setPrizeMoney: (v: string) => void;
   hasBestVeteranInShow: boolean; setHasBestVeteranInShow: (v: boolean) => void;
@@ -1292,7 +1313,15 @@ function AwardsSection({
   return (
     <div className="space-y-4">
       <div className="space-y-1.5">
-        <Label htmlFor="awards" className="text-xs">Awards / Rosettes / Trophies</Label>
+        <Label className="text-xs">Which awards are you giving?</Label>
+        <p className="text-xs text-muted-foreground">
+          Tick the awards your show gives out. This is what the sponsors table and results recording page use.
+        </p>
+        <AwardsPicker value={bestAwards} onChange={setBestAwards} showType={showType} />
+      </div>
+      <div className="space-y-1.5">
+        <Label htmlFor="awards" className="text-xs">Awards description text for the schedule</Label>
+        <p className="text-xs text-muted-foreground">The rosettes/trophies wording printed in the schedule — separate from the awards list above.</p>
         <Textarea id="awards" value={awardsDescription} onChange={(e) => setAwardsDescription(e.target.value)} placeholder="e.g. Rosettes to VHC in all classes. Trophies for Best in Show, Reserve Best in Show, Best Puppy in Show." rows={3} />
       </div>
       <div className="space-y-1.5">

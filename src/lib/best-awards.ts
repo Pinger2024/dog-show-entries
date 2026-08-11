@@ -40,6 +40,42 @@ export const DEFAULT_BEST_AWARDS: Record<string, string[]> = {
 };
 
 /**
+ * Curated, ordered vocabulary of recordable awards NOT already covered by a
+ * given show's DEFAULT_BEST_AWARDS — the "Also available" tick-list in the
+ * Awards Picker (src/components/awards/awards-picker.tsx). Every name here
+ * (and every name in DEFAULT_BEST_AWARDS) is guaranteed recordable —
+ * `awardNameToType(name) !== null` — enforced by
+ * src/lib/__tests__/best-awards-vocabulary.test.ts, so ticking a box here can
+ * never reproduce the free-typing misspelling trap this picker replaces
+ * (Mandy 2026-08-11: award names clubs typed printed fine but silently never
+ * reached the results recording page).
+ */
+export const OPTIONAL_AWARDS: string[] = [
+  'Reserve Best in Show',
+  'Best of Breed',
+  'Best Dog',
+  'Best Bitch',
+  'Reserve Best Dog',
+  'Reserve Best Bitch',
+  'Best Puppy Dog',
+  'Best Puppy Bitch',
+  'Best Puppy in Show',
+  'Best Veteran in Show',
+  'Best Long Coat Dog',
+  'Best Long Coat Bitch',
+  'Best Long Coat in Show',
+  'Best Long Coat Adult',
+  'Best Long Coat Puppy',
+  'Best Baby Puppy',
+  'Most Promising Dog',
+  'Most Promising Bitch',
+  'Dog Challenge Certificate',
+  'Reserve Dog Challenge Certificate',
+  'Bitch Challenge Certificate',
+  'Reserve Bitch Challenge Certificate',
+];
+
+/**
  * Build the ordered Best Awards list for a show: the show-type defaults first,
  * then any custom awards the secretary added that aren't already covered
  * (case-insensitive dedupe). Falls back to a single "Best in Show" for unknown

@@ -6,7 +6,6 @@ import {
   Handshake,
   Loader2,
   Plus,
-  RotateCcw,
   Trash2,
   Pencil,
   ExternalLink,
@@ -15,15 +14,14 @@ import {
   Upload,
   ArrowLeft,
   ArrowRight,
-  ArrowUp,
-  ArrowDown,
   X,
 } from 'lucide-react';
 import Link from 'next/link';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { formatSvClassName } from '@/lib/class-labels';
-import { awardNameToType } from '@/lib/top-awards';
+import { buildBestAwards } from '@/lib/best-awards';
+import { AwardsPicker, NotRecordableHint } from '@/components/awards/awards-picker';
 import { trpc } from '@/lib/trpc';
 import { uploadImage } from '@/lib/upload';
 import { SE_H } from '@/components/show-experience/tokens';
@@ -1303,43 +1301,15 @@ function NewSponsorshipRow({
   );
 }
 
-/* ─── Best Award Types ────────────────────────────── */
-
-const DEFAULT_AWARDS_SINGLE_BREED = [
-  'Best in Show',
-  'Reserve Best in Show',
-  'Best Dog',
-  'Best Bitch',
-  'Best Puppy Dog',
-  'Best Puppy Bitch',
-  'Best Veteran',
-];
-
-const DEFAULT_AWARDS_MULTI_BREED = [
-  'Best of Breed',
-  'Best Dog',
-  'Best Bitch',
-  'Best Puppy Dog',
-  'Best Puppy Bitch',
-  'Best in Show',
-  'Reserve Best in Show',
-];
-
-function getDefaultAwards(showScope?: string): string[] {
-  return showScope === 'single_breed'
-    ? [...DEFAULT_AWARDS_SINGLE_BREED]
-    : [...DEFAULT_AWARDS_MULTI_BREED];
-}
-
 /* ─── Edit Awards Dialog ──────────────────────────── */
 
 function EditAwardsDialog({
   awards,
-  showScope,
+  showType,
   onSave,
 }: {
   awards: string[];
-  showScope?: string;
+  showType?: string | null;
   onSave: (awards: string[]) => void;
 }) {
   const [open, setOpen] = useState(false);
@@ -1354,40 +1324,6 @@ function EditAwardsDialog({
     },
     [awards]
   );
-
-  const handleAdd = useCallback(() => {
-    setEditAwards((prev) => [...prev, '']);
-  }, []);
-
-  const handleRemove = useCallback((index: number) => {
-    setEditAwards((prev) => prev.filter((_, i) => i !== index));
-  }, []);
-
-  const handleChange = useCallback((index: number, value: string) => {
-    setEditAwards((prev) => prev.map((v, i) => (i === index ? value : v)));
-  }, []);
-
-  const handleMoveUp = useCallback((index: number) => {
-    if (index === 0) return;
-    setEditAwards((prev) => {
-      const next = [...prev];
-      [next[index - 1], next[index]] = [next[index]!, next[index - 1]!];
-      return next;
-    });
-  }, []);
-
-  const handleMoveDown = useCallback((index: number) => {
-    setEditAwards((prev) => {
-      if (index >= prev.length - 1) return prev;
-      const next = [...prev];
-      [next[index], next[index + 1]] = [next[index + 1]!, next[index]!];
-      return next;
-    });
-  }, []);
-
-  const handleReset = useCallback(() => {
-    setEditAwards(getDefaultAwards(showScope));
-  }, [showScope]);
 
   const handleSave = useCallback(() => {
     const cleaned = editAwards
@@ -1415,57 +1351,9 @@ function EditAwardsDialog({
           <DialogTitle>Edit Best Awards</DialogTitle>
         </DialogHeader>
         <p className="text-sm text-muted-foreground">
-          Customise which best awards appear in the sponsorship table. Reorder, add, or remove as needed.
+          Tick the awards your show gives out. Reorder, untick, or add a bespoke trophy as needed.
         </p>
-        <div className="mt-2 space-y-2">
-          {editAwards.map((award, idx) => (
-            <div key={idx} className="flex items-center gap-1.5">
-              <div className="flex flex-col">
-                <button
-                  type="button"
-                  className="rounded p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-30"
-                  disabled={idx === 0}
-                  onClick={() => handleMoveUp(idx)}
-                >
-                  <ArrowUp className="size-3.5" />
-                </button>
-                <button
-                  type="button"
-                  className="rounded p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-30"
-                  disabled={idx === editAwards.length - 1}
-                  onClick={() => handleMoveDown(idx)}
-                >
-                  <ArrowDown className="size-3.5" />
-                </button>
-              </div>
-              <div className="min-w-0 flex-1">
-                <Input
-                  value={award}
-                  onChange={(e) => handleChange(idx, e.target.value)}
-                  placeholder="Award name"
-                />
-                <NotRecordableHint award={award} />
-              </div>
-              <button
-                type="button"
-                className="rounded p-1.5 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
-                onClick={() => handleRemove(idx)}
-              >
-                <X className="size-4" />
-              </button>
-            </div>
-          ))}
-        </div>
-        <div className="mt-2 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-          <Button variant="outline" size="sm" className="gap-1.5" onClick={handleAdd}>
-            <Plus className="size-3.5" />
-            Add Award
-          </Button>
-          <Button variant="ghost" size="sm" className="gap-1.5 text-muted-foreground" onClick={handleReset}>
-            <RotateCcw className="size-3.5" />
-            Reset to Defaults
-          </Button>
-        </div>
+        <AwardsPicker value={editAwards} onChange={setEditAwards} showType={showType} />
         <div className="mt-4 flex justify-end gap-2">
           <Button variant="outline" onClick={() => setOpen(false)}>
             Cancel
@@ -1476,20 +1364,6 @@ function EditAwardsDialog({
         </div>
       </DialogContent>
     </Dialog>
-  );
-}
-
-/** Soft heads-up when an award name isn't one the results side can record —
- *  the award still prints in the catalogue/sponsor table, so a bespoke
- *  memorial trophy is fine, but a misspelt "Best Longcoat…"-style name would
- *  otherwise silently never reach the awards recording page (Mandy
- *  2026-08-11, found live on two shows). */
-function NotRecordableHint({ award }: { award: string }) {
-  if (!award.trim() || awardNameToType(award)) return null;
-  return (
-    <p className="mt-0.5 text-xs font-normal normal-case text-se-honey-deep">
-      Won&apos;t be recordable in results — check the spelling (fine if it&apos;s a bespoke trophy)
-    </p>
   );
 }
 
@@ -1965,12 +1839,17 @@ function ClassSponsorshipTable({
     [show?.scheduleData]
   );
 
-  // Customisable best awards list — falls back to defaults based on show scope
+  // Customisable best awards list — falls back to the show-type canonical
+  // defaults (src/lib/best-awards.ts), the SAME source resolveTopAwards
+  // (results), the catalogue and the judges' book already draw from. This
+  // used to fall back to a separate showScope-keyed list that lived only in
+  // this file, so a never-edited show could show one "usual" list here and
+  // a different one inside the Edit Awards picker — unify on one source.
   const bestAwards: string[] = useMemo(() => {
     const stored = (show?.scheduleData as Record<string, unknown> | null)?.bestAwards as string[] | undefined;
     if (stored && stored.length > 0) return stored;
-    return getDefaultAwards(show?.showScope);
-  }, [show?.scheduleData, show?.showScope]);
+    return buildBestAwards(show?.showType, []);
+  }, [show?.scheduleData, show?.showType]);
 
   const saveBestAwards = useCallback(
     (awards: string[]) => {
@@ -2086,7 +1965,7 @@ function ClassSponsorshipTable({
           </div>
           <EditAwardsDialog
             awards={bestAwards}
-            showScope={show?.showScope}
+            showType={show?.showType}
             onSave={saveBestAwards}
           />
         </div>
