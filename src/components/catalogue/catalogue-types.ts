@@ -64,8 +64,9 @@ export interface CatalogueEntry {
     sortOrder: number | undefined;
     showClassId?: string | undefined;
     /** SV/WUSV coat variant — 'stock' or 'long_stock'. Null for non-SV
-     *  classes. Drives the "Stock Coat" / "Long Stock Coat" class header
-     *  label on the SV catalogue (Amanda 2026-05-23). */
+     *  classes. Drives the "Short Coat" / "Long Coat" class header
+     *  label on the SV catalogue (Amanda 2026-05-23; wording updated
+     *  2026-08-11). */
     svCoatType?: 'stock' | 'long_stock' | null;
     /** `classDefinition.type` ('special' | 'junior_handler' | …) — carried
      *  through so section bucketing (`sectionClasses`, lib/class-labels.ts)
@@ -100,8 +101,9 @@ export interface ShowClassInfo {
   sortOrder: number;
   sex: string | null;
   /** SV/WUSV coat variant — 'stock' or 'long_stock'. Drives the
-   *  "Stock Coat" / "Long Stock Coat" label on the SV catalogue's
-   *  per-class header (Amanda 2026-05-23). Null for non-SV classes. */
+   *  "Short Coat" / "Long Coat" label on the SV catalogue's
+   *  per-class header (Amanda 2026-05-23; wording updated 2026-08-11).
+   *  Null for non-SV classes. */
   svCoatType?: 'stock' | 'long_stock' | null;
   /** `classDefinition.type` ('special' | 'junior_handler' | …) — carried
    *  through so section bucketing (`sectionClasses`, lib/class-labels.ts)

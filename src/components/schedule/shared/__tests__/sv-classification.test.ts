@@ -80,14 +80,14 @@ describe('groupSvClasses', () => {
     ]);
   });
 
-  it('produces a/b coat sub-letters with Standard Coat as a and Long Coat as b', () => {
+  it('produces a/b coat sub-letters with Long Coat as a and Short Coat as b', () => {
     const groups = groupSvClasses(buildFullSvShow());
     for (const cls of groups.breedClasses) {
       expect(cls.coatRows).toHaveLength(2);
       expect(cls.coatRows[0]?.letter).toBe('a');
-      expect(cls.coatRows[0]?.label).toBe('Standard Coat');
+      expect(cls.coatRows[0]?.label).toBe('Long Coat');
       expect(cls.coatRows[1]?.letter).toBe('b');
-      expect(cls.coatRows[1]?.label).toBe('Long Coat');
+      expect(cls.coatRows[1]?.label).toBe('Short Coat');
     }
   });
 
@@ -123,7 +123,7 @@ describe('groupSvClasses', () => {
     expect(groups.breedClasses.map((b) => b.name)).not.toContain('Working');
   });
 
-  it('keeps a class with no coat type — defaults to Standard Coat (a)', () => {
+  it('keeps a class with no coat type — defaults to letter a (Long Coat slot)', () => {
     // Defensive — a row missing svCoatType shouldn't get dropped silently
     const classes = [
       svClass({ className: 'SV Junior', sex: 'bitch', classType: 'sv_age', svCoatType: null }, 0),

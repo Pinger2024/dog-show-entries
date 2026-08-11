@@ -78,8 +78,8 @@ export function svDisplayAge(name: string | null | undefined): string {
 export interface SvClassNumber {
   /** The (age × sex) class number — both coats of one age/sex share it. */
   number: number;
-  /** 'a' = Standard/Stock, 'b' = Long Stock. Null when the show offers only
-   *  one coat for this age/sex (then the label is just the number). */
+  /** 'a' = Long Coat, 'b' = Short (Stock) Coat. Null when the show offers
+   *  only one coat for this age/sex (then the label is just the number). */
   coatLetter: 'a' | 'b' | null;
   /** Display label, e.g. "1a", "1b", or "1" for a single-coat class. */
   label: string;
@@ -90,11 +90,13 @@ export interface SvClassNumber {
  *
  * The DB stores up to four rows per age (sex × coat). The GSDL/BRG display
  * convention is: each (age × sex) is ONE numbered class, with the two coat
- * types shown as sub-letters a (Standard/Stock) and b (Long Stock):
+ * types shown as sub-letters a (Long Coat) and b (Short/Stock Coat) — the
+ * regional groups flipped long-before-short 2026-08-11 (previously stock
+ * was 'a'):
  *
- *   1a  Baby Puppy Bitch · Standard      1b  Baby Puppy Bitch · Long
- *   2a  Baby Puppy Dog   · Standard      2b  Baby Puppy Dog   · Long
- *   3a  Minor Puppy Bitch · Standard     …
+ *   1a  Baby Puppy Bitch · Long          1b  Baby Puppy Bitch · Short
+ *   2a  Baby Puppy Dog   · Long          2b  Baby Puppy Dog   · Short
+ *   3a  Minor Puppy Bitch · Long         …
  *
  * Numbering is DERIVED from the rows present (not the stored classNumber), so
  * deleting an age automatically renumbers everything below it. `classNumber`
@@ -155,11 +157,14 @@ export function buildSvClassNumbering(
     const hasLong = bucket.rows.some((r) => r.svCoatType === 'long_stock');
     const splitByCoat = hasStock && hasLong;
     for (const r of bucket.rows) {
+      // Long coat is 'a', short/stock coat is 'b' — regional groups' decision
+      // 2026-08-11, flipping the earlier stock='a' convention (Amanda,
+      // regional-group meeting).
       const coatLetter: 'a' | 'b' | null = !splitByCoat
         ? null
         : r.svCoatType === 'long_stock'
-          ? 'b'
-          : 'a';
+          ? 'a'
+          : 'b';
       const label = coatLetter ? `${number}${coatLetter}` : String(number);
       map.set(r.id, { number, coatLetter, label });
     }
@@ -372,10 +377,30 @@ export function getClassLabel(
 }
 
 /**
+ * Single source of truth for the regional coat-type DISPLAY WORDING —
+ * "Long Coat" / "Short Coat". The DB enum values ('stock' / 'long_stock')
+ * never change; this is only ever the user-facing label.
+ *
+ * Regional groups' decision 2026-08-11 (via Amanda): the wording used to be
+ * "Stock Coat" / "Long Stock Coat" on regional/SV screens (RKC screens
+ * already said "Long Coat"). It's now "Long Coat" / "Short Coat"
+ * everywhere a coat type is shown on a show class, RKC or regional alike.
+ * Every call site should go through this helper rather than its own
+ * stock/long_stock → string mapping.
+ */
+export function svCoatDisplayName(
+  coatType: 'stock' | 'long_stock' | null | undefined,
+): string | null {
+  if (coatType === 'stock') return 'Short Coat';
+  if (coatType === 'long_stock') return 'Long Coat';
+  return null;
+}
+
+/**
  * Format a class name for SV/WUSV-aware display.
  *
- *   "SV Junior" + svCoatType='long_stock' → "Junior — Long Stock Coat"
- *   "SV Junior" + svCoatType='stock'      → "Junior — Stock Coat"
+ *   "SV Junior" + svCoatType='long_stock' → "Junior — Long Coat"
+ *   "SV Junior" + svCoatType='stock'      → "Junior — Short Coat"
  *   "SV Junior" + svCoatType=null         → "Junior"
  *   "Working"   + svCoatType=null         → "Working"
  *
@@ -390,7 +415,6 @@ export function formatSvClassName(
   svCoatType: 'stock' | 'long_stock' | null | undefined,
 ): string {
   const base = (rawName ?? 'Unknown Class').replace(/^SV\s+/, '');
-  if (svCoatType === 'stock') return `${base} — Stock Coat`;
-  if (svCoatType === 'long_stock') return `${base} — Long Stock Coat`;
-  return base;
+  const coat = svCoatDisplayName(svCoatType);
+  return coat ? `${base} — ${coat}` : base;
 }

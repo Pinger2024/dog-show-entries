@@ -171,7 +171,7 @@ export default function WusvClassesPage() {
         <CardHeader>
           <CardTitle>SV Age Classes</CardTitle>
           <CardDescription>
-            Each selected class creates four entries: Bitch Stock → Bitch Long Stock → Dog Stock → Dog Long Stock.
+            Each selected class creates four entries: Bitch Long Coat → Bitch Short Coat → Dog Long Coat → Dog Short Coat.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -249,10 +249,10 @@ export default function WusvClassesPage() {
                 .flatMap((def) => {
                   const label = AGE_CLASS_DISPLAY[def.name] ?? def.name.replace(/^SV /, '');
                   return [
-                    `${label} · Bitch Long Stock`,
-                    `${label} · Bitch Stock`,
-                    `${label} · Dog Long Stock`,
-                    `${label} · Dog Stock`,
+                    `${label} · Bitch Long Coat`,
+                    `${label} · Bitch Short Coat`,
+                    `${label} · Dog Long Coat`,
+                    `${label} · Dog Short Coat`,
                   ];
                 })
                 .concat([

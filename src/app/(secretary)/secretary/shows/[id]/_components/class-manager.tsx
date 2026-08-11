@@ -25,6 +25,7 @@ import { trpc } from '@/lib/trpc';
 import { formatCurrency, penceToPoundsString, poundsToPence } from '@/lib/date-utils';
 import { cn } from '@/lib/utils';
 import { CLASS_TEMPLATES, getRelevantTemplates } from '@/lib/class-templates';
+import { svCoatDisplayName } from '@/lib/class-labels';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
@@ -614,9 +615,7 @@ export function ClassManager({ showId, showType, showScope, showRuleset, classes
                                               )}
                                               {(sc as { svCoatType?: 'stock' | 'long_stock' | null }).svCoatType && (
                                                 <Badge variant="outline" className="text-xs">
-                                                  {(sc as { svCoatType?: 'stock' | 'long_stock' | null }).svCoatType === 'long_stock'
-                                                    ? 'Long Stock'
-                                                    : 'Stock'}
+                                                  {svCoatDisplayName((sc as { svCoatType?: 'stock' | 'long_stock' | null }).svCoatType)}
                                                 </Badge>
                                               )}
                                               {!isMultiBreed && sc.breed && (

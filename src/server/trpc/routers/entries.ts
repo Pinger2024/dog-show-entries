@@ -45,6 +45,7 @@ import { svEntryMissingRequirements, svEntryBlockedMessage } from '@/lib/sv-entr
 import { pedigreeMissingForEntry } from '@/lib/sv-entry-readiness';
 import { hasJudgingConflict } from '@/lib/judge-exhibitor-conflict';
 import { getCompetitionAgeError } from '@/lib/date-utils';
+import { svCoatDisplayName } from '@/lib/class-labels';
 
 export const entriesRouter = createTRPCRouter({
   create: protectedProcedure
@@ -307,8 +308,8 @@ export const entriesRouter = createTRPCRouter({
       if (show.showRuleset === 'wusv' && dog.coatType) {
         for (const sc of selectedClasses) {
           if (sc.svCoatType && sc.svCoatType !== dog.coatType) {
-            const expected = sc.svCoatType === 'stock' ? 'Stock Coat' : 'Long Stock Coat';
-            const actual = dog.coatType === 'stock' ? 'Stock Coat' : 'Long Stock Coat';
+            const expected = svCoatDisplayName(sc.svCoatType);
+            const actual = svCoatDisplayName(dog.coatType);
             throw new TRPCError({
               code: 'BAD_REQUEST',
               message: `This class is for ${expected} dogs but your dog is registered as ${actual}. Please select the correct class.`,

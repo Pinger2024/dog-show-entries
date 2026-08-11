@@ -1568,7 +1568,7 @@ export default function NewShowPage() {
                 <div className="rounded-lg border bg-primary/5 p-4 space-y-2">
                   <p className="text-sm font-medium">What gets set up automatically</p>
                   <ul className="text-sm text-muted-foreground list-disc pl-5 space-y-1">
-                    <li>All SV age classes (Baby Puppy → Working) split by sex × coat type (Stock / Long Stock)</li>
+                    <li>All SV age classes (Baby Puppy → Working) split by sex × coat type (Long Coat / Short Coat)</li>
                     <li>Same entry fee on every SV age class</li>
                   </ul>
                   <p className="text-xs text-muted-foreground pt-1">

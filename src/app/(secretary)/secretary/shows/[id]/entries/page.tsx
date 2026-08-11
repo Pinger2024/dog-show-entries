@@ -17,7 +17,7 @@ import { RegistrationFlagsField } from '@/components/shows/registration-flags-fi
 import { appendRegistrationFlags, registrationFlagSuffix } from '@/lib/registration-flags';
 import { toast } from 'sonner';
 import { trpc } from '@/lib/trpc';
-import { formatSvClassName } from '@/lib/class-labels';
+import { formatSvClassName, svCoatDisplayName } from '@/lib/class-labels';
 import { cn, formatDogName } from '@/lib/utils';
 import { formatCurrency, isAgeEligibleOnShowDay, isAgeRestrictedClass } from '@/lib/date-utils';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -132,10 +132,11 @@ export default function EntriesPage() {
     const name = ec.showClass?.classDefinition?.name ?? '?';
     // Coat-split classes: a long-coat entry must read e.g. "Adult Long Coat
     // Dog", not just "Adult Dog" — the coat was being dropped (Mandy
-    // 2026-07-13). Wording is ruleset-specific (Mandy 2026-07-15): RKC shows
-    // say "Long Coat"; regional/SV shows say "Long Stock Coat" to match their
-    // schedules. Stock/unsplit classes stay unlabelled.
-    const coatLabel = showData?.showRuleset === 'wusv' ? 'Long Stock Coat' : 'Long Coat';
+    // 2026-07-13). Wording is now "Long Coat" everywhere, RKC and regional
+    // alike (regional groups dropped their "Long Stock Coat" wording
+    // 2026-08-11 — see svCoatDisplayName). Stock/unsplit classes stay
+    // unlabelled.
+    const coatLabel = svCoatDisplayName('long_stock');
     const coat = ec.showClass?.svCoatType === 'long_stock' ? `${coatLabel} ` : '';
     const base = `${name} ${coat}`.trim();
     const sex = ec.showClass?.sex;

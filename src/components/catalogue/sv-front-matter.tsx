@@ -197,10 +197,11 @@ function buildSvClassification(allShowClasses: ShowClassInfo[] | undefined): {
     if (!sex) continue;
     const key = `${display}|${sex}`;
     const b = buckets.get(key) ?? { name: display, sex, coats: new Set<'a' | 'b'>() };
-    // Coat letter from the row's svCoatType (single source) — stock='a',
-    // long_stock='b'. Fall back to the classLabel suffix for older callers.
-    if (sc.svCoatType === 'stock') b.coats.add('a');
-    else if (sc.svCoatType === 'long_stock') b.coats.add('b');
+    // Coat letter from the row's svCoatType (single source) — long_stock='a',
+    // stock='b' (regional groups flipped this 2026-08-11; previously
+    // stock='a'). Fall back to the classLabel suffix for older callers.
+    if (sc.svCoatType === 'long_stock') b.coats.add('a');
+    else if (sc.svCoatType === 'stock') b.coats.add('b');
     else {
       const label = sc.classLabel ?? '';
       if (label.endsWith('a')) b.coats.add('a');
@@ -311,9 +312,9 @@ export function SvClassificationPage({ show }: { show: CatalogueShowInfo }) {
                             {c.sex === 'bitch' ? 'Bitch' : 'Dog'}
                           </Text>
                           <Text style={{ fontFamily: SV_FONTS.sans, fontSize: 6.5, color: SV.ink3, marginTop: 1 }}>
-                            <Text style={{ color: SV.accent, fontWeight: 'bold' }}>a</Text> Stock
+                            <Text style={{ color: SV.accent, fontWeight: 'bold' }}>a</Text> Long Coat
                             {'   '}
-                            <Text style={{ color: SV.accent, fontWeight: 'bold' }}>b</Text> Long Stock
+                            <Text style={{ color: SV.accent, fontWeight: 'bold' }}>b</Text> Short Coat
                           </Text>
                         </View>
                       </>

@@ -7246,14 +7246,15 @@ export const secretaryRouter = createTRPCRouter({
       const baseClassNumber = nonManaged.reduce((max, sc) => Math.max(max, sc.classNumber ?? 0), 0);
 
       type CoatSex = { sex: 'bitch' | 'dog'; coat: 'stock' | 'long_stock' };
-      // Within each age: bitch before dog; Standard (Stock = 'a') before Long
-      // Stock ('b') so the stored classNumber order matches the a/b display
-      // order on the schedule + catalogue (Amanda 2026-05-28).
+      // Within each age: bitch before dog; Long Coat ('a') before Short/Stock
+      // Coat ('b') so the stored classNumber order matches the a/b display
+      // order on the schedule + catalogue. Regional groups flipped this
+      // 2026-08-11 (long coat now shown first — previously stock was 'a').
       const COMBOS: CoatSex[] = [
-        { sex: 'bitch', coat: 'stock' },
         { sex: 'bitch', coat: 'long_stock' },
-        { sex: 'dog', coat: 'stock' },
+        { sex: 'bitch', coat: 'stock' },
         { sex: 'dog', coat: 'long_stock' },
+        { sex: 'dog', coat: 'stock' },
       ];
 
       const values: {

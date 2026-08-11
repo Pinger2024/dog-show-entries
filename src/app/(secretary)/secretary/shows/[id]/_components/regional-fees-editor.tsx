@@ -95,7 +95,17 @@ export function RegionalFeesEditor({
   const [nmPerDog, setNmPerDog] = useState(poundsFromPence(seedNonMember.perDog));
   const [nmThreePlus, setNmThreePlus] = useState(poundsFromPence(seedNonMember.threePlus));
   const [memberships, setMemberships] = useState<MemberLevel[]>(seedMemberships);
-  const [firstTimeEnabled, setFirstTimeEnabled] = useState(config ? !!config.firstTimeEnabled : true);
+  // Regional groups' decision 2026-08-11 (via Amanda): stop offering the
+  // free/flat first-time-exhibitor entry on any NEW show. North East is the
+  // one live show still using it, and it must stay manageable (including
+  // turning it off) — so the enable control only ever appears for a show
+  // that ALREADY had it on when this editor loaded. A brand-new show
+  // (config is null) or any show that never turned it on never sees the
+  // control, so it can't be switched on going forward. Captured once at
+  // load (not re-derived from `firstTimeEnabled` state) so unticking it in
+  // this session doesn't make the control vanish before Save is pressed.
+  const [canManageFirstTime] = useState(!!config?.firstTimeEnabled);
+  const [firstTimeEnabled, setFirstTimeEnabled] = useState(!!config?.firstTimeEnabled);
   const [firstTimeFee, setFirstTimeFee] = useState(poundsFromPence(config?.firstTimeFeePence ?? 0));
   const [donationsEnabled, setDonationsEnabled] = useState(!!config?.donationsEnabled);
   const [jhFee, setJhFee] = useState(poundsFromPence(juniorHandlerFeePence ?? 0));
@@ -162,8 +172,8 @@ export function RegionalFeesEditor({
       <div className="space-y-1">
         <h3 className="text-sm font-semibold">Regional entry fees</h3>
         <p className="text-xs text-muted-foreground">
-          Set a price per dog, and a price for when someone enters 3 or more dogs. First-time
-          exhibitors and Junior Handlers are set further down.
+          Set a price per dog, and a price for when someone enters 3 or more dogs.
+          {canManageFirstTime ? ' First-time exhibitors and Junior Handlers are set further down.' : ' Junior Handlers are set further down.'}
         </p>
       </div>
 
@@ -239,19 +249,21 @@ export function RegionalFeesEditor({
 
       {/* First-time exhibitor + donation + JH fee */}
       <div className="space-y-4 border-t pt-4">
-        <div className="space-y-2">
-          <label className="flex items-center gap-2 text-sm font-medium">
-            <Switch checked={firstTimeEnabled} onCheckedChange={setFirstTimeEnabled} />
-            Offer a first-time exhibitor rate
-          </label>
-          {firstTimeEnabled && (
-            <div className="ml-11 max-w-[13rem] space-y-1">
-              <Label className="text-xs">First-timer&apos;s first dog</Label>
-              <p className="text-[11px] text-muted-foreground">Their other dogs pay the normal rates.</p>
-              <PriceInput value={firstTimeFee} onChange={setFirstTimeFee} />
-            </div>
-          )}
-        </div>
+        {canManageFirstTime && (
+          <div className="space-y-2">
+            <label className="flex items-center gap-2 text-sm font-medium">
+              <Switch checked={firstTimeEnabled} onCheckedChange={setFirstTimeEnabled} />
+              Offer a first-time exhibitor rate
+            </label>
+            {firstTimeEnabled && (
+              <div className="ml-11 max-w-[13rem] space-y-1">
+                <Label className="text-xs">First-timer&apos;s first dog</Label>
+                <p className="text-[11px] text-muted-foreground">Their other dogs pay the normal rates.</p>
+                <PriceInput value={firstTimeFee} onChange={setFirstTimeFee} />
+              </div>
+            )}
+          </div>
+        )}
         <label className="flex items-center gap-2 text-sm font-medium">
           <Switch checked={donationsEnabled} onCheckedChange={setDonationsEnabled} />
           Let exhibitors add a donation

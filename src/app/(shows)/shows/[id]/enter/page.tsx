@@ -41,6 +41,7 @@ import { isWithinAgeRange, getAgeEligibilityDetail, handlerAgeYearsOnDate, forma
 import { svAgeClassAllowed, svMissingRequirements, hasWorkingTitle, pedigreeMissingForEntry } from '@/lib/sv-entry-readiness';
 import { SV_HEALTH_FROM_CLASSES } from '@/lib/sv-entry-validation';
 import { displayShowTypeLabel } from '@/lib/show-types';
+import { svCoatDisplayName } from '@/lib/class-labels';
 import { trpc } from '@/lib/trpc/client';
 import { formatDogName } from '@/lib/utils';
 import { readReferralSource } from '@/lib/referral-source';
@@ -3056,7 +3057,7 @@ function ClassGroup({
                         rows. Amanda 2026-05-20. */}
                     {(sc as { svCoatType?: 'stock' | 'long_stock' | null }).svCoatType && (
                       <span className="ml-1 text-se-ink3">
-                        — {(sc as { svCoatType?: 'stock' | 'long_stock' }).svCoatType === 'long_stock' ? 'Long Coat' : 'Standard Coat'}
+                        — {svCoatDisplayName((sc as { svCoatType?: 'stock' | 'long_stock' | null }).svCoatType)}
                       </span>
                     )}
                   </span>

@@ -2,13 +2,15 @@ import { describe, it, expect } from 'vitest';
 import { buildClassLabelMap, buildSvClassNumbering } from '../class-labels';
 
 /**
- * SV/WUSV regional class numbering (Amanda 2026-05-28).
+ * SV/WUSV regional class numbering (Amanda 2026-05-28; coat-letter order
+ * flipped by the regional groups 2026-08-11).
  *
  * One numbered class per (age × sex), bitch before dog, Baby Puppy first and
- * INCLUDED. Coat is an a/b sub-letter (a = Standard/Stock, b = Long Stock).
- * Numbering is derived from the rows present, so deleting an age renumbers
- * everything below it. The schedule classification, catalogue classification,
- * and catalogue entry listing all consume this single source.
+ * INCLUDED. Coat is an a/b sub-letter (a = Long Coat, b = Short/Stock Coat —
+ * previously stock was 'a', flipped 2026-08-11). Numbering is derived from
+ * the rows present, so deleting an age renumbers everything below it. The
+ * schedule classification, catalogue classification, and catalogue entry
+ * listing all consume this single source.
  */
 
 type Row = {
@@ -43,20 +45,20 @@ const fullCard: Row[] = [
 describe('buildClassLabelMap — SV regional numbering', () => {
   it('numbers Baby Puppy as class 1 (bitch) and 2 (dog) with a/b coat letters', () => {
     const m = buildClassLabelMap(fullCard, 'wusv');
-    expect(m.get('bp-b-s')).toBe('1a'); // Baby Puppy Bitch, Standard
-    expect(m.get('bp-b-l')).toBe('1b'); // Baby Puppy Bitch, Long
-    expect(m.get('bp-d-s')).toBe('2a'); // Baby Puppy Dog, Standard
-    expect(m.get('bp-d-l')).toBe('2b'); // Baby Puppy Dog, Long
-    expect(m.get('mp-b-s')).toBe('3a'); // Minor Puppy Bitch, Standard
+    expect(m.get('bp-b-l')).toBe('1a'); // Baby Puppy Bitch, Long
+    expect(m.get('bp-b-s')).toBe('1b'); // Baby Puppy Bitch, Short/Stock
+    expect(m.get('bp-d-l')).toBe('2a'); // Baby Puppy Dog, Long
+    expect(m.get('bp-d-s')).toBe('2b'); // Baby Puppy Dog, Short/Stock
+    expect(m.get('mp-b-l')).toBe('3a'); // Minor Puppy Bitch, Long
   });
 
   it('renumbers so Minor Puppy becomes class 1 when Baby Puppy is deleted', () => {
     const noBaby = fullCard.filter((c) => !c.id.startsWith('bp-'));
     const m = buildClassLabelMap(noBaby, 'wusv');
-    expect(m.get('mp-b-s')).toBe('1a');
-    expect(m.get('mp-b-l')).toBe('1b');
-    expect(m.get('mp-d-s')).toBe('2a');
-    expect(m.get('mp-d-l')).toBe('2b');
+    expect(m.get('mp-b-l')).toBe('1a');
+    expect(m.get('mp-b-s')).toBe('1b');
+    expect(m.get('mp-d-l')).toBe('2a');
+    expect(m.get('mp-d-s')).toBe('2b');
   });
 
   it('omits the coat letter when a club offers only one coat for an age/sex', () => {
@@ -186,8 +188,8 @@ describe('buildSvClassNumbering — structured output', () => {
     const m = buildSvClassNumbering(fullCard, 'wusv');
     expect(m.get('bp-b-s')?.number).toBe(1);
     expect(m.get('bp-b-l')?.number).toBe(1); // same number, different coat letter
-    expect(m.get('bp-b-s')?.coatLetter).toBe('a');
-    expect(m.get('bp-b-l')?.coatLetter).toBe('b');
+    expect(m.get('bp-b-l')?.coatLetter).toBe('a'); // Long Coat is 'a'
+    expect(m.get('bp-b-s')?.coatLetter).toBe('b'); // Short/Stock Coat is 'b'
   });
 
   it('orders bitch before dog within an age', () => {

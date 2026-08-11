@@ -14,7 +14,7 @@ import { format, parseISO } from 'date-fns';
 import type { Database } from '@/server/db';
 import * as schema from '@/server/db/schema';
 import { getPaidOrderIdsForShow } from '@/server/services/show-metrics';
-import { isSpecialAwardClass } from '@/lib/class-labels';
+import { isSpecialAwardClass, svCoatDisplayName } from '@/lib/class-labels';
 import type { GradingCardEntry, GradingCardsInfo } from '@/components/reports/grading-cards-pdf';
 
 export interface GradingCardsLoad {
@@ -31,10 +31,8 @@ function safeDate(iso: string | null | undefined): string {
   }
 }
 
-function coatLabel(coatType: string | null | undefined): string {
-  if (coatType === 'stock') return 'Stock Coat';
-  if (coatType === 'long_stock') return 'Long Coat';
-  return '';
+function coatLabel(coatType: 'stock' | 'long_stock' | null | undefined): string {
+  return svCoatDisplayName(coatType) ?? '';
 }
 
 function sexLabel(sex: string | null | undefined): string {

@@ -743,10 +743,10 @@ function SvClassificationPage({
                           </Text>
                           <View style={{ flexDirection: 'row', gap: 6, marginTop: 2 }}>
                             <Text style={{ fontFamily: SV_FONTS.sans, fontSize: 7, color: SV.ink3 }}>
-                              <Text style={{ color: SV.accent, fontWeight: 'bold' }}>a</Text> Stock
+                              <Text style={{ color: SV.accent, fontWeight: 'bold' }}>a</Text> Long Coat
                             </Text>
                             <Text style={{ fontFamily: SV_FONTS.sans, fontSize: 7, color: SV.ink3 }}>
-                              <Text style={{ color: SV.accent, fontWeight: 'bold' }}>b</Text> Long Stock
+                              <Text style={{ color: SV.accent, fontWeight: 'bold' }}>b</Text> Short Coat
                             </Text>
                           </View>
                         </View>

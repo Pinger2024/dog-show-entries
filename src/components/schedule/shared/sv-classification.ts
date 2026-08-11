@@ -9,15 +9,15 @@ import { SV_AGE_ORDER } from '@/lib/class-labels';
  * sub-letters underneath:
  *
  *   1. Minor Puppy Bitch
- *      a  Standard Coat
- *      b  Long Coat
+ *      a  Long Coat
+ *      b  Short Coat
  *   2. Minor Puppy Dog
- *      a  Standard Coat
- *      b  Long Coat
+ *      a  Long Coat
+ *      b  Short Coat
  *   ...
  *   12. Working Dog
- *      a  Standard Coat
- *      b  Long Coat
+ *      a  Long Coat
+ *      b  Short Coat
  *
  * Numbering rules (Amanda 2026-05-28, GSDL BRG reference):
  * - Baby Puppy is INCLUDED as the first numbered class(es) when the club runs
@@ -26,8 +26,9 @@ import { SV_AGE_ORDER } from '@/lib/class-labels';
  *   this so the schedule and catalogue number identically.)
  * - Within each age, Bitch comes before Dog.
  * - Junior Handling is its own block, continuing after the breed block.
- * - Standard Coat (sv_coat_type='stock') is letter 'a'; Long Stock ('long_stock')
- *   is letter 'b'.
+ * - Long Coat (sv_coat_type='long_stock') is letter 'a'; Short/Stock Coat
+ *   ('stock') is letter 'b' — regional groups flipped this 2026-08-11
+ *   (previously stock was 'a').
  * - Canonical age order: SV_AGE_ORDER (shared with the catalogue + label map).
  */
 
@@ -103,8 +104,9 @@ export function groupSvClasses(classes: readonly ScheduleClass[]): SvClassificat
     if (coat === 'stock' && !bucket.stock) bucket.stock = c;
     if (coat === 'long_stock' && !bucket.longStock) bucket.longStock = c;
     // Defensive: a class row without a coat type still gets bucketed so the
-    // display doesn't drop it silently. Treat as stock if unset.
-    if (!coat && !bucket.stock) bucket.stock = c;
+    // display doesn't drop it silently. Treat as long coat (now letter 'a')
+    // if unset, so a single unset-coat row still surfaces as the lone row.
+    if (!coat && !bucket.longStock) bucket.longStock = c;
     buckets.set(key, bucket);
   }
 
@@ -125,8 +127,8 @@ export function groupSvClasses(classes: readonly ScheduleClass[]): SvClassificat
 
   const breedClasses: SvNumberedClass[] = ordered.map((b, i) => {
     const coatRows: SvCoatRow[] = [];
-    if (b.stock) coatRows.push({ letter: 'a', label: 'Standard Coat', cls: b.stock });
-    if (b.longStock) coatRows.push({ letter: 'b', label: 'Long Coat', cls: b.longStock });
+    if (b.longStock) coatRows.push({ letter: 'a', label: 'Long Coat', cls: b.longStock });
+    if (b.stock) coatRows.push({ letter: 'b', label: 'Short Coat', cls: b.stock });
     return {
       number: i + 1,
       name: b.name,

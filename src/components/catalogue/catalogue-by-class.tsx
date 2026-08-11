@@ -12,6 +12,7 @@ import {
 } from './sv-front-matter';
 import { TonalWash } from '@/components/sv-pdf/cover-atoms';
 import { SV, SV_FONTS } from '@/components/schedule/shared/sv-styles';
+import { svCoatDisplayName } from '@/lib/class-labels';
 
 // Class-sponsor banner strip. Renders at the FULL content width (A5 419.5pt −
 // 22pt L/R padding = 375.5pt) at the image's own aspect ratio, capped at this
@@ -720,20 +721,20 @@ export function CatalogueByClass({ show, entries, compact }: Props) {
               {isSvShow ? (() => {
                 // Amanda 2026-05-23: drop "SV " prefix from class names and
                 // surface the coat type in the header — "Class 9b · Adult
-                // Bitch · Long Stock Coat". Coat type comes from the
+                // Bitch · Short Coat". Coat type comes from the
                 // show_classes.sv_coat_type column, not from label-suffix
                 // guessing (some demos use sequential numeric labels).
+                // Wording + a/b lettering: regional groups' 2026-08-11
+                // decision (long coat = 'a'/Long Coat, short = 'b'/Short Coat;
+                // previously stock was 'a'/"Stock Coat").
                 const cleanName = className.replace(/^SV\s+/, '');
                 const sexWord = sex === 'dog' ? 'Dog' : sex === 'bitch' ? 'Bitch' : null;
-                const coatLabel = svCoatType === 'stock'
-                  ? 'Stock Coat'
-                  : svCoatType === 'long_stock'
-                    ? 'Long Stock Coat'
-                    : classLabel?.endsWith('a')
-                      ? 'Stock Coat'
-                      : classLabel?.endsWith('b')
-                        ? 'Long Stock Coat'
-                        : null;
+                const coatLabel = svCoatDisplayName(svCoatType)
+                  ?? (classLabel?.endsWith('a')
+                    ? 'Long Coat'
+                    : classLabel?.endsWith('b')
+                      ? 'Short Coat'
+                      : null);
                 const headParts = [
                   classLabel ? `Class ${classLabel}` : null,
                   sexWord ? `${cleanName} ${sexWord}` : cleanName,

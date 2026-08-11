@@ -30,6 +30,7 @@ import {
   svDisplayAge,
   isSpecialAwardClass,
   isJuniorHandler,
+  svCoatDisplayName,
 } from '@/lib/class-labels';
 import { Button } from '@/components/ui/button';
 import { displayShowTypeLabel } from '@/lib/show-types';
@@ -97,11 +98,8 @@ function formatPublicClassName(sc: PreviewShowClass): string {
   }
   if (cd?.type === 'sv_age' || sc.svCoatType) {
     const age = svDisplayAge(cd?.name);
-    const coat = sc.svCoatType === 'stock'
-      ? ' · Stock Coat'
-      : sc.svCoatType === 'long_stock'
-        ? ' · Long Stock Coat'
-        : '';
+    const coatName = svCoatDisplayName(sc.svCoatType);
+    const coat = coatName ? ` · ${coatName}` : '';
     return `${age}${sexLabel ? ` ${sexLabel}` : ''}${coat}`;
   }
   if (isJuniorHandler(sc)) {
