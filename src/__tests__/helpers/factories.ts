@@ -237,6 +237,7 @@ export async function makeEntryClass(opts: {
   entryId: string;
   showClassId: string;
   fee?: number;
+  absent?: boolean;
 }) {
   const [row] = await testDb
     .insert(entryClasses)
@@ -244,6 +245,7 @@ export async function makeEntryClass(opts: {
       entryId: opts.entryId,
       showClassId: opts.showClassId,
       fee: opts.fee ?? 500,
+      absent: opts.absent ?? false,
     })
     .returning();
   return row;

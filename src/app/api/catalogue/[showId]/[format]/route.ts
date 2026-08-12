@@ -278,7 +278,12 @@ export async function GET(
     exhibitorId: entry.exhibitorId,
     handler: entry.handler?.name,
     exhibitor: entry.exhibitor?.name,
-    classes: entry.entryClasses.map((ec) => ({
+    // The absentees format lists a dog only under the classes she was
+    // actually absent from (Mandy 2026-08-12) — she may be present, and
+    // even placed, in another class on the same entry (e.g. a Special
+    // Award after missing her breed class). Every other format lists all
+    // her classes as before.
+    classes: (format === 'absentees' ? entry.entryClasses.filter((ec) => ec.absent) : entry.entryClasses).map((ec) => ({
       name: ec.showClass?.classDefinition?.name,
       sex: ec.showClass?.sex,
       classNumber: ec.showClass?.classNumber,
@@ -418,18 +423,21 @@ export async function GET(
     let pdfDocument: React.ReactElement<any>;
 
     if (format === 'marked') {
-      // Build results map and absentees set for the marked catalogue
+      // Build results map and absentees set for the marked catalogue.
+      // Absence is per-class (Mandy 2026-08-12): the marked catalogue lists
+      // a dog under every class she's entered in, so "ABS" must be keyed by
+      // (catalogue number, class) exactly like `resultsMap` below — a dog
+      // absent from her breed class but placed in a Special Award must show
+      // ABS under the breed class and her placement under the Special.
       const resultsMap = new Map<string, MarkedResult>();
       const absenteesSet = new Set<string>();
 
       for (const entry of entries) {
-        // Mark absent entries
-        if (entry.absent && entry.catalogueNumber) {
-          absenteesSet.add(entry.catalogueNumber);
-        }
-
-        // Collect results from entry classes
+        // Collect results (and per-class absence) from entry classes
         for (const ec of entry.entryClasses) {
+          if (ec.absent && entry.catalogueNumber) {
+            absenteesSet.add(`${entry.catalogueNumber}-${ec.showClassId}`);
+          }
           const result = (ec as {
             result?: {
               placement: number | null;

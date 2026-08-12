@@ -67,7 +67,7 @@ const liveResultCount = (live: { breedGroups: { classes: { results: unknown[] }[
 
 describe('Fix 1 — absent dog never shows as a placed winner', () => {
   it('excludes an absent entry from live results even with a recorded placement', async () => {
-    const { steward, show, entry, ec } = await showWithSteward();
+    const { steward, show, ec } = await showWithSteward();
     const caller = createTestCaller(steward);
     await makeResult({ entryClassId: ec.id, placement: 1 });
 
@@ -75,7 +75,7 @@ describe('Fix 1 — absent dog never shows as a placed winner', () => {
     expect(liveResultCount(await caller.steward.getLiveResults({ showId: show.id }))).toBe(1);
 
     // Steward marks the dog absent — the stale placement must drop out.
-    await caller.steward.markAbsent({ entryId: entry.id, absent: true });
+    await caller.steward.markAbsent({ entryClassId: ec.id, absent: true });
     expect(liveResultCount(await caller.steward.getLiveResults({ showId: show.id }))).toBe(0);
   });
 });

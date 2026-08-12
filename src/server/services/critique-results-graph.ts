@@ -41,7 +41,7 @@ export async function loadShowClassRows(db: Database, showId: string): Promise<S
       entryClasses: {
         with: {
           entry: {
-            columns: { status: true, deletedAt: true, absent: true, entryType: true },
+            columns: { status: true, deletedAt: true, entryType: true },
             with: {
               dog: { columns: { registeredName: true } },
               juniorHandlerDetails: { columns: { handlerName: true } },
@@ -63,7 +63,10 @@ export async function loadShowClassRows(db: Database, showId: string): Promise<S
         (ec) =>
           ec.entry.status === 'confirmed' &&
           !ec.entry.deletedAt &&
-          !ec.entry.absent &&
+          // Per-class attendance (Mandy 2026-08-12) — this class's own flag,
+          // not the whole-entry roll-up (a dog absent from her breed class
+          // but placed in a Special Award is still matchable there).
+          !ec.absent &&
           ec.result?.placement != null,
       )
       .map((ec) => ({

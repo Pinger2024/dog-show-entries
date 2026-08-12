@@ -122,6 +122,9 @@ export default function StewardClassResultsPage({
   const markAbsent = trpc.steward.markAbsent.useMutation({
     onSuccess: () => {
       utils.steward.getClassEntries.invalidate({ showClassId: classId });
+      // absentCount on the class list is per-class too, so it needs the
+      // same refresh recordResult/removeResult already do.
+      utils.steward.getShowClasses.invalidate({ showId });
     },
     onError: (error) => {
       toast.error(error.message);
@@ -548,7 +551,7 @@ export default function StewardClassResultsPage({
                       recordResult.variables?.entryClassId === entry.entryClassId
                     }
                     onPlace={() => placeNext(entry.entryClassId, entry.result?.specialAward ?? null)}
-                    onMarkAbsent={() => markAbsent.mutate({ entryId: entry.entryId, absent: true })}
+                    onMarkAbsent={() => markAbsent.mutate({ entryClassId: entry.entryClassId, absent: true })}
                     onWithhold={() => setStatus(entry.entryClassId, 'withheld', entry.result?.specialAward ?? null)}
                     onUnplaced={() => setStatus(entry.entryClassId, 'unplaced', entry.result?.specialAward ?? null)}
                     onOpenSpecialAward={() => setSpecialAwardEntryId(entry.entryClassId)}
@@ -582,7 +585,7 @@ export default function StewardClassResultsPage({
                   title="Absent"
                   tone="muted"
                   entries={absent}
-                  onClear={(id, entryId) => markAbsent.mutate({ entryId: entryId!, absent: false })}
+                  onClear={(id) => markAbsent.mutate({ entryClassId: id, absent: false })}
                   clearLabel="Mark present"
                 />
               )}
@@ -936,12 +939,11 @@ function CategoryCard({
   tone: 'amber' | 'slate' | 'muted';
   entries: {
     entryClassId: string;
-    entryId: string;
     catalogueNumber: string | null;
     dogName: string;
     exhibitorName: string | null;
   }[];
-  onClear: (entryClassId: string, entryId?: string) => void;
+  onClear: (entryClassId: string) => void;
   clearLabel?: string;
 }) {
   const toneClasses =
@@ -980,7 +982,7 @@ function CategoryCard({
               variant="ghost"
               size="sm"
               className="h-8 text-xs"
-              onClick={() => onClear(e.entryClassId, e.entryId)}
+              onClick={() => onClear(e.entryClassId)}
             >
               {clearLabel}
             </Button>

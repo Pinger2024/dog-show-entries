@@ -199,7 +199,7 @@ export const stewardRouter = createTRPCRouter({
           entryClasses: {
             with: {
               entry: {
-                columns: { id: true, status: true, deletedAt: true, absent: true },
+                columns: { id: true, status: true, deletedAt: true },
               },
               result: true,
             },
@@ -225,8 +225,12 @@ export const stewardRouter = createTRPCRouter({
           .filter((r): r is NonNullable<typeof r> => r !== null);
         const resultsCount = resultsRows.length;
         const publishedResults = resultsRows.filter((r) => r.publishedAt !== null);
+        // Per-class attendance (Mandy 2026-08-12): a dog absent from THIS
+        // class still counts as forward in any other class she's entered in
+        // (e.g. a Special Award), so this reads the entry_class row's own
+        // flag, not the whole-entry roll-up.
         const absentCount = confirmedEntries.filter(
-          (ec) => ec.entry.absent
+          (ec) => ec.absent
         ).length;
 
         return {
@@ -404,7 +408,9 @@ export const stewardRouter = createTRPCRouter({
               // so the steward knows who to talk to. For dog entries
               // it's the entering user as before.
               exhibitorName: ec.entry.exhibitor.name,
-              absent: ec.entry.absent,
+              // Per-class attendance (Mandy 2026-08-12) — this entry_class
+              // row's own flag, not the whole-entry roll-up.
+              absent: ec.absent,
               result: ec.result
                 ? {
                     id: ec.result.id,
@@ -447,7 +453,7 @@ export const stewardRouter = createTRPCRouter({
         where: eq(entryClasses.id, input.entryClassId),
         with: {
           showClass: true,
-          entry: { columns: { status: true, deletedAt: true, absent: true } },
+          entry: { columns: { status: true, deletedAt: true } },
         },
       });
 
@@ -468,8 +474,11 @@ export const stewardRouter = createTRPCRouter({
       // Dogs marked absent shouldn't receive placements. The UI dims
       // absent rows but that's CSS-only — a direct API call with the
       // entryClassId still lands here, so we need a server-side guard
-      // to prevent ghost placements for no-shows.
-      if (ec.entry.absent) {
+      // to prevent ghost placements for no-shows. Per-class (Mandy
+      // 2026-08-12): a dog absent from her breed class can still be placed
+      // in a Special Award class at the same show, so this checks THIS
+      // class's own flag, not the whole-entry roll-up.
+      if (ec.absent) {
         throw new TRPCError({
           code: 'BAD_REQUEST',
           message: 'Cannot record a placement for an absent entry',
@@ -730,41 +739,87 @@ export const stewardRouter = createTRPCRouter({
       return { updated: updated.length };
     }),
 
-  // ── Mark entry absent/present ──────────────────────────
+  // ── Mark a class attendance absent/present ──────────────
+  // Attendance is per CLASS, not per entry (Mandy 2026-08-12, real incident):
+  // a dog can be absent from her breed class but shown — and placed — in a
+  // Special Award class at the same show. `entryClasses.absent` is now the
+  // authoritative flag; `entries.absent` is kept as a whole-show roll-up
+  // (true only once every one of the entry's classes is absent) so
+  // entry-level readers (financial counts, refund UIs, the RKC SH01 dog
+  // count) keep today's meaning unchanged.
   markAbsent: stewardProcedure
     .input(
       z.object({
-        entryId: z.string().uuid(),
+        entryClassId: z.string().uuid(),
         absent: z.boolean(),
       })
     )
     .mutation(async ({ ctx, input }) => {
-      const entry = await ctx.db.query.entries.findFirst({
-        where: eq(entries.id, input.entryId),
-        with: { show: { columns: { status: true } } },
+      const ec = await ctx.db.query.entryClasses.findFirst({
+        where: eq(entryClasses.id, input.entryClassId),
+        with: {
+          showClass: { columns: { showId: true } },
+          entry: { columns: { id: true } },
+        },
       });
 
-      if (!entry) {
-        throw new TRPCError({ code: 'NOT_FOUND', message: 'Entry not found' });
+      if (!ec) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'Entry class not found' });
       }
 
-      if (['completed', 'cancelled'].includes(entry.show.status)) {
+      const showId = ec.showClass.showId;
+      const show = await ctx.db.query.shows.findFirst({
+        where: eq(shows.id, showId),
+        columns: { status: true },
+      });
+      if (!show) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'Show not found' });
+      }
+
+      // A cancelled show never happened — attendance is meaningless. A
+      // COMPLETED show, though, is exactly the case that motivated this
+      // change: a secretary discovers after the fact (an RKC query, a
+      // steward's note) that attendance was recorded wrong for one class,
+      // and needs to fix it — as long as results aren't published+locked
+      // (checked below), which is the real "no more changes" gate.
+      if (show.status === 'cancelled') {
         throw new TRPCError({
           code: 'BAD_REQUEST',
-          message: 'Cannot modify attendance for a completed or cancelled show',
+          message: 'Cannot modify attendance for a cancelled show',
         });
       }
 
-      await verifyStewardAssignment(ctx.db, ctx.session.user.id, entry.showId);
-      await assertResultsNotLocked(ctx.db, entry.showId);
+      await verifyStewardAssignment(ctx.db, ctx.session.user.id, showId);
+      await assertResultsNotLocked(ctx.db, showId);
 
-      const [updated] = await ctx.db
-        .update(entries)
-        .set({ absent: input.absent })
-        .where(eq(entries.id, input.entryId))
-        .returning();
+      const updated = await ctx.db.transaction(async (tx) => {
+        const [updatedEntryClass] = await tx
+          .update(entryClasses)
+          .set({ absent: input.absent })
+          .where(eq(entryClasses.id, input.entryClassId))
+          .returning();
 
-      return updated!;
+        // Roll up to the whole-entry flag: absent only once EVERY class
+        // for this entry is absent — one dog left present in one class
+        // (e.g. the Special Award she still walked) means she's not a
+        // whole-show absentee.
+        const siblingClasses = await tx.query.entryClasses.findMany({
+          where: eq(entryClasses.entryId, ec.entry.id),
+          columns: { absent: true },
+        });
+        const allClassesAbsent =
+          siblingClasses.length > 0 && siblingClasses.every((sc) => sc.absent);
+
+        const [updatedEntry] = await tx
+          .update(entries)
+          .set({ absent: allClassesAbsent })
+          .where(eq(entries.id, ec.entry.id))
+          .returning();
+
+        return { entryClass: updatedEntryClass!, entry: updatedEntry! };
+      });
+
+      return updated;
     }),
 
   // ── BOB / BIS / Group achievements ──────────────────────
@@ -1021,7 +1076,6 @@ export const stewardRouter = createTRPCRouter({
                   status: true,
                   deletedAt: true,
                   dogId: true,
-                  absent: true,
                   entryType: true,
                 },
                 with: {
@@ -1076,12 +1130,14 @@ export const stewardRouter = createTRPCRouter({
           breedGroups.set(breedName, { breedName, classes: [] });
         }
 
-        // Count confirmed entries and dogs forward (present, not absent)
+        // Count confirmed entries and dogs forward (present, not absent).
+        // Per-class (Mandy 2026-08-12): a dog absent from THIS class still
+        // counts forward in any other class she's entered in.
         const confirmedEntries = sc.entryClasses.filter(
           (ec) => ec.entry.status === 'confirmed' && !ec.entry.deletedAt
         );
         const dogsForward = confirmedEntries.filter(
-          (ec) => !ec.entry.absent
+          (ec) => !ec.absent
         ).length;
 
         const classResults = sc.entryClasses
@@ -1093,7 +1149,7 @@ export const stewardRouter = createTRPCRouter({
               // An absent dog is never placed — if a placement was recorded and
               // then the dog marked absent, the stale result must not surface as
               // a winner on public/live results.
-              !ec.entry.absent &&
+              !ec.absent &&
               // Public users only see published results
               (isPrivileged || ec.result!.publishedAt !== null)
           )

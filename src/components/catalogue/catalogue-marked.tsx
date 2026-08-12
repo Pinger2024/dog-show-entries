@@ -52,7 +52,10 @@ export interface MarkedCatalogueProps {
   entries: CatalogueEntry[];
   /** Results keyed by `${catalogueNumber}-${showClassId}` */
   results: Map<string, MarkedResult>;
-  /** Set of catalogue numbers marked absent */
+  /** Per-class attendance (Mandy 2026-08-12): entries keyed the same way as
+   *  `results` — `${catalogueNumber}-${showClassId}` — for that one class,
+   *  so a dog absent from her breed class but placed in a Special Award
+   *  shows ABS only under the breed class. */
   absentees: Set<string>;
   /** Show-level and breed-level achievements */
   achievements: MarkedAchievement[];
@@ -633,7 +636,8 @@ export function CatalogueMarked({ show, entries, results, absentees, achievement
                     {bucket.entries.map((entry, entryIdx) => {
                       const catNo = entry.catalogueNumber ?? '';
                       const isFirstAppearance = !catNo || firstAppearanceBucket.get(catNo) === bucket;
-                      const isAbsent = catNo ? absentees.has(catNo) : false;
+                      const isAbsent =
+                        catNo && bucket.showClassId ? absentees.has(`${catNo}-${bucket.showClassId}`) : false;
                       const isJH = entry.entryType === 'junior_handler';
                       const displayName = isJH
                         ? (entry.handler ?? entry.exhibitor ?? 'Unnamed Handler')

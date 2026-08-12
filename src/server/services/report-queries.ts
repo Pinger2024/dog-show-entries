@@ -16,6 +16,12 @@
  *     (not just paid) — the standalone Absentee Report CSV/xlsx.
  *   - withdrawnOrAbsentPaidWhere: withdrawn OR absent, paid orders only,
  *     INCLUDES Junior Handling — the Withdrawn & Absent CSV/xlsx.
+ *
+ * "Absent" in all three means per-CLASS absence (Mandy 2026-08-12): an entry
+ * with at least one entry_classes.absent row matches, even if she was
+ * present for another class (e.g. a Special Award) and so `entries.absent`
+ * (the whole-show roll-up) is false. `buildAbsenteeRow` in report-rows.ts
+ * then lists only the classes she was actually absent from.
  */
 import { and, asc, eq, ilike, inArray, isNull, ne, sql } from 'drizzle-orm';
 import { entries, dogOwners, orders, orderSundryItems, sundryItems, users } from '@/server/db/schema';
@@ -25,6 +31,18 @@ import type { PrebookedCatalogueRow } from '@/components/reports/show-report-pdf
 
 // ── Absentee-shaped where clauses ────────────────────────────────────────
 
+/** True when this entry has at least one entry_class marked absent — the
+ *  authoritative per-class flag (Mandy 2026-08-12), not the whole-entry
+ *  `entries.absent` roll-up, so an entry with only SOME classes absent
+ *  (e.g. absent from her breed class, shown in a Special Award) still
+ *  matches. Raw SQL rather than drizzle's `exists()` helper (which needs a
+ *  `Database` handle threaded through every caller) since this is a
+ *  correlated subquery against the outer `entries` row only. */
+const hasAnAbsentClass = sql`EXISTS (
+  SELECT 1 FROM entry_classes ec
+  WHERE ec.entry_id = ${entries.id} AND ec.absent = true
+)`;
+
 export function paidConfirmedAbsentNonJhWhere(showId: string, paidOrderIds: string[]) {
   return and(
     eq(entries.showId, showId),
@@ -32,7 +50,7 @@ export function paidConfirmedAbsentNonJhWhere(showId: string, paidOrderIds: stri
       ? and(
           inArray(entries.orderId, paidOrderIds),
           eq(entries.status, 'confirmed'),
-          eq(entries.absent, true),
+          hasAnAbsentClass,
           ne(entries.entryType, 'junior_handler'),
         )
       : sql`false`,
@@ -44,7 +62,7 @@ export function confirmedAbsentNonJhWhere(showId: string) {
   return and(
     eq(entries.showId, showId),
     eq(entries.status, 'confirmed'),
-    eq(entries.absent, true),
+    hasAnAbsentClass,
     ne(entries.entryType, 'junior_handler'),
     isNull(entries.deletedAt),
   );
@@ -54,7 +72,7 @@ export function withdrawnOrAbsentPaidWhere(showId: string, paidOrderIds: string[
   return and(
     eq(entries.showId, showId),
     paidOrderIds.length > 0 ? inArray(entries.orderId, paidOrderIds) : sql`false`,
-    sql`(${entries.status} = 'withdrawn' OR ${entries.absent} = true)`,
+    sql`(${entries.status} = 'withdrawn' OR ${hasAnAbsentClass})`,
     isNull(entries.deletedAt),
   );
 }

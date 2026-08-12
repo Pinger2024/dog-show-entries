@@ -132,6 +132,9 @@ export interface AbsenteeEntryInput extends RegistrationFlags {
   } | null;
   exhibitor: { name: string | null } | null;
   entryClasses: {
+    /** Per-class attendance (Mandy 2026-08-12) — true when THIS class was
+     *  marked absent, independent of any other class the entry holds. */
+    absent: boolean;
     showClass: { classNumber: number | null; classDefinition: { name: string | null } | null } | null;
   }[];
 }
@@ -148,6 +151,15 @@ export interface AbsenteeRow {
 }
 
 export function buildAbsenteeRow(entry: AbsenteeEntryInput): AbsenteeRow {
+  // Withdrawal is a whole-entry status (not per-class), so a withdrawn row
+  // lists every class she'd been entered in. An "Absent" row, though, is
+  // per-class (Mandy 2026-08-12) — an entry can be absent from one class and
+  // present in another (e.g. her breed class vs. a Special Award), so it
+  // lists only the classes she was actually marked absent from.
+  const isWithdrawn = entry.status === 'withdrawn';
+  const listedClasses = isWithdrawn
+    ? entry.entryClasses
+    : entry.entryClasses.filter((ec) => ec.absent);
   return {
     catalogueNumber: entry.catalogueNumber ?? '',
     dogName: entry.dog?.registeredName
@@ -155,7 +167,7 @@ export function buildAbsenteeRow(entry: AbsenteeEntryInput): AbsenteeRow {
       : 'Junior Handler',
     breed: entry.dog?.breed?.name ?? '',
     sex: entry.dog?.sex === 'dog' ? 'Dog' : entry.dog?.sex === 'bitch' ? 'Bitch' : '',
-    classes: entry.entryClasses
+    classes: listedClasses
       .map((ec) => {
         const num = ec.showClass?.classNumber;
         const name = ec.showClass?.classDefinition?.name ?? '';
@@ -165,7 +177,7 @@ export function buildAbsenteeRow(entry: AbsenteeEntryInput): AbsenteeRow {
       .join('; '),
     owner: entry.dog?.owners?.map((o) => o.ownerName).join(' & ') ?? '',
     exhibitor: entry.exhibitor?.name ?? '',
-    status: entry.status === 'withdrawn' ? 'Withdrawn' : 'Absent',
+    status: isWithdrawn ? 'Withdrawn' : 'Absent',
   };
 }
 

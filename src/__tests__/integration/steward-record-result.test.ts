@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { eq } from 'drizzle-orm';
-import { results, entries, shows } from '@/server/db/schema';
+import { results, entries, entryClasses, shows } from '@/server/db/schema';
 import { testDb } from '../helpers/db';
 import { createTestCaller } from '../helpers/context';
 import {
@@ -180,6 +180,27 @@ describe('steward.recordResult', () => {
       caller.steward.recordResult({ entryClassId: pendingEc.id, placement: 1 }),
     ).rejects.toThrow(/non-confirmed/);
   });
+
+  // Real incident (Mandy 2026-08-12): a dog absent from her breed class was
+  // shown — and placed 1st — in a Special Award class at the same show.
+  // Attendance is per CLASS, so a placement in one class must succeed while
+  // the same entry is absent in another, and must still be refused in the
+  // class she's actually absent from.
+  it('records a placement in one class while the same entry is absent in another', async () => {
+    const { steward, show, ec } = await showWithStewardAndEntry();
+    const specialAwardClass = await makeShowClass({ showId: show.id });
+    const ecSpecial = await makeEntryClass({ entryId: ec.entryId, showClassId: specialAwardClass.id });
+    const caller = createTestCaller(steward);
+
+    await caller.steward.markAbsent({ entryClassId: ec.id, absent: true });
+
+    const result = await caller.steward.recordResult({ entryClassId: ecSpecial.id, placement: 1 });
+    expect(result.placement).toBe(1);
+
+    await expect(
+      caller.steward.recordResult({ entryClassId: ec.id, placement: 1 }),
+    ).rejects.toThrow(/Cannot record a placement for an absent entry/);
+  });
 });
 
 /** An entries_closed show with a steward + one confirmed entry, on a given
@@ -281,24 +302,74 @@ describe('steward.removeResult', () => {
 });
 
 describe('steward.markAbsent', () => {
-  it('flips the entry.absent flag', async () => {
-    const { steward, entry } = await showWithStewardAndEntry();
+  it('flips the entry_class absent flag and rolls entries.absent up to true when it was the only class', async () => {
+    const { steward, entry, ec } = await showWithStewardAndEntry();
     const caller = createTestCaller(steward);
 
-    await caller.steward.markAbsent({ entryId: entry.id, absent: true });
+    await caller.steward.markAbsent({ entryClassId: ec.id, absent: true });
 
-    const updated = await testDb.query.entries.findFirst({ where: eq(entries.id, entry.id) });
-    expect(updated?.absent).toBe(true);
+    const updatedEc = await testDb.query.entryClasses.findFirst({ where: eq(entryClasses.id, ec.id) });
+    expect(updatedEc?.absent).toBe(true);
+    const updatedEntry = await testDb.query.entries.findFirst({ where: eq(entries.id, entry.id) });
+    expect(updatedEntry?.absent).toBe(true);
   });
 
-  it('rejects modification once the show is completed', async () => {
-    const { steward, show, entry } = await showWithStewardAndEntry();
+  it('leaves entries.absent false when only SOME of the entry classes are absent', async () => {
+    const { steward, show, entry, ec } = await showWithStewardAndEntry();
+    // A second class on the SAME entry — the Special Award she's still shown in.
+    const specialAwardClass = await makeShowClass({ showId: show.id });
+    await makeEntryClass({ entryId: entry.id, showClassId: specialAwardClass.id });
+    const caller = createTestCaller(steward);
+
+    await caller.steward.markAbsent({ entryClassId: ec.id, absent: true });
+
+    const updatedEc = await testDb.query.entryClasses.findFirst({ where: eq(entryClasses.id, ec.id) });
+    expect(updatedEc?.absent).toBe(true);
+    const updatedEntry = await testDb.query.entries.findFirst({ where: eq(entries.id, entry.id) });
+    expect(updatedEntry?.absent).toBe(false);
+  });
+
+  it('rolls entries.absent back to false when the last absent class is unmarked', async () => {
+    const { steward, show, entry, ec } = await showWithStewardAndEntry();
+    const secondClass = await makeShowClass({ showId: show.id });
+    const ec2 = await makeEntryClass({ entryId: entry.id, showClassId: secondClass.id, absent: true });
+    await testDb.update(entryClasses).set({ absent: true }).where(eq(entryClasses.id, ec.id));
+    await testDb.update(entries).set({ absent: true }).where(eq(entries.id, entry.id));
+    const caller = createTestCaller(steward);
+
+    await caller.steward.markAbsent({ entryClassId: ec2.id, absent: false });
+
+    const updatedEntry = await testDb.query.entries.findFirst({ where: eq(entries.id, entry.id) });
+    expect(updatedEntry?.absent).toBe(false);
+  });
+
+  it('allows attendance changes on a completed show once results are not locked', async () => {
+    const { steward, show, ec } = await showWithStewardAndEntry();
     await testDb.update(shows).set({ status: 'completed' }).where(eq(shows.id, show.id));
     const caller = createTestCaller(steward);
 
+    const result = await caller.steward.markAbsent({ entryClassId: ec.id, absent: true });
+    expect(result.entryClass.absent).toBe(true);
+  });
+
+  it('still refuses attendance changes on a cancelled show', async () => {
+    const { steward, show, ec } = await showWithStewardAndEntry();
+    await testDb.update(shows).set({ status: 'cancelled' }).where(eq(shows.id, show.id));
+    const caller = createTestCaller(steward);
+
     await expect(
-      caller.steward.markAbsent({ entryId: entry.id, absent: true }),
-    ).rejects.toThrow(/completed or cancelled/);
+      caller.steward.markAbsent({ entryClassId: ec.id, absent: true }),
+    ).rejects.toThrow(/cancelled/);
+  });
+
+  it('refuses attendance changes once results are published and locked', async () => {
+    const { steward, show, ec } = await showWithStewardAndEntry();
+    await lockShowResults(show.id);
+    const caller = createTestCaller(steward);
+
+    await expect(
+      caller.steward.markAbsent({ entryClassId: ec.id, absent: true }),
+    ).rejects.toThrow(/published and locked/);
   });
 });
 

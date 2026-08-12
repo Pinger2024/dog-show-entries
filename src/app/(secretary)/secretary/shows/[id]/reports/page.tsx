@@ -838,6 +838,16 @@ function AbsenteeReportContent({ showId }: { showId: string }) {
 
   const absenteeCount = absentees?.length ?? 0;
 
+  // Withdrawal is a whole-entry status, so a withdrawn row lists every
+  // class she was entered in. "Absent" is per-class (Mandy 2026-08-12) — an
+  // entry can be absent from one class and present in another (e.g. her
+  // breed class vs. a Special Award) — so it lists only the classes she was
+  // actually marked absent from.
+  function classesToShow<T extends { absent: boolean }>(entry: { status: string; entryClasses?: T[] }) {
+    const classes = entry.entryClasses ?? [];
+    return entry.status === 'withdrawn' ? classes : classes.filter((ec) => ec.absent);
+  }
+
   if (isLoading) return <LoadingCard />;
 
   return (
@@ -855,7 +865,11 @@ function AbsenteeReportContent({ showId }: { showId: string }) {
           <CardContent className="pt-4 pb-3">
             <p className="text-xs font-medium text-muted-foreground">Absent</p>
             <p className="text-2xl font-bold text-se-honey-deep">
-              {absentees?.filter((e) => e.status !== 'withdrawn' && e.absent).length ?? 0}
+              {/* Every non-withdrawn row on this list is here because at least
+                  one of its classes is marked absent (Mandy 2026-08-12,
+                  per-class attendance) — status alone tells "Absent" from
+                  "Withdrawn" apart. */}
+              {absentees?.filter((e) => e.status !== 'withdrawn').length ?? 0}
             </p>
           </CardContent>
         </Card>
@@ -915,7 +929,7 @@ function AbsenteeReportContent({ showId }: { showId: string }) {
                       </Badge>
                     </div>
                     <div className="flex flex-wrap gap-1">
-                      {(entry.entryClasses ?? []).map((ec, i) => (
+                      {classesToShow(entry).map((ec, i) => (
                         <Badge key={i} variant="outline" className="text-xs">
                           {ec.showClass?.classNumber != null ? `${ec.showClass.classNumber}. ` : ''}
                           {ec.showClass?.classDefinition?.name ?? '?'}
@@ -958,7 +972,7 @@ function AbsenteeReportContent({ showId }: { showId: string }) {
                         </TableCell>
                         <TableCell>
                           <div className="flex flex-wrap gap-1">
-                            {(entry.entryClasses ?? []).map((ec, i) => (
+                            {classesToShow(entry).map((ec, i) => (
                               <Badge key={i} variant="outline" className="text-xs">
                                 {ec.showClass?.classNumber != null ? `${ec.showClass.classNumber}. ` : ''}
                                 {ec.showClass?.classDefinition?.name ?? '?'}

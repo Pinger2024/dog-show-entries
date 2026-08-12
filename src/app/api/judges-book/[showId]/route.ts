@@ -116,7 +116,11 @@ export async function GET(
       .map((ec) => ({
         catalogueNumber: ec.entry!.catalogueNumber,
         dogName: ec.entry!.dog?.registeredName ?? 'Unknown',
-        absent: ec.entry!.absent ?? false,
+        // Per-class attendance (Mandy 2026-08-12) — the judge's book is
+        // read class-by-class in the ring, so this must be THIS class's own
+        // flag, not the whole-show roll-up: a dog absent from her breed
+        // class but shown in a Special Award must not print "absent" there.
+        absent: ec.absent ?? false,
       }))
       .sort((a, b) => {
         const numA = parseInt(a.catalogueNumber ?? '0');

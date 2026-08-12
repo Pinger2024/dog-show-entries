@@ -68,7 +68,7 @@ describe('buildAbsenteeRow — shared by all three absentee-shaped reports', () 
     status: 'confirmed',
     dog: { registeredName: 'Rex', breed: { name: 'GSD' }, sex: 'dog', owners: [{ ownerName: 'Pat' }] },
     exhibitor: { name: 'Pat Owner' },
-    entryClasses: [{ showClass: { classNumber: 3, classDefinition: { name: 'Open Dog' } } }],
+    entryClasses: [{ absent: true, showClass: { classNumber: 3, classDefinition: { name: 'Open Dog' } } }],
   };
 
   it('formats classes as "N. Name" and defaults status to Absent', () => {
@@ -104,6 +104,38 @@ describe('buildAbsenteeRow — shared by all three absentee-shaped reports', () 
     expect(csvRows).toHaveLength(entries.length);
     expect(xlsxRows).toHaveLength(entries.length);
     expect(csvRows).toEqual(xlsxRows);
+  });
+
+  // Per-class attendance (Mandy 2026-08-12, real incident): a dog can be
+  // absent from her breed class but shown — and placed — in a Special
+  // Award class at the same show. An "Absent" row must list ONLY the
+  // classes she was actually marked absent from.
+  it('lists only the classes an entry was absent from when some classes are still present', () => {
+    const row = buildAbsenteeRow({
+      ...base,
+      entryClasses: [
+        { absent: true, showClass: { classNumber: 1, classDefinition: { name: 'Puppy Dog' } } },
+        { absent: false, showClass: { classNumber: 9, classDefinition: { name: 'Best of Breed Special Award' } } },
+      ],
+    });
+
+    expect(row.status).toBe('Absent');
+    expect(row.classes).toBe('1. Puppy Dog');
+    expect(row.classes).not.toContain('Best of Breed Special Award');
+  });
+
+  it('lists every class for a withdrawn entry — withdrawal is not per-class', () => {
+    const row = buildAbsenteeRow({
+      ...base,
+      status: 'withdrawn',
+      entryClasses: [
+        { absent: false, showClass: { classNumber: 1, classDefinition: { name: 'Puppy Dog' } } },
+        { absent: false, showClass: { classNumber: 9, classDefinition: { name: 'Best of Breed Special Award' } } },
+      ],
+    });
+
+    expect(row.status).toBe('Withdrawn');
+    expect(row.classes).toBe('1. Puppy Dog; 9. Best of Breed Special Award');
   });
 });
 

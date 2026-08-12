@@ -62,6 +62,8 @@ import {
   makeUser,
   makeDog,
   makeEntry,
+  makeShowClass,
+  makeEntryClass,
 } from '../helpers/factories';
 import { testDb } from '../helpers/db';
 import { entries as entriesTable } from '@/server/db/schema';
@@ -202,21 +204,30 @@ describe('GET /api/absentee-report/[showId]', () => {
 
   // Mandy 2026-07-06: withdrawn entries aren't absentees, and Junior Handling
   // entries don't belong on the absentee report — only absent dogs.
+  //
+  // Attendance is per CLASS (Mandy 2026-08-12): a "confirmed + absent" dog
+  // here means an entry with at least one entry_classes.absent row, which is
+  // what makes her appear on this report at all — not the whole-entry
+  // entries.absent roll-up (that stays false if she's still present in
+  // another class).
   it('lists absent dogs only — excludes withdrawn and Junior Handling', async () => {
     const { user, org } = await makeSecretaryWithOrg();
     const show = await makeShow({ organisationId: org.id });
+    const showClass = await makeShowClass({ showId: show.id });
     const dogA = await makeDog({ ownerId: user.id, registeredName: 'Absent Dog' });
     const dogB = await makeDog({ ownerId: user.id, registeredName: 'Withdrawn Dog' });
     const dogC = await makeDog({ ownerId: user.id, registeredName: 'JH Dog' });
 
-    // (a) confirmed + absent dog → SHOULD appear
+    // (a) confirmed, absent from her one class → SHOULD appear
     const absent = await makeEntry({ showId: show.id, dogId: dogA.id, exhibitorId: user.id, status: 'confirmed' });
-    await testDb.update(entriesTable).set({ absent: true, catalogueNumber: '5' }).where(eq(entriesTable.id, absent.id));
+    await testDb.update(entriesTable).set({ catalogueNumber: '5' }).where(eq(entriesTable.id, absent.id));
+    await makeEntryClass({ entryId: absent.id, showClassId: showClass.id, absent: true });
     // (b) withdrawn → should NOT appear
     await makeEntry({ showId: show.id, dogId: dogB.id, exhibitorId: user.id, status: 'withdrawn' });
     // (c) confirmed + absent Junior Handling → should NOT appear
-    const jh = await makeEntry({ showId: show.id, dogId: dogC.id, exhibitorId: user.id, status: 'confirmed' });
-    await testDb.update(entriesTable).set({ absent: true, entryType: 'junior_handler', catalogueNumber: '85' }).where(eq(entriesTable.id, jh.id));
+    const jh = await makeEntry({ showId: show.id, dogId: dogC.id, exhibitorId: user.id, status: 'confirmed', entryType: 'junior_handler' });
+    await testDb.update(entriesTable).set({ catalogueNumber: '85' }).where(eq(entriesTable.id, jh.id));
+    await makeEntryClass({ entryId: jh.id, showClassId: showClass.id, absent: true });
 
     authedAs(user);
     const jsonReq = new NextRequest(`http://localhost/api/x/${show.id}?format=json`);
@@ -227,5 +238,37 @@ describe('GET /api/absentee-report/[showId]', () => {
     expect(body.absentees[0].catalogueNumber).toBe('5');
     expect(body.absentees.some((a: { status: string }) => a.status === 'Withdrawn')).toBe(false);
     expect(body.absentees.some((a: { catalogueNumber: string }) => a.catalogueNumber === '85')).toBe(false);
+  });
+
+  // Real incident (Mandy 2026-08-12): a dog absent from her breed class was
+  // shown in a Special Award class at the same show — she must still appear
+  // on the absentee report (per-class absence, not the whole-entry
+  // roll-up), listing only the class she was actually absent from.
+  it('lists a dog absent from one of two classes with only that class shown', async () => {
+    const { user, org } = await makeSecretaryWithOrg();
+    const show = await makeShow({ organisationId: org.id });
+    const breedClass = await makeShowClass({ showId: show.id });
+    const specialAwardClass = await makeShowClass({ showId: show.id });
+    const dog = await makeDog({ ownerId: user.id, registeredName: 'Partial Absentee' });
+
+    const entry = await makeEntry({ showId: show.id, dogId: dog.id, exhibitorId: user.id, status: 'confirmed' });
+    await testDb.update(entriesTable).set({ catalogueNumber: '7' }).where(eq(entriesTable.id, entry.id));
+    await makeEntryClass({ entryId: entry.id, showClassId: breedClass.id, absent: true });
+    await makeEntryClass({ entryId: entry.id, showClassId: specialAwardClass.id, absent: false });
+
+    // The whole-entry roll-up stays false — she's still present in one class.
+    const stillEntry = await testDb.query.entries.findFirst({ where: eq(entriesTable.id, entry.id) });
+    expect(stillEntry?.absent).toBe(false);
+
+    authedAs(user);
+    const jsonReq = new NextRequest(`http://localhost/api/x/${show.id}?format=json`);
+    const res = await absenteeReportGET(jsonReq, params(show.id));
+    const body = await res.json();
+
+    expect(body.totalAbsentees).toBe(1);
+    const row = body.absentees[0];
+    expect(row.catalogueNumber).toBe('7');
+    // Only the class she was actually absent from is listed — not both.
+    expect(row.classes.split('; ')).toHaveLength(1);
   });
 });

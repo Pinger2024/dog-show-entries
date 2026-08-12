@@ -37,16 +37,16 @@ async function showWithSteward() {
     makeDog({ ownerId: exhibitor.id, breedId: breed.id }),
   ]);
   const entry = await makeEntry({ showId: show.id, dogId: dog.id, exhibitorId: exhibitor.id, status: 'confirmed' });
-  await makeEntryClass({ entryId: entry.id, showClassId: showClass.id });
-  return { steward, exhibitor, breed, show, showClass, entry };
+  const ec = await makeEntryClass({ entryId: entry.id, showClassId: showClass.id });
+  return { steward, exhibitor, breed, show, showClass, entry, ec };
 }
 
 describe('steward locked-results guard (bug-hunt #15)', () => {
   it('markAbsent is blocked once results are published + locked', async () => {
-    const { steward, show, entry } = await showWithSteward();
+    const { steward, show, ec } = await showWithSteward();
     await lockShowResults(show.id);
     await expect(
-      createTestCaller(steward).steward.markAbsent({ entryId: entry.id, absent: true })
+      createTestCaller(steward).steward.markAbsent({ entryClassId: ec.id, absent: true })
     ).rejects.toThrow(/published and locked/i);
   });
 

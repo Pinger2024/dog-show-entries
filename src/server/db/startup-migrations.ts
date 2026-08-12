@@ -166,5 +166,37 @@ export async function runStartupMigrations() {
       ADD COLUMN IF NOT EXISTS atc_number TEXT;
   `);
 
+  // ── 2026-08-12: per-class attendance (Mandy) — a dog can be absent from
+  // her breed class but shown in a Special Award class at the same show, so
+  // one absent flag per entry can't represent it. `entry_classes.absent`
+  // becomes the authoritative per-class flag; `entries.absent` stays as the
+  // whole-show roll-up (kept in sync by steward.markAbsent going forward).
+  // The backfill from entries.absent must run ONLY the moment the column is
+  // created — re-running it on every boot would stomp a secretary's later
+  // per-class correction back to the old whole-show value. Guarded by
+  // checking column existence BEFORE adding it (mirrors the once-only
+  // membership-insert guard above), all inside one DO block so the check
+  // and the ALTER can't race apart.
+  await db.execute(sql`
+    DO $$
+    DECLARE
+      column_already_existed BOOLEAN;
+    BEGIN
+      SELECT EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_name = 'entry_classes' AND column_name = 'absent'
+      ) INTO column_already_existed;
+
+      IF NOT column_already_existed THEN
+        ALTER TABLE entry_classes ADD COLUMN absent BOOLEAN NOT NULL DEFAULT FALSE;
+
+        UPDATE entry_classes ec
+        SET absent = true
+        FROM entries e
+        WHERE ec.entry_id = e.id AND e.absent = true;
+      END IF;
+    END $$;
+  `);
+
   console.log(`[startup-migrations] done in ${Date.now() - started}ms`);
 }
