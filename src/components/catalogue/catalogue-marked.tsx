@@ -353,12 +353,18 @@ interface GroupBucket {
   breeds: Map<string, BreedBucket>;
 }
 
-function groupEntriesKC(entries: CatalogueEntry[]) {
+export function groupEntriesKC(entries: CatalogueEntry[]) {
   const groups = new Map<string, GroupBucket>();
 
   for (const entry of entries) {
-    const group = entry.group ?? 'Unclassified';
-    const breed = entry.breed ?? 'Unknown Breed';
+    // Junior Handling entries carry no dog, so group/breed are null — they
+    // used to fall into "Unclassified / Unknown Breed" on the RKC marked
+    // catalogue (Mandy 2026-08-12, South Western). Group them under their
+    // own name; the page render skips the breed line when it would just
+    // repeat the group band.
+    const isJH = entry.entryType === 'junior_handler';
+    const group = isJH ? 'Junior Handling' : (entry.group ?? 'Unclassified');
+    const breed = isJH ? 'Junior Handling' : (entry.breed ?? 'Unknown Breed');
 
     if (!groups.has(group)) {
       groups.set(group, { sortOrder: entry.groupSortOrder ?? 999, breeds: new Map() });
@@ -609,7 +615,9 @@ export function CatalogueMarked({ show, entries, results, absentees, achievement
           <Page size="A5" style={styles.page} wrap>
           <Text style={markedStyles.watermark}>MARKED CATALOGUE</Text>
           <Text style={styles.groupHeading}>{groupName}</Text>
-          <Text style={styles.breedHeading}>{breedName}</Text>
+          {breedName !== groupName && (
+            <Text style={styles.breedHeading}>{breedName}</Text>
+          )}
           {judge && (
             <Text style={styles.judgeLabel}>Judge: {judge}</Text>
           )}
@@ -625,11 +633,14 @@ export function CatalogueMarked({ show, entries, results, absentees, achievement
                   return (
                   <View key={`${bucket.classLabel}-${bucket.className}`} wrap={!keepTogether}>
                     {showSexHeading && (
-                      <Text style={styles.sexHeading} minPresenceAhead={60}>
+                      <Text style={styles.sexHeading} minPresenceAhead={130}>
                         {sex === 'dog' ? 'Dogs' : 'Bitches'}
                       </Text>
                     )}
-                    <Text style={styles.classHeadingInBreed} minPresenceAhead={60}>
+                    {/* 120pt look-ahead: a marked entry row (with badges/
+                        placings) can exceed the old 60pt, which stranded the
+                        Open Bitch heading at a page foot (Mandy 2026-08-12). */}
+                    <Text style={styles.classHeadingInBreed} minPresenceAhead={120}>
                       {classHeadingLabel(bucket, sex)}
                     </Text>
 
