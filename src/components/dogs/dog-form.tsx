@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, isValidElement, cloneElement, type ReactElement } from 'react';
 import { useRouter } from 'next/navigation';
 import { useForm, useFieldArray, useWatch, type Control } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -225,7 +225,10 @@ interface DogFormProps {
   /** Slot for SV/WUSV-specific cards. Rendered inside the form immediately
    *  after the SV/WUSV Details card (Amanda 2026-05-21 — keeps all the
    *  German-Shepherd-specific data together as one visual block). Only
-   *  rendered when the selected breed matches German Shepherd. */
+   *  rendered when the selected breed matches German Shepherd. When this is
+   *  a single element (the usual <DogSvHealthCard/> case), it's cloned with
+   *  a `kcHealthSuggestions` prop carrying any BVA/KC hip/elbow/DNA-DM
+   *  results a completed RKC profile lookup returned. */
   svSection?: React.ReactNode;
   /** Where to go after a successful save. Used when the exhibitor came from an
    *  entry to fill in mandatory info — send them straight back to that show's
@@ -309,38 +312,70 @@ export function DogForm({ mode, defaultValues, dogId, svSection, returnTo, isReg
 
   // RKC lookup — returns an array of results
   const [kcResults, setKcResults] = useState<
-    { registeredName: string; breed: string; sex: string; dateOfBirth: string; colour?: string; sire: string; dam: string; breeder: string; dogId?: string }[]
+    { registeredName: string; breed: string; sex: string; dateOfBirth: string; colour?: string; sire: string; dam: string; dogId?: string }[]
   >([]);
 
-  // Phase 2: Fetch enriched pedigree data from the RKC dog profile page
+  // Health values a GSD's RKC profile lookup returned (BVA/KC hip + elbow
+  // scores, DNA-DM result) — only ever consumed by the SV Health card below,
+  // which owns the actual "is this field still empty" check and applies
+  // them itself (see the kcHealthSuggestions prop wiring near the svSection
+  // render below). Kept as state, not applied directly to the DB, because
+  // the health card's own autosave PUTs its full local state on every save
+  // — a side-channel write here would just get silently overwritten the
+  // next time the exhibitor touches any other health field.
+  const [kcHealthSuggestions, setKcHealthSuggestions] = useState<
+    { hipScore?: string; elbowScore?: string; dmTest?: 'clear' | 'carrier' | 'affected' } | undefined
+  >(undefined);
+
+  // Phase 2: Fetch enriched pedigree + health data from the RKC dog profile page
   const kcProfileLookup = trpc.dogs.kcLookupProfile.useMutation({
     onSuccess: (profile) => {
       if (!profile) return;
       const sv = { shouldValidate: true, shouldDirty: true } as const;
-      // Only fill sire/dam/breeder if not already populated (don't overwrite manual entries)
+      // Only fill sire/dam if not already populated (don't overwrite manual entries)
       if (profile.sire && !form.getValues('sireName')) {
         form.setValue('sireName', profile.sire, sv);
       }
       if (profile.dam && !form.getValues('damName')) {
         form.setValue('damName', profile.dam, sv);
       }
-      if (profile.breeder && !form.getValues('breederName')) {
-        form.setValue('breederName', profile.breeder, sv);
-      }
       // Colour from profile page may be more detailed
       if (profile.colour && !form.getValues('colour')) {
         form.setValue('colour', profile.colour, sv);
       }
 
-      const enriched = [profile.sire, profile.dam, profile.breeder].filter(Boolean);
-      if (enriched.length > 0) {
-        toast.success('Pedigree details populated from RKC', {
-          description: `Sire, dam, and breeder info filled in from the Royal Kennel Club.`,
+      const hasHealthData = Boolean(profile.hipScore || profile.elbowScore || profile.dmTest);
+      // Only worth stashing (and mentioning) when there's an SV Health card
+      // mounted to receive it — GSD + editing an existing dog.
+      if (hasHealthData && isGsd && mode === 'edit') {
+        setKcHealthSuggestions({
+          hipScore: profile.hipScore,
+          elbowScore: profile.elbowScore,
+          dmTest: profile.dmTest,
+        });
+      }
+
+      const enrichedPedigree = [profile.sire, profile.dam].filter(Boolean);
+      if (enrichedPedigree.length > 0 || hasHealthData || profile.studbookNumber) {
+        const parts: string[] = [];
+        if (enrichedPedigree.length > 0) parts.push('sire and dam');
+        if (hasHealthData && isGsd && mode === 'edit') parts.push('BVA/KC hip, elbow and DNA-DM results (added to the SV Health card below where blank)');
+        if (profile.studbookNumber) parts.push(`Studbook No. ${profile.studbookNumber}`);
+        toast.success('Details populated from RKC', {
+          description: parts.length > 0
+            ? `${parts.join(', ')} filled in from the Royal Kennel Club.`
+            : 'Pedigree details filled in from the Royal Kennel Club.',
         });
       }
     },
-    // Silent failure — profile enrichment is optional
-    onError: () => {},
+    onError: (error) => {
+      // Profile enrichment is normally silent-optional (a timeout or an
+      // unrecognised page just means less gets filled in) — but if RKC's
+      // own site is down, say so, matching the primary search's behaviour.
+      if (error.message.includes('having trouble right now')) {
+        toast.error('RKC lookup incomplete', { description: error.message });
+      }
+    },
   });
 
   function applyKcResult(data: typeof kcResults[number]) {
@@ -369,7 +404,6 @@ export function DogForm({ mode, defaultValues, dogId, svSection, returnTo, isReg
     }
     if (data.sire) form.setValue('sireName', data.sire, sv);
     if (data.dam) form.setValue('damName', data.dam, sv);
-    if (data.breeder) form.setValue('breederName', data.breeder, sv);
     if (data.colour) form.setValue('colour', data.colour, sv);
 
     if (data.breed) {
@@ -1424,8 +1458,21 @@ export function DogForm({ mode, defaultValues, dogId, svSection, returnTo, isReg
         {/* SV Health & Working Titles — rendered inline alongside the
             SV/WUSV Details card so all the German-Shepherd-specific data
             lives as one visual block. The slot is filled by the dog edit
-            page when breed = GSD (Amanda 2026-05-21). */}
-        {isGsd && svSection}
+            page when breed = GSD (Amanda 2026-05-21). Cloned with
+            kcHealthSuggestions so a completed RKC profile lookup can offer
+            its BVA/KC hip, elbow and DNA-DM results to the health card —
+            which applies them itself, only into fields still blank, the
+            same way it already applies its own saved profile. */}
+        {isGsd && (
+          isValidElement(svSection)
+            // Injecting an extra prop into an arbitrary passed-in element;
+            // cloneElement's typing can't express "this element accepts
+            // kcHealthSuggestions" without threading a generic through the
+            // svSection prop itself.
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            ? cloneElement(svSection as ReactElement<any>, { kcHealthSuggestions })
+            : svSection
+        )}
 
         {/* Bio */}
         <Card>

@@ -5,7 +5,7 @@ import { protectedProcedure, publicProcedure } from '../procedures';
 import { createTRPCRouter } from '../init';
 import { dogs, dogOwners, dogTitles, dogPhotos, users, entries, entryClasses, showClasses, shows, results, classDefinitions, achievements, judgeAssignments, judges, dogSvProfile } from '@/server/db/schema';
 import { deleteFromR2 } from '@/server/services/storage';
-import { scrapeKcDog, searchKcDogs, fetchKcDogProfile } from '@/server/services/firecrawl';
+import { searchKcDogs, fetchKcDogProfile, RkcUnavailableError } from '@/server/services/kc-lookup';
 import { isCcType, isRccType } from '@/lib/placements';
 import { effectiveCcType } from '@/lib/effective-achievement-type';
 import { isAgeEligibleOnShowDay, todayInLondon } from '@/lib/date-utils';
@@ -108,6 +108,13 @@ function getAchievementEligible(
       )
     : allEligible;
 }
+
+/** Shown to exhibitors (60+, not confident with computers) when RKC's own
+ *  website is failing 5xx even after our one retry — worded so it's clear
+ *  this isn't Remi's fault and there's a way forward. Shared by kcLookup and
+ *  kcLookupProfile so the message is identical whichever RKC call failed. */
+const RKC_DOWN_MESSAGE =
+  "The Royal Kennel Club website is having trouble right now. Please try again in a few minutes, or just type your dog's details in by hand.";
 
 /** SV health/working-title fields — single source shared by the
  *  `upsertSvProfile` mutation and the `/api/dog-autosave` route, so the two
@@ -850,7 +857,15 @@ export const dogsRouter = createTRPCRouter({
           message: 'Please enter at least the kennel name and the first letter of the dog\'s name (e.g. "Thornfield S") for a more accurate search.',
         });
       }
-      const results = await searchKcDogs(input.query);
+      let results;
+      try {
+        results = await searchKcDogs(input.query);
+      } catch (error) {
+        if (error instanceof RkcUnavailableError) {
+          throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: RKC_DOWN_MESSAGE });
+        }
+        throw error;
+      }
       if (results.length === 0) {
         throw new TRPCError({
           code: 'NOT_FOUND',
@@ -860,11 +875,19 @@ export const dogsRouter = createTRPCRouter({
       return results;
     }),
 
-  /** Fetch enriched pedigree data from the RKC dog profile page. */
+  /** Fetch enriched pedigree + health data from the RKC dog profile page. */
   kcLookupProfile: protectedProcedure
     .input(z.object({ dogId: z.string().min(1).max(100) }))
     .mutation(async ({ input }) => {
-      const profile = await fetchKcDogProfile(input.dogId);
+      let profile;
+      try {
+        profile = await fetchKcDogProfile(input.dogId);
+      } catch (error) {
+        if (error instanceof RkcUnavailableError) {
+          throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: RKC_DOWN_MESSAGE });
+        }
+        throw error;
+      }
       if (!profile) {
         // Not an error — we just couldn't get the data (timeout, slow page, etc.)
         return null;

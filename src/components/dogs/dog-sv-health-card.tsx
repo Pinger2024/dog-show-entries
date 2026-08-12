@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { Check, Loader2, Shield, TriangleAlert } from 'lucide-react';
+import { toast } from 'sonner';
 import { trpc } from '@/lib/trpc';
 import { useBeaconAutosave } from '@/lib/use-beacon-autosave';
 import { Input } from '@/components/ui/input';
@@ -84,15 +85,26 @@ const WORKING_TITLE_OPTIONS = [
 
 const WORKING_TITLE_PRESETS = new Set(['ZAP', 'IGP1', 'IGP2', 'IGP3', 'HGH']);
 
+/** BVA/KC hip/elbow/DNA-DM results a completed RKC profile lookup returned,
+ *  offered to this card by DogForm (see dog-form.tsx's kcHealthSuggestions).
+ *  Applied at most once, and only into fields still at their blank default —
+ *  never overwriting anything the exhibitor already entered or loaded. */
+export type KcHealthSuggestions = {
+  hipScore?: string;
+  elbowScore?: string;
+  dmTest?: 'clear' | 'carrier' | 'affected';
+};
+
 interface DogSvHealthCardProps {
   dogId: string;
   isOwner: boolean;
   /** Dog's sex — Haemophilia clear field only renders for males per SV
    *  health protocol (Amanda 2026-05-19). */
   sex?: 'dog' | 'bitch' | null;
+  kcHealthSuggestions?: KcHealthSuggestions;
 }
 
-export function DogSvHealthCard({ dogId, isOwner, sex }: DogSvHealthCardProps) {
+export function DogSvHealthCard({ dogId, isOwner, sex, kcHealthSuggestions }: DogSvHealthCardProps) {
   const utils = trpc.useUtils();
   const { data: profile, isLoading } = trpc.dogs.getSvProfile.useQuery({ dogId });
 
@@ -154,6 +166,45 @@ export function DogSvHealthCard({ dogId, isOwner, sex }: DogSvHealthCardProps) {
     populatedRef.current = true;
     setHydrated(true);
   }, [profile, isLoading]);
+
+  // Offer RKC's BVA/KC hip/elbow/DNA-DM results into whichever of these
+  // fields are STILL blank once the saved profile has loaded — same
+  // only-if-empty rule DogForm already uses for sire/dam. Applied at most
+  // once per arriving `kcHealthSuggestions` (suggestionsAppliedRef), and
+  // only after `hydrated` so it can never race the populate effect above:
+  // if suggestions arrive before hydration, this waits for `hydrated` to
+  // flip true; if they arrive after, it fires immediately. Deliberately
+  // reads hipGrade/hipScore/etc. without listing them as deps — this must
+  // check the value AT THE MOMENT suggestions arrive, not re-run every time
+  // the exhibitor changes an unrelated field.
+  const suggestionsAppliedRef = useRef(false);
+  useEffect(() => {
+    if (!kcHealthSuggestions || !hydrated || suggestionsAppliedRef.current) return;
+    suggestionsAppliedRef.current = true;
+
+    const filled: string[] = [];
+    if (kcHealthSuggestions.hipScore && hipGrade === 'not_required' && !hipScore) {
+      setHipGrade('bva');
+      setHipScore(kcHealthSuggestions.hipScore);
+      filled.push('BVA/KC hip score');
+    }
+    if (kcHealthSuggestions.elbowScore && elbowGrade === 'not_required' && !elbowScore) {
+      setElbowGrade('bva');
+      setElbowScore(kcHealthSuggestions.elbowScore);
+      filled.push('BVA/KC elbow score');
+    }
+    if (kcHealthSuggestions.dmTest && dmTest === 'not_required') {
+      setDmTest(kcHealthSuggestions.dmTest);
+      filled.push('DNA-DM result');
+    }
+
+    if (filled.length > 0 && isOwner) {
+      toast.success('Health results filled in from the Royal Kennel Club', {
+        description: `${filled.join(', ')} — please check before saving.`,
+      });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [kcHealthSuggestions, hydrated]);
 
   // Saves itself — no button. Mandy 2026-07-11: the separate "Save Health
   // Data" button was the second of two save buttons and exhibitors lost

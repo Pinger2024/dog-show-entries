@@ -607,7 +607,6 @@ function DogStep({
       colour?: string;
       sire: string;
       dam: string;
-      breeder: string;
     }[]
   >([]);
 
@@ -656,7 +655,6 @@ function DogStep({
     }
     if (data.sire) form.setValue('sireName', data.sire);
     if (data.dam) form.setValue('damName', data.dam);
-    if (data.breeder) form.setValue('breederName', data.breeder);
     if (data.colour) form.setValue('colour', data.colour);
 
     if (data.breed && breeds) {
