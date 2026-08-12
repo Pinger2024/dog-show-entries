@@ -1445,22 +1445,33 @@ interface ExhibitorIndexPageProps {
  * Entries where the exhibitor has requested withholding from publication
  * per F(1).11.b.(6)/(8) are excluded from the index entirely.
  */
-export function ExhibitorIndexPage({ show, entries, breedName, compact }: ExhibitorIndexPageProps & { compact?: boolean }) {
+/**
+ * Group index entries by exhibitor heading, alphabetical by surname.
+ * A withheld exhibitor stays IN the index — name and catalogue numbers,
+ * no address. Withholding protects the home address, not the fact of
+ * entry (Mandy 2026-08-12: "it should show name and catalogue numbers
+ * but no address" — previously these entries were skipped entirely and
+ * Sarah Hill vanished from South Western's RKC-bound catalogue). Same
+ * rule as the ringside index and redactWithheldOwnerAddresses.
+ */
+export function buildExhibitorIndexRows(entries: ExhibitorIndexEntry[]) {
   const byExhibitor = new Map<string, { name: string; sortKey: string; address?: string; catNos: string[]; classes: string[] }>();
   for (const entry of entries) {
-    if (entry.withholdFromPublication) continue;
     const { heading, sortKey } = ownerHeading(entry.owners, entry.exhibitor);
     const key = heading;
     if (!byExhibitor.has(key)) {
       byExhibitor.set(key, {
         name: heading,
         sortKey,
-        address: entry.owners[0]?.address ?? undefined,
+        address: entry.withholdFromPublication ? undefined : (entry.owners[0]?.address ?? undefined),
         catNos: [],
         classes: [],
       });
     }
     const ex = byExhibitor.get(key)!;
+    // One withheld entry hides the address even if another of the same
+    // exhibitor's entries isn't flagged — withhold wins.
+    if (entry.withholdFromPublication) ex.address = undefined;
     if (entry.catalogueNumber && !ex.catNos.includes(entry.catalogueNumber)) {
       ex.catNos.push(entry.catalogueNumber);
     }
@@ -1470,10 +1481,14 @@ export function ExhibitorIndexPage({ show, entries, breedName, compact }: Exhibi
     }
   }
 
-  const sorted = Array.from(byExhibitor.values()).sort((a, b) => {
+  return Array.from(byExhibitor.values()).sort((a, b) => {
     const surnameCmp = a.sortKey.localeCompare(b.sortKey);
     return surnameCmp !== 0 ? surnameCmp : a.name.localeCompare(b.name);
   });
+}
+
+export function ExhibitorIndexPage({ show, entries, breedName, compact }: ExhibitorIndexPageProps & { compact?: boolean }) {
+  const sorted = buildExhibitorIndexRows(entries);
   if (sorted.length === 0) return null;
 
   const title = breedName ? `Exhibitor Index — ${breedName}` : 'Exhibitor Index';
