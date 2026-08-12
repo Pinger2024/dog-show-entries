@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { eq } from 'drizzle-orm';
-import { dogPhotos, achievements } from '@/server/db/schema';
+import { dogPhotos, achievements, dogOwners } from '@/server/db/schema';
 
 vi.mock('@/server/services/storage', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/server/services/storage')>();
@@ -253,6 +253,31 @@ describe('POST /api/upload/dog-photo', () => {
     const file = new File([new Uint8Array(100)], 'photo.jpg', { type: 'image/jpeg' });
     const res = await dogPhotoPOST(postForm({ file, dogId: dog.id }) as never);
     expect(res.status).toBe(404);
+  });
+
+  // Rafaye Kanto incident, 2026-08-12: a linked co-owner (dog_owners.user_id)
+  // must get the same upload rights as the account holder — not a 404.
+  it('returns 200 for a linked co-owner (dog_owners.user_id, not dogs.owner_id)', async () => {
+    const owner = await makeUser({ role: 'exhibitor' });
+    const coOwner = await makeUser({ role: 'exhibitor' });
+    const dog = await makeDog({ ownerId: owner.id });
+    await testDb.insert(dogOwners).values({
+      dogId: dog.id,
+      userId: coOwner.id,
+      ownerName: 'Co Owner',
+      ownerAddress: '2 Low St',
+      ownerEmail: 'co-owner@test.local',
+      isPrimary: false,
+      sortOrder: 1,
+    });
+    vi.mocked(auth).mockResolvedValueOnce({
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      user: { id: coOwner.id, email: coOwner.email, name: coOwner.name, role: coOwner.role } as any,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    } as any);
+    const file = new File([new Uint8Array(100)], 'photo.jpg', { type: 'image/jpeg' });
+    const res = await dogPhotoPOST(postForm({ file, dogId: dog.id }) as never);
+    expect(res.status).toBe(200);
   });
 
   it('uploads to R2 + inserts dogPhotos row, marking first photo as primary', async () => {

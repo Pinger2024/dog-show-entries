@@ -16,7 +16,8 @@
  *               sire/dam registration (columns on `dogs`)
  *   svProfile — the SV Health & Working Titles card (dog_sv_profile)
  *
- * Auth: the dog's owner only — same rule as dogs.update / upsertSvProfile.
+ * Auth: the dog's account holder OR a linked co-owner (`dog_owners.user_id`)
+ * — same rule as dogs.update / upsertSvProfile.
  */
 import { NextRequest, NextResponse } from 'next/server';
 import { and, eq, isNull } from 'drizzle-orm';
@@ -24,6 +25,7 @@ import { z } from 'zod';
 import { auth } from '@/lib/auth';
 import { db } from '@/server/db';
 import { dogs, dogSvProfile } from '@/server/db/schema';
+import { dogAccessCondition } from '@/server/dog-access';
 import {
   dogAutosaveFieldsSchema,
   svProfileInputSchema,
@@ -91,12 +93,20 @@ export async function POST(
     return NextResponse.json({ error: 'db unavailable' }, { status: 500 });
   }
 
-  const dog = await db.query.dogs.findFirst({
+  // 404 vs 403 needs a separate existence check first — folding the access
+  // condition into one query would make "dog doesn't exist" and "dog
+  // exists but isn't yours" indistinguishable.
+  const dogExists = await db.query.dogs.findFirst({
     where: and(eq(dogs.id, dogId), isNull(dogs.deletedAt)),
+    columns: { id: true },
+  });
+  if (!dogExists) return NextResponse.json({ error: 'not found' }, { status: 404 });
+
+  const dog = await db.query.dogs.findFirst({
+    where: and(eq(dogs.id, dogId), isNull(dogs.deletedAt), dogAccessCondition(db, session.user.id)),
     with: { svProfile: true },
   });
-  if (!dog) return NextResponse.json({ error: 'not found' }, { status: 404 });
-  if (dog.ownerId !== session.user.id) {
+  if (!dog) {
     return NextResponse.json({ error: 'forbidden' }, { status: 403 });
   }
 

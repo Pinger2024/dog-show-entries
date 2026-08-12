@@ -10,6 +10,7 @@ import { isCcType, isRccType } from '@/lib/placements';
 import { effectiveCcType } from '@/lib/effective-achievement-type';
 import { isAgeEligibleOnShowDay, todayInLondon } from '@/lib/date-utils';
 import { pickRecommendedAgeClass, type AgeClassOption } from '@/lib/class-recommendation';
+import { dogAccessCondition, dogRowGrantsAccess, userMayActOnDog } from '@/server/dog-access';
 
 /**
  * Recommend the best class for a dog based on age eligibility first,
@@ -309,16 +310,7 @@ export const dogsRouter = createTRPCRouter({
       // OR any `dog_owners.user_id` row linking the dog to this user.
       where: and(
         isNull(dogs.deletedAt),
-        or(
-          eq(dogs.ownerId, ctx.session.user.id),
-          inArray(
-            dogs.id,
-            ctx.db
-              .select({ id: dogOwners.dogId })
-              .from(dogOwners)
-              .where(eq(dogOwners.userId, ctx.session.user.id)),
-          ),
-        ),
+        dogAccessCondition(ctx.db, ctx.session.user.id),
       ),
       with: {
         breed: {
@@ -383,8 +375,7 @@ export const dogsRouter = createTRPCRouter({
 
       // Joint owners (any dog_owners row linked to this user) can view the
       // dog too — not just the legacy creator. Amanda 2026-05-22.
-      const isJointOwner = dog.owners.some((o) => o.userId === ctx.session.user.id);
-      if (dog.ownerId !== ctx.session.user.id && !isJointOwner) {
+      if (!dogRowGrantsAccess(dog, ctx.session.user.id)) {
         throw new TRPCError({
           code: 'FORBIDDEN',
           message: 'You do not own this dog',
@@ -602,7 +593,7 @@ export const dogsRouter = createTRPCRouter({
         });
       }
 
-      if (existing.ownerId !== ctx.session.user.id) {
+      if (!(await userMayActOnDog(ctx.db, ctx.session.user.id, existing.id))) {
         throw new TRPCError({
           code: 'FORBIDDEN',
           message: 'You do not own this dog',
@@ -657,22 +648,50 @@ export const dogsRouter = createTRPCRouter({
         }
 
         if (owners) {
+          // Preserve co-owner account links across the replace. The caller
+          // here may now be a linked co-owner rather than the account
+          // holder (the FORBIDDEN check above accepts either), so unlike
+          // the old assumption, `existing.ownerId` is NOT guaranteed to
+          // equal the caller. Row 0 always keeps `existing.ownerId` — same
+          // rule as `create` — but every other row must keep its
+          // `dog_owners.user_id` link if the new row's email still matches
+          // a previously-linked owner. Without this, ANY edit that touches
+          // the owners array (the Edit Dog form always sends one) would
+          // silently unlink every co-owner — exactly the Rafaye Kanto
+          // incident (2026-08-12), recurring on the co-owner's next edit.
+          const priorOwners = await tx.query.dogOwners.findMany({
+            where: eq(dogOwners.dogId, id),
+          });
+          const priorUserIdByEmail = new Map(
+            priorOwners
+              .filter((o) => o.userId !== null)
+              .map((o) => [o.ownerEmail.trim().toLowerCase(), o.userId] as const)
+          );
+
           await tx.delete(dogOwners).where(eq(dogOwners.dogId, id));
           await tx.insert(dogOwners).values(
-            owners.map((o, i) => ({
-              dogId: id,
-              // Row 0 keeps the account link — same rule as `create`, and
-              // `existing.ownerId` is guaranteed to equal the caller here
-              // (the FORBIDDEN check above already enforced it).
-              userId: i === 0 ? existing.ownerId : null,
-              ownerTitle: o.ownerTitle || null,
-              ownerName: o.ownerName,
-              ownerAddress: o.ownerAddress,
-              ownerEmail: o.ownerEmail,
-              ownerPhone: o.ownerPhone ?? null,
-              isPrimary: o.isPrimary || i === 0,
-              sortOrder: i,
-            }))
+            owners.map((o, i) => {
+              // Row 0's link is always the account holder, so never let a
+              // non-zero row also claim `existing.ownerId` (e.g. the owner
+              // rows got reordered) — that would duplicate the account
+              // link across two joint-owner slots.
+              const matchedUserId = priorUserIdByEmail.get(o.ownerEmail.trim().toLowerCase());
+              return {
+                dogId: id,
+                userId: i === 0
+                  ? existing.ownerId
+                  : matchedUserId && matchedUserId !== existing.ownerId
+                    ? matchedUserId
+                    : null,
+                ownerTitle: o.ownerTitle || null,
+                ownerName: o.ownerName,
+                ownerAddress: o.ownerAddress,
+                ownerEmail: o.ownerEmail,
+                ownerPhone: o.ownerPhone ?? null,
+                isPrimary: o.isPrimary || i === 0,
+                sortOrder: i,
+              };
+            })
           );
         }
 
@@ -696,6 +715,10 @@ export const dogsRouter = createTRPCRouter({
         });
       }
 
+      // Destructive, account-level action — deliberately the account
+      // holder ONLY, not `dogAccessCondition`/`userMayActOnDog`. A linked
+      // co-owner gets full day-to-day rights (view/edit/enter/photos) but
+      // not the power to delete the dog out from under the account holder.
       if (existing.ownerId !== ctx.session.user.id) {
         throw new TRPCError({
           code: 'FORBIDDEN',
@@ -718,7 +741,7 @@ export const dogsRouter = createTRPCRouter({
       const existing = await ctx.db.query.dogs.findFirst({
         where: and(eq(dogs.id, input.id), isNull(dogs.deletedAt)),
       });
-      if (!existing || existing.ownerId !== ctx.session.user.id) {
+      if (!existing || !(await userMayActOnDog(ctx.db, ctx.session.user.id, existing.id))) {
         throw new TRPCError({ code: 'FORBIDDEN', message: 'Not your dog' });
       }
       const [updated] = await ctx.db
@@ -745,7 +768,7 @@ export const dogsRouter = createTRPCRouter({
         where: and(eq(dogs.id, input.dogId), isNull(dogs.deletedAt)),
       });
 
-      if (!dog || dog.ownerId !== ctx.session.user.id) {
+      if (!dog || !(await userMayActOnDog(ctx.db, ctx.session.user.id, dog.id))) {
         throw new TRPCError({ code: 'FORBIDDEN', message: 'Not your dog' });
       }
 
@@ -770,7 +793,7 @@ export const dogsRouter = createTRPCRouter({
         with: { dog: true },
       });
 
-      if (!title || title.dog.ownerId !== ctx.session.user.id) {
+      if (!title || !(await userMayActOnDog(ctx.db, ctx.session.user.id, title.dog.id))) {
         throw new TRPCError({ code: 'FORBIDDEN', message: 'Not your dog' });
       }
 
@@ -852,7 +875,7 @@ export const dogsRouter = createTRPCRouter({
   // ── Owner profiles (reuse previous owners) ────────────────
 
   getMyOwnerProfiles: protectedProcedure.query(async ({ ctx }) => {
-    // Get distinct owner profiles from all dogs owned by this user.
+    // Get distinct owner profiles from all dogs the user owns or co-owns.
     // Uses a subquery to deduplicate by email and return the most recent version.
     const ownerRows = await ctx.db
       .selectDistinctOn([dogOwners.ownerEmail], {
@@ -866,7 +889,7 @@ export const dogsRouter = createTRPCRouter({
       .innerJoin(dogs, eq(dogOwners.dogId, dogs.id))
       .where(
         and(
-          eq(dogs.ownerId, ctx.session.user.id),
+          dogAccessCondition(ctx.db, ctx.session.user.id),
           isNull(dogs.deletedAt),
         )
       )
@@ -1362,9 +1385,9 @@ export const dogsRouter = createTRPCRouter({
   setPrimaryPhoto: protectedProcedure
     .input(z.object({ photoId: z.string().uuid(), dogId: z.string().uuid() }))
     .mutation(async ({ ctx, input }) => {
-      // Verify ownership
+      // Verify access (account holder or linked co-owner)
       const dog = await ctx.db.query.dogs.findFirst({
-        where: and(eq(dogs.id, input.dogId), eq(dogs.ownerId, ctx.session.user.id), isNull(dogs.deletedAt)),
+        where: and(eq(dogs.id, input.dogId), dogAccessCondition(ctx.db, ctx.session.user.id), isNull(dogs.deletedAt)),
       });
       if (!dog) throw new TRPCError({ code: 'NOT_FOUND', message: 'Dog not found' });
 
@@ -1395,7 +1418,7 @@ export const dogsRouter = createTRPCRouter({
     }))
     .mutation(async ({ ctx, input }) => {
       const dog = await ctx.db.query.dogs.findFirst({
-        where: and(eq(dogs.id, input.dogId), eq(dogs.ownerId, ctx.session.user.id), isNull(dogs.deletedAt)),
+        where: and(eq(dogs.id, input.dogId), dogAccessCondition(ctx.db, ctx.session.user.id), isNull(dogs.deletedAt)),
       });
       if (!dog) throw new TRPCError({ code: 'NOT_FOUND', message: 'Dog not found' });
 
@@ -1442,7 +1465,7 @@ export const dogsRouter = createTRPCRouter({
         where: and(eq(dogs.id, input.dogId), isNull(dogs.deletedAt)),
       });
 
-      if (!dog || dog.ownerId !== ctx.session.user.id) {
+      if (!dog || !(await userMayActOnDog(ctx.db, ctx.session.user.id, dog.id))) {
         throw new TRPCError({ code: 'FORBIDDEN', message: 'Not your dog' });
       }
 
@@ -1474,7 +1497,7 @@ export const dogsRouter = createTRPCRouter({
         with: { dog: true },
       });
 
-      if (!achievement || achievement.dog.ownerId !== ctx.session.user.id) {
+      if (!achievement || !(await userMayActOnDog(ctx.db, ctx.session.user.id, achievement.dog.id))) {
         throw new TRPCError({ code: 'FORBIDDEN', message: 'Not your dog' });
       }
 
@@ -1494,7 +1517,7 @@ export const dogsRouter = createTRPCRouter({
     .input(z.object({ photoId: z.string().uuid(), dogId: z.string().uuid() }))
     .mutation(async ({ ctx, input }) => {
       const dog = await ctx.db.query.dogs.findFirst({
-        where: and(eq(dogs.id, input.dogId), eq(dogs.ownerId, ctx.session.user.id), isNull(dogs.deletedAt)),
+        where: and(eq(dogs.id, input.dogId), dogAccessCondition(ctx.db, ctx.session.user.id), isNull(dogs.deletedAt)),
       });
       if (!dog) throw new TRPCError({ code: 'NOT_FOUND', message: 'Dog not found' });
 
@@ -1561,7 +1584,7 @@ export const dogsRouter = createTRPCRouter({
         columns: { ownerId: true },
       });
       if (!dog) throw new TRPCError({ code: 'NOT_FOUND', message: 'Dog not found' });
-      if (dog.ownerId !== ctx.session.user.id)
+      if (!(await userMayActOnDog(ctx.db, ctx.session.user.id, input.dogId)))
         throw new TRPCError({ code: 'FORBIDDEN', message: 'Not your dog' });
 
       const profile = await ctx.db.query.dogSvProfile.findFirst({
@@ -1578,7 +1601,7 @@ export const dogsRouter = createTRPCRouter({
         columns: { ownerId: true },
       });
       if (!dog) throw new TRPCError({ code: 'NOT_FOUND', message: 'Dog not found' });
-      if (dog.ownerId !== ctx.session.user.id)
+      if (!(await userMayActOnDog(ctx.db, ctx.session.user.id, input.dogId)))
         throw new TRPCError({ code: 'FORBIDDEN', message: 'Not your dog' });
 
       const { dogId, ...profileData } = input;

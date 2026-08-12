@@ -17,6 +17,7 @@ import {
 } from '@/server/db/schema';
 import { deleteFromR2 } from '@/server/services/storage';
 import { isSupportedVideoUrl } from '@/lib/video-utils';
+import { dogAccessCondition, userMayActOnDog } from '@/server/dog-access';
 
 export const timelineRouter = createTRPCRouter({
   /** Get timeline for a specific dog — user posts + show results merged chronologically */
@@ -147,11 +148,11 @@ export const timelineRouter = createTRPCRouter({
       })
     )
     .mutation(async ({ ctx, input }) => {
-      // Verify ownership
+      // Verify access (account holder or linked co-owner)
       const dog = await ctx.db.query.dogs.findFirst({
         where: and(
           eq(dogs.id, input.dogId),
-          eq(dogs.ownerId, ctx.session.user.id),
+          dogAccessCondition(ctx.db, ctx.session.user.id),
           isNull(dogs.deletedAt)
         ),
       });
@@ -192,7 +193,6 @@ export const timelineRouter = createTRPCRouter({
     .mutation(async ({ ctx, input }) => {
       const post = await ctx.db.query.dogTimelinePosts.findFirst({
         where: eq(dogTimelinePosts.id, input.postId),
-        with: { dog: { columns: { ownerId: true } } },
       });
 
       if (!post) {
@@ -200,7 +200,9 @@ export const timelineRouter = createTRPCRouter({
       }
 
       const isAuthor = post.authorId === ctx.session.user.id;
-      const isOwner = post.dog.ownerId === ctx.session.user.id;
+      // Owner or linked co-owner — either can moderate posts on their dog's
+      // timeline, same as the account holder always could.
+      const isOwner = await userMayActOnDog(ctx.db, ctx.session.user.id, post.dogId);
 
       if (!isAuthor && !isOwner) {
         throw new TRPCError({
@@ -242,7 +244,7 @@ export const timelineRouter = createTRPCRouter({
         ctx.db
           .select({ id: dogs.id })
           .from(dogs)
-          .where(and(eq(dogs.ownerId, ctx.session.user.id), isNull(dogs.deletedAt))),
+          .where(and(dogAccessCondition(ctx.db, ctx.session.user.id), isNull(dogs.deletedAt))),
       ]);
 
       const ownDogIds = new Set(ownDogs.map((d) => d.id));

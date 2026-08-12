@@ -5,6 +5,7 @@ import { auth } from '@/lib/auth';
 import { validateUpload, uploadToR2, getPublicUrl } from '@/server/services/storage';
 import { db } from '@/server/db';
 import { dogs, dogPhotos } from '@/server/db/schema';
+import { dogAccessCondition } from '@/server/dog-access';
 
 const MAX_PHOTOS_PER_DOG = 20;
 
@@ -39,11 +40,11 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Only image files are allowed' }, { status: 400 });
     }
 
-    // Verify the user owns this dog
+    // Verify the user owns or co-owns this dog
     const dog = await db.query.dogs.findFirst({
       where: and(
         eq(dogs.id, dogId),
-        eq(dogs.ownerId, session.user.id),
+        dogAccessCondition(db, session.user.id),
         isNull(dogs.deletedAt)
       ),
     });

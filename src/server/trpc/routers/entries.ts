@@ -46,6 +46,7 @@ import { pedigreeMissingForEntry } from '@/lib/sv-entry-readiness';
 import { hasJudgingConflict } from '@/lib/judge-exhibitor-conflict';
 import { getCompetitionAgeError } from '@/lib/date-utils';
 import { svCoatDisplayName } from '@/lib/class-labels';
+import { dogAccessCondition } from '@/server/dog-access';
 
 export const entriesRouter = createTRPCRouter({
   create: protectedProcedure
@@ -59,11 +60,11 @@ export const entriesRouter = createTRPCRouter({
       })
     )
     .mutation(async ({ ctx, input }) => {
-      // Validate dog belongs to user
+      // Validate dog belongs to (or is co-owned by) the caller
       const dog = await ctx.db.query.dogs.findFirst({
         where: and(
           eq(dogs.id, input.dogId),
-          eq(dogs.ownerId, ctx.session.user.id),
+          dogAccessCondition(ctx.db, ctx.session.user.id),
           isNull(dogs.deletedAt)
         ),
         with: { breed: true },

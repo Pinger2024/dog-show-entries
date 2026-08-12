@@ -4,7 +4,7 @@ import { auth } from '@/lib/auth';
 import { POST as dogAutosavePOST } from '@/app/api/dog-autosave/[dogId]/route';
 import { makeUser, makeDog } from '../helpers/factories';
 import { testDb } from '../helpers/db';
-import { dogs, dogSvProfile } from '@/server/db/schema';
+import { dogs, dogOwners, dogSvProfile } from '@/server/db/schema';
 import { eq } from 'drizzle-orm';
 
 /**
@@ -49,6 +49,29 @@ describe('POST /api/dog-autosave/[dogId]', () => {
     authedAs(stranger);
     const res = await dogAutosavePOST(req(dog.id, { dog: { sireName: 'X' } }), params(dog.id));
     expect(res.status).toBe(403);
+  });
+
+  // Rafaye Kanto incident, 2026-08-12: a co-owner linked via dog_owners.user_id
+  // (not dogs.owner_id) got 403'd on autosave — same rule as dogs.update now.
+  it('200s a linked co-owner (dog_owners.user_id, not dogs.owner_id)', async () => {
+    const owner = await makeUser({});
+    const coOwner = await makeUser({});
+    const dog = await makeDog({ ownerId: owner.id });
+    await testDb.insert(dogOwners).values({
+      dogId: dog.id,
+      userId: coOwner.id,
+      ownerName: 'Co Owner',
+      ownerAddress: '2 Low St',
+      ownerEmail: 'co-owner@test.local',
+      isPrimary: false,
+      sortOrder: 1,
+    });
+    authedAs(coOwner);
+    const res = await dogAutosavePOST(req(dog.id, { dog: { sireName: 'X' } }), params(dog.id));
+    expect(res.status).toBe(200);
+
+    const saved = await testDb.query.dogs.findFirst({ where: eq(dogs.id, dog.id) });
+    expect(saved?.sireName).toBe('X');
   });
 
   it('404s an unknown dog', async () => {

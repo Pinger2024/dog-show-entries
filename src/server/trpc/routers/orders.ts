@@ -47,6 +47,7 @@ import { hasJudgingConflict } from '@/lib/judge-exhibitor-conflict';
 import { getCompetitionAgeError } from '@/lib/date-utils';
 import { isParkingSundry, PARKING_NAME_PATTERNS } from '@/lib/parking-utils';
 import { formatAtcNumber } from '@/lib/registration-flags';
+import { dogAccessCondition } from '@/server/dog-access';
 
 const cartEntrySchema = z.object({
   entryType: z.enum(['standard', 'junior_handler']).default('standard'),
@@ -128,7 +129,7 @@ export const ordersRouter = createTRPCRouter({
         });
       }
 
-      // Validate all dogs belong to user (for standard entries)
+      // Validate all dogs belong to (or are co-owned by) the caller
       const dogIds = input.entries
         .filter((e) => e.entryType === 'standard' && e.dogId)
         .map((e) => e.dogId!);
@@ -137,7 +138,7 @@ export const ordersRouter = createTRPCRouter({
         const userDogs = await ctx.db.query.dogs.findMany({
           where: and(
             inArray(dogs.id, dogIds),
-            eq(dogs.ownerId, ctx.session.user.id),
+            dogAccessCondition(ctx.db, ctx.session.user.id),
             isNull(dogs.deletedAt)
           ),
           with: { breed: true },

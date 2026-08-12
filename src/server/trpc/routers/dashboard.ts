@@ -33,6 +33,7 @@ import {
 } from '@/server/db/schema';
 import { isCcType, isRccType } from '@/lib/placements';
 import { effectiveCcType } from '@/lib/effective-achievement-type';
+import { dogAccessCondition } from '@/server/dog-access';
 
 export const dashboardRouter = createTRPCRouter({
   getSummary: protectedProcedure.query(async ({ ctx }) => {
@@ -49,7 +50,8 @@ export const dashboardRouter = createTRPCRouter({
       now.getTime() + 7 * 24 * 60 * 60 * 1000
     );
 
-    // ── Step 1: Get the user's dogs and breeds (needed by most queries) ──
+    // ── Step 1: Get the user's dogs and breeds (owned or co-owned; needed
+    // by most queries) ──
     const userDogs = await ctx.db
       .select({
         id: dogs.id,
@@ -57,7 +59,7 @@ export const dashboardRouter = createTRPCRouter({
         breedId: dogs.breedId,
       })
       .from(dogs)
-      .where(and(eq(dogs.ownerId, userId), isNull(dogs.deletedAt)));
+      .where(and(dogAccessCondition(ctx.db, userId), isNull(dogs.deletedAt)));
 
     const userDogIds = userDogs.map((d) => d.id);
     const userBreedIds = [...new Set(userDogs.map((d) => d.breedId))];
