@@ -29,3 +29,12 @@ describe('groupEntriesKC — junior handling', () => {
     expect(breeds).toEqual(['Junior Handling']);
   });
 });
+
+describe('transferDisplayLabel', () => {
+  it('strips the Special Award Class prefix, keeps everything else', async () => {
+    const { transferDisplayLabel } = await import('../catalogue-marked');
+    expect(transferDisplayLabel('Special Award Class - Post Graduate')).toBe('Post Graduate');
+    expect(transferDisplayLabel('Post Graduate')).toBe('Post Graduate');
+    expect(transferDisplayLabel('Special Award Class-Junior')).toBe('Junior');
+  });
+});

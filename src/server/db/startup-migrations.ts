@@ -198,5 +198,14 @@ export async function runStartupMigrations() {
     END $$;
   `);
 
+  // ── 2026-08-12 (later): class-transfer marker — a dog catalogued in the
+  // wrong class stays listed there as printed, with "Transferred to <class>"
+  // on the marked catalogue; her result lives on a row in the correct class.
+  // Plain nullable column, no backfill needed.
+  await db.execute(sql`
+    ALTER TABLE entry_classes
+      ADD COLUMN IF NOT EXISTS transferred_to_show_class_id UUID;
+  `);
+
   console.log(`[startup-migrations] done in ${Date.now() - started}ms`);
 }

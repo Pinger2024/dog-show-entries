@@ -23,6 +23,14 @@ export const entryClasses = pgTable(
      *  is absent), so whole-show readers (financial counts, refund UIs, the
      *  marked-catalogue-wide RKC SH01 dog count) keep today's meaning. */
     absent: boolean('absent').notNull().default(false),
+    /** Set when the dog was catalogued in THIS class but judged in another
+     *  (entered in the wrong class — routine at real shows). The catalogue
+     *  keeps her here as printed; the marked catalogue prints
+     *  "Transferred to <class>" against her name, and her result lives on a
+     *  separate entry_classes row in the class she was actually judged in
+     *  (Mandy 2026-08-12, Trimika's Japan, South Western). Soft reference to
+     *  show_classes.id — no FK constraint, matching entries.order_id. */
+    transferredToShowClassId: uuid('transferred_to_show_class_id'),
     createdAt: timestamp('created_at', { withTimezone: true })
       .defaultNow()
       .notNull(),

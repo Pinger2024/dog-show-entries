@@ -57,6 +57,9 @@ export interface MarkedCatalogueProps {
    *  so a dog absent from her breed class but placed in a Special Award
    *  shows ABS only under the breed class. */
   absentees: Set<string>;
+  /** `${catalogueNumber}-${showClassId}` → display label of the class the dog
+   *  was transferred to (she was catalogued here but judged there). */
+  transfers?: Map<string, string>;
   /** Show-level and breed-level achievements */
   achievements: MarkedAchievement[];
 }
@@ -131,6 +134,16 @@ const markedStyles = StyleSheet.create({
     marginLeft: 4,
   },
   absentBadge: {
+    fontSize: 7,
+    fontWeight: 'bold',
+    fontStyle: 'italic',
+    color: '#6b7280',
+    marginLeft: 4,
+  },
+  // "Transferred to <class>" — dog catalogued here, judged elsewhere.
+  // Same voice as the Abs. badge; italic grey so it reads as an
+  // annotation, not a placing.
+  transferBadge: {
     fontSize: 7,
     fontWeight: 'bold',
     fontStyle: 'italic',
@@ -353,6 +366,13 @@ interface GroupBucket {
   breeds: Map<string, BreedBucket>;
 }
 
+/** "Special Award Class - Post Graduate" → "Post Graduate" — the transfer
+ *  marker reads better without the family prefix ("Transferred to Post
+ *  Graduate", Mandy's wording 2026-08-12). */
+export function transferDisplayLabel(className: string): string {
+  return className.replace(/^Special Award Class\s*-\s*/i, '').trim() || className;
+}
+
 export function groupEntriesKC(entries: CatalogueEntry[]) {
   const groups = new Map<string, GroupBucket>();
 
@@ -468,7 +488,7 @@ function classHeadingLabel(bucket: ClassBucket, sex: string) {
 
 // ── Marked Catalogue Component ───────────────────────────────
 
-export function CatalogueMarked({ show, entries, results, absentees, achievements }: MarkedCatalogueProps) {
+export function CatalogueMarked({ show, entries, results, absentees, achievements, transfers }: MarkedCatalogueProps) {
   const grouped = groupEntriesKC(entries);
   const sortedGroups = [...grouped.entries()].sort(([, a], [, b]) => a.sortOrder - b.sortOrder);
 
@@ -649,6 +669,8 @@ export function CatalogueMarked({ show, entries, results, absentees, achievement
                       const isFirstAppearance = !catNo || firstAppearanceBucket.get(catNo) === bucket;
                       const isAbsent =
                         catNo && bucket.showClassId ? absentees.has(`${catNo}-${bucket.showClassId}`) : false;
+                      const transferredTo =
+                        catNo && bucket.showClassId ? transfers?.get(`${catNo}-${bucket.showClassId}`) : undefined;
                       const isJH = entry.entryType === 'junior_handler';
                       const displayName = isJH
                         ? (entry.handler ?? entry.exhibitor ?? 'Unnamed Handler')
@@ -708,6 +730,9 @@ export function CatalogueMarked({ show, entries, results, absentees, achievement
                               {isAbsent && (
                                 <Text style={markedStyles.absentBadge}> Abs.</Text>
                               )}
+                              {transferredTo && (
+                                <Text style={markedStyles.transferBadge}> Transferred to {transferredTo}</Text>
+                              )}
                               {getResultMarker(result) && (
                                 <Text style={markedStyles.placementBadge}>
                                   {' '}{getResultMarker(result)}
@@ -756,6 +781,9 @@ export function CatalogueMarked({ show, entries, results, absentees, achievement
                             <Text style={styles.dogName}>
                               {displayName}
                             </Text>
+                            {transferredTo && (
+                              <Text style={markedStyles.transferBadge}> Transferred to {transferredTo}</Text>
+                            )}
                           </View>
 
                           <Text style={styles.entryDetail}>

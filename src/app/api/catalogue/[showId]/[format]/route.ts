@@ -11,7 +11,7 @@ import { renderToBuffer } from '@react-pdf/renderer';
 import { CatalogueAbsentees } from '@/components/catalogue/catalogue-absentees';
 import { CatalogueByClass } from '@/components/catalogue/catalogue-by-class';
 import { CatalogueByBreed } from '@/components/catalogue/catalogue-by-breed';
-import { CatalogueMarked } from '@/components/catalogue/catalogue-marked';
+import { CatalogueMarked, transferDisplayLabel } from '@/components/catalogue/catalogue-marked';
 import { CatalogueJudging } from '@/components/catalogue/catalogue-judging';
 import { CatalogueRingside } from '@/components/catalogue/catalogue-ringside';
 import type { CatalogueEntry, CatalogueShowInfo, ShowSponsorInfo, ShowClassInfo } from '@/components/catalogue/catalogue-types';
@@ -431,12 +431,19 @@ export async function GET(
       // ABS under the breed class and her placement under the Special.
       const resultsMap = new Map<string, MarkedResult>();
       const absenteesSet = new Set<string>();
-
+      // Class-transfer markers: dog catalogued in one class, judged in
+      // another (Mandy 2026-08-12). Key matches resultsMap/absenteesSet;
+      // value is the human label of the destination class.
+      const transferTargets = new Map<string, string>(); // key → target showClassId
       for (const entry of entries) {
         // Collect results (and per-class absence) from entry classes
         for (const ec of entry.entryClasses) {
           if (ec.absent && entry.catalogueNumber) {
             absenteesSet.add(`${entry.catalogueNumber}-${ec.showClassId}`);
+          }
+          const transferredTo = (ec as { transferredToShowClassId?: string | null }).transferredToShowClassId;
+          if (transferredTo && entry.catalogueNumber) {
+            transferTargets.set(`${entry.catalogueNumber}-${ec.showClassId}`, transferredTo);
           }
           const result = (ec as {
             result?: {
@@ -468,12 +475,29 @@ export async function GET(
         breedName: a.dog?.breed?.name ?? null,
       }));
 
+      // Resolve transfer target ids → display labels in one query.
+      const transfersMap = new Map<string, string>();
+      if (transferTargets.size > 0) {
+        const targetIds = [...new Set(transferTargets.values())];
+        const targetRows = await db.query.showClasses.findMany({
+          where: inArray(schema.showClasses.id, targetIds),
+          with: { classDefinition: { columns: { name: true } } },
+        });
+        const labelById = new Map(
+          targetRows.map((r) => [r.id, transferDisplayLabel(r.classDefinition?.name ?? 'another class')]),
+        );
+        for (const [key, targetId] of transferTargets) {
+          transfersMap.set(key, labelById.get(targetId) ?? 'another class');
+        }
+      }
+
       pdfDocument = React.createElement(CatalogueMarked, {
         show: showInfo,
         entries: catalogueEntries,
         results: resultsMap,
         absentees: absenteesSet,
         achievements: markedAchievements,
+        transfers: transfersMap,
       });
     } else {
       // The "standard" format is now rendered by the ringside component
