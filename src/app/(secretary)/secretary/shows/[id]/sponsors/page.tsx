@@ -1956,6 +1956,18 @@ function ClassSponsorshipTable({
       }
     });
 
+    // Sponsors left pointing at an award that is no longer on the list —
+    // e.g. the award name was corrected afterwards. The catalogue and
+    // schedule still PRINT these (deliberately: sponsor-only extras must
+    // never be silently dropped), so if we only rendered awards from
+    // `bestAwards` the secretary would see them on the paperwork with no
+    // way to remove them — exactly what happened to GSD Scotland's
+    // mistyped "Best Challenge Certificate" (Mandy 2026-08-13).
+    const bestAwardKeys = new Set(bestAwards.map((a) => a.toLowerCase().trim()));
+    const orphanedAwards = [...awardMap.keys()].filter(
+      (award) => !bestAwardKeys.has(award.toLowerCase().trim()),
+    );
+
     return (
       <div className="mb-8">
         <div className="mb-2 flex items-center justify-between gap-2">
@@ -2062,6 +2074,42 @@ function ClassSponsorshipTable({
             );
           })}
         </div>
+
+        {/* Leftovers: sponsors still attached to an award that has since
+            been removed or renamed. They PRINT on the schedule and
+            catalogue, so they must be visible and removable here. */}
+        {orphanedAwards.length > 0 && (
+          <div className="mt-4 rounded-lg border border-se-honey-line bg-se-honey-soft/50 p-3">
+            <p className="text-sm font-medium text-se-honey-ink">
+              Sponsors for awards you no longer give
+            </p>
+            <p className="mt-0.5 text-xs text-se-honey-ink/80">
+              These still print on your schedule and catalogue. Remove them, or put the award back on the list above.
+            </p>
+            <div className="mt-2 space-y-2">
+              {orphanedAwards.map((award) => {
+                const data = awardMap.get(award)!;
+                return (
+                  <div key={award} className="rounded-md border bg-card p-2">
+                    <p className="text-sm font-medium">{award}</p>
+                    <div className="mt-1 space-y-2">
+                      {data.entries.map((entry, localIdx) => (
+                        <AwardSponsorshipRow
+                          key={`orphan-${award}-${data.indices[localIdx]}`}
+                          entry={entry}
+                          entryIndex={data.indices[localIdx]!}
+                          allEntries={awardSponsors}
+                          suggestions={suggestionsList}
+                          onSave={saveAwardSponsors}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
       </div>
     );
   }
