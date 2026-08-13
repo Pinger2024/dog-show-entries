@@ -188,6 +188,66 @@ describe('dog co-owner access — Rafaye Kanto incident, 2026-08-12', () => {
       // duplicate/incorrect userId assignment either.
       expect(owners[1]?.userId).toBeNull();
     });
+
+    it('keeps the account holder on their OWN row when they are not listed first', async () => {
+      // Kanto on prod: John is owner row 0, but the account had been moved
+      // to Rachel — the old rule stamped row 0 (John's name and email) with
+      // Rachel's link and left John with no access to his own dog.
+      const { primary, coOwner, dog } = await setUp();
+      // Give the primary their own linked owner row (row 0) — the real
+      // Kanto shape — then move the ACCOUNT to the co-owner.
+      await testDb.insert(dogOwners).values({
+        dogId: dog.id,
+        userId: primary.id,
+        ownerName: 'Primary Owner',
+        ownerAddress: '1 High St',
+        ownerEmail: 'primary@test.local',
+        isPrimary: true,
+        sortOrder: 0,
+      });
+      await testDb.update(dogs).set({ ownerId: coOwner.id }).where(eq(dogs.id, dog.id));
+
+      await createTestCaller(coOwner).dogs.update({
+        id: dog.id,
+        owners: [
+          { ownerName: 'Primary Owner', ownerAddress: '1 High St', ownerEmail: 'primary@test.local', isPrimary: true },
+          { ownerName: 'Linked Co-Owner', ownerAddress: '2 Low St', ownerEmail: 'co-owner@test.local', isPrimary: false },
+        ],
+      });
+
+      const owners = await testDb.query.dogOwners.findMany({
+        where: eq(dogOwners.dogId, dog.id),
+        orderBy: [asc(dogOwners.sortOrder)],
+      });
+      expect(owners[0]?.userId).toBe(primary.id); // NOT the account holder's id
+      expect(owners[1]?.userId).toBe(coOwner.id);
+      // Both still have access afterwards — the point of the whole fix.
+      await expect(createTestCaller(primary).dogs.getById({ id: dog.id })).resolves.toBeDefined();
+      await expect(createTestCaller(coOwner).dogs.getById({ id: dog.id })).resolves.toBeDefined();
+    });
+
+    it('never places the account holder link on two rows at once, and never steals a matched row', async () => {
+      const { primary, coOwner, dog } = await setUp();
+      // Reorder so the linked co-owner is listed FIRST. The co-owner's row
+      // must keep its own link; the account holder's link may not be
+      // stamped on top of it.
+      await createTestCaller(primary).dogs.update({
+        id: dog.id,
+        owners: [
+          { ownerName: 'Linked Co-Owner', ownerAddress: '2 Low St', ownerEmail: 'co-owner@test.local', isPrimary: true },
+          { ownerName: 'Primary Owner', ownerAddress: '1 High St', ownerEmail: 'primary@test.local', isPrimary: false },
+        ],
+      });
+      const owners = await testDb.query.dogOwners.findMany({
+        where: eq(dogOwners.dogId, dog.id),
+        orderBy: [asc(dogOwners.sortOrder)],
+      });
+      expect(owners[0]?.userId).toBe(coOwner.id); // matched row untouched
+      expect(owners.filter((o) => o.userId === primary.id)).toHaveLength(1);
+      // Both still have access.
+      await expect(createTestCaller(primary).dogs.getById({ id: dog.id })).resolves.toBeDefined();
+      await expect(createTestCaller(coOwner).dogs.getById({ id: dog.id })).resolves.toBeDefined();
+    });
   });
 
   describe('dogs.delete — destructive, stays account-holder only', () => {

@@ -675,30 +675,42 @@ export const dogsRouter = createTRPCRouter({
               .map((o) => [o.ownerEmail.trim().toLowerCase(), o.userId] as const)
           );
 
+          // A row keeps whatever account it was linked to, matched by email
+          // — including row 0, which is NOT always the account holder:
+          // Kanto's row 0 is John while the account had been moved to
+          // Rachel, so hardcoding row 0 to `existing.ownerId` stamped
+          // John's name with Rachel's link and cut John out of his own dog
+          // (observed on prod 2026-08-12 20:48). Email matching decides
+          // first; the account holder's link is then placed exactly once —
+          // on its matching row if there is one, otherwise on row 0 — so a
+          // reorder can never duplicate it across two owner slots.
+          const linkedUserIds = owners.map((o) =>
+            priorUserIdByEmail.get(o.ownerEmail.trim().toLowerCase()) ?? null,
+          );
+          if (!linkedUserIds.includes(existing.ownerId)) {
+            // The account holder isn't matched to any row by email — put
+            // their link on the first UNMATCHED row so the historical
+            // "the account is on an owner row" shape survives, without
+            // ever overwriting somebody else's genuine match. (Access
+            // itself never depends on this: `dogAccessCondition` grants
+            // the account holder rights via `dogs.owner_id` regardless.)
+            const firstFree = linkedUserIds.indexOf(null);
+            if (firstFree !== -1) linkedUserIds[firstFree] = existing.ownerId;
+          }
+
           await tx.delete(dogOwners).where(eq(dogOwners.dogId, id));
           await tx.insert(dogOwners).values(
-            owners.map((o, i) => {
-              // Row 0's link is always the account holder, so never let a
-              // non-zero row also claim `existing.ownerId` (e.g. the owner
-              // rows got reordered) — that would duplicate the account
-              // link across two joint-owner slots.
-              const matchedUserId = priorUserIdByEmail.get(o.ownerEmail.trim().toLowerCase());
-              return {
-                dogId: id,
-                userId: i === 0
-                  ? existing.ownerId
-                  : matchedUserId && matchedUserId !== existing.ownerId
-                    ? matchedUserId
-                    : null,
-                ownerTitle: o.ownerTitle || null,
-                ownerName: o.ownerName,
-                ownerAddress: o.ownerAddress,
-                ownerEmail: o.ownerEmail,
-                ownerPhone: o.ownerPhone ?? null,
-                isPrimary: o.isPrimary || i === 0,
-                sortOrder: i,
-              };
-            })
+            owners.map((o, i) => ({
+              dogId: id,
+              userId: linkedUserIds[i] ?? null,
+              ownerTitle: o.ownerTitle || null,
+              ownerName: o.ownerName,
+              ownerAddress: o.ownerAddress,
+              ownerEmail: o.ownerEmail,
+              ownerPhone: o.ownerPhone ?? null,
+              isPrimary: o.isPrimary || i === 0,
+              sortOrder: i,
+            }))
           );
         }
 
