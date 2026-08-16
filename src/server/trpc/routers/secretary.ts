@@ -22,6 +22,7 @@ import {
   classDefinitions,
   memberships,
   showClasses,
+  showBreeds,
   payments,
   dogOwners,
   dogs,
@@ -75,6 +76,7 @@ import {
   loadCatalogueOrdersSplit,
   withdrawnOrAbsentPaidWhere,
 } from '@/server/services/report-queries';
+import { validateRkcSchedule } from '@/lib/rkc-schedule-compliance';
 
 /**
  * True if this judge has assignments with any organisation outside the
@@ -1677,12 +1679,41 @@ export const secretaryRouter = createTRPCRouter({
         showId: z.string().uuid(),
         classDefinitionId: z.string().uuid(),
         breedId: z.string().uuid().optional(),
+        classGroup: z.string().trim().min(1).max(80).optional(),
         sex: z.enum(['dog', 'bitch']).nullable().optional(),
         entryFee: z.number().int().positive(),
       })
     )
     .mutation(async ({ ctx, input }) => {
       await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId, { callerIsAdmin: ctx.callerIsAdmin });
+
+      const [targetShow, classDefinition] = await Promise.all([
+        ctx.db.query.shows.findFirst({
+          where: eq(shows.id, input.showId),
+          columns: { showScope: true, showRuleset: true, scheduleData: true },
+        }),
+        ctx.db.query.classDefinitions.findFirst({
+          where: eq(classDefinitions.id, input.classDefinitionId),
+          columns: { name: true },
+        }),
+      ]);
+      if (!targetShow || !classDefinition) throw new TRPCError({ code: 'NOT_FOUND' });
+      if (
+        targetShow.showRuleset !== 'wusv' &&
+        targetShow.showScope !== 'single_breed' &&
+        classDefinition.name.trim().toLowerCase() === 'baby puppy'
+      ) {
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: 'Baby Puppy classes may only be scheduled at breed club shows under RKC rules.',
+        });
+      }
+      const isGroupVarietyClass = /^(avnsc|avibr|any variety not separately classified|any variety imported breed register)$/i.test(classDefinition.name.trim());
+      if (isGroupVarietyClass && input.classGroup == null) {
+        if (targetShow.scheduleData?.judgedOnGroupSystem) {
+          throw new TRPCError({ code: 'BAD_REQUEST', message: 'Choose the RKC breed group for this AVNSC or AVIBR class.' });
+        }
+      }
 
       // Get max sort order for this show
       const [maxSort] = await ctx.db
@@ -1696,6 +1727,7 @@ export const secretaryRouter = createTRPCRouter({
           showId: input.showId,
           classDefinitionId: input.classDefinitionId,
           breedId: input.breedId ?? null,
+          classGroup: input.classGroup ?? null,
           sex: input.sex ?? null,
           entryFee: input.entryFee,
           sortOrder: (Number(maxSort?.max) ?? -1) + 1,
@@ -1729,6 +1761,22 @@ export const secretaryRouter = createTRPCRouter({
         where: inArray(classDefinitions.id, input.classDefinitionIds),
         columns: { id: true, sortOrder: true, type: true, name: true },
       });
+
+      const targetShow = await ctx.db.query.shows.findFirst({
+        where: eq(shows.id, input.showId),
+        columns: { showScope: true, showRuleset: true },
+      });
+      if (!targetShow) throw new TRPCError({ code: 'NOT_FOUND' });
+      if (
+        targetShow.showRuleset !== 'wusv' &&
+        targetShow.showScope !== 'single_breed' &&
+        classDefRows.some((row) => row.name.trim().toLowerCase() === 'baby puppy')
+      ) {
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: 'Baby Puppy classes may only be scheduled at breed club shows under RKC rules.',
+        });
+      }
 
       // RKC type ordering: age first (but Veteran last), then achievement, special, junior_handler
       const typeOrder: Record<string, number> = {
@@ -4168,11 +4216,18 @@ export const secretaryRouter = createTRPCRouter({
           actionPath: '', severity: 'required',
         });
       }
-      if (!show.secretaryName || !show.secretaryEmail) {
+      if (!show.secretaryName || !show.secretaryEmail || !show.secretaryAddress || !show.secretaryPhone) {
         openEntriesBlockers.push({
-          key: 'no_secretary_details', label: 'Secretary name or email missing',
-          detail: 'Click Edit on the main show page to add secretary details',
+          key: 'no_secretary_details', label: 'Secretary contact details incomplete',
+          detail: 'Add the secretary name, postal address, email and phone number required on the schedule and entry form',
           actionPath: '', severity: 'required',
+        });
+      }
+      if (!isWusvShow && (!show.showOpenTime || !show.startTime)) {
+        openEntriesBlockers.push({
+          key: 'show_times_missing', label: 'Show opening or judging time missing',
+          detail: 'Set both times before publishing the RKC schedule',
+          actionPath: '/schedule', severity: 'required',
         });
       }
       if (!isWusvShow && guarantors.length < minGuarantors) {
@@ -4183,27 +4238,12 @@ export const secretaryRouter = createTRPCRouter({
           actionPath: '/schedule', severity: 'required',
         });
       }
-      // Minimum class count validation (RKC regulation, non-companion shows
-      // only). SV shows are exempt — their class count is governed by the
-      // WUSV/GSDL rules, not RKC F-rules.
-      if (!isWusvShow && show.showType !== 'companion') {
-        const numClasses = Number(classCount[0]?.count);
-        const minClasses = show.showScope === 'single_breed' ? 12 : 16;
-        if (numClasses > 0 && numClasses < minClasses) {
-          openEntriesBlockers.push({
-            key: 'insufficient_classes',
-            label: `Only ${numClasses} classes (RKC minimum: ${minClasses})`,
-            detail: `${show.showScope === 'single_breed' ? 'Single breed' : 'Multi-breed'} shows should have at least ${minClasses} classes per RKC regulations`,
-            actionPath: '', severity: 'recommended',
-          });
-        }
-      }
 
       if (!show.venueId) {
         openEntriesBlockers.push({
           key: 'no_venue', label: 'Venue not confirmed',
           detail: 'Confirm the show venue',
-          actionPath: '', severity: 'recommended',
+          actionPath: '', severity: 'required',
         });
       }
       // SV/WUSV regionals aren't RKC-licensed — skip the warning entirely
@@ -4212,8 +4252,77 @@ export const secretaryRouter = createTRPCRouter({
         openEntriesBlockers.push({
           key: 'no_rkc_licence', label: 'RKC licence not recorded',
           detail: 'Record the RKC licence number',
-          actionPath: '', severity: 'recommended',
+          actionPath: '', severity: 'required',
         });
+      }
+
+      if (!isWusvShow && Number(classCount[0]?.count) > 0) {
+        const [complianceClasses, complianceShowBreeds] = await Promise.all([
+          ctx.db.query.showClasses.findMany({
+            where: eq(showClasses.showId, input.showId),
+            with: { classDefinition: true, breed: { with: { group: true } } },
+          }),
+          ctx.db.query.showBreeds.findMany({
+            where: eq(showBreeds.showId, input.showId),
+            with: { breed: true },
+          }),
+        ]);
+        const complianceIssues = validateRkcSchedule({
+          show: {
+            showType: show.showType,
+            showScope: show.showScope,
+            showRuleset: show.showRuleset,
+            judgedOnGroupSystem: show.scheduleData?.judgedOnGroupSystem,
+          },
+          classes: complianceClasses.map((item) => ({
+            className: item.classDefinition?.name ?? '',
+            classType: item.classDefinition?.type,
+            breedId: item.breedId,
+            breedName: item.breed?.name,
+            breedGroupName: item.breed?.group?.name,
+            classGroup: item.classGroup,
+            sex: item.sex,
+          })),
+          showBreeds: complianceShowBreeds.map((item) => ({
+            breedId: item.breedId,
+            breedName: item.breed?.name ?? 'Unnamed breed',
+            ccOffered: item.ccOffered,
+          })),
+        });
+        for (const issue of complianceIssues) {
+          openEntriesBlockers.push({
+            key: 'rkc_' + issue.code,
+            label: issue.message,
+            detail: 'Fix the classification on the main show page before opening entries',
+            actionPath: '',
+            severity: 'required',
+          });
+        }
+      }
+
+      if (!isWusvShow && Number(judgeCount[0]?.count) > 0) {
+        const [assignedJudges, contracts] = await Promise.all([
+          ctx.db.query.judgeAssignments.findMany({
+            where: eq(judgeAssignments.showId, input.showId),
+            columns: { judgeId: true },
+          }),
+          ctx.db.query.judgeContracts.findMany({
+            where: eq(judgeContracts.showId, input.showId),
+            columns: { judgeId: true, stage: true },
+          }),
+        ]);
+        const acceptedJudgeIds = new Set(
+          contracts.filter((contract) => contract.stage === 'offer_accepted' || contract.stage === 'confirmed').map((contract) => contract.judgeId),
+        );
+        const missingAcceptance = new Set(assignedJudges.map((assignment) => assignment.judgeId).filter((judgeId) => !acceptedJudgeIds.has(judgeId)));
+        if (missingAcceptance.size > 0) {
+          openEntriesBlockers.push({
+            key: 'judge_acceptance_missing',
+            label: `${missingAcceptance.size} assigned judge${missingAcceptance.size === 1 ? ' has' : 's have'} not accepted`,
+            detail: 'Every assigned judge must accept the written appointment before entries open',
+            actionPath: '/people', severity: 'required',
+          });
+        }
       }
 
       // Sundry items step is easy to miss on the show page — bump it onto
@@ -4233,56 +4342,6 @@ export const secretaryRouter = createTRPCRouter({
         });
       }
 
-      // Championship shows: every breed with classes must have Open + Limit for each sex
-      // Skip for single-breed shows — their classes are breed-less by design
-      if (show.showType === 'championship' && show.showScope !== 'single_breed' && Number(classCount[0]?.count) > 0) {
-        const showClassRows = await ctx.db.query.showClasses.findMany({
-          where: eq(showClasses.showId, input.showId),
-          with: { classDefinition: true },
-        });
-
-        // Group classes by breedId, only for breed-specific classes
-        const breedClassMap = new Map<string, { hasOpenDog: boolean; hasOpenBitch: boolean; hasLimitDog: boolean; hasLimitBitch: boolean }>();
-        for (const sc of showClassRows) {
-          if (!sc.breedId) continue;
-          if (!breedClassMap.has(sc.breedId)) {
-            breedClassMap.set(sc.breedId, { hasOpenDog: false, hasOpenBitch: false, hasLimitDog: false, hasLimitBitch: false });
-          }
-          const entry = breedClassMap.get(sc.breedId)!;
-          const className = sc.classDefinition?.name?.toLowerCase() ?? '';
-          if (className === 'open' && sc.sex === 'dog') entry.hasOpenDog = true;
-          if (className === 'open' && sc.sex === 'bitch') entry.hasOpenBitch = true;
-          if (className === 'limit' && sc.sex === 'dog') entry.hasLimitDog = true;
-          if (className === 'limit' && sc.sex === 'bitch') entry.hasLimitBitch = true;
-        }
-
-        // Find breeds missing required classes
-        const missingBreedIds: string[] = [];
-        for (const [breedId, entry] of breedClassMap) {
-          if (!entry.hasOpenDog || !entry.hasOpenBitch || !entry.hasLimitDog || !entry.hasLimitBitch) {
-            missingBreedIds.push(breedId);
-          }
-        }
-
-        if (missingBreedIds.length > 0) {
-          // Fetch breed names for the label
-          const missingBreeds = await ctx.db.query.breeds.findMany({
-            where: inArray(breeds.id, missingBreedIds),
-            columns: { name: true },
-          });
-          const breedNames = missingBreeds.map((b) => b.name);
-          const breedList = breedNames.length <= 3
-            ? breedNames.join(', ')
-            : `${breedNames.slice(0, 2).join(', ')} + ${breedNames.length - 2} more`;
-
-          openEntriesBlockers.push({
-            key: 'championship_missing_classes',
-            label: `Open + Limit classes missing (${breedList})`,
-            detail: 'Championship shows require Open and Limit classes for each sex per RKC regulations',
-            actionPath: '', severity: 'required',
-          });
-        }
-      }
 
       const requiredBlockers = openEntriesBlockers.filter((b) => b.severity === 'required');
 
@@ -4292,21 +4351,23 @@ export const secretaryRouter = createTRPCRouter({
         startShowBlockers.push({
           key: 'no_rings', label: 'Rings not set up',
           detail: 'Create at least one ring for judging',
-          actionPath: '/people', severity: 'recommended',
+          actionPath: '/people', severity: 'required',
         });
       }
-      if (Number(stewardCount[0]?.count) === 0) {
+      if (Number(stewardCount[0]?.count) < Number(ringCount[0]?.count)) {
         startShowBlockers.push({
-          key: 'no_stewards', label: 'No stewards assigned',
-          detail: 'Assign stewards to help on show day',
-          actionPath: '/people', severity: 'recommended',
+          key: 'insufficient_stewards', label: `${Number(stewardCount[0]?.count)} steward${Number(stewardCount[0]?.count) === 1 ? '' : 's'} for ${Number(ringCount[0]?.count)} ring${Number(ringCount[0]?.count) === 1 ? '' : 's'}`,
+          detail: 'RKC F Regulations require at least one steward for every ring',
+          actionPath: '/people', severity: 'required',
         });
       }
+
+      const requiredStartBlockers = startShowBlockers.filter((blocker) => blocker.severity === 'required');
 
       return {
         canOpenEntries: requiredBlockers.length === 0,
         openEntriesBlockers,
-        canStartShow: true, // start show blockers are all recommended
+        canStartShow: requiredStartBlockers.length === 0,
         startShowBlockers,
       };
     }),

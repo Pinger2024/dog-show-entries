@@ -71,6 +71,7 @@ interface ClassManagerProps {
     sex: 'dog' | 'bitch' | null;
     sortOrder: number;
     classNumber?: number | null;
+    classGroup?: string | null;
     classDefinition?: { name: string; type: string } | null;
     breed?: { name: string; group?: { name: string; sortOrder: number } | null } | null;
   }[];
@@ -1172,9 +1173,12 @@ export function AddIndividualClass({ showId }: { showId: string }) {
                     // a WUSV-ruleset show; Amanda flagged them showing up
                     // on RKC shows on 2026-05-15.
                     const fullList = classDefs ?? [];
-                    const list = isWusvShow
+                    const rulesetList = isWusvShow
                       ? fullList
                       : fullList.filter((cd) => cd.type !== 'sv_age');
+                    const list = showInfo?.showScope !== 'single_breed' && !isWusvShow
+                      ? rulesetList.filter((cd) => cd.name.trim().toLowerCase() !== 'baby puppy')
+                      : rulesetList;
                     const buckets: Array<{ label: string; defs: typeof list }> = [];
                     const age = list.filter((cd) => cd.type === 'age');
                     const achievement = list.filter((cd) => cd.type === 'achievement');
@@ -1322,13 +1326,27 @@ const VARIETY_CLASS_DESCRIPTIONS: Record<string, string> = {
 
 export function VarietyClassQuickAdd({ showId }: { showId: string }) {
   const [feeInputs, setFeeInputs] = useState<Record<string, string>>({});
+  const [groupInputs, setGroupInputs] = useState<Record<string, string>>({});
   const { data: classDefs } = trpc.secretary.listClassDefinitions.useQuery();
+  const { data: breeds } = trpc.breeds.list.useQuery();
+  const { data: showInfo } = trpc.shows.getById.useQuery({ id: showId });
   const utils = trpc.useUtils();
+  const isGroupSystem = showInfo?.scheduleData?.judgedOnGroupSystem === true;
+  const breedGroups = Array.from(new Map(
+    (breeds ?? [])
+      .filter((breed) => breed.group?.name)
+      .map((breed) => [breed.group!.name, breed.group!]),
+  ).values()).sort((a, b) => a.sortOrder - b.sortOrder);
 
   const addClassMutation = trpc.secretary.addShowClass.useMutation({
     onSuccess: (_, vars) => {
       toast.success('Variety class added');
       setFeeInputs((prev) => {
+        const next = { ...prev };
+        delete next[vars.classDefinitionId];
+        return next;
+      });
+      setGroupInputs((prev) => {
         const next = { ...prev };
         delete next[vars.classDefinitionId];
         return next;
@@ -1344,16 +1362,22 @@ export function VarietyClassQuickAdd({ showId }: { showId: string }) {
 
   if (varietyDefs.length === 0) return null;
 
-  function handleAdd(defId: string) {
+  function handleAdd(defId: string, defName: string) {
     const raw = feeInputs[defId] ?? '5.00';
     const pounds = parseFloat(raw);
     if (isNaN(pounds) || pounds < 0) {
       toast.error('Enter a valid fee in pounds');
       return;
     }
+    const needsGroup = isGroupSystem && /^(Any Variety Not Separately Classified|Any Variety Imported Breed Register)$/i.test(defName);
+    if (needsGroup && !groupInputs[defId]) {
+      toast.error('Choose the RKC breed group for this class');
+      return;
+    }
     addClassMutation.mutate({
       showId,
       classDefinitionId: defId,
+      classGroup: needsGroup ? groupInputs[defId] : undefined,
       entryFee: poundsToPence(pounds),
     });
   }
@@ -1369,7 +1393,7 @@ export function VarietyClassQuickAdd({ showId }: { showId: string }) {
       </CardHeader>
       <CardContent className="space-y-3">
         {varietyDefs.map((def) => (
-          <div key={def.id} className="flex items-center gap-3 rounded-lg border p-3">
+          <div key={def.id} className="flex flex-col gap-3 rounded-xl border bg-card p-4 sm:flex-row sm:items-center">
             <div className="min-w-0 flex-1">
               <p className="text-sm font-medium leading-tight">{def.name}</p>
               <p className="mt-0.5 text-xs text-muted-foreground">
@@ -1377,6 +1401,21 @@ export function VarietyClassQuickAdd({ showId }: { showId: string }) {
               </p>
             </div>
             <div className="flex shrink-0 items-center gap-2">
+              {isGroupSystem && /^(Any Variety Not Separately Classified|Any Variety Imported Breed Register)$/i.test(def.name) && (
+                <Select
+                  value={groupInputs[def.id] ?? ''}
+                  onValueChange={(value) => setGroupInputs((prev) => ({ ...prev, [def.id]: value }))}
+                >
+                  <SelectTrigger className="h-9 w-32" aria-label={`RKC group for ${def.name}`}>
+                    <SelectValue placeholder="RKC group" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {breedGroups.map((group) => (
+                      <SelectItem key={group.name} value={group.name}>{group.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
               <div className="w-20">
                 <Input
                   type="number"
@@ -1394,7 +1433,7 @@ export function VarietyClassQuickAdd({ showId }: { showId: string }) {
               <Button
                 size="sm"
                 className="min-h-[2.25rem] shrink-0"
-                onClick={() => handleAdd(def.id)}
+                onClick={() => handleAdd(def.id, def.name)}
                 disabled={addClassMutation.isPending}
               >
                 {addClassMutation.isPending ? (

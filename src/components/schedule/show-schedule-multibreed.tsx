@@ -11,7 +11,6 @@ import type {
 } from './shared/types';
 import {
   C,
-  SHOW_TYPE_LABELS,
   formatVenue,
   formatDate,
   formatShortDate,
@@ -24,7 +23,9 @@ import { SectionBand, InfoCard, GoldRule, Rule, TwoColSectionHeader } from './sh
 import { sortOfficers } from './shared/officers';
 import { buildEntryFeeGroups } from './shared/entry-fee-groups';
 import { AdvertPage, selectAdverts } from './shared/advert-page';
+import { RkcNumberedRules } from './shared/rkc-rules';
 import type { ScheduleAdvert } from './shared/types';
+import { getRkcScheduleProfile } from '@/lib/rkc-schedule-profile';
 
 // ── Main Component ─────────────────────────────────────────────────────────────
 //
@@ -55,7 +56,11 @@ export function ShowScheduleMultibreed({
    *  the show hasn't yet had panel-level judges assigned. */
   panelJudges?: SchedulePanelJudge[];
 }) {
-  const showTypeLabel = SHOW_TYPE_LABELS[show.showType] ?? show.showType;
+  const rkcProfile = getRkcScheduleProfile({
+    showType: show.showType,
+    showScope: show.showScope,
+    judgedOnGroupSystem: show.scheduleData?.judgedOnGroupSystem,
+  });
   const showDate = show.endDate && show.endDate !== show.date
     ? `${formatDate(show.date)} — ${formatDate(show.endDate)}`
     : formatDate(show.date);
@@ -88,14 +93,6 @@ export function ShowScheduleMultibreed({
   // RKC ordering requires them judged before the per-sex challenges.
   // JH-only Mixed renders BELOW as the "Junior Handling" section.
   const isGroupSystem = sd?.judgedOnGroupSystem === true;
-  // Baby Puppy is not permitted at multi-breed open shows per RKC F(1) — but
-  // if a club nonetheless schedules one, Rule 8 must drop to four months and
-  // Rule 11 must appear, otherwise the schedule contradicts itself. Phase B
-  // will gate this at the class-creation UI.
-  const hasBabyPuppyClass = deduplicatedClasses.some(
-    (c) => c.className.trim().toLowerCase() === 'baby puppy',
-  );
-
   const footerRender = ({ pageNumber, totalPages }: { pageNumber: number; totalPages: number }) =>
     `${show.name}  ·  Schedule  ·  Page ${pageNumber} of ${totalPages}`;
 
@@ -142,8 +139,9 @@ export function ShowScheduleMultibreed({
 
           {/* Show type badge */}
           <View style={s.coverBadge}>
-            <Text style={s.coverBadgeText}>{showTypeLabel}</Text>
+            <Text style={s.coverBadgeText}>{rkcProfile.title}</Text>
           </View>
+          <Text style={s.coverSpecimen}>RKC specimen · {rkcProfile.specimenVersion}</Text>
 
           {/* Show-level sponsor logos below badge */}
           {(() => {
@@ -786,7 +784,7 @@ export function ShowScheduleMultibreed({
                     key={groupName}
                     style={[
                       { flexDirection: 'row', paddingVertical: 4, paddingHorizontal: 6, borderBottomWidth: 0.5, borderBottomColor: C.cardBorder },
-                      gi % 2 !== 0 && { backgroundColor: C.tableRowAlt },
+                      gi % 2 !== 0 ? { backgroundColor: C.tableRowAlt } : {},
                     ]}
                     wrap={false}
                   >
@@ -918,7 +916,7 @@ export function ShowScheduleMultibreed({
           const renderRow = (cls: ScheduleClass, i: number) => {
             const sexLabel = cls.sex === 'dog' ? 'Dogs' : cls.sex === 'bitch' ? 'Bitches' : 'Mixed';
             return (
-              <View key={`${cls.classLabel}-${i}`} style={[s.classRow, i % 2 !== 0 && s.classRowAlt]} wrap={false}>
+              <View key={`${cls.classLabel}-${i}`} style={[s.classRow, i % 2 !== 0 ? s.classRowAlt : {}]} wrap={false}>
                 <View style={s.colNo}>
                   <Text style={s.cellBold}>{cls.classLabel}</Text>
                 </View>
@@ -960,7 +958,7 @@ export function ShowScheduleMultibreed({
                 </View>
               )}
               {sacClasses.map((cls, i) => (
-                <View key={`sac-${i}`} style={[s.classRow, i % 2 !== 0 && s.classRowAlt]} wrap={false}>
+                <View key={`sac-${i}`} style={[s.classRow, i % 2 !== 0 ? s.classRowAlt : {}]} wrap={false}>
                   <View style={s.colNo}><Text style={s.cellBold}>{cls.classLabel}</Text></View>
                   <View style={s.colClass}><Text style={s.cellBold}>{sacDisplayName(cls)}</Text></View>
                   <View style={s.colSex}><Text style={s.cellMuted}>Mixed</Text></View>
@@ -1111,133 +1109,8 @@ export function ShowScheduleMultibreed({
       <Page size="A5" style={s.page}>
         <SectionBand title="Rules and Regulations" />
 
-        <View style={{ marginBottom: 10, paddingHorizontal: 2 }} wrap={false}>
-          <Text style={{ fontFamily: 'Times', fontStyle: 'italic', fontSize: 8, lineHeight: 1.4, color: C.textMedium }}>
-            All Judges at this show agree to abide by the following statement: &ldquo;In assessing dogs, judges must penalise any features or exaggerations which they consider would be detrimental to the soundness, health and well being of the dog.&rdquo;
-          </Text>
-        </View>
+        <RkcNumberedRules show={show} multiBreed />
 
-        {/* Crufts qualification — open shows judged on the group system only.
-            Per the RKC specimen, this is a notable exhibitor-facing benefit
-            so we render it as a highlighted callout above the rules. */}
-        {isGroupSystem && (show.showType === 'open' || show.showType === 'premier_open') && (
-          <View style={{ marginBottom: 10, paddingHorizontal: 8, paddingVertical: 6, backgroundColor: C.cardBg, borderRadius: 4, borderLeftWidth: 3, borderLeftColor: C.primary }} wrap={false}>
-            <Text style={{ fontFamily: 'Inter', fontSize: 7, fontWeight: 'bold', color: C.primary, letterSpacing: 0.5, marginBottom: 2 }}>
-              CRUFTS QUALIFICATION
-            </Text>
-            <Text style={{ fontFamily: 'Times', fontSize: 7.5, lineHeight: 1.5, color: C.textDark }}>
-              Dogs placed 1&ndash;4 in each group, and 1&ndash;4 in each puppy group, will qualify for Crufts the following year, as a result of which more dogs will gain opportunities to qualify for Crufts.
-            </Text>
-          </View>
-        )}
-
-        {show.showOpenTime && (
-          <Rule num="1">The show will open at {formatTime(show.showOpenTime)}.</Rule>
-        )}
-        <Rule num="2">
-          {sd?.isBenched
-            ? `Dogs will be benched${sd.benchingRemovalTime ? `. ${sd.benchingRemovalTime}` : ' and may be removed after Best in Show judging has been completed'}.`
-            : 'Dogs will not be benched at any time but it is the exhibitor\u2019s responsibility to ensure that exhibits are available for judging.'}
-        </Rule>
-        {show.startTime && (
-          <Rule num="3">Judging will commence {formatTime(show.startTime)}.</Rule>
-        )}
-        <Rule num="4">Exhibits may be removed from the Show after their judging has been completed. The Show will close half an hour after all judging has been completed. Exhibits may not be removed any earlier unless by written order of the veterinary surgeon, veterinary practitioner or of the Show Management and then only in very exceptional and unforeseen circumstances which must be reported to the Royal Kennel Club.</Rule>
-        {(show.firstEntryFee != null || show.subsequentEntryFee != null || show.nfcEntryFee != null) && (
-          <Rule num="5">
-            ENTRY FEES: {show.firstEntryFee != null ? `${formatCurrency(show.firstEntryFee)} first entry` : ''}
-            {show.subsequentEntryFee != null ? `, subsequent entries same dog ${formatCurrency(show.subsequentEntryFee)}` : ''}
-            {show.discountGroups.map((g) => `. ${g.label} first entry ${formatCurrency(g.firstEntryFeePence)}`).join('')}
-            {show.multiDogThreshold != null && show.multiDogPackagePence != null
-              ? `. ${show.multiDogThreshold}+ dog package ${formatCurrency(show.multiDogPackagePence)}`
-              : ''}
-            {show.discountGroups
-              .filter((g) => g.multiDogPackagePence != null)
-              .map((g) => ` (${g.label}: ${formatCurrency(g.multiDogPackagePence!)})`)
-              .join('')}
-            {show.nfcEntryFee != null ? `. NFC ${formatCurrency(show.nfcEntryFee)}` : ''}
-            {show.juniorHandlerFee != null ? `. Junior Handler ${formatCurrency(show.juniorHandlerFee)}` : ''}.
-            {' '}A handling fee of £1.00 plus 1% of the order subtotal is added at checkout to cover online processing; this is shown to exhibitors before they pay.
-          </Rule>
-        )}
-        <Rule num="6">ONLINE ENTRY can be found at remishowmanager.co.uk/shows/{show.slug}</Rule>
-        <Rule num="7">The Committee reserves to itself the right to refuse any entries.</Rule>
-        {/* Rule 8: multi-breed open shows use a six-month puppy threshold per
-            the RKC specimens (no Baby Puppy class permitted at multi-breed
-            open shows). If a club nonetheless schedules a Baby Puppy class
-            we drop to four months so the schedule doesn't contradict itself.
-            Phase B will gate this at the class-creation UI. */}
-        <Rule num="8">Puppies under {hasBabyPuppyClass ? 'four' : 'six'} calendar months of age on the first day of the Show are not eligible for exhibition.</Rule>
-        <Rule num="9">The mating of bitches within the precincts of the Show is forbidden.</Rule>
-        {/* Rule 10: multi-breed Best Puppy in Show chain. Group-system shows
-            include the Best Puppy in Group → Best Puppy in Show progression. */}
-        {isGroupSystem ? (
-          <Text style={s.ruleText}>
-            <Text style={s.ruleNumber}>10.</Text> <Text style={s.ruleTextBold}>Best Puppy in Show:</Text> Where a Best Puppy in Show competition is scheduled the Best Puppy in Show is a puppy which has competed and has been declared Best Puppy in Breed, Best Any Variety Not Separately Classified Puppy or Best Any Variety Imported Breed Register Puppy. A puppy is a dog of six and not exceeding twelve calendar months of age on the first day of the Show. Best Puppy in Group must be selected from the Best Puppy in Breed winners and the Best Puppy from the Any Variety Imported Breed Register classes in each group. Best Puppy in Show must be selected from the Best Puppy in Group winners.
-          </Text>
-        ) : (
-          <Text style={s.ruleText}>
-            <Text style={s.ruleNumber}>10.</Text> <Text style={s.ruleTextBold}>Best Puppy in Show:</Text> Where a Best Puppy in Show competition is scheduled the Best Puppy in Show is a puppy which has competed and has been declared Best Puppy in Breed, Best Any Variety Not Separately Classified Puppy or Best Any Variety Imported Breed Register Puppy. A puppy is a dog of six and not exceeding twelve calendar months of age on the first day of the Show.
-          </Text>
-        )}
-        {/* Rule 11 (Baby Puppy) only renders when a Baby Puppy class is
-            scheduled — otherwise it's dead text contradicting Rule 8. */}
-        {hasBabyPuppyClass && (
-          <Rule num="11">A Baby Puppy is a dog of four and less than six calendar months of age on the first day of the show. Baby Puppy classes may be scheduled at any breed Club show, Best Baby Puppy in Breed may be declared at each breed from the dogs entered in the Baby Puppy class. There must be no progression to further competitions.</Rule>
-        )}
-        {/* Rule 12: multi-breed BIS chain. Group-system shows go through
-            BOG (Best of Group) winners; non-group-system shows pick BIS
-            directly from BOB + AVNSC + AVIBR. */}
-        {isGroupSystem ? (
-          <Text style={s.ruleText}>
-            <Text style={s.ruleNumber}>12.</Text>{' '}
-            <Text style={s.ruleTextBold}>Best of Group, Best in Show:</Text>{' '}
-            Where a breed is separately classified a Best of Breed may be declared but only from those dogs which have received a first prize in a breed class at the show. Where separate classes are provided for each sex of a breed a Best of each Sex must be declared. Best of Group and subsequent placings must be selected from the Best of Breed winners in each group, the dog declared Best Any Variety Not Separately Classified in each group, and the Best dog from Any Variety Imported Breed Register classes in each group. Best in Show must be selected from the Best of Group winners. Reserve Best in Show must be selected from the remaining Group winners following the selection of Best in Show.
-          </Text>
-        ) : (
-          <Text style={s.ruleText}>
-            <Text style={s.ruleNumber}>12.</Text>{' '}
-            <Text style={s.ruleTextBold}>Best in Show:</Text>{' '}
-            Where a breed is separately classified a Best of Breed may be declared but only from those dogs which have received a first prize in a breed class at the show. Where separate classes are provided for each sex of a breed a Best of each Sex must be declared. Best in Show and subsequent placings must be selected from those dogs declared Best of Breed, Best Any Variety Not Separately Classified and Best Any Variety Imported Breed Register.
-          </Text>
-        )}
-        {sd?.hasBestVeteranInShow && (
-          <Text style={s.ruleText}>
-            <Text style={s.ruleNumber}>12a.</Text>{' '}
-            <Text style={s.ruleTextBold}>Best Veteran in Show:</Text>{' '}
-            {sd.bestVeteranInShowEligibility?.trim()
-              ? sd.bestVeteranInShowEligibility
-              : 'A Best Veteran in Show competition will be held. Eligible dogs are those declared Best Veteran in their breed (or Best Veteran of Sex where applicable). The selection of Best in Show may follow the selection of Best Veteran in Show. Where the Best in Show is a veteran it may, at the discretion of the judge, be awarded Best Veteran in Show.'}
-          </Text>
-        )}
-        <Rule num="13">Exhibits will not be admitted to Group or Best in Show competition after a period of ten minutes has elapsed since the announcement that exhibits are required for judging, unless they have been unavoidably delayed by previous judging not being completed on time, and then only with the special permission of the Show Management.</Rule>
-        <Rule num="14">Exhibitors must not pick up dogs by their tails and leads. When lifting dogs not handle in a rough manner.</Rule>
-        <Rule num="15">All exhibitors must be familiar with Royal Kennel Club Regulation F (Annex B) Regulations for the Preparation of Dogs for Exhibition.</Rule>
-        <Rule num="16">All dogs resident outside the UK must be issued with a Royal Kennel Club Authority to Compete number before entry to the show/event can be made. All singles must be resident within the UK. A single entry for an overseas exhibit must be accompanied by a copy of the dog&apos;s official export pedigree.</Rule>
-
-        {/* Dogs in vehicles WARNING */}
-        <View style={s.warningBox} wrap={false}>
-          <Text style={s.warningTitle}>WARNING</Text>
-          <Text style={s.warningText}>
-            IF YOUR DOG IS FOUND TO BE AT RISK FORCIBLE ENTRY TO YOUR VEHICLE MAY BE NECESSARY WITHOUT LIABILITY FOR ANY DAMAGE CAUSED.
-          </Text>
-        </View>
-
-        <Rule num="17">Anyone whose dog is entered at a Royal Kennel Club licensed event should take all reasonable steps to ensure the needs of their dog(s) are met and should not put a dog&apos;s health and welfare at risk by any action, default, omission or otherwise. Breach of Royal Kennel Club Regulations in this respect may be referred to the Board for disciplinary action under the Royal Kennel Club Rules and Regulations. The use of pinch collars, electronic shock collars, or prong collars, is not permitted at any show licensed by the Royal Kennel Club. This shall apply at the venue or within the precincts of the show.</Rule>
-        <Text style={s.ruleText}>
-          <Text style={s.ruleNumber}>18.</Text> <Text style={s.ruleTextBold}>Not for Competition:</Text> Not for Competition entries are accepted. Details of each dog so entered must be recorded on the entry form and must be Royal Kennel Club registered.
-        </Text>
-        <Rule num="19">No modifications will be made to the schedule except by permission of the Board of the Royal Kennel Club, which will be followed by advertisement in the Canine press wherever possible.</Rule>
-        <Rule num="20">An exhibitor or competitor should ensure that contact details for any handler are available and must be provided upon request in any investigation of a breach of this regulation by such handler.</Rule>
-
-        {/* F(1) applicable paragraphs notice — RKC compliance */}
-        <View style={{ marginTop: 6, paddingTop: 4, borderTopWidth: 0.5, borderTopColor: C.ruleLight }} wrap={false}>
-          <Text style={{ fontFamily: 'Inter', fontSize: 7, color: C.textMedium, lineHeight: 1.4 }}>
-            The following paragraphs of the RKC Show F(1) Regulations are applicable to this show and exhibitors should familiarise themselves with these before entering: F(1).8.a, F(1).8.l, F(1).8.m, F(1).13, F(1).18, F(B) Preparation of Dogs for Exhibition.
-          </Text>
-        </View>
-
-        {/* Custom statements now appear on the cover page for prominence */}
 
 
           <Text style={s.footer} render={footerRender} fixed />
@@ -1393,6 +1266,20 @@ export function ShowScheduleMultibreed({
       {show.acceptsPostalEntries && (
         <Page size="A5" style={s.page}>
           <SectionBand title="Entry Form" />
+          <View style={{ backgroundColor: C.cardBg, borderRadius: 10, padding: 10, marginBottom: 8, borderLeftWidth: 4, borderLeftColor: C.accent }} wrap={false}>
+            <Text style={{ fontFamily: 'HankenGrotesk', fontSize: 10, fontWeight: 'bold', color: C.primary, textAlign: 'center', marginBottom: 4 }}>
+              ENTRY FORM FOR {show.name.toUpperCase()}
+            </Text>
+            <Text style={{ fontFamily: 'Inter', fontSize: 6.5, color: C.textMedium, textAlign: 'center', marginBottom: 3 }}>
+              {rkcProfile.title} · Held under Royal Kennel Club Rules &amp; Show Regulations F(1)
+            </Text>
+            <Text style={{ fontFamily: 'Inter', fontSize: 7, color: C.textDark }}>
+              Entries close: {show.postalCloseDate ? formatShortDate(show.postalCloseDate) : show.entryCloseDate ? formatShortDate(show.entryCloseDate) : 'date to be confirmed'} · Entry fees: {show.firstEntryFee != null ? formatCurrency(show.firstEntryFee) + ' first entry' : 'see schedule'}{show.subsequentEntryFee != null ? ', ' + formatCurrency(show.subsequentEntryFee) + ' subsequent entries with the same dog' : ''}.
+            </Text>
+            <Text style={{ fontFamily: 'Times', fontSize: 6.5, lineHeight: 1.35, color: C.textMedium, marginTop: 3 }}>
+              Use one line for each dog. If the dog is awaiting registration, write NAF for Name Applied For or TAF for Transfer Applied For. Dogs resident outside the UK must have a Royal Kennel Club Authority to Compete (ATC) number. Send completed postal entries and fees to: {show.secretaryName || 'Show Secretary'}, {show.secretaryAddress || 'secretary address shown in the schedule'}.
+            </Text>
+          </View>
 
           <Text style={{ fontFamily: 'Inter', fontSize: 7, color: C.textLight, marginBottom: 8, textAlign: 'center' }}>
             Enter online at{' '}

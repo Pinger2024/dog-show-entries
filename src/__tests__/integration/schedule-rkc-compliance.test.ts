@@ -140,6 +140,12 @@ describe('RKC schedule compliance — mandatory clauses', () => {
     expect(html).toMatch(/exceptional and unforeseen circumstances which must be reported/i);
   });
 
+  it('uses the current 2026 specimen sequence for receipt, fees and prize money', () => {
+    expect(html).toMatch(/Dogs will be received at any time/i);
+    expect(html).toMatch(/ENTRY FEES:.*Online entry at remishowmanager\.co\.uk/i);
+    expect(html).toMatch(/PRIZE MONEY: There is no prize money on offer at this show/i);
+  });
+
   it('Rule 8 uses the four-month threshold (not the contradictory six-month one)', () => {
     expect(html).toMatch(/under four calendar months/i);
     expect(html).not.toMatch(/under 6 calendar months of age on the first day of the Show is eligible for exhibition/i);
@@ -155,10 +161,25 @@ describe('RKC schedule compliance — mandatory clauses', () => {
 
   it('Rule 14 forbids picking up dogs by tails and leads', () => {
     expect(html).toMatch(/Exhibitors must not pick up dogs by their tails and leads/i);
+    expect(html).toMatch(/causes its feet not to touch the ground/i);
+    expect(html).toMatch(/Royal Kennel Club Show Regulation F11/i);
   });
 
   it('Rule 15 references RKC F (Annex B) Preparation regulations', () => {
     expect(html).toMatch(/Regulation F.*Annex B.*Preparation of Dogs for Exhibition/i);
+  });
+
+  it('uses the current Authority to Compete wording', () => {
+    expect(html).toMatch(/All overseas entries without an Authority to Compete number will be returned/i);
+    expect(html).not.toMatch(/All singles must be resident within the UK/i);
+  });
+
+  it('labels the hot-weather notice as numbered Rule 16', () => {
+    expect(html).toMatch(/16\..*DOGS IN VEHICLES ON HOT DAYS/i);
+  });
+
+  it('uses the 2026 twelve-week NFC minimum', () => {
+    expect(html).toMatch(/Dogs must be at least 12 weeks of age/i);
   });
 
   it('Rule 17 prohibits pinch / electronic shock / prong collars', () => {
@@ -342,6 +363,20 @@ describe('RKC schedule compliance — postal entry form', () => {
     const html = renderPostal();
     const matches = html.match(/A dog docked on or after 6 April 2007/g) ?? [];
     expect(matches.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it('includes the specimen header, closing date, fees and postal return address', () => {
+    const html = renderPostal();
+    expect(html).toMatch(/ENTRY FORM FOR TEST CHAMP SHOW/i);
+    expect(html).toMatch(/Entries close:.*Entry fees:/i);
+    expect(html).toMatch(/Send completed postal entries and fees to: Jane Secretary, 1 Test Lane/i);
+  });
+
+  it('includes NAF, TAF and ATC entry instructions', () => {
+    const html = renderPostal();
+    expect(html).toMatch(/NAF for Name Applied For/i);
+    expect(html).toMatch(/TAF for Transfer Applied For/i);
+    expect(html).toMatch(/Authority to Compete \(ATC\) number/i);
   });
 
   it('includes the Hot Days notice on the entry form', () => {
@@ -578,7 +613,8 @@ describe('RKC schedule compliance — single-breed show (regression: must NOT pi
   const html = render(); // baseShow() defaults to single_breed
 
   it('Rule 12 retains the single-breed Best of Sex wording', () => {
-    expect(html).toMatch(/may be selected from the exhibits declared Best of Sex/i);
+    expect(html).toMatch(/Best in Show must be selected from the exhibits declared Best of Sex/i);
+    expect(html).toMatch(/Best Opposite Sex and Reserve Best of Sex/i);
     expect(html).not.toMatch(/Best Any Variety Not Separately Classified/);
   });
 
@@ -650,13 +686,10 @@ describe('RKC schedule compliance — multi-breed open show with Baby Puppy clas
   });
   const html = renderMultibreed(show, classesWithBabyPuppy);
 
-  it('drops Rule 8 to four months when a Baby Puppy class is scheduled', () => {
-    expect(html).toMatch(/Puppies under four calendar months/i);
+  it('keeps Rule 8 at six months because Baby Puppy is invalid at multi-breed shows', () => {
+    expect(html).toMatch(/Puppies under six calendar months/i);
   });
 
-  it('renders Rule 11 (Baby Puppy definition) when the class is present', () => {
-    expect(html).toMatch(/A Baby Puppy is a dog of four and less than six calendar months/i);
-  });
 });
 
 
@@ -771,4 +804,3 @@ describe("RKC schedule compliance — panel page omitted when no panel judges (P
     expect(html).not.toMatch(/Best in Show.*Group Judges/i);
   });
 });
-

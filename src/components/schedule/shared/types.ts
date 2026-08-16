@@ -107,6 +107,8 @@ export interface ScheduleClass {
   /** Sort order for the breed's group (used to render groups in the RKC's
    *  conventional order regardless of breed name alphabetisation). */
   breedGroupSortOrder?: number | null;
+  /** Explicit RKC group chosen for breed-less AVNSC/AVIBR classes. */
+  classGroup?: string | null;
 }
 
 export interface ScheduleJudge {

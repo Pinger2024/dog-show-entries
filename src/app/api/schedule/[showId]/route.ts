@@ -104,8 +104,11 @@ export async function GET(
     breedName: sc.breed?.name ?? null,
     classType: sc.classDefinition?.type ?? null,
     svCoatType: (sc as { svCoatType?: 'stock' | 'long_stock' | null }).svCoatType ?? null,
-    breedGroupName: sc.breed?.group?.name ?? null,
-    breedGroupSortOrder: sc.breed?.group?.sortOrder ?? null,
+    breedGroupName: sc.breed?.group?.name ?? sc.classGroup ?? null,
+    breedGroupSortOrder: sc.breed?.group?.sortOrder ?? (sc.classGroup
+      ? ['Gundog', 'Hound', 'Pastoral', 'Terrier', 'Toy', 'Utility', 'Working'].indexOf(sc.classGroup) + 1
+      : null),
+    classGroup: sc.classGroup,
     entryFee: sc.entryFee ?? null,
   }));
 

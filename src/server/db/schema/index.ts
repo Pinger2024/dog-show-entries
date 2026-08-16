@@ -63,6 +63,7 @@ export {
   classDefinitionsRelations,
 } from './class-definitions';
 export { showClasses, showClassesRelations } from './show-classes';
+export { showBreeds, showBreedsRelations } from './show-breeds';
 export { users, usersRelations } from './users';
 export { accounts, sessions, verificationTokens } from './auth';
 export { dogs, dogsRelations } from './dogs';

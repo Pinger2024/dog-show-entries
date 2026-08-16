@@ -51,23 +51,23 @@ Font.registerHyphenationCallback((word) => [word]);
 // ── Colour Palette ─────────────────────────────────────────────────────────────
 
 export const C = {
-  primary: '#2D5F3F',
-  accent: '#B8963E',
+  primary: '#123C34',
+  accent: '#DF8E63',
 
-  cardBg: '#F5F3EE',
-  cardBorder: '#E5E0D5',
+  cardBg: '#EDF6F2',
+  cardBorder: '#D4E7DF',
 
-  textDark: '#1A1A1A',
-  textMedium: '#4A4A4A',
-  textLight: '#7A7A7A',
+  textDark: '#12221E',
+  textMedium: '#40534D',
+  textLight: '#6B7C76',
   textOnPrimary: '#FFFFFF',
 
-  tableRowAlt: '#F5F3EE',
+  tableRowAlt: '#F4F9F7',
 
   warningBg: '#FFF8E1',
   warningBorder: '#D4A017',
 
-  ruleLight: '#D4CFC5',
+  ruleLight: '#C8DDD5',
 };
 
 /** WUSV / SV regional show palette — red/blue/black per the British Regional
@@ -171,7 +171,7 @@ export const s = StyleSheet.create({
   },
   coverTopBand: {
     backgroundColor: C.primary,
-    paddingVertical: 10,
+    paddingVertical: 12,
     paddingHorizontal: 20,
     alignItems: 'center',
   },
@@ -185,8 +185,8 @@ export const s = StyleSheet.create({
     textAlign: 'center',
   },
   coverContent: {
-    paddingHorizontal: 30,
-    paddingTop: 14,
+    paddingHorizontal: 26,
+    paddingTop: 18,
     flex: 1,
     alignItems: 'center',
   },
@@ -199,26 +199,36 @@ export const s = StyleSheet.create({
   },
   coverShowName: {
     fontFamily: 'HankenGrotesk',
-    fontSize: 17,
+    fontSize: 19,
     fontWeight: 800,
     textAlign: 'center',
     color: C.textDark,
-    marginBottom: 8,
+    marginBottom: 10,
   },
   coverBadge: {
     backgroundColor: C.primary,
-    borderRadius: 10,
-    paddingVertical: 3,
-    paddingHorizontal: 14,
-    marginBottom: 4,
+    borderRadius: 14,
+    paddingVertical: 5,
+    paddingHorizontal: 16,
+    marginBottom: 3,
+    maxWidth: '100%',
   },
   coverBadgeText: {
     fontFamily: 'Inter',
-    fontSize: 7.5,
+    fontSize: 7,
     fontWeight: 'bold',
     color: C.textOnPrimary,
     textTransform: 'uppercase',
-    letterSpacing: 1.5,
+    letterSpacing: 1.1,
+    textAlign: 'center',
+  },
+  coverSpecimen: {
+    fontFamily: 'Inter',
+    fontSize: 5.5,
+    color: C.textLight,
+    textTransform: 'uppercase',
+    letterSpacing: 1.2,
+    marginBottom: 5,
   },
   coverClassCount: {
     fontFamily: 'Inter',
@@ -243,10 +253,10 @@ export const s = StyleSheet.create({
   coverDetailCard: {
     width: '100%',
     backgroundColor: C.cardBg,
-    borderRadius: 6,
-    padding: '8 14',
+    borderRadius: 12,
+    padding: '9 14',
     marginBottom: 8,
-    borderLeftWidth: 3,
+    borderLeftWidth: 4,
     borderLeftColor: C.accent,
   },
   coverDetailRow: {
@@ -323,7 +333,7 @@ export const s = StyleSheet.create({
     backgroundColor: C.primary,
     marginTop: -25,
     marginHorizontal: -25,
-    paddingVertical: 9,
+    paddingVertical: 11,
     paddingHorizontal: 25,
     marginBottom: 14,
   },
@@ -352,7 +362,7 @@ export const s = StyleSheet.create({
   // ── Info cards ──
   infoCard: {
     backgroundColor: C.cardBg,
-    borderRadius: 6,
+    borderRadius: 10,
     padding: '8 12',
     marginBottom: 8,
     borderLeftWidth: 3,

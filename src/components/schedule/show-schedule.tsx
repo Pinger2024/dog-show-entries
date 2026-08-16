@@ -11,7 +11,6 @@ import type {
 import {
   C,
   CSv,
-  SHOW_TYPE_LABELS,
   formatVenue,
   formatDate,
   formatShortDate,
@@ -24,10 +23,12 @@ import { SectionBand, InfoCard, GoldRule, Rule, TwoColSectionHeader } from './sh
 import { sortOfficers } from './shared/officers';
 import { buildEntryFeeGroups } from './shared/entry-fee-groups';
 import { juniorHandlerFeeForSchedule } from './shared/junior-handler-fee';
+import { RkcNumberedRules } from './shared/rkc-rules';
 import { AdvertPage, selectAdverts } from './shared/advert-page';
 import type { ScheduleAdvert } from './shared/types';
 import { groupSvClasses, type SvClassificationGroups } from './shared/sv-classification';
 import { sectionClasses } from '@/lib/class-labels';
+import { getRkcScheduleProfile } from '@/lib/rkc-schedule-profile';
 
 // Re-export so existing consumers (route.ts, pdf-generation.ts, tests,
 // preview scripts) continue importing from this module path.
@@ -51,12 +52,17 @@ export function ShowSchedule({
   judges: ScheduleJudge[];
   sponsors?: ScheduleSponsor[];
   adverts?: ScheduleAdvert[];
+  format?: ScheduleFormat;
   /** Accepted but unused — single-breed shows don't render group/show-level
    *  panel judges. The dispatcher passes this prop to both renderers so the
    *  call signatures stay symmetrical; multi-breed component consumes it. */
   panelJudges?: unknown;
 }) {
-  const showTypeLabel = SHOW_TYPE_LABELS[show.showType] ?? show.showType;
+  const rkcProfile = getRkcScheduleProfile({
+    showType: show.showType,
+    showScope: show.showScope,
+    judgedOnGroupSystem: show.scheduleData?.judgedOnGroupSystem,
+  });
   const showDate = show.endDate && show.endDate !== show.date
     ? `${formatDate(show.date)} — ${formatDate(show.endDate)}`
     : formatDate(show.date);
@@ -143,7 +149,7 @@ export function ShowSchedule({
       <Page size="A5" style={s.coverPage}>
         {/* Cover top band — Remi green for RKC shows, BRG red for SV shows. */}
         {show.organisation && (
-          <View style={[s.coverTopBand, isWusv && { backgroundColor: CSv.primary }]}>
+          <View style={[s.coverTopBand, isWusv ? { backgroundColor: CSv.primary } : {}]}>
             <Text style={s.coverOrgName}>{show.organisation.name}</Text>
           </View>
         )}
@@ -174,9 +180,10 @@ export function ShowSchedule({
           <Text style={s.coverShowName}>{show.name}</Text>
 
           {/* Show type badge */}
-          <View style={[s.coverBadge, isWusv && { backgroundColor: CSv.primary }]}>
-            <Text style={s.coverBadgeText}>{isWusv ? 'Regional' : showTypeLabel}</Text>
+          <View style={[s.coverBadge, isWusv ? { backgroundColor: CSv.primary } : {}]}>
+            <Text style={s.coverBadgeText}>{isWusv ? 'Regional' : rkcProfile.title}</Text>
           </View>
+          {!isWusv && <Text style={s.coverSpecimen}>RKC specimen · {rkcProfile.specimenVersion}</Text>}
 
           {/* Show-level sponsor logos below badge */}
           {(() => {
@@ -221,7 +228,7 @@ export function ShowSchedule({
           <GoldRule variant={variant} />
 
           {/* ── Key details card ── */}
-          <View style={[s.coverDetailCard, isWusv && { borderLeftColor: CSv.streak, backgroundColor: CSv.cardBg }]}>
+          <View style={[s.coverDetailCard, isWusv ? { borderLeftColor: CSv.streak, backgroundColor: CSv.cardBg } : {}]}>
             <View style={s.coverDetailRow}>
               <Text style={s.coverDetailLabel}>Date</Text>
               <Text style={s.coverDetailValue}>{showDate}</Text>
@@ -271,7 +278,7 @@ export function ShowSchedule({
           {/* ── Secretary details ── */}
           {(show.secretaryName || show.secretaryEmail) && (
             <View style={{ ...s.coverDetailCard, borderLeftColor: isWusv ? CSv.primary : C.primary, ...(isWusv ? { backgroundColor: CSv.cardBg } : {}) }}>
-              <Text style={[s.coverSectionLabel, isWusv && { color: CSv.primary }]}>Show Secretary</Text>
+              <Text style={[s.coverSectionLabel, isWusv ? { color: CSv.primary } : {}]}>Show Secretary</Text>
               {show.secretaryName && (
                 <Text style={s.coverSectionText}>{show.secretaryName}</Text>
               )}
@@ -290,7 +297,7 @@ export function ShowSchedule({
           {/* On-call vet */}
           {show.onCallVet && (
             <View style={{ width: '100%', marginBottom: 4 }}>
-              <Text style={[s.coverSectionLabel, isWusv && { color: CSv.primary }]}>On-Call Veterinary Surgeon</Text>
+              <Text style={[s.coverSectionLabel, isWusv ? { color: CSv.primary } : {}]}>On-Call Veterinary Surgeon</Text>
               <Text style={s.coverSectionText}>{show.onCallVet}</Text>
             </View>
           )}
@@ -298,7 +305,7 @@ export function ShowSchedule({
           {/* First Aider(s) — RKC compliance, Amanda 2026-05-14 */}
           {sd?.firstAiders && sd.firstAiders.length > 0 && (
             <View style={{ width: '100%', marginBottom: 4 }}>
-              <Text style={[s.coverSectionLabel, isWusv && { color: CSv.primary }]}>
+              <Text style={[s.coverSectionLabel, isWusv ? { color: CSv.primary } : {}]}>
                 {sd.firstAiders.length === 1 ? 'First Aider' : 'First Aiders'}
               </Text>
               <Text style={s.coverSectionText}>{sd.firstAiders.join(', ')}</Text>
@@ -309,7 +316,7 @@ export function ShowSchedule({
               GSDL convention (Amanda 2026-05-20). */}
           {sd?.showManager && (
             <View style={{ width: '100%', marginBottom: 4 }}>
-              <Text style={[s.coverSectionLabel, isWusv && { color: CSv.primary }]}>{isWusv ? 'Event Manager' : 'Show Manager'}</Text>
+              <Text style={[s.coverSectionLabel, isWusv ? { color: CSv.primary } : {}]}>{isWusv ? 'Event Manager' : 'Show Manager'}</Text>
               <Text style={s.coverSectionText}>{sd.showManager}</Text>
             </View>
           )}
@@ -341,7 +348,7 @@ export function ShowSchedule({
         </View>
 
         {/* Green bottom band */}
-        <View style={[s.coverBottomBand, isWusv && { backgroundColor: CSv.primary }]} />
+        <View style={[s.coverBottomBand, isWusv ? { backgroundColor: CSv.primary } : {}]} />
       </Page>
 
       {/* Inside-front-cover adverts — render right after the cover page. */}
@@ -1098,7 +1105,7 @@ export function ShowSchedule({
           <View style={{ marginBottom: 8 }}>
             <TwoColSectionHeader title="Mixed" />
             {mixedTopClasses.map((cls, i) => (
-              <View key={i} style={[s.twoColRow, i % 2 !== 0 && s.twoColRowAlt]} wrap={false}>
+              <View key={i} style={[s.twoColRow, i % 2 !== 0 ? s.twoColRowAlt : {}]} wrap={false}>
                 <Text style={s.twoColNum}>{cls.classLabel}</Text>
                 <Text style={s.twoColName}>{cls.className}</Text>
               </View>
@@ -1113,7 +1120,7 @@ export function ShowSchedule({
               <Text style={s.twoColHeaderText}>Dog</Text>
             </View>
             {dogClasses.map((cls, i) => (
-              <View key={i} style={[s.twoColRow, i % 2 !== 0 && s.twoColRowAlt]} wrap={false}>
+              <View key={i} style={[s.twoColRow, i % 2 !== 0 ? s.twoColRowAlt : {}]} wrap={false}>
                 <Text style={s.twoColNum}>{cls.classLabel}</Text>
                 <Text style={s.twoColName}>{cls.className}</Text>
               </View>
@@ -1126,7 +1133,7 @@ export function ShowSchedule({
               <Text style={s.twoColHeaderText}>Bitch</Text>
             </View>
             {bitchClasses.map((cls, i) => (
-              <View key={i} style={[s.twoColRow, i % 2 !== 0 && s.twoColRowAlt]} wrap={false}>
+              <View key={i} style={[s.twoColRow, i % 2 !== 0 ? s.twoColRowAlt : {}]} wrap={false}>
                 <Text style={s.twoColNum}>{cls.classLabel}</Text>
                 <Text style={s.twoColName}>{cls.className}</Text>
               </View>
@@ -1159,7 +1166,7 @@ export function ShowSchedule({
               </View>
             )}
             {sacClasses.map((cls, i) => (
-              <View key={i} style={[s.twoColRow, i % 2 !== 0 && s.twoColRowAlt]} wrap={false}>
+              <View key={i} style={[s.twoColRow, i % 2 !== 0 ? s.twoColRowAlt : {}]} wrap={false}>
                 <Text style={s.twoColNum}>{cls.classLabel}</Text>
                 <Text style={s.twoColName}>{sacDisplayName(cls)}</Text>
               </View>
@@ -1190,7 +1197,7 @@ export function ShowSchedule({
           <View style={{ marginTop: 8 }}>
             <TwoColSectionHeader title="Junior Handling" />
             {mixedBottomClasses.map((cls, i) => (
-              <View key={i} style={[s.twoColRow, i % 2 !== 0 && s.twoColRowAlt]} wrap={false}>
+              <View key={i} style={[s.twoColRow, i % 2 !== 0 ? s.twoColRowAlt : {}]} wrap={false}>
                 <Text style={s.twoColNum}>{cls.classLabel}</Text>
                 <Text style={s.twoColName}>{cls.className}</Text>
               </View>
@@ -1293,91 +1300,8 @@ export function ShowSchedule({
       <Page size="A5" style={s.page}>
         <SectionBand variant={variant} title="Rules and Regulations" />
 
-        <View style={{ marginBottom: 10, paddingHorizontal: 2 }} wrap={false}>
-          <Text style={{ fontFamily: 'Times', fontStyle: 'italic', fontSize: 8, lineHeight: 1.4, color: C.textMedium }}>
-            All Judges at this show agree to abide by the following statement: &ldquo;In assessing dogs, judges must penalise any features or exaggerations which they consider would be detrimental to the soundness, health and well being of the dog.&rdquo;
-          </Text>
-        </View>
+        <RkcNumberedRules show={show} multiBreed={false} />
 
-        {show.showOpenTime && (
-          <Rule num="1">The show will open at {formatTime(show.showOpenTime)}.</Rule>
-        )}
-        <Rule num="2">
-          {sd?.isBenched
-            ? `Dogs will be benched${sd.benchingRemovalTime ? `. ${sd.benchingRemovalTime}` : ' and may be removed after Best in Show judging has been completed'}.`
-            : 'Dogs will not be benched at any time but it is the exhibitor\u2019s responsibility to ensure that exhibits are available for judging.'}
-        </Rule>
-        {show.startTime && (
-          <Rule num="3">Judging will commence {formatTime(show.startTime)}.</Rule>
-        )}
-        <Rule num="4">Exhibits may be removed from the Show after their judging has been completed. The Show will close half an hour after all judging has been completed. Exhibits may not be removed any earlier unless by written order of the veterinary surgeon, veterinary practitioner or of the Show Management and then only in very exceptional and unforeseen circumstances which must be reported to the Royal Kennel Club.</Rule>
-        {(show.firstEntryFee != null || show.subsequentEntryFee != null || show.nfcEntryFee != null) && (
-          <Rule num="5">
-            ENTRY FEES: {show.firstEntryFee != null ? `${formatCurrency(show.firstEntryFee)} first entry` : ''}
-            {show.subsequentEntryFee != null ? `, subsequent entries same dog ${formatCurrency(show.subsequentEntryFee)}` : ''}
-            {show.discountGroups.map((g) => `. ${g.label} first entry ${formatCurrency(g.firstEntryFeePence)}`).join('')}
-            {show.multiDogThreshold != null && show.multiDogPackagePence != null
-              ? `. ${show.multiDogThreshold}+ dog package ${formatCurrency(show.multiDogPackagePence)}`
-              : ''}
-            {show.discountGroups
-              .filter((g) => g.multiDogPackagePence != null)
-              .map((g) => ` (${g.label}: ${formatCurrency(g.multiDogPackagePence!)})`)
-              .join('')}
-            {show.nfcEntryFee != null ? `. NFC ${formatCurrency(show.nfcEntryFee)}` : ''}
-            {show.juniorHandlerFee != null ? `. Junior Handler ${formatCurrency(show.juniorHandlerFee)}` : ''}.
-            {' '}A handling fee of £1.00 plus 1% of the order subtotal is added at checkout to cover online processing; this is shown to exhibitors before they pay.
-          </Rule>
-        )}
-        <Rule num="6">ONLINE ENTRY can be found at remishowmanager.co.uk/shows/{show.slug}</Rule>
-        <Rule num="7">The Committee reserves to itself the right to refuse any entries.</Rule>
-        <Rule num="8">Puppies under four calendar months of age on the first day of the Show are not eligible for exhibition.</Rule>
-        <Rule num="9">The mating of bitches within the precincts of the Show is forbidden.</Rule>
-        <Text style={s.ruleText}>
-          <Text style={s.ruleNumber}>10.</Text> <Text style={s.ruleTextBold}>Best Puppy in Show:</Text> Where a Best Puppy in Show competition is scheduled the Best Puppy in Show is a puppy which has competed and is unbeaten by any other puppy exhibited at the show. A puppy is a dog of six and not exceeding twelve calendar months of age on the first day of the show.
-        </Text>
-        <Rule num="11">A Baby Puppy is a dog of four and less than six calendar months of age on the first day of the show. Baby Puppy classes may be scheduled at any breed Club show, Best Baby Puppy in Breed may be declared at each breed from the dogs entered in the Baby Puppy class. There must be no progression to further competitions.</Rule>
-        <Rule num="12">In Best in Show the exhibits may be selected from the exhibits declared Best of Sex. If a Reserve Best in Show is to be selected, the eligible dogs are those declared Best of Sex, Opposite Best of Sex of the exhibit declared Best in Show.</Rule>
-        {/* Multi-breed BIS chains (Best of Group → Best in Show), the Crufts
-            qualification banner, and the AVNSC/AVIBR variants of Rule 10 all
-            live in ShowScheduleMultibreed — the sibling component dispatched
-            for showScope 'general' / 'group'. */}
-        {sd?.hasBestVeteranInShow && (
-          <Text style={s.ruleText}>
-            <Text style={s.ruleNumber}>12a.</Text>{' '}
-            <Text style={s.ruleTextBold}>Best Veteran in Show:</Text>{' '}
-            {sd.bestVeteranInShowEligibility?.trim()
-              ? sd.bestVeteranInShowEligibility
-              : 'A Best Veteran in Show competition will be held. Eligible dogs are those declared Best Veteran in their breed (or Best Veteran of Sex where applicable). The selection of Best in Show may follow the selection of Best Veteran in Show. Where the Best in Show is a veteran it may, at the discretion of the judge, be awarded Best Veteran in Show.'}
-          </Text>
-        )}
-        <Rule num="13">Exhibits will not be admitted to Group or Best in Show competition after a period of ten minutes has elapsed since the announcement that exhibits are required for judging, unless they have been unavoidably delayed by previous judging not being completed on time, and then only with the special permission of the Show Management.</Rule>
-        <Rule num="14">Exhibitors must not pick up dogs by their tails and leads. When lifting dogs not handle in a rough manner.</Rule>
-        <Rule num="15">All exhibitors must be familiar with Royal Kennel Club Regulation F (Annex B) Regulations for the Preparation of Dogs for Exhibition.</Rule>
-        <Rule num="16">All dogs resident outside the UK must be issued with a Royal Kennel Club Authority to Compete number before entry to the show/event can be made. All singles must be resident within the UK. A single entry for an overseas exhibit must be accompanied by a copy of the dog&apos;s official export pedigree.</Rule>
-
-        {/* Dogs in vehicles WARNING */}
-        <View style={s.warningBox} wrap={false}>
-          <Text style={s.warningTitle}>WARNING</Text>
-          <Text style={s.warningText}>
-            IF YOUR DOG IS FOUND TO BE AT RISK FORCIBLE ENTRY TO YOUR VEHICLE MAY BE NECESSARY WITHOUT LIABILITY FOR ANY DAMAGE CAUSED.
-          </Text>
-        </View>
-
-        <Rule num="17">Anyone whose dog is entered at a Royal Kennel Club licensed event should take all reasonable steps to ensure the needs of their dog(s) are met and should not put a dog&apos;s health and welfare at risk by any action, default, omission or otherwise. Breach of Royal Kennel Club Regulations in this respect may be referred to the Board for disciplinary action under the Royal Kennel Club Rules and Regulations. The use of pinch collars, electronic shock collars, or prong collars, is not permitted at any show licensed by the Royal Kennel Club. This shall apply at the venue or within the precincts of the show.</Rule>
-        <Text style={s.ruleText}>
-          <Text style={s.ruleNumber}>18.</Text> <Text style={s.ruleTextBold}>Not for Competition:</Text> Not for Competition entries are accepted. Details of each dog so entered must be recorded on the entry form and must be Royal Kennel Club registered.
-        </Text>
-        <Rule num="19">No modifications will be made to the schedule except by permission of the Board of the Royal Kennel Club, which will be followed by advertisement in the Canine press wherever possible.</Rule>
-        <Rule num="20">An exhibitor or competitor should ensure that contact details for any handler are available and must be provided upon request in any investigation of a breach of this regulation by such handler.</Rule>
-
-        {/* F(1) applicable paragraphs notice — RKC compliance */}
-        <View style={{ marginTop: 6, paddingTop: 4, borderTopWidth: 0.5, borderTopColor: C.ruleLight }} wrap={false}>
-          <Text style={{ fontFamily: 'Inter', fontSize: 7, color: C.textMedium, lineHeight: 1.4 }}>
-            The following paragraphs of the RKC Show F(1) Regulations are applicable to this show and exhibitors should familiarise themselves with these before entering: F(1).8.a, F(1).8.l, F(1).8.m, F(1).13, F(1).18, F(B) Preparation of Dogs for Exhibition.
-          </Text>
-        </View>
-
-        {/* Custom statements now appear on the cover page for prominence */}
 
 
           <Text style={s.footer} render={footerRender} fixed />
@@ -1538,6 +1462,20 @@ export function ShowSchedule({
       {show.acceptsPostalEntries && (
         <Page size="A5" style={s.page}>
           <SectionBand variant={variant} title="Entry Form" />
+          <View style={{ backgroundColor: C.cardBg, borderRadius: 10, padding: 10, marginBottom: 8, borderLeftWidth: 4, borderLeftColor: C.accent }} wrap={false}>
+            <Text style={{ fontFamily: 'HankenGrotesk', fontSize: 10, fontWeight: 'bold', color: C.primary, textAlign: 'center', marginBottom: 4 }}>
+              ENTRY FORM FOR {show.name.toUpperCase()}
+            </Text>
+            <Text style={{ fontFamily: 'Inter', fontSize: 6.5, color: C.textMedium, textAlign: 'center', marginBottom: 3 }}>
+              {rkcProfile.title} · Held under Royal Kennel Club Rules &amp; Show Regulations F(1)
+            </Text>
+            <Text style={{ fontFamily: 'Inter', fontSize: 7, color: C.textDark }}>
+              Entries close: {show.postalCloseDate ? formatShortDate(show.postalCloseDate) : show.entryCloseDate ? formatShortDate(show.entryCloseDate) : 'date to be confirmed'} · Entry fees: {show.firstEntryFee != null ? formatCurrency(show.firstEntryFee) + ' first entry' : 'see schedule'}{show.subsequentEntryFee != null ? ', ' + formatCurrency(show.subsequentEntryFee) + ' subsequent entries with the same dog' : ''}.
+            </Text>
+            <Text style={{ fontFamily: 'Times', fontSize: 6.5, lineHeight: 1.35, color: C.textMedium, marginTop: 3 }}>
+              Use one line for each dog. If the dog is awaiting registration, write NAF for Name Applied For or TAF for Transfer Applied For. Dogs resident outside the UK must have a Royal Kennel Club Authority to Compete (ATC) number. Send completed postal entries and fees to: {show.secretaryName || 'Show Secretary'}, {show.secretaryAddress || 'secretary address shown in the schedule'}.
+            </Text>
+          </View>
 
           <Text style={{ fontFamily: 'Inter', fontSize: 7, color: C.textLight, marginBottom: 8, textAlign: 'center' }}>
             Enter online at{' '}
