@@ -26,19 +26,26 @@ export function getRkcScheduleProfile({
 }: RkcScheduleProfileInput): RkcScheduleProfile {
   const singleBreed = showScope === 'single_breed';
   const isGroupSystem = !singleBreed && judgedOnGroupSystem === true;
+  const isGroupShow = showScope === 'group';
+  const ordinaryTypeLabel = showType === 'premier_open'
+    ? 'PREMIER OPEN'
+    : showType.toUpperCase().replaceAll('_', ' ');
   const typeLabel = showType === 'championship'
-    ? singleBreed ? 'BREED CHAMPIONSHIP' : 'GENERAL CHAMPIONSHIP'
-    : showType === 'premier_open'
-      ? 'PREMIER OPEN'
-      : showType.toUpperCase().replaceAll('_', ' ');
+    ? singleBreed
+      ? 'BREED CHAMPIONSHIP'
+      : isGroupShow
+        ? 'GROUP CHAMPIONSHIP'
+        : 'GENERAL CHAMPIONSHIP'
+    : singleBreed
+      ? `${ordinaryTypeLabel} SINGLE BREED`
+      : ordinaryTypeLabel;
 
   const systemLabel = !singleBreed && showType !== 'championship'
     ? isGroupSystem ? ' JUDGED ON THE GROUP SYSTEM' : ' NOT JUDGED ON THE GROUP SYSTEM'
     : '';
-  const scopeLabel = singleBreed && showType !== 'championship' ? 'SINGLE BREED ' : '';
 
   return {
-    title: `SCHEDULE OF UNBENCHED ${scopeLabel}${typeLabel} SHOW${systemLabel}`,
+    title: `SCHEDULE OF UNBENCHED ${typeLabel} SHOW${systemLabel}`,
     specimenVersion: RKC_SCHEDULE_SPECIMEN_VERSION,
     minimumClasses: singleBreed ? 12 : 16,
     minimumPuppyAgeMonths: singleBreed ? 4 : 6,

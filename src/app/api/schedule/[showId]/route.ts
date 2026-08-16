@@ -46,7 +46,7 @@ export async function GET(
 
   // Fetch show classes, judge assignments, sponsors, discount groups,
   // and catalogue adverts concurrently
-  const [showClasses, judgeAssignments, showSponsorData, discountGroups, advertRows, sundryItemRows] = await Promise.all([
+  const [showClasses, judgeAssignments, showSponsorData, discountGroups, advertRows, sundryItemRows, showBreedRows] = await Promise.all([
     db.query.showClasses.findMany({
       where: eq(schema.showClasses.showId, showId),
       with: {
@@ -81,6 +81,10 @@ export async function GET(
       where: eq(schema.sundryItems.showId, showId),
       orderBy: [asc(schema.sundryItems.sortOrder)],
     }),
+    db.query.showBreeds.findMany({
+      where: eq(schema.showBreeds.showId, showId),
+      columns: { breedId: true, ccOffered: true },
+    }),
   ]);
 
   const adverts: ScheduleAdvert[] = advertRows.map((ad) => ({
@@ -95,6 +99,7 @@ export async function GET(
   // Build classes data — classLabel is what the PDF actually renders
   // (non-JH classes show their classNumber, JH classes show JHA/JHB…).
   const classLabelMap = buildClassLabelMap(showClasses, show.showRuleset);
+  const ccOfferedByBreed = new Map(showBreedRows.map((row) => [row.breedId, row.ccOffered]));
   const classes: ScheduleClass[] = showClasses.map((sc) => ({
     classNumber: sc.classNumber,
     classLabel: classLabelMap.get(sc.id) ?? '',
@@ -110,6 +115,7 @@ export async function GET(
       : null),
     classGroup: sc.classGroup,
     entryFee: sc.entryFee ?? null,
+    ccOffered: sc.breedId ? ccOfferedByBreed.get(sc.breedId) === true : false,
   }));
 
   // Build judges data (deduplicated by judge id). For each judge we track

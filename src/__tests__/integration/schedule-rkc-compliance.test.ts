@@ -115,6 +115,20 @@ describe('RKC schedule compliance — mandatory clauses', () => {
   it('includes the joint-and-several officer responsibility paragraph', () => {
     expect(html).toMatch(/jointly and severally responsible/i);
     expect(html).toMatch(/F4 and F5/);
+    expect(html).toMatch(/conditions of Regulation F17/i);
+    expect(html).not.toMatch(/conditions of Regulation F16/i);
+  });
+
+  it('keeps the mandatory F17 responsibility paragraph even when optional officials are blank', () => {
+    const noOfficials = baseShow({
+      onCallVet: null,
+      scheduleData: {
+        ...(baseShow().scheduleData as object),
+        officers: [],
+        showManager: undefined,
+      } as ScheduleShowInfo['scheduleData'],
+    });
+    expect(render(noOfficials)).toMatch(/conditions of Regulation F17/i);
   });
 
   it('includes the "Committee not responsible for loss/damage/injury" disclaimer', () => {
@@ -122,8 +136,8 @@ describe('RKC schedule compliance — mandatory clauses', () => {
     expect(html).toMatch(/personal injury whether arising from accident or any other cause whatsoever/i);
   });
 
-  it('states the show is held under RKC Rules & Show Regulations F(1)', () => {
-    expect(html).toMatch(/Held under Royal Kennel Club Rules.*Show Regulations F\(1\)/i);
+  it('states the show is held under Royal Kennel Club Limited Rules & Regulations', () => {
+    expect(html).toMatch(/Held under Royal Kennel Club Limited Rules.*Regulations/i);
   });
 
   // ── Judges' welfare undertaking (mandatory) ────────────────────────────────
@@ -204,6 +218,11 @@ describe('RKC schedule compliance — mandatory clauses', () => {
 
   it('includes a docking statement on the cover (England paid-admission default)', () => {
     expect(html).toMatch(/A dog docked on or after 6 April 2007/i);
+  });
+
+  it('identifies the dog and bitch Challenge Certificates on a breed championship classification', () => {
+    expect(html).toMatch(/CHALLENGE CERTIFICATE\s*[—–-]\s*DOG/i);
+    expect(html).toMatch(/CHALLENGE CERTIFICATE\s*[—–-]\s*BITCH/i);
   });
 
   // ── Hot weather warning ────────────────────────────────────────────────────
@@ -374,9 +393,18 @@ describe('RKC schedule compliance — postal entry form', () => {
 
   it('includes NAF, TAF and ATC entry instructions', () => {
     const html = renderPostal();
-    expect(html).toMatch(/NAF for Name Applied For/i);
-    expect(html).toMatch(/TAF for Transfer Applied For/i);
-    expect(html).toMatch(/Authority to Compete \(ATC\) number/i);
+    expect(html).toMatch(/NAF (?:for|means) Name Applied For/i);
+    expect(html).toMatch(/TAF (?:for|means) Transfer Applied For/i);
+    expect(html).toMatch(/Authority to Compete (?:\(ATC\) )?number/i);
+  });
+
+  it('uses the approved RKC postal-entry instruction wording', () => {
+    const html = renderPostal();
+    expect(html).toMatch(/This form must be used by one person only \(or partnership\)/i);
+    expect(html).toMatch(/Writing MUST BE IN INK OR INDELIBLE PENCIL/);
+    expect(html).toMatch(/Puppies under (?:four|4) months of age.*cannot be entered for competition/i);
+    expect(html).toMatch(/On no account will entries be accepted without fees/i);
+    expect(html).toMatch(/classes in numerical order and USE BLOCK CAPITALS/i);
   });
 
   it('includes the Hot Days notice on the entry form', () => {
@@ -606,6 +634,14 @@ describe('RKC schedule compliance — multi-breed general championship show', ()
 
   it('uses the SIX-month puppy threshold', () => {
     expect(html).toMatch(/Puppies under six calendar months/i);
+  });
+
+  it('identifies CC awards for a separately classified CC breed', () => {
+    const ccClasses = multiBreedClasses.map((item) =>
+      item.breedName === 'Beagle' ? { ...item, ccOffered: true } : item,
+    );
+    const ccHtml = renderMultibreed(show, ccClasses);
+    expect(ccHtml).toMatch(/Beagle\s*[—–-]\s*CHALLENGE CERTIFICATES OFFERED:\s*DOG AND BITCH/i);
   });
 });
 

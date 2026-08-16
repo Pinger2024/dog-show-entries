@@ -25,6 +25,7 @@ import {
   orders,
   orderSundryItems,
   showDiscountGroups,
+  showBreeds,
 } from '@/server/db/schema';
 import { verifyShowAccess } from '../verify-show-access';
 import { publicOrgColumns } from '../public-org-columns';
@@ -507,6 +508,7 @@ export const showsRouter = createTRPCRouter({
           breedIds: z.array(z.string().uuid()),
           classDefinitionIds: z.array(z.string().uuid()),
           splitBySex: z.boolean().default(false),
+          ccBreedIds: z.array(z.string().uuid()).default([]),
         }).optional(),
       })
     )
@@ -688,6 +690,19 @@ export const showsRouter = createTRPCRouter({
 
       // Create show classes for all-breed shows (per-breed classes)
       if (allBreedClassData && allBreedClassData.breedIds.length > 0 && allBreedClassData.classDefinitionIds.length > 0) {
+        const selectedBreedIds = new Set(allBreedClassData.breedIds);
+        const ccBreedIds = new Set(
+          allBreedClassData.ccBreedIds.filter((breedId) => selectedBreedIds.has(breedId)),
+        );
+        await ctx.db.insert(showBreeds).values(
+          allBreedClassData.breedIds.map((breedId, displayOrder) => ({
+            showId: show!.id,
+            breedId,
+            ccOffered: showData.showType === 'championship' && ccBreedIds.has(breedId),
+            displayOrder,
+          })),
+        );
+
         const isSeparateSex = allBreedClassData.splitBySex;
         const fee = entryFee ?? 0;
         const allValues: {

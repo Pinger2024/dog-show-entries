@@ -227,6 +227,7 @@ export default function NewShowPage() {
     selectedTemplateId: null,
     classDefinitionIds: [],
     breedClassOverrides: {},
+    ccBreedIds: [],
   });
 
   const form = useForm<CreateShowValues>({
@@ -475,6 +476,7 @@ export default function NewShowPage() {
               breedIds: allBreedData.selectedBreedIds,
               classDefinitionIds: allBreedData.classDefinitionIds,
               splitBySex: !!values.classSexArrangement && values.classSexArrangement === 'separate_sex',
+              ccBreedIds: values.showType === 'championship' ? allBreedData.ccBreedIds : [],
             }
           : undefined,
       });
@@ -1546,6 +1548,7 @@ export default function NewShowPage() {
                   value={allBreedData}
                   onChange={handleAllBreedDataChange}
                   classDefinitions={classDefinitions ?? []}
+                  showType={watchedShowType}
                 />
               </CardContent>
             </Card>

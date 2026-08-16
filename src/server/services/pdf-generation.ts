@@ -475,7 +475,7 @@ export async function generateSchedulePdf(showId: string): Promise<Buffer> {
 
   if (!show) throw new Error(`Show ${showId} not found`);
 
-  const [showClasses, judgeAssignments, showSponsors, discountGroups, advertRows, sundryItemRows] = await Promise.all([
+  const [showClasses, judgeAssignments, showSponsors, discountGroups, advertRows, sundryItemRows, showBreedRows] = await Promise.all([
     db.query.showClasses.findMany({
       where: eq(schema.showClasses.showId, showId),
       with: {
@@ -504,6 +504,10 @@ export async function generateSchedulePdf(showId: string): Promise<Buffer> {
     db.query.sundryItems.findMany({
       where: eq(schema.sundryItems.showId, showId),
       orderBy: [asc(schema.sundryItems.sortOrder)],
+    }),
+    db.query.showBreeds.findMany({
+      where: eq(schema.showBreeds.showId, showId),
+      columns: { breedId: true, ccOffered: true },
     }),
   ]);
 
@@ -631,6 +635,7 @@ export async function generateSchedulePdf(showId: string): Promise<Buffer> {
   }
 
   const classLabelMap = buildClassLabelMap(showClasses, show.showRuleset);
+  const ccOfferedByBreed = new Map(showBreedRows.map((row) => [row.breedId, row.ccOffered]));
   const classes: ScheduleClass[] = showClasses.map((sc) => ({
     classNumber: sc.classNumber,
     classLabel: classLabelMap.get(sc.id) ?? '',
@@ -646,6 +651,7 @@ export async function generateSchedulePdf(showId: string): Promise<Buffer> {
       : null),
     classGroup: sc.classGroup,
     entryFee: sc.entryFee ?? null,
+    ccOffered: sc.breedId ? ccOfferedByBreed.get(sc.breedId) === true : false,
   }));
 
   // Build class sponsorships grouped by show sponsor (loaded via showClasses relation)

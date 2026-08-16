@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { eq, asc } from 'drizzle-orm';
-import { shows, showClasses, organisations, venues, rings } from '@/server/db/schema';
+import { shows, showClasses, showBreeds, organisations, venues, rings } from '@/server/db/schema';
 import { testDb } from '../helpers/db';
 import { createTestCaller } from '../helpers/context';
 import {
@@ -113,6 +113,39 @@ describe('shows.create', () => {
     expect(
       breedRows.map((c) => c.classNumber).sort((a, b) => (a ?? 0) - (b ?? 0)),
     ).toEqual([1, 2]);
+  });
+
+  it('records per-breed Challenge Certificate allocations for an all-breed championship show', async () => {
+    const { user, org } = await makeSecretaryWithOrg();
+    const [ccBreed, nonCcBreed, open] = await Promise.all([
+      makeBreed({ name: 'CC Breed' }),
+      makeBreed({ name: 'Non-CC Breed' }),
+      makeClassDef({ name: 'Open', type: 'achievement', sortOrder: 50 }),
+    ]);
+
+    const created = await createTestCaller(user).shows.create({
+      name: 'General Championship Show',
+      showType: 'championship',
+      showScope: 'general',
+      organisationId: org.id,
+      startDate: '2030-06-01',
+      endDate: '2030-06-01',
+      allBreedClassData: {
+        breedIds: [ccBreed.id, nonCcBreed.id],
+        classDefinitionIds: [open.id],
+        splitBySex: true,
+        ccBreedIds: [ccBreed.id],
+      },
+    });
+
+    const rows = await testDb.query.showBreeds.findMany({
+      where: eq(showBreeds.showId, created.id),
+      orderBy: [asc(showBreeds.displayOrder)],
+    });
+    expect(rows.map((row) => ({ breedId: row.breedId, ccOffered: row.ccOffered }))).toEqual([
+      { breedId: ccBreed.id, ccOffered: true },
+      { breedId: nonCcBreed.id, ccOffered: false },
+    ]);
   });
 
   it('appends -2 to the slug when the same name is used twice', async () => {

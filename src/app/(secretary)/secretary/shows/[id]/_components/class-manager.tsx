@@ -85,6 +85,21 @@ export function ClassManager({ showId, showType, showScope, showRuleset, classes
   const [optimisticOrder, setOptimisticOrder] = useState<Record<string, number> | null>(null);
   const [pendingAction, setPendingAction] = useState<{ message: string; action: () => void } | null>(null);
   const utils = trpc.useUtils();
+  const managesCcAllocations = showType === 'championship' && showScope !== 'single_breed' && showRuleset !== 'wusv';
+  const { data: ccBreedSettings = [] } = trpc.secretary.getShowBreedCcSettings.useQuery(
+    { showId },
+    { enabled: managesCcAllocations },
+  );
+  const ccMutation = trpc.secretary.setShowBreedCc.useMutation({
+    onSuccess: async () => {
+      await Promise.all([
+        utils.secretary.getShowBreedCcSettings.invalidate({ showId }),
+        utils.secretary.getPhaseBlockers.invalidate({ showId }),
+      ]);
+      toast.success('Challenge Certificate setting saved');
+    },
+    onError: (error) => toast.error(error.message || 'Could not save the Challenge Certificate setting'),
+  });
 
   const updateMutation = trpc.secretary.updateShowClass.useMutation({
     onSuccess: () => {
@@ -384,6 +399,33 @@ export function ClassManager({ showId, showType, showScope, showRuleset, classes
 
   return (
     <>
+    {managesCcAllocations && ccBreedSettings.length > 0 && (
+      <Card className="border-primary/20 bg-primary/5">
+        <CardHeader>
+          <CardTitle>Challenge Certificates</CardTitle>
+          <CardDescription>
+            Tick each breed for which the RKC has allocated both Dog and Bitch Challenge Certificates at this show.
+            Remi will print the declaration and apply the stricter class checks.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+          {ccBreedSettings.map((breed) => (
+            <label key={breed.breedId} className="flex min-h-12 cursor-pointer items-center gap-3 rounded-lg border bg-background px-3 py-2.5 text-sm">
+              <Checkbox
+                checked={breed.ccOffered}
+                disabled={ccMutation.isPending}
+                onCheckedChange={(checked) => ccMutation.mutate({
+                  showId,
+                  breedId: breed.breedId,
+                  ccOffered: checked === true,
+                })}
+              />
+              <span className="font-medium">{breed.breedName}</span>
+            </label>
+          ))}
+        </CardContent>
+      </Card>
+    )}
     <Card>
       <CardHeader>
         <div className="flex items-center justify-between gap-3">

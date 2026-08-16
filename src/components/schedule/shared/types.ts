@@ -109,6 +109,9 @@ export interface ScheduleClass {
   breedGroupSortOrder?: number | null;
   /** Explicit RKC group chosen for breed-less AVNSC/AVIBR classes. */
   classGroup?: string | null;
+  /** Whether this breed is offering Challenge Certificates at this show.
+   *  Used by championship schedules to print the required Dog/Bitch notice. */
+  ccOffered?: boolean;
 }
 
 export interface ScheduleJudge {

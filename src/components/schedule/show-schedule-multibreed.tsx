@@ -23,7 +23,7 @@ import { SectionBand, InfoCard, GoldRule, Rule, TwoColSectionHeader } from './sh
 import { sortOfficers } from './shared/officers';
 import { buildEntryFeeGroups } from './shared/entry-fee-groups';
 import { AdvertPage, selectAdverts } from './shared/advert-page';
-import { RkcNumberedRules } from './shared/rkc-rules';
+import { RkcNumberedRules, RkcPostalEntryInstructions } from './shared/rkc-rules';
 import type { ScheduleAdvert } from './shared/types';
 import { getRkcScheduleProfile } from '@/lib/rkc-schedule-profile';
 
@@ -168,7 +168,7 @@ export function ShowScheduleMultibreed({
 
           {/* RKC jurisdiction */}
           <Text style={s.coverRegulatory}>
-            Held under Royal Kennel Club Rules &amp; Show Regulations F(1)
+            Held under Royal Kennel Club Limited Rules &amp; Regulations
           </Text>
           {sd?.judgedOnGroupSystem && (
             <Text style={s.coverRegulatory}>Judged on the Group System</Text>
@@ -530,8 +530,7 @@ export function ShowScheduleMultibreed({
       {/* ════════════════════════════════════════════════════════════════════════
           OFFICIALS
           ════════════════════════════════════════════════════════════════════ */}
-      {(sd?.officers?.length || sd?.showManager || show.onCallVet) && (
-        <Page size="A5" style={s.page}>
+      <Page size="A5" style={s.page}>
           <SectionBand title="Officials" />
 
           {sd?.officers && sd.officers.length > 0 && (
@@ -547,7 +546,7 @@ export function ShowScheduleMultibreed({
 
           <InfoCard title="Jurisdiction and Responsibilities">
             <Text style={{ fontFamily: 'Times', fontStyle: 'italic', fontSize: 7.5, lineHeight: 1.4, color: C.textMedium }}>
-              The Officers and Committee members of the society holding the licence are deemed responsible for organising and conducting the show safely and in accordance with the Rules and Regulations of the Royal Kennel Club and agree to abide by and adopt any decision of the Board or any authority to whom the Board may delegate its powers, subject to the conditions of Regulation F16. In so doing those appointed as Officers and Committee members accept that they are jointly and severally responsible for the organisation of the show and that this is a binding undertaking (vide Royal Kennel Club General Show Regulations F4 and F5).
+              The Officers and Committee members of the society holding the licence are deemed responsible for organising and conducting the show safely and in accordance with the Rules and Regulations of the Royal Kennel Club and agree to abide by and adopt any decision of the Board or any authority to whom the Board may delegate its powers, subject to the conditions of Regulation F17. In so doing those appointed as Officers and Committee members accept that they are jointly and severally responsible for the organisation of the show and that this is a binding undertaking (vide Royal Kennel Club General Show Regulations F4 and F5).
             </Text>
           </InfoCard>
 
@@ -565,8 +564,7 @@ export function ShowScheduleMultibreed({
 
   
           <Text style={s.footer} render={footerRender} fixed />
-        </Page>
-      )}
+      </Page>
 
       {/* ════════════════════════════════════════════════════════════════════════
           SPONSORS & ACKNOWLEDGEMENTS
@@ -933,6 +931,25 @@ export function ShowScheduleMultibreed({
             );
           };
 
+          const renderCcNotices = (sectionClasses: ScheduleClass[]) => {
+            if (show.showType !== 'championship') return null;
+            const ccBreeds = Array.from(new Set(
+              sectionClasses
+                .filter((item) => item.ccOffered && item.breedName)
+                .map((item) => item.breedName!),
+            )).sort((a, b) => a.localeCompare(b));
+            if (ccBreeds.length === 0) return null;
+            return (
+              <View style={{ paddingVertical: 4, paddingHorizontal: 8, backgroundColor: C.cardBg, borderBottomWidth: 0.5, borderBottomColor: C.cardBorder }}>
+                {ccBreeds.map((breedName) => (
+                  <Text key={breedName} style={{ fontFamily: 'Inter', fontSize: 7, fontWeight: 'bold', color: C.primary, marginVertical: 0.5 }}>
+                    {breedName} — CHALLENGE CERTIFICATES OFFERED: DOG AND BITCH
+                  </Text>
+                ))}
+              </View>
+            );
+          };
+
           const sacSection = sacClasses.length > 0 ? (
             <View key="sac-section" wrap={false} style={{ marginTop: 12 }}>
               <TwoColSectionHeader title="SPECIAL AWARD CLASSES" />
@@ -976,6 +993,7 @@ export function ShowScheduleMultibreed({
           if (sections.length === 1 && ungrouped.length === 0) {
             return (
               <>
+                {renderCcNotices(sections[0].classes)}
                 {sections[0].classes.map(renderRow)}
                 {sacSection}
               </>
@@ -1011,6 +1029,7 @@ export function ShowScheduleMultibreed({
                       ))}
                     </View>
                   )}
+                  {renderCcNotices(section.classes)}
                   {section.classes.map((cls, i) => renderRow(cls, i))}
                 </View>
               ))}
@@ -1271,14 +1290,12 @@ export function ShowScheduleMultibreed({
               ENTRY FORM FOR {show.name.toUpperCase()}
             </Text>
             <Text style={{ fontFamily: 'Inter', fontSize: 6.5, color: C.textMedium, textAlign: 'center', marginBottom: 3 }}>
-              {rkcProfile.title} · Held under Royal Kennel Club Rules &amp; Show Regulations F(1)
+              {rkcProfile.title} · Held under Royal Kennel Club Limited Rules &amp; Regulations
             </Text>
             <Text style={{ fontFamily: 'Inter', fontSize: 7, color: C.textDark }}>
               Entries close: {show.postalCloseDate ? formatShortDate(show.postalCloseDate) : show.entryCloseDate ? formatShortDate(show.entryCloseDate) : 'date to be confirmed'} · Entry fees: {show.firstEntryFee != null ? formatCurrency(show.firstEntryFee) + ' first entry' : 'see schedule'}{show.subsequentEntryFee != null ? ', ' + formatCurrency(show.subsequentEntryFee) + ' subsequent entries with the same dog' : ''}.
             </Text>
-            <Text style={{ fontFamily: 'Times', fontSize: 6.5, lineHeight: 1.35, color: C.textMedium, marginTop: 3 }}>
-              Use one line for each dog. If the dog is awaiting registration, write NAF for Name Applied For or TAF for Transfer Applied For. Dogs resident outside the UK must have a Royal Kennel Club Authority to Compete (ATC) number. Send completed postal entries and fees to: {show.secretaryName || 'Show Secretary'}, {show.secretaryAddress || 'secretary address shown in the schedule'}.
-            </Text>
+            <RkcPostalEntryInstructions show={show} />
           </View>
 
           <Text style={{ fontFamily: 'Inter', fontSize: 7, color: C.textLight, marginBottom: 8, textAlign: 'center' }}>

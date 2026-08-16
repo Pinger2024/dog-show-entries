@@ -7,6 +7,8 @@ import {
   makeSecretaryWithOrg,
   makeSecretaryWithOrgAndBreed,
   makeShow,
+  makeShowClass,
+  makeClassDef,
   makeJudge,
   makeJudgeAssignment,
   makeUser,
@@ -145,6 +147,44 @@ describe('secretary.getPhaseBlockers', () => {
     expect(result).toBeDefined();
     expect(typeof result).toBe('object');
     // At minimum: should report 'no_classes', 'no_judge', 'no_entry_fees', 'no_close_date'
+  });
+
+  it('blocks opening entries when an advertised close date is fewer than seven days before the show', async () => {
+    const { user, org } = await makeSecretaryWithOrg();
+    const show = await makeShow({
+      organisationId: org.id,
+      startDate: '2030-06-01',
+      endDate: '2030-06-01',
+      entryCloseDate: new Date('2030-05-26T23:59:00.000Z'),
+    });
+    const openClass = await makeClassDef({ name: 'Open', type: 'achievement' });
+    await makeShowClass({ showId: show.id, classDefinitionId: openClass.id });
+
+    const result = await createTestCaller(user).secretary.getPhaseBlockers({ showId: show.id });
+    expect(result.openEntriesBlockers).toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: 'rkc_entry_closing_date', severity: 'required' }),
+    ]));
+  });
+});
+
+describe('secretary Challenge Certificate settings', () => {
+  it('lets a secretary record the RKC CC allocation for an existing championship breed', async () => {
+    const { user, org, breed } = await makeSecretaryWithOrgAndBreed();
+    const show = await makeShow({
+      organisationId: org.id,
+      showType: 'championship',
+      showScope: 'general',
+    });
+    await makeShowClass({ showId: show.id, breedId: breed.id });
+    const caller = createTestCaller(user);
+
+    expect(await caller.secretary.getShowBreedCcSettings({ showId: show.id })).toEqual([
+      expect.objectContaining({ breedId: breed.id, ccOffered: false }),
+    ]);
+    await caller.secretary.setShowBreedCc({ showId: show.id, breedId: breed.id, ccOffered: true });
+    expect(await caller.secretary.getShowBreedCcSettings({ showId: show.id })).toEqual([
+      expect.objectContaining({ breedId: breed.id, ccOffered: true }),
+    ]);
   });
 });
 

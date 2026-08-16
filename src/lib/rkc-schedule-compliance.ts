@@ -5,6 +5,9 @@ export interface RkcComplianceShow {
   showScope: string;
   showRuleset?: 'rkc' | 'wusv' | null;
   judgedOnGroupSystem?: boolean | null;
+  startDate?: string | Date | null;
+  entryCloseDate?: string | Date | null;
+  postalCloseDate?: string | Date | null;
 }
 
 export interface RkcComplianceClass {
@@ -31,6 +34,7 @@ export interface RkcComplianceIssue {
     | 'baby_puppy_not_permitted'
     | 'group_avnsc'
     | 'group_avibr'
+    | 'entry_closing_date'
     | 'cc_breed_minimum_classes'
     | 'cc_breed_open_limit';
   severity: 'required';
@@ -51,6 +55,42 @@ function isNamed(item: RkcComplianceClass, ...names: string[]): boolean {
   return names.some((name) => value === normalise(name));
 }
 
+function toUtcCalendarDay(value: string | Date | null | undefined): number | null {
+  if (!value) return null;
+  const raw = value instanceof Date ? value.toISOString() : value;
+  const match = raw.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (!match) return null;
+  return Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
+}
+
+/**
+ * The current RKC specimen requires every advertised closing date to be at
+ * least seven calendar days before the show. This is intentionally separate
+ * from Remi's stricter 13-day editor rule so imported/legacy data is still
+ * audited before publication.
+ */
+export function validateRkcClosingDates(show: RkcComplianceShow): RkcComplianceIssue[] {
+  if (show.showRuleset === 'wusv' || show.showType === 'companion') return [];
+  const showDay = toUtcCalendarDay(show.startDate);
+  if (showDay == null) return [];
+
+  const dayMs = 24 * 60 * 60 * 1000;
+  const dates = [
+    ['Online entries close', show.entryCloseDate],
+    ['Postal entries close', show.postalCloseDate],
+  ] as const;
+
+  return dates.flatMap(([label, value]) => {
+    const closingDay = toUtcCalendarDay(value);
+    if (closingDay == null || (showDay - closingDay) / dayMs >= 7) return [];
+    return [{
+      code: 'entry_closing_date' as const,
+      severity: 'required' as const,
+      message: `${label} fewer than seven calendar days before the show. Move the closing date earlier.`,
+    }];
+  });
+}
+
 /** Returns only hard RKC failures: every result must be fixed before entries open. */
 export function validateRkcSchedule({
   show,
@@ -65,7 +105,7 @@ export function validateRkcSchedule({
 
   const profile = getRkcScheduleProfile(show);
   const licensedClasses = classes.filter(isLicensedClass);
-  const issues: RkcComplianceIssue[] = [];
+  const issues: RkcComplianceIssue[] = validateRkcClosingDates(show);
 
   if (licensedClasses.length < profile.minimumClasses) {
     issues.push({

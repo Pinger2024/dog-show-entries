@@ -96,6 +96,41 @@ describe('validateRkcSchedule', () => {
     ]));
   });
 
+  it('requires every advertised closing date to be at least seven calendar days before the show', () => {
+    const issues = validateRkcSchedule({
+      show: {
+        showType: 'open',
+        showScope: 'single_breed',
+        showRuleset: 'rkc',
+        startDate: '2026-06-01',
+        entryCloseDate: '2026-05-26T23:59:00.000Z',
+        postalCloseDate: '2026-05-25T23:59:00.000Z',
+      },
+      classes: singleClasses,
+    });
+    expect(issues).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        code: 'entry_closing_date',
+        message: expect.stringContaining('Online entries close'),
+      }),
+    ]));
+    expect(issues.filter((issue) => issue.code === 'entry_closing_date')).toHaveLength(1);
+  });
+
+  it('accepts closing dates on the seventh calendar day before the show', () => {
+    const issues = validateRkcSchedule({
+      show: {
+        showType: 'open',
+        showScope: 'single_breed',
+        showRuleset: 'rkc',
+        startDate: '2026-06-01',
+        entryCloseDate: '2026-05-25T23:59:00.000Z',
+      },
+      classes: singleClasses,
+    });
+    expect(issues.some((issue) => issue.code === 'entry_closing_date')).toBe(false);
+  });
+
   it('does not apply RKC checks to WUSV shows', () => {
     expect(validateRkcSchedule({
       show: { showType: 'championship', showScope: 'single_breed', showRuleset: 'wusv' },

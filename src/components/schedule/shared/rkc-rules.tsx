@@ -17,6 +17,23 @@ function entryFees(show: ScheduleShowInfo): string {
   return parts.length > 0 ? parts.join('; ') : 'See the entry form';
 }
 
+/** Approved instructions from the current RKC postal entry-form specimens. */
+export function RkcPostalEntryInstructions({ show }: { show: ScheduleShowInfo }) {
+  const profile = getRkcScheduleProfile({
+    showType: show.showType,
+    showScope: show.showScope,
+    judgedOnGroupSystem: show.scheduleData?.judgedOnGroupSystem,
+  });
+  const puppyAge = profile.minimumPuppyAgeMonths === 4 ? '4' : '6';
+
+  return (
+    <Text style={{ fontFamily: 'Times', fontSize: 6.2, lineHeight: 1.35, color: C.textMedium, marginTop: 4 }}>
+      <Text style={{ fontWeight: 'bold' }}>INSTRUCTIONS: </Text>
+      This form must be used by one person only (or partnership). Writing MUST BE IN INK OR INDELIBLE PENCIL. Use one line only for each dog. The name of the dog and all the details as recorded with The Royal Kennel Club must be given on this entry form. If an error is made the dog may be disqualified by the Committee of The Royal Kennel Club. All dogs must be REGISTERED at The Royal Kennel Club in the name of the exhibitor. If the registration or transfer of ownership has not been confirmed it must be applied for before the closing date of entries. In case of dispute proof of postage of such applications may be required by The Royal Kennel Club. Puppies under {puppyAge} months of age on the first day of the Show cannot be entered for competition. On no account will entries be accepted without fees. If a dog is in the process of Registration or Transfer at the time entry is made, add the letters NAF or TAF as appropriate after its name. NAF means Name Applied For; TAF means Transfer Applied For. Please put classes in numerical order and USE BLOCK CAPITALS throughout when completing this entry form. The Royal Kennel Club Authority to Compete number (for dogs registered and resident outside the UK) must be stated or the entry will be returned. PLEASE CHECK ALL DETAILS BEFORE POSTING. Send completed postal entries and fees to: {show.secretaryName || 'Show Secretary'}, {show.secretaryAddress || 'the secretary address shown in the schedule'}.
+    </Text>
+  );
+}
+
 function BestPuppyRule({ multiBreed, groupSystem }: { multiBreed: boolean; groupSystem: boolean }) {
   if (!multiBreed) {
     return (

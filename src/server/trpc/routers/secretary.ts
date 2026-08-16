@@ -1912,6 +1912,23 @@ export const secretaryRouter = createTRPCRouter({
       if (values.length > 0) {
         await ctx.db.insert(showClasses).values(values);
 
+        // Keep the explicit per-show breed configuration in step when a
+        // secretary adds breeds after initial show creation. Championship
+        // CC allocations default to false until the secretary confirms them.
+        const addedBreedIds = Array.from(new Set(
+          values.map((item) => item.breedId).filter((breedId): breedId is string => !!breedId),
+        ));
+        if (addedBreedIds.length > 0) {
+          await ctx.db.insert(showBreeds).values(
+            addedBreedIds.map((breedId, displayOrder) => ({
+              showId: input.showId,
+              breedId,
+              ccOffered: false,
+              displayOrder,
+            })),
+          ).onConflictDoNothing();
+        }
+
         // Auto-number breed classes in sort order. Junior Handler + Special
         // Award Classes stay unnumbered (classNumber=null) — they sit outside
         // the RKC-licensed count and render as JHA/JHB and A/B/C (bug hunt #5).
@@ -1934,6 +1951,59 @@ export const secretaryRouter = createTRPCRouter({
     }),
 
   // ── Individual class management ────────────────────────────
+
+  getShowBreedCcSettings: secretaryProcedure
+    .input(z.object({ showId: z.string().uuid() }))
+    .query(async ({ ctx, input }) => {
+      await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId, { callerIsAdmin: ctx.callerIsAdmin });
+      const [classRows, settingRows] = await Promise.all([
+        ctx.db.query.showClasses.findMany({
+          where: eq(showClasses.showId, input.showId),
+          columns: { breedId: true },
+          with: { breed: { columns: { id: true, name: true } } },
+        }),
+        ctx.db.query.showBreeds.findMany({
+          where: eq(showBreeds.showId, input.showId),
+          columns: { breedId: true, ccOffered: true },
+        }),
+      ]);
+      const ccByBreed = new Map(settingRows.map((row) => [row.breedId, row.ccOffered]));
+      const breedNames = new Map<string, string>();
+      for (const row of classRows) {
+        if (row.breedId && row.breed?.name) breedNames.set(row.breedId, row.breed.name);
+      }
+      return Array.from(breedNames, ([breedId, breedName]) => ({
+        breedId,
+        breedName,
+        ccOffered: ccByBreed.get(breedId) === true,
+      })).sort((a, b) => a.breedName.localeCompare(b.breedName));
+    }),
+
+  setShowBreedCc: secretaryProcedure
+    .input(z.object({
+      showId: z.string().uuid(),
+      breedId: z.string().uuid(),
+      ccOffered: z.boolean(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId, { callerIsAdmin: ctx.callerIsAdmin });
+      const scheduledBreed = await ctx.db.query.showClasses.findFirst({
+        where: and(eq(showClasses.showId, input.showId), eq(showClasses.breedId, input.breedId)),
+        columns: { id: true },
+      });
+      if (!scheduledBreed) {
+        throw new TRPCError({ code: 'BAD_REQUEST', message: 'That breed is not scheduled at this show.' });
+      }
+      await ctx.db.insert(showBreeds).values({
+        showId: input.showId,
+        breedId: input.breedId,
+        ccOffered: input.ccOffered,
+      }).onConflictDoUpdate({
+        target: [showBreeds.showId, showBreeds.breedId],
+        set: { ccOffered: input.ccOffered, updatedAt: new Date() },
+      });
+      return { updated: true };
+    }),
 
   updateShowClass: secretaryProcedure
     .input(
@@ -4273,6 +4343,9 @@ export const secretaryRouter = createTRPCRouter({
             showScope: show.showScope,
             showRuleset: show.showRuleset,
             judgedOnGroupSystem: show.scheduleData?.judgedOnGroupSystem,
+            startDate: show.startDate,
+            entryCloseDate: show.entryCloseDate,
+            postalCloseDate: show.postalCloseDate,
           },
           classes: complianceClasses.map((item) => ({
             className: item.classDefinition?.name ?? '',
