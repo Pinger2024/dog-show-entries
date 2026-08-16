@@ -55,7 +55,11 @@ import {
   CommandList,
 } from '@/components/ui/command';
 import type { ScheduleData } from '@/server/db/schema/shows';
-import { RKC_STATEMENTS, RKC_STATEMENT_CATEGORIES } from '@/lib/rkc-statements';
+import {
+  isRkcJudgesWelfareStatement,
+  RKC_STATEMENTS,
+  RKC_STATEMENT_CATEGORIES,
+} from '@/lib/rkc-statements';
 import { SHOW_TIMES } from '@/lib/show-times';
 import { buildBestAwards } from '@/lib/best-awards';
 import { AwardsPicker } from '@/components/awards/awards-picker';
@@ -418,8 +422,8 @@ export function ScheduleSettingsForm({ showId, onSaved }: ScheduleSettingsFormPr
       bestVeteranInShowEligibility: hasBestVeteranInShow && bestVeteranInShowEligibility.trim()
         ? bestVeteranInShowEligibility.trim()
         : undefined,
-      customStatements: customStatements.filter((s) => s.trim()).length > 0
-        ? customStatements.filter((s) => s.trim())
+      customStatements: customStatements.filter((s) => s.trim() && (isWusvShow || !isRkcJudgesWelfareStatement(s))).length > 0
+        ? customStatements.filter((s) => s.trim() && (isWusvShow || !isRkcJudgesWelfareStatement(s)))
         : undefined,
     };
     const payload = {
@@ -568,8 +572,8 @@ export function ScheduleSettingsForm({ showId, onSaved }: ScheduleSettingsFormPr
       bestVeteranInShowEligibility: hasBestVeteranInShow && bestVeteranInShowEligibility.trim()
         ? bestVeteranInShowEligibility.trim()
         : undefined,
-      customStatements: customStatements.filter((s) => s.trim()).length > 0
-        ? customStatements.filter((s) => s.trim())
+      customStatements: customStatements.filter((s) => s.trim() && (isWusvShow || !isRkcJudgesWelfareStatement(s))).length > 0
+        ? customStatements.filter((s) => s.trim() && (isWusvShow || !isRkcJudgesWelfareStatement(s)))
         : undefined,
     };
     return {
@@ -1532,41 +1536,47 @@ function RegulationsSection({
             regionals (they run under GSDL-BRG/WUSV rules). Custom statements
             below stay available for regionals. */}
         {!isWusvShow && (
-        <div className="space-y-2 max-h-48 overflow-y-auto rounded-lg border p-3">
-          {RKC_STATEMENT_CATEGORIES.map((category) => {
-            const statementsInCategory = RKC_STATEMENTS.filter((s) => s.category === category);
-            return (
-              <div key={category}>
-                <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1">{category}</p>
-                <div className="space-y-0.5">
-                  {statementsInCategory.map((stmt) => {
-                    const isSelected = customStatements.includes(stmt.text);
-                    return (
-                      <label key={stmt.id} className="flex items-start gap-2 rounded-md px-2 py-1 cursor-pointer hover:bg-accent text-xs">
-                        <Checkbox checked={isSelected} onCheckedChange={(checked) => {
-                          if (checked) setCustomStatements([...customStatements, stmt.text]);
-                          else setCustomStatements(customStatements.filter((s) => s !== stmt.text));
-                        }} className="mt-0.5" />
-                        <span className="leading-snug">
-                          {stmt.text}
-                          {stmt.regulation && <span className="ml-1 text-muted-foreground">({stmt.regulation})</span>}
-                        </span>
-                      </label>
-                    );
-                  })}
+        <>
+          <div className="flex items-start gap-2 rounded-lg border border-primary/20 bg-primary/5 p-3 text-xs text-foreground">
+            <Shield className="mt-0.5 size-4 shrink-0" />
+            <p>The judges&apos; welfare commitment is mandatory and is included automatically near the front of every RKC schedule.</p>
+          </div>
+          <div className="space-y-2 max-h-48 overflow-y-auto rounded-lg border p-3">
+            {RKC_STATEMENT_CATEGORIES.map((category) => {
+              const statementsInCategory = RKC_STATEMENTS.filter((s) => s.category === category);
+              return (
+                <div key={category}>
+                  <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1">{category}</p>
+                  <div className="space-y-0.5">
+                    {statementsInCategory.map((stmt) => {
+                      const isSelected = customStatements.includes(stmt.text);
+                      return (
+                        <label key={stmt.id} className="flex items-start gap-2 rounded-md px-2 py-1 cursor-pointer hover:bg-accent text-xs">
+                          <Checkbox checked={isSelected} onCheckedChange={(checked) => {
+                            if (checked) setCustomStatements([...customStatements, stmt.text]);
+                            else setCustomStatements(customStatements.filter((s) => s !== stmt.text));
+                          }} className="mt-0.5" />
+                          <span className="leading-snug">
+                            {stmt.text}
+                            {stmt.regulation && <span className="ml-1 text-muted-foreground">({stmt.regulation})</span>}
+                          </span>
+                        </label>
+                      );
+                    })}
+                  </div>
                 </div>
-              </div>
-            );
-          })}
-        </div>
+              );
+            })}
+          </div>
+        </>
         )}
 
-        {customStatements.filter((s) => !RKC_STATEMENTS.some((r) => r.text === s)).length > 0 && (
+        {customStatements.filter((s) => !RKC_STATEMENTS.some((r) => r.text === s) && (isWusvShow || !isRkcJudgesWelfareStatement(s))).length > 0 && (
           <div className="space-y-2">
             <p className="text-xs font-medium text-muted-foreground">Custom statements</p>
             {customStatements
               .map((stmt, i) => ({ stmt, i }))
-              .filter(({ stmt }) => !RKC_STATEMENTS.some((r) => r.text === stmt))
+              .filter(({ stmt }) => !RKC_STATEMENTS.some((r) => r.text === stmt) && (isWusvShow || !isRkcJudgesWelfareStatement(stmt)))
               .map(({ stmt, i }) => (
                 <div key={i} className="flex gap-2">
                   <Input value={stmt} onChange={(e) => {

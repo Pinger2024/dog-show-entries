@@ -2,6 +2,7 @@ import React from 'react';
 import { Text, View } from '@react-pdf/renderer';
 import { formatCurrency } from '@/lib/date-utils';
 import { getRkcScheduleProfile } from '@/lib/rkc-schedule-profile';
+import { RKC_JUDGES_WELFARE_STATEMENT } from '@/lib/rkc-statements';
 import type { ScheduleShowInfo } from './types';
 import { C, formatTime, s } from './styles';
 import { Rule } from './elements';
@@ -31,6 +32,20 @@ export function RkcPostalEntryInstructions({ show }: { show: ScheduleShowInfo })
       <Text style={{ fontWeight: 'bold' }}>INSTRUCTIONS: </Text>
       This form must be used by one person only (or partnership). Writing MUST BE IN INK OR INDELIBLE PENCIL. Use one line only for each dog. The name of the dog and all the details as recorded with The Royal Kennel Club must be given on this entry form. If an error is made the dog may be disqualified by the Committee of The Royal Kennel Club. All dogs must be REGISTERED at The Royal Kennel Club in the name of the exhibitor. If the registration or transfer of ownership has not been confirmed it must be applied for before the closing date of entries. In case of dispute proof of postage of such applications may be required by The Royal Kennel Club. Puppies under {puppyAge} months of age on the first day of the Show cannot be entered for competition. On no account will entries be accepted without fees. If a dog is in the process of Registration or Transfer at the time entry is made, add the letters NAF or TAF as appropriate after its name. NAF means Name Applied For; TAF means Transfer Applied For. Please put classes in numerical order and USE BLOCK CAPITALS throughout when completing this entry form. The Royal Kennel Club Authority to Compete number (for dogs registered and resident outside the UK) must be stated or the entry will be returned. PLEASE CHECK ALL DETAILS BEFORE POSTING. Send completed postal entries and fees to: {show.secretaryName || 'Show Secretary'}, {show.secretaryAddress || 'the secretary address shown in the schedule'}.
     </Text>
+  );
+}
+
+/**
+ * Mandatory judges' undertaking, deliberately positioned on the first inside
+ * page by both schedule renderers instead of being buried in the rules block.
+ */
+export function RkcJudgesWelfareCommitment() {
+  return (
+    <View style={s.welfareCommitment} wrap={false}>
+      <Text style={s.welfareCommitmentEyebrow}>Royal Kennel Club welfare undertaking</Text>
+      <Text style={s.welfareCommitmentTitle}>Judges&apos; Welfare Commitment</Text>
+      <Text style={s.welfareCommitmentText}>{RKC_JUDGES_WELFARE_STATEMENT}</Text>
+    </View>
   );
 }
 
@@ -90,12 +105,6 @@ export function RkcNumberedRules({ show, multiBreed }: { show: ScheduleShowInfo;
 
   return (
     <>
-      <View style={{ marginBottom: 10, paddingHorizontal: 2 }} wrap={false}>
-        <Text style={{ fontFamily: 'Times', fontStyle: 'italic', fontSize: 8, lineHeight: 1.4, color: C.textMedium }}>
-          All Judges at this show agree to abide by the following statement: &ldquo;In assessing dogs, judges must penalise any features or exaggerations which they consider would be detrimental to the soundness, health and well being of the dog.&rdquo;
-        </Text>
-      </View>
-
       {profile.isGroupSystem && (show.showType === 'open' || show.showType === 'premier_open') && (
         <View style={{ marginBottom: 10, paddingHorizontal: 8, paddingVertical: 6, backgroundColor: C.cardBg, borderRadius: 4, borderLeftWidth: 3, borderLeftColor: C.primary }} wrap={false}>
           <Text style={{ fontFamily: 'Inter', fontSize: 7, fontWeight: 'bold', color: C.primary, letterSpacing: 0.5, marginBottom: 2 }}>CRUFTS QUALIFICATION</Text>

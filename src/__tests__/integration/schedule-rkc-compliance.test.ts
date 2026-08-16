@@ -147,6 +147,39 @@ describe('RKC schedule compliance — mandatory clauses', () => {
     expect(html).toMatch(/soundness, health and well being of the dog/i);
   });
 
+  it('places the judges welfare undertaking prominently on the first information page', () => {
+    expect(html).toMatch(/Judges.*Welfare Commitment/i);
+
+    const undertaking = html.search(/All Judges at this show agree/i);
+    const entryFees = html.search(/Entry Fees/i);
+    const rules = html.search(/Rules and Regulations/i);
+
+    expect(undertaking).toBeGreaterThan(-1);
+    expect(undertaking).toBeLessThan(entryFees);
+    expect(undertaking).toBeLessThan(rules);
+    expect(html.match(/judges must penalise any features or exaggerations/gi)).toHaveLength(1);
+  });
+
+  it('groups show-specific statements into a formal notices section without repeating the judges undertaking', () => {
+    const withNotices = baseShow({
+      scheduleData: {
+        ...(baseShow().scheduleData as object),
+        customStatements: [
+          'ENTRY FEES CANNOT BE REFUNDED ONCE AN ENTRY HAS BEEN ACCEPTED',
+          'NO PHOTOGRAPHY, FILMING OR OTHER FORM OF RECORDING IS PERMITTED AT THE VENUE OR IN JUDGING RINGS WITHOUT EXPRESS WRITTEN PERMISSION OF THE ORGANISERS',
+          'ALL JUDGES AT THIS SHOW AGREE TO ABIDE BY THE FOLLOWING STATEMENT: "IN ASSESSING DOGS, JUDGES MUST PENALISE ANY FEATURES OR EXAGGERATIONS WHICH THEY CONSIDER WOULD BE DETRIMENTAL TO THE SOUNDNESS, HEALTH OR WELL BEING OF THE DOG"',
+        ],
+      } as ScheduleShowInfo['scheduleData'],
+    });
+    const noticesHtml = render(withNotices);
+
+    expect(noticesHtml).toMatch(/Important Show Notices/i);
+    expect(noticesHtml).toMatch(/ENTRY FEES CANNOT BE REFUNDED/i);
+    expect(noticesHtml).toMatch(/NO PHOTOGRAPHY, FILMING/i);
+    expect(noticesHtml.search(/Important Show Notices/i)).toBeLessThan(noticesHtml.search(/Entry Fees/i));
+    expect(noticesHtml.match(/judges must penalise any features or exaggerations/gi)).toHaveLength(1);
+  });
+
   // ── Numbered Rules (every show must have them) ─────────────────────────────
 
   it('Rule 4 includes the vet/show-management early-removal exception', () => {

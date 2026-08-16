@@ -19,13 +19,14 @@ import {
   getDockingStatement,
   s,
 } from './shared/styles';
-import { SectionBand, InfoCard, GoldRule, Rule, TwoColSectionHeader } from './shared/elements';
+import { SectionBand, InfoCard, ImportantShowNotices, GoldRule, Rule, TwoColSectionHeader } from './shared/elements';
 import { sortOfficers } from './shared/officers';
 import { buildEntryFeeGroups } from './shared/entry-fee-groups';
 import { AdvertPage, selectAdverts } from './shared/advert-page';
-import { RkcNumberedRules, RkcPostalEntryInstructions } from './shared/rkc-rules';
+import { RkcJudgesWelfareCommitment, RkcNumberedRules, RkcPostalEntryInstructions } from './shared/rkc-rules';
 import type { ScheduleAdvert } from './shared/types';
 import { getRkcScheduleProfile } from '@/lib/rkc-schedule-profile';
+import { isRkcJudgesWelfareStatement } from '@/lib/rkc-statements';
 
 // ── Main Component ─────────────────────────────────────────────────────────────
 //
@@ -95,6 +96,14 @@ export function ShowScheduleMultibreed({
   const isGroupSystem = sd?.judgedOnGroupSystem === true;
   const footerRender = ({ pageNumber, totalPages }: { pageNumber: number; totalPages: number }) =>
     `${show.name}  ·  Schedule  ·  Page ${pageNumber} of ${totalPages}`;
+  const autoStatements = new Set<string>();
+  if (sd?.wetWeatherAccommodation === false) autoStatements.add('NO WET WEATHER ACCOMMODATION IS PROVIDED');
+  if (!sd?.isBenched) autoStatements.add('THIS IS AN UNBENCHED SHOW \u2014 EXHIBITORS ARE RESPONSIBLE FOR ENSURING THEIR DOGS ARE AVAILABLE FOR JUDGING');
+  if (sd?.outsideAttraction) autoStatements.add('PLEASE NOTE: OUTSIDE ATTRACTION \u2014 RKC REGULATION F(1) 16H WILL BE STRICTLY ENFORCED');
+  const additionalScheduleStatements = (sd?.customStatements ?? []).filter((statement) => (
+    !autoStatements.has(statement.toUpperCase())
+    && !isRkcJudgesWelfareStatement(statement)
+  ));
 
 
 
@@ -304,11 +313,22 @@ export function ShowScheduleMultibreed({
         <AdvertPage key={`ad-if-${ad.id}`} advert={ad} />
       ))}
 
+      {additionalScheduleStatements.length > 0 && (
+        <Page size="A5" style={s.page}>
+          <SectionBand title="Important Information" />
+          <RkcJudgesWelfareCommitment />
+          <ImportantShowNotices statements={additionalScheduleStatements} />
+          <Text style={s.footer} render={footerRender} fixed />
+        </Page>
+      )}
+
       {/* ════════════════════════════════════════════════════════════════════════
           ENTRY INFORMATION
           ════════════════════════════════════════════════════════════════════ */}
       <Page size="A5" style={s.page}>
         <SectionBand title="Entry Information" />
+
+        {additionalScheduleStatements.length === 0 && <RkcJudgesWelfareCommitment />}
 
         {/* Fees */}
         {(show.firstEntryFee != null || show.subsequentEntryFee != null || show.nfcEntryFee != null) && (
@@ -496,33 +516,6 @@ export function ShowScheduleMultibreed({
             <Text style={s.infoText}>{sd.prizeMoney}</Text>
           </InfoCard>
         )}
-
-        {/* Additional schedule statements (filter out ones already shown by toggles) */}
-        {(() => {
-          const autoStatements = new Set<string>();
-          if (sd?.wetWeatherAccommodation === false) autoStatements.add('NO WET WEATHER ACCOMMODATION IS PROVIDED');
-          if (!sd?.isBenched) autoStatements.add('THIS IS AN UNBENCHED SHOW \u2014 EXHIBITORS ARE RESPONSIBLE FOR ENSURING THEIR DOGS ARE AVAILABLE FOR JUDGING');
-          if (sd?.outsideAttraction) autoStatements.add('PLEASE NOTE: OUTSIDE ATTRACTION \u2014 RKC REGULATION F(1) 16H WILL BE STRICTLY ENFORCED');
-          const filtered = (sd?.customStatements ?? []).filter((s) => !autoStatements.has(s.toUpperCase()));
-          if (filtered.length === 0) return null;
-          return (
-          <View style={{ marginTop: 8, paddingHorizontal: 4 }}>
-            {filtered.map((statement, i) => (
-              <Text key={i} style={{
-                fontFamily: 'Inter',
-                fontSize: 7.5,
-                fontWeight: 'bold',
-                color: C.textDark,
-                textAlign: 'center',
-                textTransform: 'uppercase',
-                marginTop: i > 0 ? 3 : 0,
-              }}>
-                {statement}
-              </Text>
-            ))}
-          </View>
-          );
-        })()}
 
           <Text style={s.footer} render={footerRender} fixed />
       </Page>

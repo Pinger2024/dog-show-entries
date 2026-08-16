@@ -44,6 +44,46 @@ export function InfoCard({
   );
 }
 
+/** A formal, scannable home for secretary-selected show-specific notices. */
+export function ImportantShowNotices({
+  statements,
+  variant = 'rkc',
+}: {
+  statements: string[];
+  variant?: Variant;
+}) {
+  if (statements.length === 0) return null;
+
+  return (
+    <View style={s.noticesSection}>
+      <View wrap={false} minPresenceAhead={35}>
+        <Text style={[
+          s.noticesHeading,
+          variant === 'sv' ? { color: CSv.primary, borderBottomColor: CSv.streak } : {},
+        ]}>
+          Important Show Notices
+        </Text>
+      </View>
+      {statements.map((statement, index) => (
+        <View
+          key={`${statement}-${index}`}
+          wrap={false}
+          style={[
+            s.noticeItem,
+            variant === 'sv' ? {
+              backgroundColor: CSv.cardBg,
+              borderColor: CSv.cardBorder,
+              borderLeftColor: CSv.primary,
+            } : {},
+          ]}
+        >
+          <Text style={s.noticeItemText}>{statement}</Text>
+        </View>
+      ))}
+    </View>
+  );
+}
+
 /** Two-column classification sub-heading ("Mixed", "Junior Handling",
  *  "Special Award Classes", per-group headings). minPresenceAhead keeps the
  *  heading with its first class row — never stranded at a page foot — and

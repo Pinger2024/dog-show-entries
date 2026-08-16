@@ -19,16 +19,17 @@ import {
   getDockingStatement,
   s,
 } from './shared/styles';
-import { SectionBand, InfoCard, GoldRule, Rule, TwoColSectionHeader } from './shared/elements';
+import { SectionBand, InfoCard, ImportantShowNotices, GoldRule, Rule, TwoColSectionHeader } from './shared/elements';
 import { sortOfficers } from './shared/officers';
 import { buildEntryFeeGroups } from './shared/entry-fee-groups';
 import { juniorHandlerFeeForSchedule } from './shared/junior-handler-fee';
-import { RkcNumberedRules, RkcPostalEntryInstructions } from './shared/rkc-rules';
+import { RkcJudgesWelfareCommitment, RkcNumberedRules, RkcPostalEntryInstructions } from './shared/rkc-rules';
 import { AdvertPage, selectAdverts } from './shared/advert-page';
 import type { ScheduleAdvert } from './shared/types';
 import { groupSvClasses, type SvClassificationGroups } from './shared/sv-classification';
 import { sectionClasses } from '@/lib/class-labels';
 import { getRkcScheduleProfile } from '@/lib/rkc-schedule-profile';
+import { isRkcJudgesWelfareStatement } from '@/lib/rkc-statements';
 
 // Re-export so existing consumers (route.ts, pdf-generation.ts, tests,
 // preview scripts) continue importing from this module path.
@@ -101,6 +102,14 @@ export function ShowSchedule({
   const isWusv = show.showRuleset === 'wusv';
   const variant: 'rkc' | 'sv' = isWusv ? 'sv' : 'rkc';
   const svGroups: SvClassificationGroups | null = isWusv ? groupSvClasses(classes) : null;
+  const autoStatements = new Set<string>();
+  if (sd?.wetWeatherAccommodation === false) autoStatements.add('NO WET WEATHER ACCOMMODATION IS PROVIDED');
+  if (!sd?.isBenched) autoStatements.add('THIS IS AN UNBENCHED SHOW \u2014 EXHIBITORS ARE RESPONSIBLE FOR ENSURING THEIR DOGS ARE AVAILABLE FOR JUDGING');
+  if (sd?.outsideAttraction) autoStatements.add('PLEASE NOTE: OUTSIDE ATTRACTION \u2014 RKC REGULATION F(1) 16H WILL BE STRICTLY ENFORCED');
+  const additionalScheduleStatements = (sd?.customStatements ?? []).filter((statement) => (
+    !autoStatements.has(statement.toUpperCase())
+    && (isWusv || !isRkcJudgesWelfareStatement(statement))
+  ));
 
   // "Special Award Class - Junior" → "Special Award Junior" so the schedule
   // reads cleanly under its own heading. Mixed-sex SACs get a "Dog or Bitch"
@@ -356,11 +365,25 @@ export function ShowSchedule({
         <AdvertPage key={`ad-if-${ad.id}`} advert={ad} />
       ))}
 
+      {/* When a show has selected notices, give them and the mandatory welfare
+          undertaking a deliberate early page. This avoids an anonymous
+          overflow page and keeps the important material together. */}
+      {!isWusv && additionalScheduleStatements.length > 0 && (
+        <Page size="A5" style={s.page}>
+          <SectionBand variant={variant} title="Important Information" />
+          <RkcJudgesWelfareCommitment />
+          <ImportantShowNotices statements={additionalScheduleStatements} variant={variant} />
+          <Text style={s.footer} render={footerRender} fixed />
+        </Page>
+      )}
+
       {/* ════════════════════════════════════════════════════════════════════════
           ENTRY INFORMATION
           ════════════════════════════════════════════════════════════════════ */}
       <Page size="A5" style={s.page}>
         <SectionBand variant={variant} title="Entry Information" />
+
+        {!isWusv && additionalScheduleStatements.length === 0 && <RkcJudgesWelfareCommitment />}
 
         {/* Fees */}
         {(show.firstEntryFee != null || show.subsequentEntryFee != null || show.nfcEntryFee != null) && (
@@ -568,32 +591,12 @@ export function ShowSchedule({
           </InfoCard>
         )}
 
-        {/* Additional schedule statements (filter out ones already shown by toggles) */}
-        {(() => {
-          const autoStatements = new Set<string>();
-          if (sd?.wetWeatherAccommodation === false) autoStatements.add('NO WET WEATHER ACCOMMODATION IS PROVIDED');
-          if (!sd?.isBenched) autoStatements.add('THIS IS AN UNBENCHED SHOW \u2014 EXHIBITORS ARE RESPONSIBLE FOR ENSURING THEIR DOGS ARE AVAILABLE FOR JUDGING');
-          if (sd?.outsideAttraction) autoStatements.add('PLEASE NOTE: OUTSIDE ATTRACTION \u2014 RKC REGULATION F(1) 16H WILL BE STRICTLY ENFORCED');
-          const filtered = (sd?.customStatements ?? []).filter((s) => !autoStatements.has(s.toUpperCase()));
-          if (filtered.length === 0) return null;
-          return (
-          <View style={{ marginTop: 8, paddingHorizontal: 4 }}>
-            {filtered.map((statement, i) => (
-              <Text key={i} style={{
-                fontFamily: 'Inter',
-                fontSize: 7.5,
-                fontWeight: 'bold',
-                color: C.textDark,
-                textAlign: 'center',
-                textTransform: 'uppercase',
-                marginTop: i > 0 ? 3 : 0,
-              }}>
-                {statement}
-              </Text>
-            ))}
-          </View>
-          );
-        })()}
+        {/* SV/WUSV keeps its custom notices on Entry Information. RKC notices
+            are presented with the mandatory welfare undertaking on the early
+            Important Information page above. */}
+        {isWusv && (
+          <ImportantShowNotices statements={additionalScheduleStatements} variant={variant} />
+        )}
 
           <Text style={s.footer} render={footerRender} fixed />
       </Page>
