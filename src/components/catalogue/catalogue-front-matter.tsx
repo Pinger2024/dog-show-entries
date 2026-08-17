@@ -770,6 +770,9 @@ function SvCoverPage({ show, classCount }: { show: CatalogueShowInfo; classCount
             {show.venueAddress ? (
               <Text style={[ss.bodySmall, { marginTop: 2 }]}>{show.venueAddress}</Text>
             ) : null}
+            {show.venueWhat3words ? (
+              <Text style={[ss.bodySmall, { marginTop: 2 }]}>what3words: {show.venueWhat3words}</Text>
+            ) : null}
           </View>
           <View style={{ width: '50%', paddingLeft: 8 }}>
             <Text style={[ss.eyebrow, { marginBottom: 3 }]}>Breed Judge</Text>
@@ -966,6 +969,7 @@ export function CoverPage({ show }: FrontMatterProps) {
               <Text style={styles.coverDetailLabel}>Venue</Text>
               <Text style={styles.coverDetailValue}>
                 {[show.venue, show.venueAddress].filter(Boolean).join(', ').replace(/,\s*,/g, ',').trim()}
+                {show.venueWhat3words ? `\nwhat3words: ${show.venueWhat3words}` : ''}
               </Text>
             </View>
           )}

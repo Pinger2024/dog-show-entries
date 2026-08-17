@@ -49,7 +49,7 @@ export async function generateCataloguePdf(
      *  until the club has announced it). The site's own downloads keep
      *  reading the DB, so the embargo holds itself; this override exists
      *  for generating the print files ahead of the announcement. */
-    venueOverride?: { name: string; address: string };
+    venueOverride?: { name: string; address: string; what3words?: string };
   }
 ): Promise<Buffer> {
   const show = await db.query.shows.findFirst({
@@ -299,6 +299,7 @@ export async function generateCataloguePdf(
     endDate: show.endDate !== show.startDate ? show.endDate : undefined,
     venue: opts?.venueOverride?.name ?? show.venue?.name,
     venueAddress: opts?.venueOverride?.address ?? show.venue?.address ?? undefined,
+    venueWhat3words: opts?.venueOverride?.what3words,
     organisation: show.organisation?.name,
     kcLicenceNo: show.kcLicenceNo,
     logoUrl: show.organisation?.logoUrl ?? undefined,

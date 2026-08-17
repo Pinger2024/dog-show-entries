@@ -141,6 +141,11 @@ export interface CatalogueShowInfo {
   endDate?: string;
   venue: string | undefined;
   venueAddress: string | undefined;
+  /** what3words for the venue, printed under the address when present —
+   *  currently only supplied via generateCataloguePdf's venueOverride
+   *  (Mandy 2026-08-17: wanted on the cover for the Monteith Park move,
+   *  a venue exhibitors don't know). No DB column yet. */
+  venueWhat3words?: string;
   organisation: string | undefined;
   /** Pre-baked tonal-wash background buffers for the SV cover + inside
    *  pages, tinted with the club's brand colours. Same pattern as the
