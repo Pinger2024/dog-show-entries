@@ -57,9 +57,17 @@ Font.registerHyphenationCallback((word) => [word]);
 
 export interface CompositeShowInfo {
   clubName: string;
+  /** Used for the PDF's document title only — deliberately NOT printed on
+   *  the card. A show name almost always restates the club name and the
+   *  show type ("GSD Club of Scotland Championship Show"), so printing it
+   *  put both on the card twice over (Mandy 2026-08-16). */
   showName: string;
   showType: string;
   date: string; // ISO yyyy-mm-dd
+  /** Club logo, already fetched, downscaled and inlined as a data URI by
+   *  the route — never a remote URL. A club with no logo passes null and
+   *  the card simply renders without one. */
+  logoUrl: string | null;
 }
 
 interface CompositeProps {
@@ -111,10 +119,23 @@ const styles = StyleSheet.create({
   },
   overprintZone: {
     position: 'absolute',
-    top: 104,
+    // Stays at 106 so the club logo clears the "FIRST/SECOND/…" wording
+    // baked into the artwork above it — raising this to make room for the
+    // logo pushed it into the lettering (checked by eye, 2026-08-16). The
+    // block grows downward instead; the cream zone runs to roughly 290pt
+    // before the rosette, and a full card ends around 210pt.
+    top: 106,
     left: 95,
     right: 95,
     alignItems: 'center',
+  },
+  logo: {
+    // Fixed box with objectFit 'contain', so tall, square and wide logos
+    // all sit within the same footprint without distortion.
+    width: 150,
+    height: 42,
+    objectFit: 'contain',
+    marginBottom: 6,
   },
   clubName: {
     fontFamily: 'Times',
@@ -123,29 +144,21 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     color: '#7A1620',
     letterSpacing: 0.5,
-    marginBottom: 4,
-  },
-  showName: {
-    fontFamily: 'Times',
-    fontSize: 11,
-    fontStyle: 'italic',
-    textAlign: 'center',
-    color: '#3a3a3a',
     marginBottom: 3,
   },
-  showMeta: {
+  showType: {
+    fontFamily: 'Times',
+    fontSize: 11,
+    textAlign: 'center',
+    color: '#3a3a3a',
+    marginBottom: 2,
+  },
+  showDate: {
     fontFamily: 'Times',
     fontSize: 9,
     textAlign: 'center',
     color: '#555',
     letterSpacing: 0.2,
-  },
-  classLine: {
-    fontFamily: 'Times',
-    fontSize: 10,
-    textAlign: 'center',
-    color: '#3a3a3a',
-    marginTop: 6,
   },
   judgeLine: {
     fontFamily: 'Times',
@@ -153,6 +166,13 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     color: '#3a3a3a',
     marginTop: 6,
+  },
+  classLine: {
+    fontFamily: 'Times',
+    fontSize: 10,
+    textAlign: 'center',
+    color: '#3a3a3a',
+    marginTop: 4,
   },
 });
 
@@ -175,22 +195,26 @@ export function PrizeCardComposite({ show, pages }: CompositeProps) {
   const renderPages = isEmpty ? [{ placement: 1 as const, judgeLine: null, classLine: '' }] : pages;
 
   return (
-    <Document title={`Prize Cards — ${show.clubName}`} author="Remi Show Manager">
+    <Document title={`Prize Cards — ${show.showName}`} author="Remi Show Manager">
       {renderPages.map((page, i) => (
         <Page key={i} size={[PAGE_WIDTH, PAGE_HEIGHT]} style={styles.page} wrap={false}>
           <Image src={path.join(templatesDir, TEMPLATE_FILES[page.placement])} style={styles.template} />
+          {/* Running order is Mandy's, 2026-08-16: club logo, club name,
+              show type, date, judge (+ affix), then the class. The show
+              NAME is deliberately absent — it restates the club and the
+              type, which is the duplication she reported. Judge sits above
+              the class; they used to be the other way round. */}
           <View style={styles.overprintZone}>
+            {show.logoUrl && <Image src={show.logoUrl} style={styles.logo} />}
             <Text style={styles.clubName}>{show.clubName}</Text>
-            <Text style={styles.showName}>{show.showName}</Text>
-            <Text style={styles.showMeta}>
-              {showTypeLabel} · {showDate}
-            </Text>
+            <Text style={styles.showType}>{showTypeLabel}</Text>
+            <Text style={styles.showDate}>{showDate}</Text>
             {isEmpty ? (
               <Text style={styles.judgeLine}>No entries confirmed yet — check back closer to the show</Text>
             ) : (
               <>
-                {page.classLine && <Text style={styles.classLine}>{page.classLine}</Text>}
                 {page.judgeLine && <Text style={styles.judgeLine}>{page.judgeLine}</Text>}
+                {page.classLine && <Text style={styles.classLine}>{page.classLine}</Text>}
               </>
             )}
           </View>

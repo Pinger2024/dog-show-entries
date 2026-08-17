@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import sharp from 'sharp';
 import { publicOrgColumns } from '@/server/trpc/public-org-columns';
 import { db } from '@/server/db';
 import { asc, eq } from 'drizzle-orm';
@@ -12,6 +13,7 @@ import { authenticatePdfRequest, makePdfResponse } from '@/lib/pdf-utils';
 import { resolveJudgeForClass } from '@/lib/judge-resolution';
 import { buildPrizeCardPages, type PrizeCardClassInput } from '@/lib/prize-card-pages';
 import { sectionClasses, buildClassLabelMap } from '@/lib/class-labels';
+import { fetchClubImage } from '@/lib/safe-image-fetch';
 
 // Above this, log loudly — a runaway page count (e.g. a bug that stops the
 // image-embed cache from matching, or a genuinely enormous show) should be
@@ -142,11 +144,43 @@ export async function GET(
 
   const pages = buildPrizeCardPages(classInputs);
 
+  // Club logo — fetched, downscaled and inlined as a data URI HERE rather
+  // than handed to react-pdf as a remote URL. Two reasons: react-pdf would
+  // re-fetch it during render, and any failure (404, R2 hiccup, an image it
+  // rejects for "invalid dimensions") would throw and 500 the whole
+  // document. A club logo is decoration — losing it must never cost the
+  // secretary her prize cards, so every failure path degrades to no logo,
+  // exactly what a club without one already gets. Downscaled to 300px so a
+  // 1.6MB club PNG doesn't ride along in a 75-page PDF; the data URI is one
+  // stable string, so pdfkit still embeds it once and reuses it per page.
+  let logoDataUri: string | null = null;
+  const clubLogoUrl = show.organisation?.logoUrl;
+  if (clubLogoUrl) {
+    // fetchClubImage guards the SSRF sink — organisations.logo_url is
+    // secretary-supplied (`z.string().url()`), so it must never be handed
+    // to a bare fetch(). See lib/safe-image-fetch.ts.
+    const raw = await fetchClubImage(clubLogoUrl);
+    if (raw) {
+      try {
+        const png = await sharp(raw)
+          .resize({ width: 300, withoutEnlargement: true })
+          .png()
+          .toBuffer();
+        logoDataUri = `data:image/png;base64,${png.toString('base64')}`;
+      } catch (err) {
+        console.warn(`Prize cards: club logo could not be processed for show ${showId}`, err);
+      }
+    } else {
+      console.warn(`Prize cards: club logo unavailable or rejected for show ${showId}`);
+    }
+  }
+
   const showInfo: CompositeShowInfo = {
     clubName: show.organisation?.name ?? 'Unknown Club',
     showName: show.name,
     showType: show.showType,
     date: show.startDate,
+    logoUrl: logoDataUri,
   };
 
   try {
