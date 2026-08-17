@@ -11,10 +11,16 @@ import { toast } from 'sonner';
 import { trpc } from '@/lib/trpc';
 import { useBeaconAutosave } from '@/lib/use-beacon-autosave';
 import { blank } from '@/lib/sv-entry-readiness';
+import {
+  addressesMatch,
+  applySameAddress,
+  deriveSameAddressFlags,
+} from '@/lib/owner-address';
 import { cn, getTitleDisplay } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Textarea } from '@/components/ui/textarea';
 import { Calendar } from '@/components/ui/calendar';
 import {
@@ -60,6 +66,10 @@ const ownerSchema = z.object({
   ownerAddress: z.string().min(1, 'Address is required'),
   ownerEmail: z.string().email('Valid email required'),
   ownerPhone: z.string().optional(),
+  /** UI-only: "same address as Owner 1". Never stored — the row always keeps
+   *  a real address VALUE (see lib/owner-address.ts). Derived on load by
+   *  comparing addresses, resolved back into `ownerAddress` at submit. */
+  sameAddressAsPrimary: z.boolean().optional(),
   isPrimary: z.boolean(),
 });
 
@@ -566,15 +576,20 @@ export function DogForm({ mode, defaultValues, dogId, svSection, returnTo, isReg
       !ownersHydrated.current
     ) {
       ownersHydrated.current = true;
+      // A joint owner already living at the primary's address loads with the
+      // "same address" tick on, so the household stays a household — and a
+      // later edit to Owner 1's address carries them with it on save.
+      const sameAddressFlags = deriveSameAddressFlags(dogData.owners);
       form.setValue(
         'owners',
-        dogData.owners.map((o) => ({
+        dogData.owners.map((o, i) => ({
           ownerTitle: o.ownerTitle ?? '',
           ownerName: o.ownerName,
           ownerAddress: o.ownerAddress,
           ownerEmail: o.ownerEmail,
           ownerPhone: o.ownerPhone ?? '',
           isPrimary: o.isPrimary,
+          sameAddressAsPrimary: sameAddressFlags[i],
         }))
       );
     }
@@ -598,6 +613,26 @@ export function DogForm({ mode, defaultValues, dogId, svSection, returnTo, isReg
 
   const { fields: ownerFields, append: appendOwner, remove: removeOwner } =
     useFieldArray({ control: form.control, name: 'owners' });
+
+  // Keep every ticked joint owner's address tracking Owner 1's, live. The
+  // field is hidden while ticked, so it can't be left holding a stale — or
+  // empty — value that would fail validation behind a tick nobody can see.
+  const watchedOwners = useWatch({ control: form.control, name: 'owners' });
+  const primaryAddress = watchedOwners?.[0]?.ownerAddress ?? '';
+  useEffect(() => {
+    if (!watchedOwners || !primaryAddress.trim()) return;
+    watchedOwners.forEach((owner, i) => {
+      if (
+        i > 0 &&
+        owner?.sameAddressAsPrimary &&
+        owner.ownerAddress !== primaryAddress
+      ) {
+        form.setValue(`owners.${i}.ownerAddress`, primaryAddress, {
+          shouldValidate: true,
+        });
+      }
+    });
+  }, [watchedOwners, primaryAddress, form]);
 
   const isPending = createDog.isPending || updateDog.isPending;
 
@@ -642,6 +677,20 @@ export function DogForm({ mode, defaultValues, dogId, svSection, returnTo, isReg
       toast.error('Up to 4 owners are allowed');
       return;
     }
+
+    // Resolve "same address as Owner 1" into real per-row address VALUES, and
+    // drop the UI-only flag — the server stores an address on every row.
+    const payload = {
+      ...data,
+      owners: applySameAddress(
+        data.owners,
+        data.owners.map((o) => o.sameAddressAsPrimary ?? false),
+      ).map((owner) => {
+        const row = { ...owner };
+        delete row.sameAddressAsPrimary;
+        return row;
+      }),
+    };
 
     if (mode === 'create') {
       // Pedigree (sire + dam + breeder) is mandatory — a catalogue can't be
@@ -698,9 +747,9 @@ export function DogForm({ mode, defaultValues, dogId, svSection, returnTo, isReg
           return;
         }
       }
-      createDog.mutate(data);
+      createDog.mutate(payload);
     } else if (dogId) {
-      updateDog.mutate({ id: dogId, ...data });
+      updateDog.mutate({ id: dogId, ...payload });
     }
   }
 
@@ -1615,22 +1664,64 @@ export function DogForm({ mode, defaultValues, dogId, svSection, returnTo, isReg
                     )}
                   />
                 </div>
-                <FormField
-                  control={form.control}
-                  name={`owners.${index}.ownerAddress`}
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Full postal address</FormLabel>
-                      <FormControl>
-                        <Input
-                          placeholder="House, street, town, postcode"
-                          {...field}
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
+                {/* Joint owners are usually the same household, so they
+                    default to Owner 1's address — untick to type a different
+                    one (Mandy 2026-08-12). */}
+                {index > 0 && (
+                  <FormField
+                    control={form.control}
+                    name={`owners.${index}.sameAddressAsPrimary`}
+                    render={({ field }) => (
+                      <FormItem className="flex flex-row items-center gap-3 rounded-md border bg-muted/40 p-3">
+                        <FormControl>
+                          <Checkbox
+                            checked={field.value ?? false}
+                            onCheckedChange={(checked) => {
+                              const ticked = checked === true;
+                              field.onChange(ticked);
+                              if (ticked && primaryAddress.trim()) {
+                                form.setValue(
+                                  `owners.${index}.ownerAddress`,
+                                  primaryAddress,
+                                  { shouldValidate: true },
+                                );
+                              }
+                            }}
+                            className="size-5"
+                          />
+                        </FormControl>
+                        <FormLabel className="!mt-0 cursor-pointer text-sm font-normal leading-snug">
+                          Same address as Owner 1
+                        </FormLabel>
+                      </FormItem>
+                    )}
+                  />
+                )}
+                {index > 0 && form.watch(`owners.${index}.sameAddressAsPrimary`) ? (
+                  <div className="space-y-1">
+                    <p className="text-sm font-medium">Full postal address</p>
+                    <p className="rounded-md border border-dashed px-3 py-2 text-sm text-muted-foreground">
+                      {primaryAddress.trim() || 'Add Owner 1’s address above'}
+                    </p>
+                  </div>
+                ) : (
+                  <FormField
+                    control={form.control}
+                    name={`owners.${index}.ownerAddress`}
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Full postal address</FormLabel>
+                        <FormControl>
+                          <Input
+                            placeholder="House, street, town, postcode"
+                            {...field}
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                )}
                 <FormField
                   control={form.control}
                   name={`owners.${index}.ownerPhone`}
@@ -1657,10 +1748,13 @@ export function DogForm({ mode, defaultValues, dogId, svSection, returnTo, isReg
                     appendOwner({
                       ownerTitle: '',
                       ownerName: '',
-                      ownerAddress: '',
+                      // Ticked by default — most joint owners live with
+                      // Owner 1, so the address arrives already filled in.
+                      ownerAddress: primaryAddress,
                       ownerEmail: '',
                       ownerPhone: '',
                       isPrimary: ownerFields.length === 0,
+                      sameAddressAsPrimary: ownerFields.length > 0,
                     })
                   }
                 >
@@ -1696,6 +1790,11 @@ export function DogForm({ mode, defaultValues, dogId, svSection, returnTo, isReg
                                 ownerEmail: profile.ownerEmail,
                                 ownerPhone: profile.ownerPhone ?? '',
                                 isPrimary: ownerFields.length === 0,
+                                // Their saved address speaks for itself — tick
+                                // only if it already is Owner 1's.
+                                sameAddressAsPrimary:
+                                  ownerFields.length > 0 &&
+                                  addressesMatch(profile.ownerAddress, primaryAddress),
                               });
                               toast.success(`Added ${profile.ownerName}`);
                             }}
