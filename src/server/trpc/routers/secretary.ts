@@ -620,9 +620,11 @@ export const secretaryRouter = createTRPCRouter({
       } | null = null;
       if (needsExtraction) {
         try {
-          const res = await fetch(newLogoUrl);
-          if (res.ok) {
-            const buf = Buffer.from(await res.arrayBuffer());
+          // Guarded — this input is the secretary's own `z.string().url()`,
+          // so a bare fetch() here is an SSRF sink that fires on SAVE, with
+          // no document needed. See lib/safe-image-fetch.ts.
+          const buf = await fetchClubImage(newLogoUrl);
+          if (buf) {
             const { extractBrandColors } = await import(
               '@/server/services/extract-brand-colors'
             );

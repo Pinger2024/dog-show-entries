@@ -1048,16 +1048,14 @@ export async function generatePrizeCardsA3Jpeg(showId: string): Promise<Buffer> 
   )];
   const judgeName = uniqueNames.length === 1 ? uniqueNames[0] : uniqueNames.length > 1 ? 'Various Judges' : null;
 
-  // Fetch club logo if present
+  // Fetch club logo if present. Guarded — organisations.logo_url is
+  // secretary-supplied free text, so a bare fetch() here is an SSRF sink
+  // (lib/safe-image-fetch.ts). Returns null on anything suspicious and the
+  // card simply renders without a logo.
   let logoBuffer: Buffer | null = null;
   const logoUrl = show.organisation?.logoUrl;
   if (logoUrl) {
-    try {
-      const res = await fetch(logoUrl);
-      if (res.ok) logoBuffer = Buffer.from(await res.arrayBuffer());
-    } catch {
-      // proceed without logo
-    }
+    logoBuffer = await fetchClubImage(logoUrl);
   }
 
   const overlayOpts = {
