@@ -49,6 +49,18 @@ Font.register({
 // Disable word hyphenation for dog names and pedigree text
 Font.registerHyphenationCallback((word) => [word]);
 
+// Secretaries write welcome notes / awards lists WITH emoji (they display
+// fine on the public show page, which is HTML) — but none of the embedded
+// print fonts carry emoji glyphs, so the catalogue printed tofu boxes where
+// Mandy's 🏆 bullets should be (2026-08-17, GSD Scotland). react-pdf
+// resolves emoji as inline images from this source at render time instead.
+// Server-side fetch, same risk class as the R2 advert images the catalogue
+// already depends on. jdecked/twemoji is the maintained twemoji fork.
+Font.registerEmojiSource({
+  format: 'png',
+  url: 'https://cdn.jsdelivr.net/gh/jdecked/twemoji@15.1.0/assets/72x72/',
+});
+
 // ── Colour Palette (matches schedule) ───────────────────────────
 export const C = {
   primary: '#2D5F3F',
