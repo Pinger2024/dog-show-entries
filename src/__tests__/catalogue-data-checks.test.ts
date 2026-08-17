@@ -74,7 +74,30 @@ describe('checkOwnerRecord', () => {
 
   it('is case-insensitive and allows apostrophes/hyphens in the surname-like segment', () => {
     expect(
-      checkOwnerRecord({ ownerName: 'Mrs Smith', ownerAddress: "o'brien-jones, 4 The Lane" })
+      checkOwnerRecord({
+        ownerName: "Mrs O'Brien-Jones",
+        ownerAddress: "o'brien-jones, 4 The Lane",
+      })
+    ).toContain('name_like_address_start');
+  });
+
+  // Mandy 2026-08-12: "houses have NAMES not numbers". A one-word house name
+  // is not a mis-typed surname, and must not be flagged for a second look.
+  it('leaves a one-word house name alone when the owner name is complete', () => {
+    expect(
+      checkOwnerRecord({ ownerName: 'Mrs Jean McArthur', ownerAddress: 'Fortissat, Shotts, ML7 4AB' })
+    ).not.toContain('name_like_address_start');
+  });
+
+  it('leaves a named house alone for a two-token name', () => {
+    expect(
+      checkOwnerRecord({ ownerName: 'Jean McArthur', ownerAddress: 'Braeside, Perth' })
+    ).not.toContain('name_like_address_start');
+  });
+
+  it('still flags a lone forename with a surname-shaped address, named house or not', () => {
+    expect(
+      checkOwnerRecord({ ownerName: 'Karen', ownerAddress: 'Fortissat, Shotts' })
     ).toContain('name_like_address_start');
   });
 

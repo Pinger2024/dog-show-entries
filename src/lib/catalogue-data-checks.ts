@@ -91,10 +91,34 @@ export function checkOwnerRecord(input: OwnerCheckInput): OwnerCheckIssue[] {
   // "Smith". "4 The Lane" (no comma) → "4 The Lane" itself.
   const firstSegment = address.split(/[,\n]/)[0].trim();
   const segmentTokens = firstSegment.split(/\s+/).filter(Boolean);
-  if (segmentTokens.length === 1 && SINGLE_ALPHA_WORD.test(segmentTokens[0])) {
-    // A single alphabetic word before the first comma reads as a surname,
-    // not a house name/number. "Rose Cottage, ..." (two words) and
-    // "4 The Lane" (digits) are left alone.
+  // A single alphabetic word before the first comma MIGHT be a surname that
+  // fell into the address field — but it is just as likely to be a house
+  // name. Plenty of houses have a name and no number: "Fortissat, Shotts",
+  // "Braeside, Perth" (Mandy 2026-08-12 — houses have NAMES, not numbers).
+  // A bare word on its own is therefore not evidence of anything, and
+  // flagging every one of them buries the real fault in noise.
+  //
+  // What IS evidence, either of:
+  //   · a lone word in the NAME field too — "Karen" + "Smith, 4 The Lane",
+  //     the original bug: the surname went in the address, so the name field
+  //     kept only a forename; or
+  //   · the word appearing in the owner's own name — "Mrs Smith" +
+  //     "Smith, 4 The Lane" — the surname typed into both fields.
+  // "Mrs Jean McArthur" + "Fortissat, Shotts" matches neither, and is left
+  // alone. "Rose Cottage, ..." (two words) and "4 The Lane" (digits) never
+  // reach here.
+  const nameWords = new Set(
+    name
+      .toLowerCase()
+      .split(/\s+/)
+      .filter(Boolean)
+      .map((w) => w.replace(/\.$/, '')),
+  );
+  if (
+    segmentTokens.length === 1 &&
+    SINGLE_ALPHA_WORD.test(segmentTokens[0]) &&
+    (tokenCount(name) === 1 || nameWords.has(segmentTokens[0].toLowerCase()))
+  ) {
     issues.push('name_like_address_start');
   }
 
