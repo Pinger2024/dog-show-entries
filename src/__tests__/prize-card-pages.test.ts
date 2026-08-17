@@ -44,12 +44,15 @@ describe('buildPrizeCardPages', () => {
     expect(noAffix[0].judgeLine).toBe('Judge: Hugh De Zutter');
   });
 
-  it('a class with no assigned judge yields a null judge line rather than being dropped', () => {
+  // Mandy 2026-08-17: "if no JH judge assigned, can we just have a
+  // Judge: _________ instead so that it can be hand written in" — a card
+  // must never print judge-less; the blank invites the pen.
+  it('a class with no assigned judge gets a hand-writable blank judge line rather than none', () => {
     const pages = buildPrizeCardPages([
       { confirmedCount: 2, judgeId: null, judgeName: null, classLabel: 'Class 1 — Minor Puppy', sex: 'dog' },
     ]);
     expect(pages).toHaveLength(2);
-    expect(pages.every((p) => p.judgeLine === null)).toBe(true);
+    expect(pages.every((p) => p.judgeLine === 'Judge: ______________________')).toBe(true);
     expect(pages.every((p) => p.classLine === 'Class 1 — Minor Puppy Dog')).toBe(true);
   });
 

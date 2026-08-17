@@ -109,9 +109,13 @@ export function buildPrizeCardPages(classesInRunningOrder: PrizeCardClassInput[]
     const cardsNeeded = Math.min(Math.max(0, Math.trunc(cls.confirmedCount) || 0), 4);
     if (cardsNeeded <= 0) continue;
 
+    // No judge assigned yet → a hand-writable blank, never a judge-less
+    // card (Mandy 2026-08-17: "Judge: _________ … so that it can be hand
+    // written in" — asked for the Scotland JH classes, applied to any
+    // class still awaiting its judge).
     const judgeLine = cls.judgeId && cls.judgeName
       ? formatJudgeLine(cls.judgeName, cls.judgeAffix)
-      : null;
+      : 'Judge: ______________________';
 
     const classLine = formatClassLine(cls.classLabel, cls.sex);
 
