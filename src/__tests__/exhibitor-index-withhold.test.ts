@@ -60,4 +60,19 @@ describe('buildExhibitorIndexRows — withheld exhibitors', () => {
     expect(rows[0]!.catNos).toEqual(['2', '3']);
     expect(rows[0]!.address).toBeUndefined();
   });
+
+  // Mandy 2026-08-17: particle surnames ("De Zutter") are one unit — the
+  // catalogue printed "ZUTTER, H" and filed it under Z instead of D.
+  it('particle surname "De Zutter" prints as one unit and files under D', () => {
+    const rows = buildExhibitorIndexRows([
+      entry({ catalogueNumber: '9', owners: owner('Hugh De Zutter', '1 Kennel Lane') }),
+      entry({ catalogueNumber: '10', owners: owner('Sandra Hall', '75 Denton Road') }),
+    ]);
+    const deZutter = rows.find((r) => r.name.startsWith('DE ZUTTER'));
+    expect(deZutter).toBeDefined();
+    expect(deZutter!.name).toBe('DE ZUTTER, H');
+    expect(deZutter!.sortKey).toBe('de zutter');
+    // Sorted rows: "de zutter" < "hall" alphabetically, so De Zutter leads.
+    expect(rows[0]!.name).toBe('DE ZUTTER, H');
+  });
 });

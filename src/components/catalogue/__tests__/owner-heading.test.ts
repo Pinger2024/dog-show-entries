@@ -32,6 +32,9 @@ describe('toPhoneBookName', () => {
   it('returns empty for empty input', () => {
     expect(toPhoneBookName('')).toBe('');
   });
+  it('particle surname "De Zutter" stays one unit', () => {
+    expect(toPhoneBookName('Hugh De Zutter')).toBe('De Zutter, Hugh');
+  });
 });
 
 describe('surnameOf', () => {
@@ -40,6 +43,13 @@ describe('surnameOf', () => {
   });
   it('handles trailing whitespace', () => {
     expect(surnameOf('Ann Swift  ')).toBe('swift');
+  });
+  // Particle surnames: Mandy 2026-08-17 — "De Zutter" files under D, not Z.
+  it('particle surname "De Zutter" sorts as one unit', () => {
+    expect(surnameOf('Hugh De Zutter')).toBe('de zutter');
+  });
+  it('regression: middle name is not a particle', () => {
+    expect(surnameOf('John William Smith')).toBe('smith');
   });
 });
 
@@ -111,6 +121,84 @@ describe('ownerHeading — RKC compound format (Amanda 2026-05-22)', () => {
     const result = ownerHeading([], null);
     expect(result.heading).toBe('UNKNOWN');
     expect(result.sortKey).toBe('unknown');
+  });
+});
+
+// Particle surnames: Mandy 2026-08-17 — "De Zutter" is one unit, both for
+// display and for sorting, and files under D. Catalogue was printing
+// "ZUTTER, H" because surname extraction took only the last token.
+describe('ownerHeading — particle surnames (Mandy 2026-08-17)', () => {
+  it('"Hugh De Zutter" → "DE ZUTTER, H", sortKey files under d', () => {
+    const result = ownerHeading([{ name: 'Hugh De Zutter', address: null }], null);
+    expect(result.heading).toBe('DE ZUTTER, H');
+    expect(result.sortKey).toBe('de zutter');
+  });
+
+  it('"Anna Van Der Berg" walks back three tokens', () => {
+    const result = ownerHeading([{ name: 'Anna Van Der Berg', address: null }], null);
+    expect(result.heading).toBe('VAN DER BERG, A');
+  });
+
+  it('"Jan Van Dijk"', () => {
+    const result = ownerHeading([{ name: 'Jan Van Dijk', address: null }], null);
+    expect(result.heading).toBe('VAN DIJK, J');
+  });
+
+  it('"Maria De La Cruz"', () => {
+    const result = ownerHeading([{ name: 'Maria De La Cruz', address: null }], null);
+    expect(result.heading).toBe('DE LA CRUZ, M');
+  });
+
+  it('spaced "Angus Mac Donald"', () => {
+    const result = ownerHeading([{ name: 'Angus Mac Donald', address: null }], null);
+    expect(result.heading).toBe('MAC DONALD, A');
+  });
+
+  it('regression: "Amanda McAteer" (already-merged particle) unaffected', () => {
+    const result = ownerHeading([{ name: 'Amanda McAteer', address: null }], null);
+    expect(result.heading).toBe('MCATEER, A');
+  });
+
+  it('regression: middle name "John William Smith" is not a particle', () => {
+    const result = ownerHeading([{ name: 'John William Smith', address: null }], null);
+    expect(result.heading).toBe('SMITH, J');
+  });
+
+  it('regression: "N Dodds" (bare initial forename) unchanged', () => {
+    const result = ownerHeading([{ name: 'N Dodds', address: null }], null);
+    expect(result).toEqual({ heading: 'DODDS, N', sortKey: 'dodds' });
+  });
+
+  it('joint owners: De Zutter (D) sorts before Dodds (Do), not after', () => {
+    const result = ownerHeading(
+      [
+        { title: 'Mr', name: 'N Dodds', address: null },
+        { title: 'Ms', name: 'A De Zutter', address: null },
+      ],
+      null,
+    );
+    expect(result.heading).toBe('DE ZUTTER & DODDS, MS A & MR N');
+    expect(result.sortKey).toBe('de zutter');
+  });
+
+  it('edge case: bare 2-token "De Zutter" (no forename typed) degrades sanely, no crash', () => {
+    const result = ownerHeading([{ name: 'De Zutter', address: null }], null);
+    // Only two tokens total — walking back would leave no forename at all,
+    // so the general "always leave one leading token" rule wins and this
+    // degrades exactly like the pre-fix behaviour for any 2-token name.
+    expect(result.heading).toBe('ZUTTER, D');
+    expect(() => ownerHeading([{ name: 'De Zutter', address: null }], null)).not.toThrow();
+  });
+
+  it('sort: De Zutter files between D-names and Dodds, not after Zack', () => {
+    const keys = [
+      ownerHeading([{ name: 'A De Zutter', address: null }], null),
+      ownerHeading([{ name: 'B Dodds', address: null }], null),
+      ownerHeading([{ name: 'C Zack', address: null }], null),
+    ]
+      .sort((a, b) => a.sortKey.localeCompare(b.sortKey, 'en'))
+      .map((r) => r.sortKey);
+    expect(keys).toEqual(['de zutter', 'dodds', 'zack']);
   });
 });
 

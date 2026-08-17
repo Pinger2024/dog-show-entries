@@ -94,11 +94,53 @@ function firstInitial(name: string): string {
   return head.charAt(0).toUpperCase();
 }
 
+// Particle tokens that fuse with the following token into one surname
+// unit for both display and sorting — "De Zutter" files under D, not Z
+// (Mandy 2026-08-17, after the catalogue printed "ZUTTER, H" for Hugh De
+// Zutter). Case-insensitive match against the token as typed.
+const SURNAME_PARTICLES = new Set([
+  'de', 'del', 'della', 'di', 'da', 'du', 'la', 'le', 'van', 'von', 'der',
+  'den', 'ter', 'ten', 'te', 'zu', 'zur', 'vom', 'mac', 'mc', 'st', 'saint', 'o',
+]);
+
+/**
+ * Split a full name into the forename portion and the surname, where the
+ * surname absorbs any run of particle tokens immediately before the final
+ * token ("Van Der Berg", not just "Berg"). Walks backward token by token
+ * so multi-particle surnames ("De La Cruz") work, not just a fixed
+ * 2-token grab.
+ *
+ * Always leaves at least one leading token as the forename when the name
+ * has more than one token — even if that token happens to be a particle
+ * word itself (a bare 2-token name like "Van Persie" keeps "Van" as the
+ * forename; there's no way to tell it apart from a genuine particle
+ * without more context, and a forename must survive). A single-token
+ * name is returned whole as the surname with an empty forename — this is
+ * also the harmless degrade path for a surname-only entry that happens
+ * to start with a particle word ("De Zutter" typed with no forename at
+ * all still resolves to surname "Zutter", forename "De" — identical to
+ * how any other 2-token name behaves; not a crash, just ambiguous input).
+ */
+function splitParticleSurname(fullName: string): { forename: string; surname: string } {
+  const parts = fullName.trim().split(/\s+/).filter(Boolean);
+  if (parts.length <= 1) return { forename: '', surname: parts[0] ?? '' };
+  let start = parts.length - 1;
+  while (start > 1 && SURNAME_PARTICLES.has(parts[start - 1]!.toLowerCase())) {
+    start--;
+  }
+  return {
+    forename: parts.slice(0, start).join(' '),
+    surname: parts.slice(start).join(' '),
+  };
+}
+
+/** The surname portion of a full name, including any particle prefix. */
+function particleSurname(fullName: string): string {
+  return splitParticleSurname(fullName).surname;
+}
+
 function surnameUpper(name: string): string {
-  const trimmed = name.trim();
-  if (!trimmed) return '';
-  const parts = trimmed.split(/\s+/);
-  return (parts[parts.length - 1] ?? '').toUpperCase();
+  return particleSurname(name).toUpperCase();
 }
 
 export function formatRkcOwnerHeading(owners: readonly RkcOwnerEntry[]): string {
@@ -169,21 +211,19 @@ export function isJuniorHandlingClass(
  * suppresses personal contact details, not exhibitor identity.
  */
 // "Amanda McAteer" → "McAteer, Amanda". Single-word names left untouched.
-// Used by the back-of-catalogue exhibitor index per Amanda's spec
-// (2026-05-14) so the index reads like a phone book sorted by surname.
+// Particle surnames stay one unit — "Hugh De Zutter" → "De Zutter, Hugh"
+// (Mandy 2026-08-17). No current call sites; kept for consistency with
+// surnameUpper/surnameOf, which share the same splitParticleSurname logic.
 export function toPhoneBookName(fullName: string): string {
   const trimmed = fullName.trim();
   if (!trimmed) return trimmed;
-  const parts = trimmed.split(/\s+/);
-  if (parts.length < 2) return trimmed;
-  const surname = parts[parts.length - 1]!;
-  const first = parts.slice(0, -1).join(' ');
-  return `${surname}, ${first}`;
+  const { forename, surname } = splitParticleSurname(trimmed);
+  if (!forename) return trimmed;
+  return `${surname}, ${forename}`;
 }
 
 export function surnameOf(fullName: string): string {
-  const parts = fullName.trim().split(/\s+/);
-  return (parts[parts.length - 1] ?? '').toLowerCase();
+  return particleSurname(fullName).toLowerCase();
 }
 
 // Heading + sort key for the exhibitor index. Owners array is the
