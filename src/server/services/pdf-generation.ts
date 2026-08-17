@@ -18,6 +18,7 @@ import { CatalogueRingside } from '@/components/catalogue/catalogue-ringside';
 import { CatalogueByClass } from '@/components/catalogue/catalogue-by-class';
 import { CatalogueByBreed } from '@/components/catalogue/catalogue-by-breed';
 import type { CatalogueEntry, CatalogueShowInfo } from '@/components/catalogue/catalogue-types';
+import { fetchClubImage } from '@/lib/safe-image-fetch';
 import { PrizeCards } from '@/components/prize-cards/prize-cards';
 import type { PrizeCardShowInfo, PrizeCardClass } from '@/components/prize-cards/prize-cards';
 import { pickScheduleComponent, designedSchedulePageCount } from '@/components/schedule';

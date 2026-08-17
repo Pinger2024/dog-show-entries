@@ -6,6 +6,7 @@ import { createTRPCRouter } from '../init';
 import { verifyShowAccess } from '../verify-show-access';
 import type { Database } from '@/server/db';
 import { verifyOrgAccess } from '../verify-org-access';
+import { fetchClubImage } from '@/lib/safe-image-fetch';
 import { getBaseUrl } from '@/server/lib/utils';
 import { ACHIEVEMENT_TYPES } from '@/lib/placements';
 import { computeOrderFees, type FeeContext } from '@/lib/fee-calc';
