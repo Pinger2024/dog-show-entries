@@ -34,7 +34,7 @@ import { getDockingStatementFromScheduleData } from '@/lib/rkc-compliance';
 import type { RegionalFeeConfig } from '@/server/db/schema/shows';
 import { buildClassLabelMap, isSpecialAwardClass, buildCatalogueClassDefinitions } from '@/lib/class-labels';
 import { buildScheduleJudges, aggregateJudgeAssignments } from '@/lib/schedule-judges';
-import { stripUnembeddedBase14Fonts } from '@/lib/pdf-pad';
+import { padPdfToMultiple, stripUnembeddedBase14Fonts } from '@/lib/pdf-pad';
 import { prepareAdvertsForRender } from '@/lib/advert-orientation';
 
 // ── Catalogue PDF ──
@@ -384,13 +384,14 @@ export async function generateCataloguePdf(
   const Component = formatComponents[effectiveFormat];
   const pdfDocument = React.createElement(Component, { show: showInfo, entries: catalogueEntries });
   const rawBuffer = await renderToBuffer(pdfDocument);
-  // Strip react-pdf's unembedded base-14 phantom font refs (Helvetica etc.)
-  // before this goes to print. The /api/catalogue route does this via
-  // padPdfToMultiple for the standard/by-class booklet formats; this print-
-  // pipeline function (used for direct Mixam submission via
-  // generateAndUploadForPrint) had no equivalent step, so it went to print
-  // with an unembedded font reference.
-  return Buffer.from(await stripUnembeddedBase14Fonts(rawBuffer));
+  // Pad to a multiple of 4 pages — the SAME padPdfToMultiple the
+  // /api/catalogue route applies to these booklet formats, so a catalogue
+  // from this function is page-for-page identical to a site download. It
+  // also strips react-pdf's unembedded base-14 phantom font refs. Before
+  // 2026-08-17 this function only stripped fonts and skipped the padding,
+  // which is how Mandy received a 31-page book that couldn't duplex
+  // ("we need an even number of pages for printing the catalogue").
+  return Buffer.from(await padPdfToMultiple(rawBuffer, 4));
 }
 
 // ── Prize Cards PDF ──
