@@ -12,7 +12,7 @@ import {
 } from './sv-front-matter';
 import { TonalWash } from '@/components/sv-pdf/cover-atoms';
 import { SV, SV_FONTS } from '@/components/schedule/shared/sv-styles';
-import { svCoatDisplayName } from '@/lib/class-labels';
+import { svCoatDisplayName, sectionClasses } from '@/lib/class-labels';
 
 // Class-sponsor banner strip. Renders at the FULL content width (A5 419.5pt −
 // 22pt L/R padding = 375.5pt) at the image's own aspect ratio, capped at this
@@ -326,6 +326,12 @@ function groupByClass(entries: CatalogueEntry[]) {
     classLabel: string;
     sortOrder: number | undefined;
     svCoatType?: 'stock' | 'long_stock' | null;
+    /** `classDefinition.type` ('special' | 'junior_handler' | …) — carried
+     *  through so the Challenge Certificate headers can bucket Dog/Bitch
+     *  classes via the shared `sectionClasses` predicate rather than a
+     *  naive `sex` check, which a legacy-tagged Junior Handling class
+     *  (sex set instead of null) would fool. */
+    classDefinitionType?: string | null;
     entries: CatalogueEntry[];
   }> = {};
 
@@ -343,6 +349,7 @@ function groupByClass(entries: CatalogueEntry[]) {
         classLabel: label,
         sortOrder: cls.sortOrder,
         svCoatType: cls.svCoatType ?? null,
+        classDefinitionType: cls.classDefinitionType ?? null,
         entries: [],
       };
       classes[classKey].entries.push(entry);
@@ -369,6 +376,24 @@ function ClassSectionBand({ title, judge }: { title: string; judge: string | nul
           Judge: {judge}
         </Text>
       )}
+    </View>
+  );
+}
+
+/** RKC single-breed CHAMPIONSHIP shows award a Challenge Certificate to
+ *  Best Dog and Best Bitch. The schedule shows this as two side-by-side
+ *  coloured panels above the whole classification; the catalogue instead
+ *  prints it as a plain banner header at the START of each sex's own
+ *  classes — exact wording, no judge name, no extra prose (Mandy
+ *  2026-08-17: "simple over clever" for the 60+ show-secretary audience).
+ *  Styled like the catalogue's existing section headings (ClassSectionBand)
+ *  rather than the schedule's coloured pills. */
+function ChallengeCertificateHeader({ sex }: { sex: 'DOG' | 'BITCH' }) {
+  return (
+    <View wrap={false} minPresenceAhead={40} style={{ marginTop: 12 }}>
+      <View style={{ ...styles.sectionBand, marginTop: 0, marginBottom: 8 }}>
+        <Text style={styles.sectionBandText}>CHALLENGE CERTIFICATE — {sex}</Text>
+      </View>
     </View>
   );
 }
@@ -407,10 +432,16 @@ export function CatalogueByClass({ show, entries, compact }: Props) {
           classLabel: label,
           sortOrder: sc.sortOrder,
           svCoatType: sc.svCoatType ?? null,
+          classDefinitionType: sc.classDefinitionType ?? null,
           entries: [],
         };
-      } else if (grouped[classKey].svCoatType == null && sc.svCoatType) {
-        grouped[classKey].svCoatType = sc.svCoatType;
+      } else {
+        if (grouped[classKey].svCoatType == null && sc.svCoatType) {
+          grouped[classKey].svCoatType = sc.svCoatType;
+        }
+        if (grouped[classKey].classDefinitionType == null && sc.classDefinitionType) {
+          grouped[classKey].classDefinitionType = sc.classDefinitionType;
+        }
       }
     }
   }
@@ -465,6 +496,24 @@ export function CatalogueByClass({ show, entries, compact }: Props) {
     (k) => jhFlag[k] === 0 && /special award/i.test(grouped[k].className),
   );
   const firstJhKey = classKeys.find((k) => jhFlag[k] === 1);
+
+  // Challenge Certificate headers — RKC single-breed CHAMPIONSHIP shows
+  // only (Mandy 2026-08-17). CatalogueByClass is only ever invoked for
+  // single-breed shows by the real dispatcher (route.ts / pdf-generation.ts
+  // route multi-breed 'by-class' requests to CatalogueByBreed instead), so
+  // the remaining gate is ruleset (RKC, not WUSV/SV) and show type.
+  const showsChallengeCertificateHeaders = !isSvShow && show.showType === 'championship';
+  // Bucket via the shared `sectionClasses` predicate-driven helper (same one
+  // the standard/ringside catalogue uses) rather than a naive `sex` check —
+  // a Junior Handling class from the old bulk-create bug can carry
+  // sex='dog'/'bitch' instead of null, and a naive check would wrongly
+  // treat it as the first breed class of that sex.
+  const classSections = sectionClasses(classKeys, (key) => ({
+    sex: grouped[key].sex ?? null,
+    classDefinition: { type: grouped[key].classDefinitionType ?? null, name: grouped[key].className },
+  }));
+  const firstDogKey = classSections.find((s) => s.key === 'dog')?.classes[0];
+  const firstBitchKey = classSections.find((s) => s.key === 'bitch')?.classes[0];
 
   // pdfkit underflows coordinates inside clipBorderTop once a wrapped
   // <Page> accumulates too many layout nodes (error:
@@ -659,6 +708,12 @@ export function CatalogueByClass({ show, entries, compact }: Props) {
 
         return (
           <Fragment key={classKey}>
+            {showsChallengeCertificateHeaders && classKey === firstDogKey && (
+              <ChallengeCertificateHeader sex="DOG" />
+            )}
+            {showsChallengeCertificateHeaders && classKey === firstBitchKey && (
+              <ChallengeCertificateHeader sex="BITCH" />
+            )}
             {classKey === firstSpecialKey && (
               <ClassSectionBand title="Special Awards Classes" judge={specialAwardsJudge} />
             )}

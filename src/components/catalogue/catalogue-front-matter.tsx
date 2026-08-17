@@ -7,6 +7,8 @@ import { buildBestAwards } from '@/lib/best-awards';
 import { MastheadBand, TonalWash, ClubCrestSlot } from '@/components/sv-pdf/cover-atoms';
 import { ss, SV, SV_FONTS } from '@/components/schedule/shared/sv-styles';
 import { Numero } from '@/components/schedule/shared/numero';
+import { getRkcScheduleProfile } from '@/lib/rkc-schedule-profile';
+import { RKC_JUDGES_WELFARE_STATEMENT, isRkcJudgesWelfareStatement } from '@/lib/rkc-statements';
 
 const SHOW_TYPE_LABELS: Record<string, string> = {
   championship: 'Championship Show',
@@ -149,6 +151,12 @@ const showInfoStyles = {
  * This filter drops any custom statement that's clearly a duplicate of one
  * of the dedicated notices, so the cover stays the single source of truth
  * for "no wet weather" and "outside attraction".
+ *
+ * Also drops a custom statement that restates the RKC Judges' Welfare
+ * Commitment — that wording now always renders as its own mandatory block
+ * (see `JudgesWelfareCommitmentBlock`), so a secretary who typed it in as
+ * free text must not get it printed a second time (Mandy 2026-08-17,
+ * carried over from the same rule on the schedule).
  */
 function filterDuplicateRegulations(
   customStatements: string[] | undefined,
@@ -163,8 +171,33 @@ function filterDuplicateRegulations(
     if (show.outsideAttraction === true && lower.includes('outside attraction')) {
       return false;
     }
+    if (isRkcJudgesWelfareStatement(statement)) {
+      return false;
+    }
     return true;
   });
+}
+
+/**
+ * Mandatory RKC judges' undertaking — carried over from the schedule
+ * (Mandy 2026-08-17: the catalogue must show it too, exactly once).
+ * Wording comes from the single shared `RKC_JUDGES_WELFARE_STATEMENT`
+ * constant so the two documents can never state it differently; the
+ * bordered-box layout is the catalogue's own idiom (the schedule's
+ * `RkcJudgesWelfareCommitment` colour styling belongs to the schedule and
+ * isn't reused here). Rendered unconditionally from `ShowParticularsContent`
+ * — deliberately NOT gated behind `showHasShowInformation` — so it always
+ * appears once per catalogue, even for a show with no other show-information
+ * fields filled in.
+ */
+function JudgesWelfareCommitmentBlock() {
+  return (
+    <View style={styles.welfareBlock} wrap={false}>
+      <Text style={styles.welfareBlockEyebrow}>Royal Kennel Club Welfare Undertaking</Text>
+      <Text style={styles.welfareBlockTitle}>Judges&apos; Welfare Commitment</Text>
+      <Text style={styles.welfareBlockText}>{RKC_JUDGES_WELFARE_STATEMENT}</Text>
+    </View>
+  );
 }
 
 /** Heuristic: is there anything worth rendering in Show Information? */
@@ -786,6 +819,18 @@ export function CoverPage({ show }: FrontMatterProps) {
 
   const showTypeLabel = show.showType ? SHOW_TYPE_LABELS[show.showType] : undefined;
 
+  // Formal RKC designation — reuses the schedule's own profile helper so the
+  // two documents can never state the show's designation differently (Mandy
+  // 2026-08-17). Guarded on showType being present: getRkcScheduleProfile
+  // requires it and some legacy/incomplete shows have none.
+  const rkcProfile = show.showType
+    ? getRkcScheduleProfile({
+        showType: show.showType,
+        showScope: show.showScope ?? '',
+        judgedOnGroupSystem: show.judgedOnGroupSystem,
+      })
+    : null;
+
   // Show judges on cover for single-breed OR when there's only one unique judge
   // Prefer sex-annotated display list (e.g. "Dogs — Mr A Winfrow") when available
   const judges = show.judgesByBreedName ?? {};
@@ -866,10 +911,32 @@ export function CoverPage({ show }: FrontMatterProps) {
           </Text>
         )}
 
-        {/* RKC jurisdiction */}
+        {/* Formal RKC designation — "CATALOGUE OF <same designation as the
+            schedule cover>", in the catalogue's own print-first Times idiom
+            (not the schedule's coloured pill). RKC shows only; WUSV/SV
+            covers return via SvCoverPage above and never reach this code
+            (Mandy 2026-08-17). */}
+        {rkcProfile && (
+          <Text style={styles.coverDesignation}>
+            CATALOGUE OF {rkcProfile.designation}
+          </Text>
+        )}
+
+        {/* RKC jurisdiction — same exact wording as the schedule cover
+            (Mandy 2026-08-17), replacing the catalogue's previous,
+            differently-worded citation so a secretary never sees two
+            different "held under" lines on the same document. */}
         <Text style={styles.coverRegulatory}>
-          Held under Royal Kennel Club Rules &amp; Show Regulations F(1)
+          Held under Royal Kennel Club Limited Rules &amp; Regulations
         </Text>
+
+        {/* Docking statement — mandatory RKC F(1).7.c(2) notice, now
+            prominent on the cover directly beneath the designation,
+            mirroring the schedule's cover (Mandy 2026-08-17). No longer
+            duplicated on the particulars page — see ShowParticularsContent. */}
+        {show.dockingStatement && (
+          <Text style={styles.coverDocking}>{show.dockingStatement}</Text>
+        )}
 
         {/* Product label — so exhibitors buying a printed copy on the
             day can see at a glance what the booklet is. Deliberately
@@ -1047,6 +1114,11 @@ export function ShowParticularsContent({ show }: FrontMatterProps) {
 
   return (
     <>
+      {/* Mandatory RKC judges' welfare undertaking — the first thing on the
+          front-matter content, ahead of sponsors/fees/notes, mirroring the
+          schedule's "first information page" placement (Mandy 2026-08-17). */}
+      <JudgesWelfareCommitmentBlock />
+
       {/* Show Manager rendered on the CoverPage (after On-Call Vet)
           per Amanda's feedback that the cover should end with the
           show manager. Deliberately not re-rendered here. */}
@@ -1088,19 +1160,10 @@ export function ShowParticularsContent({ show }: FrontMatterProps) {
         </View>
       )}
 
-      {show.dockingStatement && (
-        <Text style={{
-          fontFamily: 'Times',
-          fontSize: 7,
-          fontStyle: 'italic',
-          color: C.textMedium,
-          textAlign: 'center',
-          marginBottom: 8,
-          paddingHorizontal: 8,
-        }}>
-          {show.dockingStatement}
-        </Text>
-      )}
+      {/* Docking statement now renders prominently on the CoverPage instead
+          (Mandy 2026-08-17) — every real catalogue format renders CoverPage
+          in the same document as this component, so nothing loses the
+          statement by removing the second copy here. See CoverPage. */}
 
       <JurisdictionBlock />
     </>

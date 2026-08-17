@@ -8,6 +8,15 @@ export interface RkcScheduleProfileInput {
 
 export interface RkcScheduleProfile {
   title: string;
+  /**
+   * The designation portion of `title` — everything after "SCHEDULE OF "
+   * (e.g. "UNBENCHED BREED CHAMPIONSHIP SHOW"). Exposed so other RKC
+   * documents can compose their own "<DOCUMENT> OF <designation>" line
+   * (the catalogue cover reads "CATALOGUE OF …") without hand-copying the
+   * type/scope/group-system wording logic below — Mandy 2026-08-17: the
+   * catalogue must carry the same formal designation as the schedule.
+   */
+  designation: string;
   specimenVersion: typeof RKC_SCHEDULE_SPECIMEN_VERSION;
   minimumClasses: 12 | 16;
   minimumPuppyAgeMonths: 4 | 6;
@@ -44,8 +53,11 @@ export function getRkcScheduleProfile({
     ? isGroupSystem ? ' JUDGED ON THE GROUP SYSTEM' : ' NOT JUDGED ON THE GROUP SYSTEM'
     : '';
 
+  const designation = `UNBENCHED ${typeLabel} SHOW${systemLabel}`;
+
   return {
-    title: `SCHEDULE OF UNBENCHED ${typeLabel} SHOW${systemLabel}`,
+    title: `SCHEDULE OF ${designation}`,
+    designation,
     specimenVersion: RKC_SCHEDULE_SPECIMEN_VERSION,
     minimumClasses: singleBreed ? 12 : 16,
     minimumPuppyAgeMonths: singleBreed ? 4 : 6,

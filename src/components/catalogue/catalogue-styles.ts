@@ -483,6 +483,33 @@ export const styles = StyleSheet.create({
     textAlign: 'center',
     marginBottom: 2,
   },
+  // Formal RKC designation ("CATALOGUE OF UNBENCHED …") — same designation
+  // wording as the schedule cover, in the catalogue's own print-first Times
+  // idiom rather than the schedule's coloured pill (Mandy 2026-08-17).
+  coverDesignation: {
+    fontFamily: 'Times',
+    fontSize: 8.5,
+    fontWeight: 'bold',
+    color: C.textDark,
+    textAlign: 'center',
+    textTransform: 'uppercase',
+    letterSpacing: 0.4,
+    marginTop: 2,
+    marginBottom: 1,
+  },
+  // Docking statement — mandatory RKC F(1).7.c(2) notice, now prominent on
+  // the cover directly beneath the designation (Mandy 2026-08-17), mirroring
+  // the schedule cover instead of being buried on the particulars page.
+  coverDocking: {
+    fontFamily: 'Times',
+    fontSize: 7,
+    fontStyle: 'italic',
+    color: C.textMedium,
+    textAlign: 'center',
+    marginTop: 2,
+    marginBottom: 2,
+    paddingHorizontal: 8,
+  },
   coverBottomBand: {
     position: 'absolute',
     bottom: 0,
@@ -664,6 +691,44 @@ export const styles = StyleSheet.create({
     fontSize: 8,
     fontWeight: 'bold',
     color: C.textDark,
+  },
+
+  // ── Judges' Welfare Commitment (carried over from the schedule, catalogue's
+  //    own bordered-box idiom — Mandy 2026-08-17) ──────────────
+  welfareBlock: {
+    backgroundColor: C.cardBg,
+    borderWidth: 0.75,
+    borderColor: C.cardBorder,
+    borderRadius: 6,
+    borderLeftWidth: 3,
+    borderLeftColor: C.accent,
+    padding: '8 12',
+    marginBottom: 10,
+  },
+  welfareBlockEyebrow: {
+    fontFamily: 'Inter',
+    fontSize: 6,
+    fontWeight: 'bold',
+    color: C.textLight,
+    textTransform: 'uppercase',
+    letterSpacing: 1.1,
+    marginBottom: 2,
+  },
+  welfareBlockTitle: {
+    fontFamily: 'HankenGrotesk',
+    fontSize: 9,
+    fontWeight: 'bold',
+    color: C.primary,
+    textTransform: 'uppercase',
+    letterSpacing: 0.7,
+    marginBottom: 5,
+  },
+  welfareBlockText: {
+    fontFamily: 'Times',
+    fontSize: 8.5,
+    fontStyle: 'italic',
+    color: C.textDark,
+    lineHeight: 1.5,
   },
 
   // ── Judge bio styles ──────────────────────────
