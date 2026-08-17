@@ -41,7 +41,16 @@ import { prepareAdvertsForRender } from '@/lib/advert-orientation';
 
 export async function generateCataloguePdf(
   showId: string,
-  format: 'standard' | 'by-class' = 'standard'
+  format: 'standard' | 'by-class' = 'standard',
+  opts?: {
+    /** Print a different venue than the one stored on the show — for an
+     *  embargoed venue change (Mandy 2026-08-17: Clyde Valley + Scotland
+     *  moved to Monteith Park, but the public site must keep the old venue
+     *  until the club has announced it). The site's own downloads keep
+     *  reading the DB, so the embargo holds itself; this override exists
+     *  for generating the print files ahead of the announcement. */
+    venueOverride?: { name: string; address: string };
+  }
 ): Promise<Buffer> {
   const show = await db.query.shows.findFirst({
     where: eq(schema.shows.id, showId),
@@ -288,8 +297,8 @@ export async function generateCataloguePdf(
     showRuleset: (show as { showRuleset?: 'rkc' | 'wusv' | null }).showRuleset ?? null,
     date: show.startDate,
     endDate: show.endDate !== show.startDate ? show.endDate : undefined,
-    venue: show.venue?.name,
-    venueAddress: show.venue?.address ?? undefined,
+    venue: opts?.venueOverride?.name ?? show.venue?.name,
+    venueAddress: opts?.venueOverride?.address ?? show.venue?.address ?? undefined,
     organisation: show.organisation?.name,
     kcLicenceNo: show.kcLicenceNo,
     logoUrl: show.organisation?.logoUrl ?? undefined,
