@@ -70,6 +70,25 @@ type ConfirmedEntryRow = {
   entryType: 'standard' | 'junior_handler';
 };
 
+/**
+ * A withdrawn entry on a paid order. Per the entries.status enum + how
+ * secretary.issueRefund transitions it (see below), status='withdrawn' in
+ * the DB *always* means the fee is still with the club — a withdrawn
+ * exhibitor keeps no refund by default, and the moment a secretary actually
+ * refunds a withdrawn entry's fee, the entry flips to status='cancelled'
+ * (secretary.ts issueRefund, `withdrawnFullyRefunded`), which is a
+ * different bucket (see cancelledFeeRows below) and never reaches here.
+ * Mandy 2026-08-18: this money was showing nowhere on the settlement —
+ * Clyde Valley's £10 withdrawn fee vanished between "not confirmed" (so it
+ * dropped out of Entries) and "not refunded" (so no refund line covered
+ * it either). It stays with the club, so it must show as club money.
+ */
+type WithdrawnEntryRow = {
+  id: string;
+  orderId: string | null;
+  totalFee: number;
+};
+
 type SundryRow = {
   orderId: string;
   itemName: string;
@@ -95,34 +114,40 @@ function isDonationName(name: string): boolean {
   return name.toLowerCase().includes('donation');
 }
 
+/**
+ * Group fee-bearing rows by price into settlement lines: ≤3 distinct
+ * prices get one line each ("N @ £X"), more than that collapse to a single
+ * "N entries @ £min–£max" range line. Shared by the confirmed "Entries"
+ * line and the "Withdrawn — fee kept" line — a withdrawn dog's fee is
+ * priced exactly like a confirmed one, it just landed in a different
+ * status bucket, so it groups the same way (Mandy 2026-08-18).
+ */
+function buildPriceGroupedLines(feeBearing: { totalFee: number }[], label: string): SettlementLine[] {
+  if (feeBearing.length === 0) return [];
+  const byPrice = new Map<number, number>(); // price -> count
+  for (const e of feeBearing) byPrice.set(e.totalFee, (byPrice.get(e.totalFee) ?? 0) + 1);
+  const distinctPrices = [...byPrice.keys()].sort((a, b) => a - b);
+  const total = feeBearing.reduce((sum, e) => sum + e.totalFee, 0);
+  const count = feeBearing.length;
+
+  if (distinctPrices.length <= 3) {
+    return distinctPrices.map((price) => {
+      const n = byPrice.get(price)!;
+      return { label, sub: `${n} @ ${money(price)}`, amountPence: n * price };
+    });
+  }
+  const min = distinctPrices[0]!;
+  const max = distinctPrices[distinctPrices.length - 1]!;
+  return [{ label, sub: `${count} entries @ ${money(min)}–${money(max)}`, amountPence: total }];
+}
+
 function buildEntryLines(entriesInChannel: TaggedEntry[]): SettlementLine[] {
   const lines: SettlementLine[] = [];
 
   const regular = entriesInChannel.filter((e) => !e.jhOrSacOnly && e.totalFee > 0);
   const jhOrSac = entriesInChannel.filter((e) => e.jhOrSacOnly && e.totalFee > 0);
 
-  if (regular.length > 0) {
-    const byPrice = new Map<number, number>(); // price -> count
-    for (const e of regular) byPrice.set(e.totalFee, (byPrice.get(e.totalFee) ?? 0) + 1);
-    const distinctPrices = [...byPrice.keys()].sort((a, b) => a - b);
-    const total = regular.reduce((sum, e) => sum + e.totalFee, 0);
-    const count = regular.length;
-
-    if (distinctPrices.length <= 3) {
-      for (const price of distinctPrices) {
-        const n = byPrice.get(price)!;
-        lines.push({ label: 'Entries', sub: `${n} @ ${money(price)}`, amountPence: n * price });
-      }
-    } else {
-      const min = distinctPrices[0]!;
-      const max = distinctPrices[distinctPrices.length - 1]!;
-      lines.push({
-        label: 'Entries',
-        sub: `${count} entries @ ${money(min)}–${money(max)}`,
-        amountPence: total,
-      });
-    }
-  }
+  lines.push(...buildPriceGroupedLines(regular, 'Entries'));
 
   if (jhOrSac.length > 0) {
     const byPrice = new Map<number, number>();
@@ -182,6 +207,11 @@ export async function computeSettlementItemisation(
   }));
   const orderById = new Map(orderRows.map((o) => [o.id, o]));
   const paidOrderIds = orderRows.map((o) => o.id);
+  // drizzle's inArray(col, []) generates an always-false `IN ()` that some
+  // drivers choke on — the existing placeholder-UUID guard, reused below.
+  const paidOrderIdsOrPlaceholder = paidOrderIds.length
+    ? paidOrderIds
+    : ['00000000-0000-0000-0000-000000000000'];
 
   // Confirmed entries — both those on a paid order AND fully orderless
   // (NFC dogs / manual additions never linked to a Remi order at all).
@@ -199,10 +229,52 @@ export async function computeSettlementItemisation(
         eq(entries.showId, showId),
         eq(entries.status, 'confirmed'),
         isNull(entries.deletedAt),
-        or(
-          isNull(entries.orderId),
-          inArray(entries.orderId, paidOrderIds.length ? paidOrderIds : ['00000000-0000-0000-0000-000000000000']),
-        ),
+        or(isNull(entries.orderId), inArray(entries.orderId, paidOrderIdsOrPlaceholder)),
+      ),
+    );
+
+  // Withdrawn entries on a paid order — see WithdrawnEntryRow doc. Unlike
+  // confirmed, orderless withdrawn/cancelled entries are excluded rather
+  // than treated as a free-standing bucket: show-metrics.ts does the same
+  // (an entry can only reach "withdrawn" via money moving through an order
+  // first, so an orderless one is defensive dead code there, not a real
+  // case) — settlement-itemisation must agree with that filter exactly.
+  const withdrawnRows: WithdrawnEntryRow[] = await db
+    .select({
+      id: entries.id,
+      orderId: entries.orderId,
+      totalFee: entries.totalFee,
+    })
+    .from(entries)
+    .where(
+      and(
+        eq(entries.showId, showId),
+        eq(entries.status, 'withdrawn'),
+        isNull(entries.deletedAt),
+        inArray(entries.orderId, paidOrderIdsOrPlaceholder),
+      ),
+    );
+
+  // Cancelled entries on a paid order — a per-entry fee that WAS refunded
+  // (see WithdrawnEntryRow doc: a refunded withdrawal becomes 'cancelled',
+  // never stays 'withdrawn'). Never shown as a settlement line — the
+  // refund already nets out of the channel via the "Refunds to exhibitors"
+  // line below — but its fee is still part of orders.total_amount (refunds
+  // don't rewrite that column), so it must still count in the order-level
+  // discount-gap check just below, or a cancelled entry inside a
+  // multi-entry order would look like an undetected multi-dog discount.
+  const cancelledFeeRows: { orderId: string | null; totalFee: number }[] = await db
+    .select({
+      orderId: entries.orderId,
+      totalFee: entries.totalFee,
+    })
+    .from(entries)
+    .where(
+      and(
+        eq(entries.showId, showId),
+        eq(entries.status, 'cancelled'),
+        isNull(entries.deletedAt),
+        inArray(entries.orderId, paidOrderIdsOrPlaceholder),
       ),
     );
 
@@ -230,6 +302,23 @@ export async function computeSettlementItemisation(
     const hasJhClass = types.includes('junior_handler');
     return { ...e, jhOrSacOnly, hasJhClass, hasClasses: types.length > 0 };
   });
+
+  // Per-order fee total across EVERY status that was ever actually charged
+  // (confirmed + withdrawn + cancelled) — used only for the order-level
+  // discount-gap check in buildChannel. orders.total_amount is the original
+  // Stripe charge and never gets rewritten by a later withdrawal or refund,
+  // so the gap check must compare against the full original fee component,
+  // not just the confirmed subset, or a withdrawn/cancelled entry sharing
+  // an order with other confirmed entries reads as a phantom "multi-dog
+  // package discount" for exactly its fee (Mandy 2026-08-18).
+  const orderFeeComponentPence = new Map<string, number>();
+  const addOrderFee = (orderId: string | null, fee: number) => {
+    if (!orderId) return;
+    orderFeeComponentPence.set(orderId, (orderFeeComponentPence.get(orderId) ?? 0) + fee);
+  };
+  for (const e of taggedEntries) addOrderFee(e.orderId, e.totalFee);
+  for (const e of withdrawnRows) addOrderFee(e.orderId, e.totalFee);
+  for (const e of cancelledFeeRows) addOrderFee(e.orderId, e.totalFee);
 
   const sundryRows =
     paidOrderIds.length === 0
@@ -277,9 +366,20 @@ export async function computeSettlementItemisation(
   function buildChannel(channel: ChannelKey, title: string, totalLabel: string): SettlementSection {
     const channelOrderIds = new Set(orderRows.filter((o) => o.channel === channel).map((o) => o.id));
     const channelEntries = taggedEntries.filter((e) => e.orderId && channelOrderIds.has(e.orderId));
+    const channelWithdrawn = withdrawnRows.filter((e) => e.orderId && channelOrderIds.has(e.orderId));
     const channelSundries = sundryRows.filter((s) => channelOrderIds.has(s.orderId));
 
     const lines: SettlementLine[] = [...buildEntryLines(channelEntries)];
+
+    // Withdrawn entries kept their fee — house rule is no refund unless one
+    // is actually issued (WithdrawnEntryRow doc). Own line, directly under
+    // Entries, deliberately NOT folded into the "Entries N @ £X" count:
+    // that count also drives the total-entries/catalogue footer below, and
+    // a withdrawn dog isn't in the catalogue. Wording matches the existing
+    // "Withdrawn — fee kept" convention on the Financial page and dashboard
+    // (financial/page.tsx, entries/page.tsx) — same fact, same words
+    // (Mandy 2026-08-18).
+    lines.push(...buildPriceGroupedLines(channelWithdrawn.filter((e) => e.totalFee > 0), 'Withdrawn — fee kept'));
 
     const donationSundries = channelSundries.filter((s) => isDonationName(s.itemName));
     const otherSundries = channelSundries.filter((s) => !isDonationName(s.itemName));
@@ -308,14 +408,17 @@ export async function computeSettlementItemisation(
 
     // Order-level discount — the gap between what the components sum to
     // and what the order actually charged (multi-dog package discounts,
-    // member-rate reductions applied at checkout).
+    // member-rate reductions applied at checkout). entryComponent reads
+    // orderFeeComponentPence (confirmed + withdrawn + cancelled), NOT just
+    // taggedEntries, because orders.total_amount is the original charge and
+    // still includes a withdrawn/cancelled entry's fee — summing confirmed
+    // entries alone would under-count and misread that fee as a phantom
+    // discount (Mandy 2026-08-18).
     let discountTotal = 0;
     for (const id of channelOrderIds) {
       const order = orderById.get(id);
       if (!order) continue;
-      const entryComponent = taggedEntries
-        .filter((e) => e.orderId === id)
-        .reduce((s, e) => s + e.totalFee, 0);
+      const entryComponent = orderFeeComponentPence.get(id) ?? 0;
       const sundryComponent = channelSundries.filter((s) => s.orderId === id).reduce((s, r) => s + r.quantity * r.unitPrice, 0);
       const componentSum = entryComponent + sundryComponent + order.donationPence;
       const gap = componentSum - order.totalAmount;
