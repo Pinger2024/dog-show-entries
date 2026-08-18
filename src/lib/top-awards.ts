@@ -137,6 +137,34 @@ export function awardFilter(type: AchievementType): AwardFilter {
   };
 }
 
+/** Which Judge's Book page a Best Award prints on — split from one combined
+ *  sign-off page into three, each placed where that decision is actually
+ *  made (Mandy 2026-08-10, re-requested 2026-08-18 for two shows about to
+ *  print): the dog-side awards land on the page after the last dog class,
+ *  the bitch-side awards after the last bitch class, and everything else —
+ *  the overall/show-level awards (Best of Breed, Best in Show, Best Puppy
+ *  in Show, …) — stays on the back page. */
+export type BestAwardSection = 'dog' | 'bitch' | 'overall';
+
+/**
+ * Classify a configured Best Award NAME into its Judge's Book section, built
+ * on the same `awardNameToType` → `awardFilter` lookup that already decides
+ * whether an award is sex-restricted for results recording — one
+ * classification, not a second copy of the award vocabulary.
+ *
+ * A name `awardNameToType` doesn't recognise (a club's bespoke trophy — see
+ * `resolveTopAwards`'s "still print in the judges' book, they're just not
+ * recorded here") is NEVER dropped: it resolves to 'overall' so it lands on
+ * the back page with the show-level awards rather than vanishing from the
+ * book entirely.
+ */
+export function bestAwardSection(name: string): BestAwardSection {
+  const type = awardNameToType(name);
+  if (!type) return 'overall';
+  const sex = awardFilter(type).sex;
+  return sex === 'dog' ? 'dog' : sex === 'bitch' ? 'bitch' : 'overall';
+}
+
 export type TopAward = {
   /** The display name exactly as configured for the show. */
   name: string;

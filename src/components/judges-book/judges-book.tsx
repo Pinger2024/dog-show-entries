@@ -2,6 +2,7 @@ import React from 'react';
 import { Document, Page, Text, View, Image, StyleSheet, Font } from '@react-pdf/renderer';
 import path from 'path';
 import type { JudgesBookClass, JudgesBookShowInfo } from '@/app/api/judges-book/[showId]/route';
+import { buildJudgesBookPages, type JudgesBookAwardsSection } from '@/lib/judges-book-pages';
 // Side-effect: registers the HankenGrotesk family used on the branded front
 // cover sheet below. Imported from a single shared module (not registered
 // inline here) — see src/lib/pdf-fonts.ts for why duplicate registration of
@@ -559,10 +560,16 @@ function BestAwardsColumn({
   awards,
   variant,
   copyLabel,
+  title,
 }: {
   awards: string[];
   variant: 'judge' | 'secretary' | 'awardsBoard';
   copyLabel: string;
+  /** Column heading — "Dog Awards" / "Bitch Awards" on the two pages now
+   *  placed mid-book, "Best Awards" on the back page (Mandy 2026-08-10/18
+   *  split) — so a judge or steward flipping through knows which sign-off
+   *  page they're holding without reading every award name on it. */
+  title: string;
 }) {
   const columnStyle =
     variant === 'judge'
@@ -575,7 +582,7 @@ function BestAwardsColumn({
       <View style={s.copyLabelBox}><Text style={s.copyLabel}>{copyLabel}</Text></View>
       <View style={bestAwardsStyles.columnHeader}>
         <Text style={bestAwardsStyles.columnHeaderLabel}>Sign-off</Text>
-        <Text style={bestAwardsStyles.columnHeaderTitle}>Best Awards</Text>
+        <Text style={bestAwardsStyles.columnHeaderTitle}>{title}</Text>
       </View>
 
       {awards.map((award) => (
@@ -653,6 +660,169 @@ function PlacementColumn(props: ColumnHeaderProps & { isLast?: boolean; wide?: b
   );
 }
 
+/** One page per class: notes on the left, 3 tearoff placement columns on
+ *  the right. Extracted from JudgesBook's class loop so `buildJudgesBookPages`
+ *  (lib/judges-book-pages.ts) can interleave it with AwardsPage below in a
+ *  single ordered list, and so both are individually identifiable in the
+ *  rendered element tree by component reference (see
+ *  judges-book-awards-split.test.tsx) rather than only by page content. */
+export function ClassPage({
+  show,
+  showDate,
+  cls,
+}: {
+  show: JudgesBookShowInfo;
+  showDate: string;
+  cls: JudgesBookClass;
+}) {
+  const sexLabel = cls.sex === 'dog' ? 'Dogs' : cls.sex === 'bitch' ? 'Bitches' : null;
+  const columnProps: ColumnHeaderProps = {
+    classLabel: cls.classLabel,
+    className: cls.className,
+    sexLabel,
+    breedName: cls.breedName,
+  };
+
+  return (
+    <Page size="A4" style={s.page}>
+      <View style={s.pageHeader} fixed>
+        <View style={s.pageHeaderLeft}>
+          {show.organisation && (
+            <Text style={s.clubName}>{show.organisation}</Text>
+          )}
+          <Text style={s.showName}>{show.name}</Text>
+          {cls.judgeName && (
+            <Text style={s.judgeLine}>Judge: {cls.judgeName}</Text>
+          )}
+        </View>
+        <Text style={s.dateBlock}>{showDate}</Text>
+      </View>
+
+      <View style={s.body}>
+        {/* Left: bench numbers + critique writing area */}
+        <View style={s.notesSection}>
+          <View style={s.notesHeader} fixed>
+            <View style={s.notesHeaderLeft}>
+              <Text style={s.notesClassNumber}>
+                Class {cls.classLabel || '—'}
+              </Text>
+              <Text style={s.notesClassName}>
+                {cls.className}{sexLabel ? ` (${sexLabel})` : ''}
+              </Text>
+              {cls.breedName && (
+                <Text style={s.notesClassBreed}>{cls.breedName}</Text>
+              )}
+            </View>
+            <Text style={s.notesEntryCount}>
+              {cls.exhibits.length}{' '}
+              {cls.exhibits.length === 1 ? 'entry' : 'entries'}
+              {cls.ringNumber != null ? ` · Ring ${cls.ringNumber}` : ''}
+            </Text>
+          </View>
+
+          <View style={s.notesColHeader} fixed>
+            <Text style={s.notesColHeaderBench}>No.</Text>
+            <Text style={s.notesColHeaderCritique}>Judge&apos;s Notes / Critique</Text>
+          </View>
+
+          {cls.exhibits.map((exhibit, i) => (
+            <View key={i} style={s.notesRow} wrap={false}>
+              <View style={s.notesBenchCell}>
+                <Text style={s.notesBenchNumber}>
+                  {exhibit.catalogueNumber ?? '—'}
+                </Text>
+              </View>
+              <View style={s.notesCritiqueCell}>
+                {Array.from({ length: 3 }, (_, j) => (
+                  <View key={j} style={s.notesCritiqueLine} />
+                ))}
+              </View>
+            </View>
+          ))}
+        </View>
+
+        {/* Right: three tearoff placement columns */}
+        <View style={s.placementsSection}>
+          <PlacementColumn {...columnProps} copyLabel="Judge's copy — keep" wide />
+          <PlacementColumn {...columnProps} copyLabel="Tear off — Secretary" />
+          <PlacementColumn {...columnProps} copyLabel="Tear off — Awards Board" isLast />
+        </View>
+      </View>
+
+      <Text
+        style={s.footer}
+        render={({ pageNumber, totalPages }) =>
+          `${SHOW_TYPE_LABELS[show.showType] ?? show.showType} — Class ${cls.classLabel || '—'} — Page ${pageNumber} of ${totalPages} — Generated by Remi`
+        }
+        fixed
+      />
+    </Page>
+  );
+}
+
+// Column heading + footer wording per awards-page section — lets a judge or
+// steward flipping through tell the dog-side, bitch-side and back (overall)
+// sign-off pages apart at a glance (Mandy 2026-08-10/18 split).
+const AWARDS_PAGE_TITLE: Record<JudgesBookAwardsSection, string> = {
+  dog: 'Dog Awards',
+  bitch: 'Bitch Awards',
+  overall: 'Best Awards',
+};
+const AWARDS_PAGE_FOOTER_LABEL: Record<JudgesBookAwardsSection, string> = {
+  dog: 'Dog Awards sign-off',
+  bitch: 'Bitch Awards sign-off',
+  overall: 'Best Awards sign-off',
+};
+
+/** Best Awards sign-off page — triplicate tear-off columns, no notes
+ *  needed. One of THREE now (Mandy 2026-08-10, re-requested 2026-08-18):
+ *  dog-side awards land right after the last dog class, bitch-side right
+ *  after the last bitch class, and the overall awards (Best of Breed, Best
+ *  in Show, Best Puppy in Show, …) stay on the back page — see
+ *  buildJudgesBookPages (lib/judges-book-pages.ts) for the placement logic.
+ *  No judge attribution here, same as before the split — the breed judge
+ *  signs whichever copy reaches them. */
+export function AwardsPage({
+  show,
+  showDate,
+  section,
+  awards,
+}: {
+  show: JudgesBookShowInfo;
+  showDate: string;
+  section: JudgesBookAwardsSection;
+  awards: string[];
+}) {
+  const title = AWARDS_PAGE_TITLE[section];
+  return (
+    <Page size="A4" style={s.page}>
+      <View style={s.pageHeader} fixed>
+        <View style={s.pageHeaderLeft}>
+          {show.organisation && (
+            <Text style={s.clubName}>{show.organisation}</Text>
+          )}
+          <Text style={s.showName}>{show.name}</Text>
+        </View>
+        <Text style={s.dateBlock}>{showDate}</Text>
+      </View>
+
+      <View style={s.body}>
+        <BestAwardsColumn awards={awards} variant="judge" copyLabel="Judge's copy — keep" title={title} />
+        <BestAwardsColumn awards={awards} variant="secretary" copyLabel="Tear off — Secretary" title={title} />
+        <BestAwardsColumn awards={awards} variant="awardsBoard" copyLabel="Tear off — Awards Board" title={title} />
+      </View>
+
+      <Text
+        style={s.footer}
+        render={({ pageNumber, totalPages }) =>
+          `${SHOW_TYPE_LABELS[show.showType] ?? show.showType} — ${AWARDS_PAGE_FOOTER_LABEL[section]} — Page ${pageNumber} of ${totalPages} — Generated by Remi`
+        }
+        fixed
+      />
+    </Page>
+  );
+}
+
 export function JudgesBook({
   show,
   classes,
@@ -666,6 +836,13 @@ export function JudgesBook({
     year: 'numeric',
   });
 
+  // Dog → Bitch → Special Awards → Junior Handling running order, with the
+  // Best Awards sign-off split across three pages placed where each
+  // decision is actually made — see buildJudgesBookPages' own doc comment
+  // for the full ordering rules and edge cases (no bitch classes but
+  // bitch-side awards configured, etc).
+  const pages = buildJudgesBookPages(classes, show.bestAwards);
+
   return (
     <Document
       title={`Judge's Book — ${show.name}${show.judgeName ? ` (${show.judgeName})` : ''}`}
@@ -673,120 +850,12 @@ export function JudgesBook({
     >
       <JudgesBookCover show={show} />
 
-      {classes.map((cls, classIdx) => {
-        const sexLabel = cls.sex === 'dog' ? 'Dogs' : cls.sex === 'bitch' ? 'Bitches' : null;
-        const columnProps: ColumnHeaderProps = {
-          classLabel: cls.classLabel,
-          className: cls.className,
-          sexLabel,
-          breedName: cls.breedName,
-        };
-
-        return (
-          // One page per class: notes on the left, 3 tearoff placement columns on the right.
-          <Page key={classIdx} size="A4" style={s.page}>
-            <View style={s.pageHeader} fixed>
-              <View style={s.pageHeaderLeft}>
-                {show.organisation && (
-                  <Text style={s.clubName}>{show.organisation}</Text>
-                )}
-                <Text style={s.showName}>{show.name}</Text>
-                {cls.judgeName && (
-                  <Text style={s.judgeLine}>Judge: {cls.judgeName}</Text>
-                )}
-              </View>
-              <Text style={s.dateBlock}>{showDate}</Text>
-            </View>
-
-            <View style={s.body}>
-              {/* Left: bench numbers + critique writing area */}
-              <View style={s.notesSection}>
-                <View style={s.notesHeader} fixed>
-                  <View style={s.notesHeaderLeft}>
-                    <Text style={s.notesClassNumber}>
-                      Class {cls.classLabel || '—'}
-                    </Text>
-                    <Text style={s.notesClassName}>
-                      {cls.className}{sexLabel ? ` (${sexLabel})` : ''}
-                    </Text>
-                    {cls.breedName && (
-                      <Text style={s.notesClassBreed}>{cls.breedName}</Text>
-                    )}
-                  </View>
-                  <Text style={s.notesEntryCount}>
-                    {cls.exhibits.length}{' '}
-                    {cls.exhibits.length === 1 ? 'entry' : 'entries'}
-                    {cls.ringNumber != null ? ` · Ring ${cls.ringNumber}` : ''}
-                  </Text>
-                </View>
-
-                <View style={s.notesColHeader} fixed>
-                  <Text style={s.notesColHeaderBench}>No.</Text>
-                  <Text style={s.notesColHeaderCritique}>Judge&apos;s Notes / Critique</Text>
-                </View>
-
-                {cls.exhibits.map((exhibit, i) => (
-                  <View key={i} style={s.notesRow} wrap={false}>
-                    <View style={s.notesBenchCell}>
-                      <Text style={s.notesBenchNumber}>
-                        {exhibit.catalogueNumber ?? '—'}
-                      </Text>
-                    </View>
-                    <View style={s.notesCritiqueCell}>
-                      {Array.from({ length: 3 }, (_, j) => (
-                        <View key={j} style={s.notesCritiqueLine} />
-                      ))}
-                    </View>
-                  </View>
-                ))}
-              </View>
-
-              {/* Right: three tearoff placement columns */}
-              <View style={s.placementsSection}>
-                <PlacementColumn {...columnProps} copyLabel="Judge's copy — keep" wide />
-                <PlacementColumn {...columnProps} copyLabel="Tear off — Secretary" />
-                <PlacementColumn {...columnProps} copyLabel="Tear off — Awards Board" isLast />
-              </View>
-            </View>
-
-            <Text
-              style={s.footer}
-              render={({ pageNumber, totalPages }) =>
-                `${SHOW_TYPE_LABELS[show.showType] ?? show.showType} — Class ${cls.classLabel || '—'} — Page ${pageNumber} of ${totalPages} — Generated by Remi`
-              }
-              fixed
-            />
-          </Page>
-        );
-      })}
-
-      {/* Final page — Best Awards sign-off. Triplicate columns, no notes needed. */}
-      {show.bestAwards.length > 0 && (
-        <Page size="A4" style={s.page}>
-          <View style={s.pageHeader} fixed>
-            <View style={s.pageHeaderLeft}>
-              {show.organisation && (
-                <Text style={s.clubName}>{show.organisation}</Text>
-              )}
-              <Text style={s.showName}>{show.name}</Text>
-            </View>
-            <Text style={s.dateBlock}>{showDate}</Text>
-          </View>
-
-          <View style={s.body}>
-            <BestAwardsColumn awards={show.bestAwards} variant="judge" copyLabel="Judge's copy — keep" />
-            <BestAwardsColumn awards={show.bestAwards} variant="secretary" copyLabel="Tear off — Secretary" />
-            <BestAwardsColumn awards={show.bestAwards} variant="awardsBoard" copyLabel="Tear off — Awards Board" />
-          </View>
-
-          <Text
-            style={s.footer}
-            render={({ pageNumber, totalPages }) =>
-              `${SHOW_TYPE_LABELS[show.showType] ?? show.showType} — Best Awards sign-off — Page ${pageNumber} of ${totalPages} — Generated by Remi`
-            }
-            fixed
-          />
-        </Page>
+      {pages.map((page, idx) =>
+        page.kind === 'class' ? (
+          <ClassPage key={idx} show={show} showDate={showDate} cls={page.class} />
+        ) : (
+          <AwardsPage key={idx} show={show} showDate={showDate} section={page.section} awards={page.awards} />
+        )
       )}
     </Document>
   );

@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   awardNameToType,
   awardFilter,
+  bestAwardSection,
   resolveTopAwards,
   buildPlacementIndex,
   beatenByRival,
@@ -86,6 +87,32 @@ describe('awardFilter', () => {
     expect(awardFilter('best_puppy_in_show')).toMatchObject({ sex: null, puppy: true });
     expect(awardFilter('best_veteran_in_show').veteran).toBe(true);
     expect(awardFilter('best_long_coat_in_show')).toMatchObject({ sex: null, longCoat: true });
+  });
+});
+
+// Judge's Book "Best Awards" split (Mandy 2026-08-10, re-requested
+// 2026-08-18): which of the three sign-off pages — dog / bitch / back
+// (overall) — a configured award name belongs on. Built on
+// awardNameToType + awardFilter, not a second copy of the vocabulary.
+describe('bestAwardSection', () => {
+  it('sends sex-restricted awards to their own page', () => {
+    expect(bestAwardSection('Dog Challenge Certificate')).toBe('dog');
+    expect(bestAwardSection('Reserve Dog Challenge Certificate')).toBe('dog');
+    expect(bestAwardSection('Best Puppy Dog')).toBe('dog');
+    expect(bestAwardSection('Best Dog')).toBe('dog');
+    expect(bestAwardSection('Bitch Challenge Certificate')).toBe('bitch');
+    expect(bestAwardSection('Best Bitch')).toBe('bitch');
+  });
+
+  it('sends show-level / overall awards to the back page', () => {
+    expect(bestAwardSection('Best of Breed')).toBe('overall');
+    expect(bestAwardSection('Best in Show')).toBe('overall');
+    expect(bestAwardSection('Best Puppy in Show')).toBe('overall');
+    expect(bestAwardSection('Best Veteran in Show')).toBe('overall');
+  });
+
+  it('never drops a bespoke award it cannot classify — it lands on the back page with the overalls', () => {
+    expect(bestAwardSection('The Smith Memorial Trophy')).toBe('overall');
   });
 });
 

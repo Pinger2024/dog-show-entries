@@ -32,6 +32,15 @@ export type JudgesBookClass = {
   judgeName: string | null;
   ringNumber: number | null;
   isJh: boolean;
+  /** Raw show_classes.classDefinition.type ('age' | 'special' |
+   *  'junior_handler' | 'sv_age' | …) — carried through so the renderer can
+   *  bucket classes Dog → Bitch → Special Awards → Junior Handling via the
+   *  shared `sectionClasses` helper (class-labels.ts), the SAME bucketing
+   *  every other document uses. Previously this route trusted raw
+   *  show_classes.sortOrder, which let Special Award / Junior Handling
+   *  classes sit between the dog and bitch blocks on some shows — see
+   *  buildJudgesBookPages (lib/judges-book-pages.ts). */
+  classType: string | null;
   exhibits: {
     catalogueNumber: string | null;
     dogName: string;
@@ -139,6 +148,7 @@ export async function GET(
       judgeName: judge?.name ?? null,
       ringNumber: judge?.ring ?? null,
       isJh: sc.classDefinition?.type === 'junior_handler',
+      classType: sc.classDefinition?.type ?? null,
       exhibits,
     };
   });
@@ -162,10 +172,17 @@ export async function GET(
       judgeAssignments.find((ja) => ja.judge?.id === filterJudgeId)?.judge?.name ??
       null
     : null;
-  // Best Awards (BIS / CCs / Best Puppy in Show) are decided by the breed
-  // judge, so only carry that sign-off page when the book has breed classes —
-  // a Junior-Handling-only book doesn't need it.
-  const hasBreedClasses = bookClasses.some((c) => !c.isJh);
+  // Best Awards (BIS / CCs / Best Puppy in Show) are decided by the DOG or
+  // BITCH breed judge, so only carry them when the book actually has a dog
+  // or bitch class — a Junior-Handling-only book doesn't need them, and
+  // neither does a Special-Award-Classes-only book (the SAC judge decides
+  // the Special Award classes, not Best of Breed/CCs/etc — see
+  // judge-resolution.ts). Checking `sex` directly rather than `!isJh` closes
+  // that SAC gap: a SAC class is also not JH, so the old `!isJh` check
+  // wrongly counted it as a "breed class" and would have handed a
+  // SAC-only per-judge book three stray awards pages once the sign-off
+  // split by section (buildJudgesBookPages) below.
+  const hasBreedClasses = bookClasses.some((c) => c.sex === 'dog' || c.sex === 'bitch');
 
   const showInfo: JudgesBookShowInfo = {
     name: show.name,
