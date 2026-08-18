@@ -84,6 +84,21 @@ const s = StyleSheet.create({
   dateBlock: {
     fontSize: 10,
     textAlign: 'right',
+    // The PAGE has zero right margin (Mandy 2026-07-19, so the tear-off
+    // strips sit flush on the perforated stock) — that's fine for the
+    // strips, which pad their own content, but this header Text inherited
+    // that same zero margin and rendered with its last digit touching the
+    // physical page edge on every page (Mandy 2026-08-18: "the date... [is]
+    // being cut off"). This is an inset on the TEXT itself, not a page
+    // margin, so the flush tear-off geometry below is untouched.
+    //
+    // 30pt (~10.6mm), not a token amount: printers have an unprintable dead
+    // zone of up to ~5mm at the paper edge, and Mandy called an 8pt inset
+    // from the proof picture — "I think that date will still cut off when
+    // printing, can we move that in a little bit further" (2026-08-18).
+    // The date is decoration; the slips' own content stays where the
+    // perforated-stock design puts it.
+    paddingRight: 30,
   },
   // ── Combined body: notes on left, 3 placement columns on right ──
   body: {
@@ -250,8 +265,22 @@ const s = StyleSheet.create({
     overflow: 'hidden',
     borderBottomWidth: 1,
     borderBottomColor: '#000',
-    padding: 5,
+    paddingTop: 5,
+    paddingLeft: 5,
+    paddingBottom: 5,
+    paddingRight: 5,
     backgroundColor: '#f4f4f4',
+  },
+  // Extra right inset, Awards Board (LAST) placement column only — that
+  // column sits flush against the physical page edge (STRIP_WIDTH /
+  // placementColumnLast, deliberately zero page-level right margin so it
+  // lands on the perforation). Even with the narrower class-name font below,
+  // this gives the text a genuine gap before that perforation (Mandy
+  // 2026-08-18: "some class names are being cut off"). The Judge's and
+  // Secretary columns keep the standard padding — neither sits at the
+  // physical edge, so they don't need it.
+  columnClassHeaderLast: {
+    paddingRight: 8,
   },
   columnClassNumber: {
     fontSize: 8,
@@ -264,8 +293,28 @@ const s = StyleSheet.create({
     fontWeight: 'bold',
     textTransform: 'uppercase',
   },
+  // Secretary + Awards Board strips only (both a true 28mm, same width as
+  // each other) — a size down from columnClassName's 9pt. A long class name
+  // + breed combo (e.g. "Special Award Class - Special Yearling" / "German
+  // Shepherd Dog") was wrapping to more lines at 9pt than the fixed 78pt
+  // header height could hold, so the breed name overlapped the line above
+  // it instead of sitting cleanly beneath (Mandy 2026-08-18, found verifying
+  // the right-edge fix below). Mirrors the same wide-vs-strip font split
+  // bestAwardsStyles already uses (awardLabel vs awardLabelStrip) — the
+  // Judge's copy is wide enough to keep the larger size.
+  columnClassNameStrip: {
+    fontSize: 8,
+    fontWeight: 'bold',
+    textTransform: 'uppercase',
+  },
   columnClassBreed: {
     fontSize: 8,
+    fontStyle: 'italic',
+    color: '#555',
+    marginTop: 1,
+  },
+  columnClassBreedStrip: {
+    fontSize: 7,
     fontStyle: 'italic',
     color: '#555',
     marginTop: 1,
@@ -554,6 +603,13 @@ interface ColumnHeaderProps {
   className: string;
   sexLabel: string | null;
   breedName: string | null;
+  /** True only for the Awards Board (last) column — flush against the
+   *  physical page edge, so it gets the extra right inset (see
+   *  columnClassHeaderLast). */
+  isLast?: boolean;
+  /** True only for the Judge's copy — the one column wide enough to keep
+   *  the larger class-name font (see columnClassNameStrip). */
+  wide?: boolean;
 }
 
 function BestAwardsColumn({
@@ -565,10 +621,10 @@ function BestAwardsColumn({
   awards: string[];
   variant: 'judge' | 'secretary' | 'awardsBoard';
   copyLabel: string;
-  /** Column heading — "Dog Awards" / "Bitch Awards" on the two pages now
-   *  placed mid-book, "Best Awards" on the back page (Mandy 2026-08-10/18
-   *  split) — so a judge or steward flipping through knows which sign-off
-   *  page they're holding without reading every award name on it. */
+  /** Column heading — "Dog Awards" on the page placed mid-book, "Best
+   *  Awards" on the back page (Mandy 2026-08-10, revised 08-18) — so a
+   *  judge or steward flipping through knows which sign-off page they're
+   *  holding without reading every award name on it. */
   title: string;
 }) {
   const columnStyle =
@@ -608,19 +664,21 @@ function BestAwardsColumn({
   );
 }
 
-function ColumnHeader({ classLabel, className, sexLabel, breedName }: ColumnHeaderProps) {
+function ColumnHeader({ classLabel, className, sexLabel, breedName, isLast, wide }: ColumnHeaderProps) {
   return (
-    <View style={s.columnClassHeader}>
+    <View style={isLast ? [s.columnClassHeader, s.columnClassHeaderLast] : s.columnClassHeader}>
       <Text style={s.columnClassNumber}>Class {classLabel || '—'}</Text>
-      <Text style={s.columnClassName}>
+      <Text style={wide ? s.columnClassName : s.columnClassNameStrip}>
         {className}{sexLabel ? ` (${sexLabel})` : ''}
       </Text>
-      {breedName && <Text style={s.columnClassBreed}>{breedName}</Text>}
+      {breedName && (
+        <Text style={wide ? s.columnClassBreed : s.columnClassBreedStrip}>{breedName}</Text>
+      )}
     </View>
   );
 }
 
-function PlacementColumn(props: ColumnHeaderProps & { isLast?: boolean; wide?: boolean; copyLabel: string }) {
+function PlacementColumn(props: ColumnHeaderProps & { copyLabel: string }) {
   const columnStyle = props.wide
     ? s.placementColumnJudge
     : props.isLast
@@ -761,27 +819,26 @@ export function ClassPage({
 }
 
 // Column heading + footer wording per awards-page section — lets a judge or
-// steward flipping through tell the dog-side, bitch-side and back (overall)
-// sign-off pages apart at a glance (Mandy 2026-08-10/18 split).
+// steward flipping through tell the dog-side sign-off page from the back
+// (full Best Awards) page at a glance (Mandy 2026-08-10, revised 08-18).
 const AWARDS_PAGE_TITLE: Record<JudgesBookAwardsSection, string> = {
   dog: 'Dog Awards',
-  bitch: 'Bitch Awards',
   overall: 'Best Awards',
 };
 const AWARDS_PAGE_FOOTER_LABEL: Record<JudgesBookAwardsSection, string> = {
   dog: 'Dog Awards sign-off',
-  bitch: 'Bitch Awards sign-off',
   overall: 'Best Awards sign-off',
 };
 
 /** Best Awards sign-off page — triplicate tear-off columns, no notes
- *  needed. One of THREE now (Mandy 2026-08-10, re-requested 2026-08-18):
- *  dog-side awards land right after the last dog class, bitch-side right
- *  after the last bitch class, and the overall awards (Best of Breed, Best
- *  in Show, Best Puppy in Show, …) stay on the back page — see
- *  buildJudgesBookPages (lib/judges-book-pages.ts) for the placement logic.
- *  No judge attribution here, same as before the split — the breed judge
- *  signs whichever copy reaches them. */
+ *  needed. Two of these print now (Mandy 2026-08-10, REVISED 2026-08-18 —
+ *  "just leave [the back page] with all the awards on it as it is today,
+ *  just need that extra page for the Male awards"): the dog-side awards
+ *  page lands right after the last dog class, and the full, unfiltered
+ *  Best Awards list stays on the back page — see buildJudgesBookPages
+ *  (lib/judges-book-pages.ts) for the placement logic. No judge
+ *  attribution here, same as before the split — the breed judge signs
+ *  whichever copy reaches them. */
 export function AwardsPage({
   show,
   showDate,
@@ -836,11 +893,10 @@ export function JudgesBook({
     year: 'numeric',
   });
 
-  // Dog → Bitch → Special Awards → Junior Handling running order, with the
-  // Best Awards sign-off split across three pages placed where each
-  // decision is actually made — see buildJudgesBookPages' own doc comment
-  // for the full ordering rules and edge cases (no bitch classes but
-  // bitch-side awards configured, etc).
+  // Dog → Bitch → Special Awards → Junior Handling running order, with a
+  // dog-side awards sign-off page after the last dog class and the full
+  // Best Awards sign-off on the back page — see buildJudgesBookPages' own
+  // doc comment for the full ordering rules and edge cases.
   const pages = buildJudgesBookPages(classes, show.bestAwards);
 
   return (
