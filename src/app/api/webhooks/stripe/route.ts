@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { and, eq, inArray, isNull, ne, notInArray, sql } from 'drizzle-orm';
+import { and, eq, inArray, isNull, notInArray, sql } from 'drizzle-orm';
 import { getStripe } from '@/server/services/stripe';
+import { captureFeeForPaymentIntent } from '@/server/services/stripe-fee-heal';
 import { db } from '@/server/db';
 import { entries, entryClasses, entryAuditLog, orders, payments, organisations, plans, users, printOrders, printOrderItems } from '@/server/db/schema';
 import { sendEntryConfirmationEmail, sendSecretaryNotificationEmail, sendPrintOrderConfirmationEmail, sendPrintOrderAdminNotificationEmail } from '@/server/services/email';
@@ -28,32 +29,12 @@ import type Stripe from 'stripe';
  */
 async function captureStripeFeeDetails(paymentIntentId: string) {
   try {
-    const stripe = getStripe();
-    const pi = await stripe.paymentIntents.retrieve(paymentIntentId, {
-      expand: ['latest_charge.balance_transaction'],
-    });
-    const charge = pi.latest_charge;
-    if (!charge || typeof charge === 'string') {
+    const outcome = await captureFeeForPaymentIntent(paymentIntentId);
+    if (outcome.status === 'missing_charge') {
       console.warn(`[stripe-webhook] no expanded charge for PI ${paymentIntentId}; skipping fee capture`);
-      return;
-    }
-    const balanceTransaction = charge.balance_transaction;
-    if (!balanceTransaction || typeof balanceTransaction === 'string') {
+    } else if (outcome.status === 'missing_balance_transaction') {
       console.warn(`[stripe-webhook] no balance_transaction for PI ${paymentIntentId} yet; skipping fee capture`);
-      return;
     }
-    const cardDetails = charge.payment_method_details?.card;
-
-    await db
-      .update(payments)
-      .set({
-        feePence: balanceTransaction.fee,
-        netPence: balanceTransaction.net,
-        balanceTransactionId: balanceTransaction.id,
-        cardBrand: cardDetails?.brand ?? null,
-        cardCountry: cardDetails?.country ?? null,
-      })
-      .where(and(eq(payments.stripePaymentId, paymentIntentId), ne(payments.type, 'refund')));
   } catch (err) {
     console.warn(`[stripe-webhook] fee capture failed for PI ${paymentIntentId}:`, err);
   }

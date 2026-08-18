@@ -1,10 +1,11 @@
 import { z } from 'zod';
-import { and, desc, eq, sql } from 'drizzle-orm';
+import { and, desc, eq, isNotNull, isNull, sql } from 'drizzle-orm';
 import { TRPCError } from '@trpc/server';
 import { adminProcedure } from '../procedures';
 import { createTRPCRouter } from '../init';
-import { invoices, organisations } from '@/server/db/schema';
+import { invoices, organisations, orders, payments } from '@/server/db/schema';
 import { computeSettlementItemisation } from '@/server/services/settlement-itemisation';
+import { healMissingStripeFees, type StripeFeeHealResult } from '@/server/services/stripe-fee-heal';
 import type { Database } from '@/server/db';
 
 /**
@@ -72,6 +73,27 @@ async function computeSettlementFigures(
     throw new TRPCError({ code: 'NOT_FOUND', message: 'Show has no club on record' });
   }
 
+  // Self-heal any Stripe fee-capture gap before computing the itemisation
+  // (see stripe-fee-heal.ts) — the webhook's live capture is best-effort and
+  // can miss, leaving payment rows with NULL feePence that understate card
+  // fees on the settlement. Gated behind a cheap EXISTS-style pre-check
+  // (indexed columns, LIMIT 1) so a show with complete fee capture — the
+  // common case — pays no extra latency viewing its invoice.
+  const [gapRow] = await db
+    .select({ id: payments.id })
+    .from(payments)
+    .innerJoin(orders, eq(payments.orderId, orders.id))
+    .where(
+      and(
+        eq(orders.showId, showId),
+        eq(orders.status, 'paid'),
+        isNotNull(payments.stripePaymentId),
+        isNull(payments.feePence),
+      ),
+    )
+    .limit(1);
+  const feeHeal: StripeFeeHealResult | undefined = gapRow ? await healMissingStripeFees(showId) : undefined;
+
   const settlement = await computeSettlementItemisation(db, showId, {
     packageFeePence: input.packageFeePence,
     packageFeeDescription: input.packageFeeDescription,
@@ -88,6 +110,9 @@ async function computeSettlementFigures(
     organisation: showRow.organisation,
     settlement,
     freeEntriesCount,
+    // Additive — rides along so the UI could later show "fees refreshed
+    // just now"; undefined when the pre-check found nothing to heal.
+    feeHeal,
   };
 }
 
