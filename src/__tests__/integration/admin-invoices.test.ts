@@ -45,12 +45,15 @@ async function seedPayment(opts: {
   amount: number;
   feePence?: number | null;
   refundAmount?: number | null;
+  /** Pass null for an OFFLINE payment (manual/postal — never touched Stripe). */
+  stripePaymentId?: string | null;
 }) {
   const [row] = await testDb
     .insert(payments)
     .values({
       orderId: opts.orderId,
-      stripePaymentId: `pi_${randomUUID()}`,
+      stripePaymentId:
+        opts.stripePaymentId === null ? null : opts.stripePaymentId ?? `pi_${randomUUID()}`,
       amount: opts.amount,
       status: opts.status,
       type: 'initial',
@@ -186,6 +189,32 @@ describe('adminInvoices.preview figures', () => {
     expect(settlement.discountAmountPence).toBe(40); // 20p × 2
     expect(settlement.costs.totalPence).toBe(5000 + 190 - 40); // package + card fee - discount
     expect(settlement.netToClubPence).toBe(6000 - (5000 + 190 - 40));
+  });
+
+  // Mandy 2026-08-18, Clyde Valley: a paid-direct-to-club order's manually
+  // recorded payment (no Stripe reference at all — £10 entry + £10 class
+  // sponsorship taken by post) kept the "N payments missing captured fee
+  // data" warning alive at 1 forever: Stripe never charged it, so there is
+  // no fee to capture and nothing for the self-heal to fetch. A payment
+  // with no stripe_payment_id must not count as a capture gap.
+  it('an offline (no-Stripe) succeeded payment never counts as a fee capture gap', async () => {
+    const { show } = await seedShowWithMixedOrders();
+    const exhibitor = await makeUser({ role: 'exhibitor' });
+    const offlineOrder = await seedOrder({
+      showId: show.id, exhibitorId: exhibitor.id, amount: 2000, stripePaymentIntentId: null,
+    });
+    await seedPayment({
+      orderId: offlineOrder.id, status: 'succeeded', amount: 2000, stripePaymentId: null,
+    });
+
+    const caller = await adminCaller();
+    const { settlement } = await caller.adminInvoices.preview(baseInput(show.id));
+
+    // Only order D (a real Stripe payment with an uncaptured fee) is a gap —
+    // the offline payment is not, and the fee sums are untouched by it.
+    expect(settlement.captureGapCount).toBe(1);
+    expect(settlement.feeBearingChargeCount).toBe(2);
+    expect(settlement.cardFeeTotalPence).toBe(190);
   });
 
   it('does not write anything to the database', async () => {

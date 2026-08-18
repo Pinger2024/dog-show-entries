@@ -340,7 +340,12 @@ export async function computeSettlementItemisation(
         .select({
           feeTotal: sql<number>`COALESCE(SUM(${payments.feePence}), 0)::int`,
           feeCount: sql<number>`COUNT(*) FILTER (WHERE ${payments.feePence} IS NOT NULL)::int`,
-          captureGap: sql<number>`COUNT(*) FILTER (WHERE ${payments.feePence} IS NULL AND ${payments.status} IN ('succeeded', 'partially_refunded'))::int`,
+          // A payment with no Stripe reference never has a fee to capture —
+          // it's an offline/manual payment (postal entry, recorded by the
+          // secretary), not a gap. Counting it kept Clyde Valley's warning
+          // stuck at "1 payment missing" forever (Mandy 2026-08-18): the
+          // self-heal has nothing to fetch for a payment Stripe never saw.
+          captureGap: sql<number>`COUNT(*) FILTER (WHERE ${payments.feePence} IS NULL AND ${payments.stripePaymentId} IS NOT NULL AND ${payments.status} IN ('succeeded', 'partially_refunded'))::int`,
         })
         .from(payments)
         .innerJoin(orders, eq(payments.orderId, orders.id))
