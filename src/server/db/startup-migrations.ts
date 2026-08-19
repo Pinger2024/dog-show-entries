@@ -207,5 +207,20 @@ export async function runStartupMigrations() {
       ADD COLUMN IF NOT EXISTS transferred_to_show_class_id UUID;
   `);
 
+  // ── 2026-08-19: Other Qualifications on the SV profile — the GSDL-BRG
+  // exhibit data form's "BH / AD / WB (Character Assessment) / Other" row,
+  // which Remi had no field for (Mandy). Recorded, never required: no
+  // regional class gates on them, and `hasWorkingTitle` deliberately keeps
+  // them out of the Working-class routing. Plain additive columns, no
+  // backfill — a dog with none is FALSE, which is the truth for every
+  // existing row.
+  await db.execute(sql`
+    ALTER TABLE dog_sv_profile
+      ADD COLUMN IF NOT EXISTS bh BOOLEAN NOT NULL DEFAULT FALSE,
+      ADD COLUMN IF NOT EXISTS ad BOOLEAN NOT NULL DEFAULT FALSE,
+      ADD COLUMN IF NOT EXISTS wb BOOLEAN NOT NULL DEFAULT FALSE,
+      ADD COLUMN IF NOT EXISTS other_qualifications TEXT;
+  `);
+
   console.log(`[startup-migrations] done in ${Date.now() - started}ms`);
 }

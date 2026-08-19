@@ -137,6 +137,14 @@ export const svProfileInputSchema = z.object({
         koerung: z.enum(['none', 'current_year', 'lebenzeit']).nullable().optional(),
         dna: z.enum(['recorded', 'proven']).nullable().optional(),
         workingTitle: z.string().nullable().optional(),
+        // Other Qualifications (Mandy 2026-08-19) — the GSDL-BRG form's
+        // "BH / AD / WB (Character Assessment) / Other" row. Recorded, never
+        // required, and deliberately NOT working titles: `hasWorkingTitle`
+        // keeps them out of the Working-class routing.
+        bh: z.boolean().optional(),
+        ad: z.boolean().optional(),
+        wb: z.boolean().optional(),
+        otherQualifications: z.string().nullable().optional(),
 });
 
 /** The dog-form sections that autosave in edit mode (pedigree, breeder

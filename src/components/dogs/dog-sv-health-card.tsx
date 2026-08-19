@@ -21,6 +21,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
+import { Checkbox } from '@/components/ui/checkbox';
 
 // Amanda 2026-05-19: extended hip / elbow grading to recognise BVA + ANKC
 // alongside the SV grade vocab. "Other" surfaces a free-text field so any
@@ -126,6 +127,12 @@ export function DogSvHealthCard({ dogId, isOwner, sex, kcHealthSuggestions }: Do
   const [breedSurveyClass, setBreedSurveyClass] = useState('');
   const [breedSurveyYear, setBreedSurveyYear] = useState('');
   const [breedSurveyor, setBreedSurveyor] = useState('');
+  // Other Qualifications — the GSDL-BRG form's BH / AD / WB row. Ticks, not a
+  // working title: a dog holding only these belongs in Adult (Mandy 2026-08-19).
+  const [bh, setBh] = useState(false);
+  const [ad, setAd] = useState(false);
+  const [wb, setWb] = useState(false);
+  const [otherQualifications, setOtherQualifications] = useState('');
   // Autosave arms only once the loaded profile has been written into local
   // state — never against blank mount defaults (the 2026-04-22 lesson).
   const [hydrated, setHydrated] = useState(false);
@@ -156,6 +163,16 @@ export function DogSvHealthCard({ dogId, isOwner, sex, kcHealthSuggestions }: Do
       const wt = profile.workingTitle ?? '';
       setWorkingTitle(wt);
       setWorkingTitleChoice(wt && !WORKING_TITLE_PRESETS.has(wt) ? '__other__' : wt);
+      const quals = profile as {
+        bh?: boolean | null;
+        ad?: boolean | null;
+        wb?: boolean | null;
+        otherQualifications?: string | null;
+      };
+      setBh(quals.bh ?? false);
+      setAd(quals.ad ?? false);
+      setWb(quals.wb ?? false);
+      setOtherQualifications(quals.otherQualifications ?? '');
       setBreedSurveyClass(profile.breedSurveyClass ?? '');
       const bsy = (profile as { breedSurveyYear?: number | null }).breedSurveyYear;
       setBreedSurveyYear(bsy != null ? String(bsy) : '');
@@ -237,6 +254,10 @@ export function DogSvHealthCard({ dogId, isOwner, sex, kcHealthSuggestions }: Do
         breedSurveyClass: breedSurveyClass || null,
         breedSurveyYear: breedSurveyYear ? Number(breedSurveyYear) : null,
         breedSurveyor: breedSurveyor || null,
+        bh,
+        ad,
+        wb,
+        otherQualifications: otherQualifications || null,
       },
     },
     onSaved: () => utils.dogs.getSvProfile.invalidate({ dogId }),
@@ -508,6 +529,49 @@ export function DogSvHealthCard({ dogId, isOwner, sex, kcHealthSuggestions }: Do
               />
             )}
             <p className="text-xs text-muted-foreground">Required for the Working class.</p>
+          </div>
+
+          {/* Other Qualifications — the GSDL-BRG exhibit data form's
+              "BH / AD / WB (Character Assessment) / Other" row, which had no
+              home in Remi until now (Mandy 2026-08-19). Ticks rather than free
+              text: the form exhibitors already fill in lists these three by
+              name, and a blank box asking for German abbreviations is the
+              wrong ask for our exhibitors. Each carries its English meaning
+              because the abbreviations alone mean nothing to most owners.
+
+              These never affect which class the dog can enter — the note below
+              says so plainly, because an owner who has just ticked three boxes
+              will reasonably wonder. */}
+          <div className="space-y-2.5">
+            <Label>Other Qualifications <span className="text-muted-foreground font-normal">(opt.)</span></Label>
+            <div className="space-y-2.5">
+              {([
+                { key: 'bh', checked: bh, set: setBh, code: 'BH', meaning: 'Companion Dog Test' },
+                { key: 'ad', checked: ad, set: setAd, code: 'AD', meaning: 'Endurance Test' },
+                { key: 'wb', checked: wb, set: setWb, code: 'WB', meaning: 'Character Assessment' },
+              ] as const).map((q) => (
+                <div key={q.key} className="flex items-center gap-2.5">
+                  <Checkbox
+                    id={`qual-${q.key}`}
+                    checked={q.checked}
+                    onCheckedChange={(checked) => q.set(checked === true)}
+                    disabled={readOnly}
+                  />
+                  <Label htmlFor={`qual-${q.key}`} className="font-normal cursor-pointer">
+                    {q.code} <span className="text-muted-foreground">— {q.meaning}</span>
+                  </Label>
+                </div>
+              ))}
+            </div>
+            <Input
+              value={otherQualifications}
+              onChange={(e) => setOtherQualifications(e.target.value)}
+              placeholder="Any other qualification"
+              disabled={readOnly}
+            />
+            <p className="text-[11px] text-muted-foreground">
+              Printed in the catalogue after the working title. These don&apos;t decide which class your dog enters.
+            </p>
           </div>
 
           {!readOnly && (

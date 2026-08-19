@@ -238,3 +238,99 @@ describe('POST /api/dog-autosave/[dogId]', () => {
     expect(res.status).toBe(400);
   });
 });
+
+/**
+ * Other Qualifications and the wipe guard (2026-08-19).
+ *
+ * `svGroupHasContent` originally ignored booleans entirely, so a dog whose
+ * ONLY SV data was its BH / AD / WB ticks looked empty on BOTH sides of the
+ * guard — an unhydrated blank payload sailed straight through and erased them.
+ */
+describe('POST /api/dog-autosave/[dogId] — other qualifications', () => {
+  it('saves the ticks and the free-text Other', async () => {
+    const user = await makeUser({});
+    const dog = await makeDog({ ownerId: user.id });
+    authedAs(user);
+
+    const res = await dogAutosavePOST(
+      req(dog.id, {
+        svProfile: { bh: true, ad: true, wb: true, otherQualifications: 'BRG GM' },
+      }),
+      params(dog.id),
+    );
+    expect(res.status).toBe(200);
+
+    const profile = await testDb.query.dogSvProfile.findFirst({
+      where: eq(dogSvProfile.dogId, dog.id),
+    });
+    expect(profile?.bh).toBe(true);
+    expect(profile?.ad).toBe(true);
+    expect(profile?.wb).toBe(true);
+    expect(profile?.otherQualifications).toBe('BRG GM');
+  });
+
+  it('refuses a blank payload against a profile holding ONLY ticks', async () => {
+    const user = await makeUser({});
+    const dog = await makeDog({ ownerId: user.id });
+    authedAs(user);
+
+    // This dog has no hips, no elbows, no working title — just the ticks.
+    await dogAutosavePOST(
+      req(dog.id, { svProfile: { bh: true, ad: true, wb: true } }),
+      params(dog.id),
+    );
+
+    // The unhydrated card's defaults, now including the unticked boxes.
+    const res = await dogAutosavePOST(
+      req(dog.id, {
+        svProfile: {
+          hipGrade: 'not_required',
+          elbowGrade: 'not_required',
+          haemophiliaClear: 'not_required',
+          dmTest: 'not_required',
+          koerung: null,
+          dna: null,
+          workingTitle: null,
+          bh: false,
+          ad: false,
+          wb: false,
+          otherQualifications: null,
+        },
+      }),
+      params(dog.id),
+    );
+    expect(res.status).toBe(200);
+    expect((await res.json()).skipped).toContain('svProfile');
+
+    const profile = await testDb.query.dogSvProfile.findFirst({
+      where: eq(dogSvProfile.dogId, dog.id),
+    });
+    expect(profile?.bh).toBe(true);
+    expect(profile?.ad).toBe(true);
+    expect(profile?.wb).toBe(true);
+  });
+
+  it('still lets the owner genuinely untick one while others remain', async () => {
+    const user = await makeUser({});
+    const dog = await makeDog({ ownerId: user.id });
+    authedAs(user);
+
+    await dogAutosavePOST(
+      req(dog.id, { svProfile: { bh: true, ad: true, wb: true } }),
+      params(dog.id),
+    );
+
+    const res = await dogAutosavePOST(
+      req(dog.id, { svProfile: { bh: true, ad: true, wb: false } }),
+      params(dog.id),
+    );
+    expect(res.status).toBe(200);
+    expect((await res.json()).skipped ?? []).not.toContain('svProfile');
+
+    const profile = await testDb.query.dogSvProfile.findFirst({
+      where: eq(dogSvProfile.dogId, dog.id),
+    });
+    expect(profile?.wb).toBe(false);
+    expect(profile?.bh).toBe(true);
+  });
+});

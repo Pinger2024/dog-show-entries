@@ -14,6 +14,8 @@
  * wizard (`enter/page.tsx`) imports this same set so client and server agree.
  */
 
+import { hasWorkingTitle } from './sv-entry-readiness';
+
 /** DB class-definition names from Yearling up, where health data is required. */
 export const SV_HEALTH_FROM_CLASSES = new Set([
   'SV Yearling',
@@ -56,8 +58,12 @@ export function svEntryMissingRequirements(opts: {
     if (!svProfile?.dna) missing.push('DNA recording');
   }
 
-  // Working class needs a working title on top of the above.
-  if (classNames.includes('Working') && blank(svProfile?.workingTitle)) {
+  // Working class needs a working title on top of the above. `hasWorkingTitle`
+  // is the shared predicate — it rejects BH / AD / WB, which are recorded
+  // qualifications but not working ones, so a dog holding only those is told
+  // it can't enter Working rather than being quietly admitted (Mandy
+  // 2026-08-19).
+  if (classNames.includes('Working') && !hasWorkingTitle(svProfile?.workingTitle)) {
     missing.push('working title');
   }
 

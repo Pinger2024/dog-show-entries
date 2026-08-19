@@ -241,6 +241,11 @@ export async function generateCataloguePdf(
           elbowScoreOther: entry.dog.svProfile.elbowScoreOther ?? null,
           dna: entry.dog.svProfile.dna ?? null,
           koerung: entry.dog.svProfile.koerung ?? null,
+          workingTitle: entry.dog.svProfile.workingTitle ?? null,
+          bh: entry.dog.svProfile.bh ?? false,
+          ad: entry.dog.svProfile.ad ?? false,
+          wb: entry.dog.svProfile.wb ?? false,
+          otherQualifications: entry.dog.svProfile.otherQualifications ?? null,
         }
       : null,
     colour: entry.dog?.colour,

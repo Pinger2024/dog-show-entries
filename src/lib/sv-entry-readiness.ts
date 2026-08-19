@@ -119,7 +119,35 @@ export function pedigreeMissingForEntry(dog: BaselinePedigree): string[] {
   return missing;
 }
 
-/** Has the dog got a (non-blank) working title recorded? */
+/**
+ * Marks that are NOT working qualifications, however an exhibitor typed them.
+ *
+ * SV's own Prüfungsordnung says it outright — *"Das Kennzeichen 'AD' ist kein
+ * Ausbildungskennzeichen im Sinne der Zucht- und Zuchtschauordnung"* — AD is a
+ * Körung prerequisite, not a title. BH (Begleithundeprüfung, written BH/VT) is
+ * the gateway test that unlocks the working-title ladder rather than a title in
+ * its own right, and WB (Wesensbeurteilung) is a character assessment.
+ *
+ * These have their own fields on the SV profile now, but the working-title box
+ * is free text, and until they did an exhibitor holding a BH or an AD had
+ * nowhere else to put them. Typing one here offered the dog the Working class
+ * and HID Adult — the class it actually belongs in (Mandy 2026-08-19: "guard
+ * the routing rules as these should NOT drive the entry into the working
+ * class").
+ */
+const NON_WORKING_TITLE_MARKS = new Set(['BH', 'BHVT', 'VT', 'AD', 'WB']);
+
+/**
+ * True when the dog holds a genuine working qualification.
+ *
+ * Splits on anything non-alphanumeric so every way of writing it lands the
+ * same — "BH, AD", "BH/VT", "bh ad" all resolve to marks alone and return
+ * false, while "IGP1 BH" still counts because of the IGP1.
+ */
 export function hasWorkingTitle(workingTitle: string | null | undefined): boolean {
-  return !!(workingTitle ?? '').trim();
+  const marks = (workingTitle ?? '')
+    .toUpperCase()
+    .split(/[^A-Z0-9]+/)
+    .filter(Boolean);
+  return marks.some((mark) => !NON_WORKING_TITLE_MARKS.has(mark));
 }

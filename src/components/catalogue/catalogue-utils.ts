@@ -592,3 +592,55 @@ export function buildSponsorLines(
   }
   return lines;
 }
+
+/** The Körung wording the regional catalogue prints, keyed by our enum.
+ *  Taken from Mandy's own working-class catalogue (2026-08-19): a current
+ *  survey reads "Current Year Kkl", a lifetime one "KKL Lebenzeit". */
+const KOERUNG_LABELS: Record<string, string> = {
+  current_year: 'Current Year Kkl',
+  lebenzeit: 'KKL Lebenzeit',
+};
+
+export interface SvQualificationSource {
+  workingTitle?: string | null;
+  koerung?: string | null;
+  bh?: boolean | null;
+  ad?: boolean | null;
+  wb?: boolean | null;
+  otherQualifications?: string | null;
+}
+
+/**
+ * The qualification string printed after a dog's name in the regional
+ * catalogue — "IGP1 Current Year Kkl WB, BH, AD".
+ *
+ * Order and punctuation come from Mandy's own catalogue (2026-08-19): the
+ * working title first, then the Körung, then the other qualifications
+ * comma-separated in the order WB, BH, AD. A dog holding only some of them
+ * simply gets a shorter string ("IGP1 Current Year Kkl"), and a dog with
+ * none gets ''.
+ *
+ * DNA is deliberately absent. We capture it and it is mandatory from the
+ * Yearling class up, but no SV or WUSV catalogue prints it — confirmed
+ * against the full text of the SV Bundessiegerzuchtschau and USCA Universal
+ * Sieger catalogues, and against Mandy's own.
+ */
+export function formatSvQualifications(
+  profile: SvQualificationSource | null | undefined,
+): string {
+  if (!profile) return '';
+
+  const marks: string[] = [];
+  if (profile.wb) marks.push('WB');
+  if (profile.bh) marks.push('BH');
+  if (profile.ad) marks.push('AD');
+  const other = profile.otherQualifications?.trim();
+  if (other) marks.push(other);
+
+  const lead = [
+    profile.workingTitle?.trim(),
+    profile.koerung ? KOERUNG_LABELS[profile.koerung] : undefined,
+  ].filter(Boolean);
+
+  return [...lead, marks.join(', ')].filter(Boolean).join(' ');
+}

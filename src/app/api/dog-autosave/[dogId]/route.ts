@@ -74,6 +74,11 @@ function dogGroupHasContent(g: Record<string, unknown>): boolean {
 function svGroupHasContent(g: Record<string, unknown>): boolean {
   return Object.entries(g).some(([, v]) => {
     if (typeof v === 'number') return true;
+    // A ticked qualification (BH / AD / WB) is real data — false is merely the
+    // default. Without this a dog whose ONLY SV data was its ticks read as
+    // empty on BOTH sides of the wipe guard, so a blank pre-hydration payload
+    // sailed past it and erased them (added with the fields, 2026-08-19).
+    if (typeof v === 'boolean') return v;
     if (typeof v === 'string') return v.trim().length > 0 && !SV_EMPTY.has(v);
     return false;
   });

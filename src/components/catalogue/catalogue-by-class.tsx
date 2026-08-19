@@ -3,7 +3,7 @@ import { Document, Page, View, Text, Image } from '@react-pdf/renderer';
 import { styles, C } from './catalogue-styles';
 import { CatalogueHeader } from './catalogue-header';
 import type { CatalogueEntry, CatalogueShowInfo, ClassSponsorshipInfo } from './catalogue-types';
-import { formatDobKC, titleCase, formatOwnerKC, formatRkcOwnerHeading, uppercaseName, buildSponsorLines, isJuniorHandlingClass, formatPedigreeSireDam } from './catalogue-utils';
+import { formatDobKC, titleCase, formatOwnerKC, formatRkcOwnerHeading, uppercaseName, buildSponsorLines, isJuniorHandlingClass, formatPedigreeSireDam, formatSvQualifications } from './catalogue-utils';
 import { CoverPage, FrontMatterPage, TrophiesPage, ExhibitorIndexPage, BestsWriteInPage, NotForCompetitionPage } from './catalogue-front-matter';
 import {
   SvAcknowledgementsPage,
@@ -88,6 +88,16 @@ const svEntry = {
     fontSize: 7,
     fontWeight: 'bold' as const,
     color: SV.ink,
+  } as const,
+  /** Qualification string trailing the dog's name — "IGP1 Current Year Kkl
+   *  WB, BH, AD". Same size as the name but regular weight, so the name stays
+   *  the thing the eye lands on while the quals read as its tail (Mandy's own
+   *  catalogue runs them straight on from the name). */
+  qualifications: {
+    fontFamily: SV_FONTS.sans,
+    fontSize: 8,
+    color: SV.ink,
+    flexShrink: 1,
   } as const,
   meta: {
     fontFamily: SV_FONTS.sans,
@@ -201,6 +211,10 @@ function renderSvEntry(
     entry.svProfile?.elbowScoreOther,
   );
   const dob = entry.dateOfBirth ? formatDobKC(entry.dateOfBirth) : null;
+  // Working title · Körung · BH/AD/WB, printed after the dog's name the way
+  // Mandy's own working-class catalogue prints them (2026-08-19). Empty for a
+  // dog holding none, which is most of the younger classes.
+  const qualifications = formatSvQualifications(entry.svProfile);
 
   // Breeder town+postcode — prefer the structured columns when populated.
   const breederTown = entry.breederCity ?? '';
@@ -237,6 +251,9 @@ function renderSvEntry(
       <View style={svEntry.line1}>
         <Text style={svEntry.catNumber}>{entry.catalogueNumber ?? '—'}</Text>
         <Text style={svEntry.dogName}>{uppercaseName(entry.dogName) || 'Unnamed'}</Text>
+        {qualifications ? (
+          <Text style={svEntry.qualifications}>{qualifications}</Text>
+        ) : null}
         {entry.microchipNumber ? (
           <Text style={svEntry.microchip}>· Chip {entry.microchipNumber}</Text>
         ) : null}

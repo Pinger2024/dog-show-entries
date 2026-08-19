@@ -36,6 +36,16 @@ export interface CatalogueEntry {
     elbowScoreOther: string | null;
     dna: string | null;
     koerung: string | null;
+    /** Working title, Körung and the BH / AD / WB qualifications compose the
+     *  string printed after the dog's name — "IGP1 Current Year Kkl WB, BH,
+     *  AD" (Mandy 2026-08-19, from her own working-class catalogue). `dna` is
+     *  captured but deliberately never printed: no SV or WUSV catalogue
+     *  prints it. */
+    workingTitle: string | null;
+    bh: boolean;
+    ad: boolean;
+    wb: boolean;
+    otherQualifications: string | null;
   } | null;
   colour: string | null | undefined;
   sire: string | null | undefined;

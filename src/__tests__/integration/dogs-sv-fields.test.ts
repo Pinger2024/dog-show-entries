@@ -140,3 +140,57 @@ describe('dogs.upsertSvProfile — extended grading + breed survey', () => {
     expect(profile?.workingTitle).toBe('SVV2');
   });
 });
+
+/**
+ * Other Qualifications — BH / AD / WB (Mandy 2026-08-19). Recorded on the dog,
+ * never required, and never a working title.
+ */
+describe('other qualifications round-trip', () => {
+  it('saves and reads back the ticks and the free-text Other', async () => {
+    const exhibitor = await makeUser({ role: 'exhibitor' });
+    const dog = await makeDog({ ownerId: exhibitor.id });
+    const caller = createTestCaller(exhibitor);
+
+    await caller.dogs.upsertSvProfile({
+      dogId: dog.id,
+      bh: true,
+      ad: true,
+      wb: true,
+      otherQualifications: 'BRG GM',
+    });
+
+    const profile = await caller.dogs.getSvProfile({ dogId: dog.id });
+    expect(profile?.bh).toBe(true);
+    expect(profile?.ad).toBe(true);
+    expect(profile?.wb).toBe(true);
+    expect(profile?.otherQualifications).toBe('BRG GM');
+  });
+
+  it('defaults to not-held for a dog whose profile never mentions them', async () => {
+    const exhibitor = await makeUser({ role: 'exhibitor' });
+    const dog = await makeDog({ ownerId: exhibitor.id });
+    const caller = createTestCaller(exhibitor);
+
+    await caller.dogs.upsertSvProfile({ dogId: dog.id, hipGrade: 'normal' });
+
+    const profile = await caller.dogs.getSvProfile({ dogId: dog.id });
+    expect(profile?.bh).toBe(false);
+    expect(profile?.ad).toBe(false);
+    expect(profile?.wb).toBe(false);
+    expect(profile?.otherQualifications).toBeNull();
+  });
+
+  it('records them without granting the dog a working title', async () => {
+    const exhibitor = await makeUser({ role: 'exhibitor' });
+    const dog = await makeDog({ ownerId: exhibitor.id });
+    const caller = createTestCaller(exhibitor);
+
+    await caller.dogs.upsertSvProfile({ dogId: dog.id, bh: true, ad: true, wb: true });
+
+    const profile = await caller.dogs.getSvProfile({ dogId: dog.id });
+    // The qualifications are held; the working-title field stays empty, so
+    // the dog is still routed to Adult rather than Working.
+    expect(profile?.wb).toBe(true);
+    expect(profile?.workingTitle ?? null).toBeNull();
+  });
+});
