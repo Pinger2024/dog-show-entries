@@ -1215,6 +1215,21 @@ export async function sendRefundFailedAlertEmail(params: {
   const subject = `⚠ Stripe refund FAILED — ${exhibitorName}, ${amount}, ${showName}`;
   const recipients = ['michael@prometheus-it.com', 'hundarkgsd@gmail.com'];
 
+  // Exhibitor and show names are user-supplied free text going into an HTML
+  // body — escape them (an exhibitor named "<img src=x onerror=…>" must
+  // render as text in the founders' inboxes, not as markup). The subject
+  // line is plain text and needs no escaping.
+  const esc = (s: string) =>
+    s
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  const safeExhibitor = esc(exhibitorName);
+  const safeShow = esc(showName);
+  const safePaymentIntent = esc(paymentIntentId);
+
   const html = `
 <!DOCTYPE html>
 <html>
@@ -1232,10 +1247,10 @@ export async function sendRefundFailedAlertEmail(params: {
           most likely an expired or replaced card, or a closed account.
         </p>
         <table style="width: 100%; border-collapse: collapse; margin: 16px 0;">
-          <tr><td style="padding: 8px 12px; border-bottom: 1px solid ${BRAND.line}; font-weight: 600; color: ${BRAND.ink}; width: 120px;">Exhibitor</td><td style="padding: 8px 12px; border-bottom: 1px solid ${BRAND.line};">${exhibitorName}</td></tr>
-          <tr><td style="padding: 8px 12px; border-bottom: 1px solid ${BRAND.line}; font-weight: 600; color: ${BRAND.ink};">Show</td><td style="padding: 8px 12px; border-bottom: 1px solid ${BRAND.line};">${showName}</td></tr>
+          <tr><td style="padding: 8px 12px; border-bottom: 1px solid ${BRAND.line}; font-weight: 600; color: ${BRAND.ink}; width: 120px;">Exhibitor</td><td style="padding: 8px 12px; border-bottom: 1px solid ${BRAND.line};">${safeExhibitor}</td></tr>
+          <tr><td style="padding: 8px 12px; border-bottom: 1px solid ${BRAND.line}; font-weight: 600; color: ${BRAND.ink};">Show</td><td style="padding: 8px 12px; border-bottom: 1px solid ${BRAND.line};">${safeShow}</td></tr>
           <tr><td style="padding: 8px 12px; border-bottom: 1px solid ${BRAND.line}; font-weight: 600; color: ${BRAND.ink};">Amount</td><td style="padding: 8px 12px; border-bottom: 1px solid ${BRAND.line};">${amount}</td></tr>
-          <tr><td style="padding: 8px 12px; font-weight: 600; color: ${BRAND.ink};">Payment Intent</td><td style="padding: 8px 12px; font-family: monospace; font-size: 13px;">${paymentIntentId}</td></tr>
+          <tr><td style="padding: 8px 12px; font-weight: 600; color: ${BRAND.ink};">Payment Intent</td><td style="padding: 8px 12px; font-family: monospace; font-size: 13px;">${safePaymentIntent}</td></tr>
         </table>
         <p style="font-size: 15px; color: ${BRAND.ink}; line-height: 1.6;">
           The money has returned to Remi's Stripe balance — the exhibitor has <strong>not</strong> been paid.
