@@ -602,6 +602,186 @@ describe('POST /api/webhooks/stripe — entry-edit UPGRADE (deferred adjustment)
   });
 });
 
+// Maxine's £52.51, 2026-08-19 — Stripe accepted the refund, Remi marked it
+// 'refunded' forever, but the refund then FAILED at Stripe (expired card)
+// and the money sat back in Remi's own Stripe balance for a month before the
+// exhibitor said anything. The webhook previously handled no refund events
+// at all, so a failure after the fact was invisible.
+describe('POST /api/webhooks/stripe — refund.failed / refund.updated', () => {
+  async function orderReadyForRefund() {
+    const [exhibitor, org, breed] = await Promise.all([
+      makeUser({ role: 'exhibitor' }),
+      makeOrg(),
+      makeBreed(),
+    ]);
+    const show = await makeShow({ organisationId: org.id, breedId: breed.id, status: 'entries_open' });
+    const order = await makeOrder({ showId: show.id, exhibitorId: exhibitor.id, status: 'paid' });
+    return { exhibitor, show, order };
+  }
+
+  beforeEach(() => {
+    vi.mocked(emailService.sendRefundFailedAlertEmail).mockClear();
+  });
+
+  it('flips the refund row to failed, restores the original payment to succeeded, and alerts the founders (full refund)', async () => {
+    const { order } = await orderReadyForRefund();
+    const intentId = 'pi_test_refund_failed_full';
+    const original = await makePayment({
+      orderId: order.id,
+      stripePaymentId: intentId,
+      amount: 5251,
+      status: 'refunded',
+      refundAmount: 5251,
+    });
+    const refundRow = await makePayment({
+      orderId: order.id,
+      stripePaymentId: intentId,
+      amount: 5251,
+      status: 'refunded',
+      type: 'refund',
+    });
+
+    injectStripeEvent({
+      type: 'refund.failed',
+      data: {
+        object: { id: 're_test_full', amount: 5251, payment_intent: intentId, status: 'failed' },
+      },
+    });
+
+    const res = await stripeWebhook(buildStripeWebhookRequest() as never);
+    expect(res.status).toBe(200);
+
+    const updatedRefundRow = await testDb.query.payments.findFirst({ where: eq(payments.id, refundRow!.id) });
+    expect(updatedRefundRow?.status).toBe('failed');
+
+    const updatedOriginal = await testDb.query.payments.findFirst({ where: eq(payments.id, original!.id) });
+    expect(updatedOriginal?.status).toBe('succeeded');
+    expect(updatedOriginal?.refundAmount).toBe(0);
+
+    expect(emailService.sendRefundFailedAlertEmail).toHaveBeenCalledTimes(1);
+    expect(emailService.sendRefundFailedAlertEmail).toHaveBeenCalledWith(
+      expect.objectContaining({ orderId: order.id, amountPence: 5251, paymentIntentId: intentId })
+    );
+  });
+
+  it('restores the original payment to partially_refunded when another refund is still outstanding', async () => {
+    const { order } = await orderReadyForRefund();
+    const intentId = 'pi_test_refund_failed_partial';
+    const original = await makePayment({
+      orderId: order.id,
+      stripePaymentId: intentId,
+      amount: 10000,
+      status: 'partially_refunded',
+      refundAmount: 5251,
+    });
+    // Two refunds happened against this payment: 3000 succeeded, 2251 is
+    // about to fail. Only the failing one's amount should come back off.
+    await makePayment({
+      orderId: order.id,
+      stripePaymentId: intentId,
+      amount: 3000,
+      status: 'refunded',
+      type: 'refund',
+    });
+    const failingRefundRow = await makePayment({
+      orderId: order.id,
+      stripePaymentId: intentId,
+      amount: 2251,
+      status: 'refunded',
+      type: 'refund',
+    });
+
+    injectStripeEvent({
+      type: 'refund.failed',
+      data: {
+        object: { id: 're_test_partial', amount: 2251, payment_intent: intentId, status: 'failed' },
+      },
+    });
+
+    const res = await stripeWebhook(buildStripeWebhookRequest() as never);
+    expect(res.status).toBe(200);
+
+    const updatedFailingRow = await testDb.query.payments.findFirst({ where: eq(payments.id, failingRefundRow!.id) });
+    expect(updatedFailingRow?.status).toBe('failed');
+
+    const updatedOriginal = await testDb.query.payments.findFirst({ where: eq(payments.id, original!.id) });
+    expect(updatedOriginal?.status).toBe('partially_refunded');
+    expect(updatedOriginal?.refundAmount).toBe(3000);
+  });
+
+  it('is idempotent — a replayed refund.failed event does not double-subtract or re-alert', async () => {
+    const { order } = await orderReadyForRefund();
+    const intentId = 'pi_test_refund_failed_replay';
+    const original = await makePayment({
+      orderId: order.id,
+      stripePaymentId: intentId,
+      amount: 5251,
+      status: 'refunded',
+      refundAmount: 5251,
+    });
+    await makePayment({
+      orderId: order.id,
+      stripePaymentId: intentId,
+      amount: 5251,
+      status: 'refunded',
+      type: 'refund',
+    });
+    const event = {
+      type: 'refund.failed',
+      data: { object: { id: 're_test_replay', amount: 5251, payment_intent: intentId, status: 'failed' } },
+    };
+
+    injectStripeEvent(event);
+    await stripeWebhook(buildStripeWebhookRequest() as never);
+    injectStripeEvent(event);
+    const res2 = await stripeWebhook(buildStripeWebhookRequest() as never);
+    expect(res2.status).toBe(200);
+
+    const updatedOriginal = await testDb.query.payments.findFirst({ where: eq(payments.id, original!.id) });
+    expect(updatedOriginal?.status).toBe('succeeded');
+    expect(updatedOriginal?.refundAmount).toBe(0); // never goes negative on replay
+
+    expect(emailService.sendRefundFailedAlertEmail).toHaveBeenCalledTimes(1);
+  });
+
+  it('refund.updated with status succeeded does nothing', async () => {
+    const { order } = await orderReadyForRefund();
+    const intentId = 'pi_test_refund_updated_succeeded';
+    const original = await makePayment({
+      orderId: order.id,
+      stripePaymentId: intentId,
+      amount: 5251,
+      status: 'refunded',
+      refundAmount: 5251,
+    });
+    const refundRow = await makePayment({
+      orderId: order.id,
+      stripePaymentId: intentId,
+      amount: 5251,
+      status: 'refunded',
+      type: 'refund',
+    });
+
+    injectStripeEvent({
+      type: 'refund.updated',
+      data: {
+        object: { id: 're_test_updated', amount: 5251, payment_intent: intentId, status: 'succeeded' },
+      },
+    });
+
+    const res = await stripeWebhook(buildStripeWebhookRequest() as never);
+    expect(res.status).toBe(200);
+
+    const unchangedRefundRow = await testDb.query.payments.findFirst({ where: eq(payments.id, refundRow!.id) });
+    expect(unchangedRefundRow?.status).toBe('refunded');
+    const unchangedOriginal = await testDb.query.payments.findFirst({ where: eq(payments.id, original!.id) });
+    expect(unchangedOriginal?.status).toBe('refunded');
+    expect(unchangedOriginal?.refundAmount).toBe(5251);
+
+    expect(emailService.sendRefundFailedAlertEmail).not.toHaveBeenCalled();
+  });
+});
+
 describe('POST /api/webhooks/stripe — signature handling', () => {
   it('returns 400 when the stripe-signature header is missing', async () => {
     const res = await stripeWebhook(

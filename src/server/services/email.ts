@@ -1,7 +1,7 @@
 import { Resend } from 'resend';
 import { db } from '@/server/db';
 import { and, eq } from 'drizzle-orm';
-import { orders, memberships, users, printOrders, showClasses } from '@/server/db/schema';
+import { orders, entries, memberships, users, printOrders, showClasses } from '@/server/db/schema';
 import { formatOrderRef, PRINT_PAYMENT_METHODS } from '@/lib/print-products';
 import { isCatalogueItem } from '@/lib/catalogue-utils';
 import { generateParkingPassPdf } from '@/server/services/parking-pass-pdf';
@@ -1164,4 +1164,105 @@ export async function sendParkingPassEmail(orderId: string): Promise<boolean> {
   }
   console.log(`[email] Parking pass sent for order ${orderId} to ${exhibitor.email}`);
   return true;
+}
+
+/**
+ * Alerts both founders when a refund Remi recorded as done subsequently
+ * FAILED at Stripe — the money returns to Remi's own Stripe balance while
+ * our records still say 'refunded'. Maxine's £52.51, 2026-08-19 — Remi said
+ * refunded for a month while the money sat in the Stripe balance and the
+ * exhibitor found out from nobody. There's no dashboard surface for this
+ * yet, so a direct email is the whole mitigation. Called fire-and-forget
+ * from the webhook (see its own catch) — this function is never allowed to
+ * throw into that call site.
+ */
+export async function sendRefundFailedAlertEmail(params: {
+  orderId?: string | null;
+  entryId?: string | null;
+  amountPence: number;
+  paymentIntentId: string;
+}) {
+  const { orderId, entryId, amountPence, paymentIntentId } = params;
+
+  let exhibitorName = 'Unknown exhibitor';
+  let showName = 'Unknown show';
+
+  try {
+    if (orderId) {
+      const order = await db.query.orders.findFirst({
+        where: eq(orders.id, orderId),
+        with: { exhibitor: true, show: true },
+      });
+      if (order) {
+        exhibitorName = order.exhibitor?.name ?? order.exhibitor?.email ?? exhibitorName;
+        showName = order.show?.name ?? showName;
+      }
+    } else if (entryId) {
+      const entry = await db.query.entries.findFirst({
+        where: eq(entries.id, entryId),
+        with: { exhibitor: true, show: true },
+      });
+      if (entry) {
+        exhibitorName = entry.exhibitor?.name ?? entry.exhibitor?.email ?? exhibitorName;
+        showName = entry.show?.name ?? showName;
+      }
+    }
+  } catch (err) {
+    console.error(`[email] Refund-failed alert: could not look up exhibitor/show for PI ${paymentIntentId}:`, err);
+  }
+
+  const amount = formatFee(amountPence);
+  const subject = `⚠ Stripe refund FAILED — ${exhibitorName}, ${amount}, ${showName}`;
+  const recipients = ['michael@prometheus-it.com', 'hundarkgsd@gmail.com'];
+
+  const html = `
+<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
+<body style="margin: 0; padding: 0; background-color: ${BRAND.paper}; font-family: 'Hanken Grotesk', -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
+  <div style="max-width: 600px; margin: 0 auto; padding: 24px 16px;">
+    ${emailHeader()}
+    <div style="background: #ffffff; border: 1px solid ${BRAND.line}; border-radius: 14px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+      <div style="background: #b3261e; padding: 24px; text-align: center;">
+        <h2 style="margin: 0; color: #fff; font-size: 20px; font-weight: 700;">Stripe Refund FAILED</h2>
+      </div>
+      <div style="padding: 24px;">
+        <p style="font-size: 15px; color: ${BRAND.ink}; line-height: 1.6;">
+          A refund Remi recorded as <strong>done</strong> has since <strong>FAILED at Stripe</strong> —
+          most likely an expired or replaced card, or a closed account.
+        </p>
+        <table style="width: 100%; border-collapse: collapse; margin: 16px 0;">
+          <tr><td style="padding: 8px 12px; border-bottom: 1px solid ${BRAND.line}; font-weight: 600; color: ${BRAND.ink}; width: 120px;">Exhibitor</td><td style="padding: 8px 12px; border-bottom: 1px solid ${BRAND.line};">${exhibitorName}</td></tr>
+          <tr><td style="padding: 8px 12px; border-bottom: 1px solid ${BRAND.line}; font-weight: 600; color: ${BRAND.ink};">Show</td><td style="padding: 8px 12px; border-bottom: 1px solid ${BRAND.line};">${showName}</td></tr>
+          <tr><td style="padding: 8px 12px; border-bottom: 1px solid ${BRAND.line}; font-weight: 600; color: ${BRAND.ink};">Amount</td><td style="padding: 8px 12px; border-bottom: 1px solid ${BRAND.line};">${amount}</td></tr>
+          <tr><td style="padding: 8px 12px; font-weight: 600; color: ${BRAND.ink};">Payment Intent</td><td style="padding: 8px 12px; font-family: monospace; font-size: 13px;">${paymentIntentId}</td></tr>
+        </table>
+        <p style="font-size: 15px; color: ${BRAND.ink}; line-height: 1.6;">
+          The money has returned to Remi's Stripe balance — the exhibitor has <strong>not</strong> been paid.
+          Remi has updated its own records to reflect this, but the exhibitor still needs to be repaid
+          another way (bank transfer, a new refund to a different card, etc).
+        </p>
+      </div>
+    </div>
+    ${emailFooter()}
+  </div>
+</body>
+</html>`;
+
+  try {
+    const result = await resend.emails.send({
+      from: FROM,
+      to: recipients,
+      subject,
+      html,
+    });
+    if (result.error) {
+      console.error(`[email] Resend rejected refund-failed alert for PI ${paymentIntentId}:`, result.error);
+      return result;
+    }
+    console.log(`[email] Refund-failed alert sent for PI ${paymentIntentId}`, result);
+    return result;
+  } catch (error) {
+    console.error(`[email] Failed to send refund-failed alert for PI ${paymentIntentId}:`, error);
+  }
 }

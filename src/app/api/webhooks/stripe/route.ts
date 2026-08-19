@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { and, eq, inArray, isNull, notInArray, sql } from 'drizzle-orm';
+import { and, eq, inArray, isNull, ne, notInArray, sql } from 'drizzle-orm';
 import { getStripe } from '@/server/services/stripe';
 import { captureFeeForPaymentIntent } from '@/server/services/stripe-fee-heal';
 import { db } from '@/server/db';
 import { entries, entryClasses, entryAuditLog, orders, payments, organisations, plans, users, printOrders, printOrderItems } from '@/server/db/schema';
-import { sendEntryConfirmationEmail, sendSecretaryNotificationEmail, sendPrintOrderConfirmationEmail, sendPrintOrderAdminNotificationEmail } from '@/server/services/email';
+import { sendEntryConfirmationEmail, sendSecretaryNotificationEmail, sendPrintOrderConfirmationEmail, sendPrintOrderAdminNotificationEmail, sendRefundFailedAlertEmail } from '@/server/services/email';
 import { syncCatalogueNumbers } from '@/server/services/catalogue-numbering';
 import { formatOrderRef } from '@/lib/print-products';
 import type Stripe from 'stripe';
@@ -52,6 +52,83 @@ async function numberConfirmedEntries(showId: string) {
   } catch (err) {
     console.error(`[stripe-webhook] syncCatalogueNumbers failed for show ${showId}:`, err);
   }
+}
+
+/**
+ * A refund Stripe accepted can still FAIL afterwards — an expired/replaced
+ * card, a closed account — at which point the money quietly returns to
+ * Remi's own Stripe balance while our records still say 'refunded' forever.
+ * Maxine's £52.51, 2026-08-19: her refund was recorded as done on 07-21, but
+ * the money never reached her — nobody found out until she asked, a month
+ * later. `refund.failed` and `refund.updated` both land here; only a
+ * genuine 'failed' status does anything (see the switch case above).
+ *
+ * Idempotent by construction: the UPDATE...RETURNING below is the only
+ * thing that can happen once per refund. A replayed event finds the refund
+ * row already 'failed' (no longer 'refunded'), so `flipped` comes back
+ * empty and the original payment is never touched a second time.
+ */
+async function handleFailedRefund(refund: Stripe.Refund) {
+  const paymentIntentId =
+    typeof refund.payment_intent === 'string'
+      ? refund.payment_intent
+      : refund.payment_intent?.id;
+
+  if (!paymentIntentId) {
+    console.error(`[stripe-webhook] refund ${refund.id} failed with no payment_intent — cannot process`);
+    return;
+  }
+
+  const amount = refund.amount;
+
+  // Flip the refund row(s) Remi recorded as 'refunded' for this PI+amount to
+  // 'failed'. RETURNING is the idempotency guard — a replayed delivery finds
+  // nothing left in 'refunded' state, `flipped` is empty, and nothing below
+  // this runs.
+  const flipped = await db
+    .update(payments)
+    .set({ status: 'failed' })
+    .where(
+      and(
+        eq(payments.stripePaymentId, paymentIntentId),
+        eq(payments.type, 'refund'),
+        eq(payments.amount, amount),
+        eq(payments.status, 'refunded')
+      )
+    )
+    .returning({ id: payments.id, entryId: payments.entryId, orderId: payments.orderId });
+
+  if (flipped.length === 0) {
+    console.log(`[stripe-webhook] refund.failed for PI ${paymentIntentId} (amount ${amount}) — no matching 'refunded' row; already processed or unknown refund`);
+    return;
+  }
+
+  console.log(`[stripe-webhook] refund FAILED for PI ${paymentIntentId}, amount ${amount} — reverting ${flipped.length} refund row(s) and restoring the original payment`);
+
+  // Restore the ORIGINAL (non-refund) payment row: the money is back in
+  // Remi's Stripe balance, so refundAmount comes back down and status
+  // recomputes. Never touch a row already 'failed' for some other reason.
+  // Entries/orders are deliberately left alone — a cancelled entry stays
+  // cancelled regardless of whether the refund money actually moved.
+  await db
+    .update(payments)
+    .set({
+      refundAmount: sql`GREATEST(COALESCE(${payments.refundAmount}, 0) - ${amount}, 0)`,
+      status: sql`(CASE WHEN GREATEST(COALESCE(${payments.refundAmount}, 0) - ${amount}, 0) = 0 THEN 'succeeded' ELSE 'partially_refunded' END)::payment_status`,
+    })
+    .where(
+      and(
+        eq(payments.stripePaymentId, paymentIntentId),
+        ne(payments.type, 'refund'),
+        ne(payments.status, 'failed')
+      )
+    );
+
+  // Alert the founders — fire-and-forget, must never fail the webhook.
+  const { orderId, entryId } = flipped[0]!;
+  sendRefundFailedAlertEmail({ orderId, entryId, amountPence: amount, paymentIntentId }).catch((err) =>
+    console.error('[webhook] Refund-failed alert email failed:', err)
+  );
 }
 
 export async function POST(request: NextRequest) {
@@ -362,6 +439,19 @@ export async function POST(request: NextRequest) {
           )
         );
 
+      break;
+    }
+
+    // `refund.failed` fires once, when a refund that Stripe had already
+    // accepted subsequently fails (expired/replaced card, closed account).
+    // `refund.updated` fires on every status transition a refund goes
+    // through, so it also carries 'failed' — and everything else besides.
+    // Both land here; only a genuine 'failed' status does anything.
+    case 'refund.failed':
+    case 'refund.updated': {
+      const refund = event.data.object as Stripe.Refund;
+      if (refund.status !== 'failed') break;
+      await handleFailedRefund(refund);
       break;
     }
 
