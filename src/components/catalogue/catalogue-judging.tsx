@@ -458,20 +458,42 @@ export function CatalogueJudging({ show, entries }: Props) {
             key={`section-${section.key}`}
             break={section.key === 'jh' && sectionIdx > 0}
           >
-            <Text style={s.sexBand} minPresenceAhead={80}>
-              {section.label}
-            </Text>
-            {section.judge && (
-              <Text style={s.sexBandJudge}>Judge: {section.judge}</Text>
+            {/* The band + judge line render INSIDE the first class's
+                non-wrapping unit below, so the section heading can never be
+                stranded alone at a page foot with its first class overleaf —
+                Mandy 2026-08-19, Scotland stewards' catalogue p4: "SPECIAL
+                AWARDS CLASSES / Judge: …" sat orphaned at the bottom because
+                its 80pt look-ahead fit the band but not the wrap={false}
+                class block that followed. Anchoring beats tuning the
+                look-ahead: no first-class size can strand it. (A section
+                with no classes can't come from buildJudgingSections — empty
+                buckets are dropped — but the fallback keeps the band
+                renderable if that ever changes.) */}
+            {section.classes.length === 0 && (
+              <>
+                <Text style={s.sexBand}>{section.label}</Text>
+                {section.judge && (
+                  <Text style={s.sexBandJudge}>Judge: {section.judge}</Text>
+                )}
+              </>
             )}
 
             {section.classes.map((classGroup, classIdx) => {
               const sorted = sortEntries(classGroup.entries);
+              const sectionLead = classIdx === 0 && (
+                <>
+                  <Text style={s.sexBand}>{section.label}</Text>
+                  {section.judge && (
+                    <Text style={s.sexBandJudge}>Judge: {section.judge}</Text>
+                  )}
+                </>
+              );
               return (
                 <View
                   key={`cls-${section.key}-${classGroup.classLabel || classGroup.className}-${classIdx}`}
                   wrap={false}
                 >
+                {sectionLead}
                 <View style={s.classHeader}>
                   <Text style={s.classHeaderText}>
                     {classGroup.classLabel ? `${classGroup.classLabel}. ` : ''}

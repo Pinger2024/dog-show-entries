@@ -17,6 +17,7 @@ import { renderToBuffer, Document, Page, Text, StyleSheet } from '@react-pdf/ren
 import { CatalogueRingside } from '@/components/catalogue/catalogue-ringside';
 import { CatalogueByClass } from '@/components/catalogue/catalogue-by-class';
 import { CatalogueByBreed } from '@/components/catalogue/catalogue-by-breed';
+import { CatalogueJudging } from '@/components/catalogue/catalogue-judging';
 import type { CatalogueEntry, CatalogueShowInfo } from '@/components/catalogue/catalogue-types';
 import { fetchClubImage } from '@/lib/safe-image-fetch';
 import { PrizeCards } from '@/components/prize-cards/prize-cards';
@@ -41,7 +42,7 @@ import { prepareAdvertsForRender } from '@/lib/advert-orientation';
 
 export async function generateCataloguePdf(
   showId: string,
-  format: 'standard' | 'by-class' = 'standard',
+  format: 'standard' | 'by-class' | 'judging' = 'standard',
   opts?: {
     /** Print a different venue than the one stored on the show — for an
      *  embargoed venue change (Mandy 2026-08-17: Clyde Valley + Scotland
@@ -362,6 +363,10 @@ export async function generateCataloguePdf(
   const formatComponents = {
     standard: CatalogueRingside,
     'by-class': isAllBreed ? CatalogueByBreed : CatalogueByClass,
+    // Stewards' catalogue — same props, same assembly; mirrors the route's
+    // dispatch so the working document is renderable server-side too
+    // (verification harness / print pipeline).
+    judging: CatalogueJudging,
   } as const;
 
   // For SV shows we pre-bake the cover + inside tonal washes from the
@@ -391,6 +396,11 @@ export async function generateCataloguePdf(
   // 2026-08-17 this function only stripped fonts and skipped the padding,
   // which is how Mandy received a 31-page book that couldn't duplex
   // ("we need an even number of pages for printing the catalogue").
+  // The judging (stewards') catalogue is an internal working document — the
+  // route doesn't booklet-pad it either, only the public booklet formats.
+  if (effectiveFormat === 'judging') {
+    return Buffer.from(await stripUnembeddedBase14Fonts(rawBuffer));
+  }
   return Buffer.from(await padPdfToMultiple(rawBuffer, 4));
 }
 
