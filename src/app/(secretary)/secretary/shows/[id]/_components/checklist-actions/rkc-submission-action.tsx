@@ -23,7 +23,7 @@ export function RkcSubmissionAction({ showId, onComplete }: ActionPanelProps) {
     onSuccess: () => {
       utils.shows.getById.invalidate({ id: showId });
       onComplete?.();
-      toast.success('Marked as submitted to RKC');
+      toast.success('Recorded as sent to the RKC');
     },
     onError: (err) => toast.error(err.message),
   });
@@ -31,7 +31,7 @@ export function RkcSubmissionAction({ showId, onComplete }: ActionPanelProps) {
   const unmarkSubmitted = trpc.secretary.unmarkRkcSubmitted.useMutation({
     onSuccess: () => {
       utils.shows.getById.invalidate({ id: showId });
-      toast.success('RKC submission status cleared');
+      toast.success('Undone — recorded as not sent');
     },
     onError: (err) => toast.error(err.message),
   });
@@ -55,13 +55,23 @@ export function RkcSubmissionAction({ showId, onComplete }: ActionPanelProps) {
   return (
     <div className="space-y-3">
       {/* Status */}
+      {/* Remi never transmits anything to the RKC — this whole panel is a
+          record that the SECRETARY sent it. A secretary clicked the button
+          believing it filed her return and was badly frightened (via Mandy,
+          2026-08-20), so every label here now says "marked" rather than
+          "submitted", and the note below states it outright. */}
+      <p className="rounded-lg bg-se-paper2 p-3 text-xs text-se-ink2">
+        Remi doesn&apos;t send anything to the RKC. You send your return to them
+        yourself, then tick it here so Remi can keep track of the 14-day deadline.
+      </p>
+
       {rkcSubmitted ? (
         <div className="flex items-center gap-2 rounded-lg bg-se-fresh-soft p-3 text-sm text-se-fresh-deep">
           <CheckCircle className="size-4 shrink-0" />
           <div>
-            <p className="font-medium">Submitted to RKC</p>
+            <p className="font-medium">Marked as sent</p>
             <p className="text-xs text-se-fresh-deep">
-              Marked as submitted on{' '}
+              You recorded this as sent on{' '}
               {new Date(rkcSubmittedAt!).toLocaleDateString('en-GB', {
                 day: 'numeric',
                 month: 'short',
@@ -73,7 +83,7 @@ export function RkcSubmissionAction({ showId, onComplete }: ActionPanelProps) {
       ) : (
         <div className="flex items-center gap-2 rounded-lg bg-se-honey-soft p-3 text-sm text-se-honey-deep">
           <Send className="size-4 shrink-0" />
-          <p className="font-medium">Not yet submitted</p>
+          <p className="font-medium">Not yet marked as sent</p>
         </div>
       )}
 
@@ -117,7 +127,7 @@ export function RkcSubmissionAction({ showId, onComplete }: ActionPanelProps) {
           ) : (
             <X className="mr-1 size-3" />
           )}
-          Clear submission status
+          Undo — I haven&apos;t sent it
         </Button>
       ) : (
         <Button
@@ -131,13 +141,13 @@ export function RkcSubmissionAction({ showId, onComplete }: ActionPanelProps) {
           ) : (
             <Send className="size-3" />
           )}
-          Mark as submitted to RKC
+          I&apos;ve sent this to the RKC
         </Button>
       )}
 
       {!isCompleted && !rkcSubmitted && (
         <p className="text-xs text-muted-foreground">
-          The show must be completed before marking RKC submission.
+          The show must be completed before you can record this.
         </p>
       )}
     </div>

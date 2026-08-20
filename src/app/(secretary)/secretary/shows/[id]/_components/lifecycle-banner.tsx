@@ -436,7 +436,7 @@ function PostShowContent({ show }: { show: Show }) {
   const rkcDeadline = new Date(show.endDate);
   rkcDeadline.setDate(rkcDeadline.getDate() + 14);
   const rkcInfo = rkcSubmitted
-    ? { text: 'Submitted to RKC', urgent: false, overdue: false }
+    ? { text: 'RKC return marked as sent', urgent: false, overdue: false }
     : formatDeadline(rkcDeadline, 'RKC submission deadline');
 
   return (

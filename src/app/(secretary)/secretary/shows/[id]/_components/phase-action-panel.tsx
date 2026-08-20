@@ -714,7 +714,7 @@ function PostShowPanel({ show, showId }: { show: Show; showId: string }) {
   const markRkcSubmitted = trpc.secretary.markRkcSubmitted.useMutation({
     onSuccess: () => {
       utils.shows.getById.invalidate({ id: showId });
-      toast.success('Marked as submitted to RKC');
+      toast.success('Recorded as sent to the RKC');
     },
     onError: (err) => toast.error(err.message),
   });
@@ -723,13 +723,13 @@ function PostShowPanel({ show, showId }: { show: Show; showId: string }) {
   const rkcDeadline = new Date(show.endDate);
   rkcDeadline.setDate(rkcDeadline.getDate() + 14);
   const rkcInfo = rkcSubmitted
-    ? { text: `Submitted to RKC on ${new Date(rkcSubmittedAt!).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}`, urgent: false, overdue: false }
+    ? { text: `Marked as sent to RKC on ${new Date(rkcSubmittedAt!).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}`, urgent: false, overdue: false }
     : formatDeadline(rkcDeadline, 'RKC submission deadline');
 
   // Count completed tasks
   const tasks = [
     { done: resultsPublished, label: 'Publish results' },
-    { done: rkcSubmitted, label: 'Submit to RKC' },
+    { done: rkcSubmitted, label: 'Mark RKC return as sent' },
   ];
   const completedCount = tasks.filter(t => t.done).length;
 
@@ -749,7 +749,7 @@ function PostShowPanel({ show, showId }: { show: Show; showId: string }) {
           </span>
         </div>
         {rkcSubmitted ? (
-          <Chip tone="fresh">RKC submitted</Chip>
+          <Chip tone="fresh">RKC marked as sent</Chip>
         ) : (
           <span className={cn(
             'text-xs font-medium',
@@ -786,7 +786,7 @@ function PostShowPanel({ show, showId }: { show: Show; showId: string }) {
           <ActionCard
             icon={Send}
             label="Mark RKC Submitted"
-            description="Record that you've sent the marked catalogue to the RKC"
+            description="Remi doesn't send it — tick this once you have"
             accent="blue"
             onClick={() => markRkcSubmitted.mutate({ showId })}
           />
