@@ -41,17 +41,45 @@ async function resolveShowId(db: Database, idOrSlug: string): Promise<string> {
 }
 
 /**
- * Exhibits are locked to the host club + admins until the morning of the show
- * (Amanda 2026-05-28). Returns true if this user is allowed to see exhibits
- * regardless of date — i.e. admin or an active member of the host org.
+ * May this caller see exhibitor identities BEFORE show day?
+ *
+ * The lock itself is Amanda 2026-05-28: stewards meet the entry list for the
+ * first time when they arrive on the day.
+ *
+ * Mandy 2026-08-21: "only me, Michael and the show secretary … I don't want any
+ * of the other committee to be able to see who has entered at all."
+ *
+ * This used to pass ANY active member of the host organisation. That matched her
+ * intent only by accident — the sole membership rows in existence were staff. A
+ * membership is a CLUB membership (it carries an expiry, and drives the members'
+ * entry discount), so the moment a club adds real members every one of them would
+ * have silently gained an early view of the entry list, with nothing to announce
+ * it.
+ *
+ * Who now gets through:
+ *  - the founders (admin);
+ *  - the show's named secretary (`shows.secretary_user_id`);
+ *  - co-secretaries — the secretary ROLE plus an active membership of the host
+ *    club. That is how a shared secretaryship is represented: South Western ran
+ *    Denise Hensley (the show's secretary_user_id) alongside Ann Swift, who is a
+ *    secretary-role member of the club and nothing else. Mandy confirmed that
+ *    arrangement stays.
+ *
+ * Committee members and ordinary club members hold a membership but not the
+ * secretary role, so the role check is what separates them. Verified against
+ * live data before the change: nobody currently relying on the old rule lost
+ * access.
  */
 async function callerCanBypassShowDayLock(
   db: Database,
   userId: string,
   role: string,
   organisationId: string,
+  showSecretaryUserId: string | null,
 ): Promise<boolean> {
   if (role === 'admin') return true;
+  if (showSecretaryUserId && showSecretaryUserId === userId) return true;
+  if (role !== 'secretary') return false;
   const membership = await db.query.memberships.findFirst({
     where: and(
       eq(memberships.userId, userId),
@@ -286,6 +314,7 @@ export const stewardRouter = createTRPCRouter({
           showRuleset: true,
           startDate: true,
           organisationId: true,
+          secretaryUserId: true,
         },
       });
 
@@ -299,6 +328,7 @@ export const stewardRouter = createTRPCRouter({
           ctx.session.user.id,
           ctx.session.user.role,
           show.organisationId,
+          show.secretaryUserId ?? null,
         );
         if (!dayReached && !canBypass) {
           return {
