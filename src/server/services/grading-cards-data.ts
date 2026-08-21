@@ -14,7 +14,8 @@ import { format, parseISO } from 'date-fns';
 import type { Database } from '@/server/db';
 import * as schema from '@/server/db/schema';
 import { getPaidOrderIdsForShow } from '@/server/services/show-metrics';
-import { isSpecialAwardClass, svCoatDisplayName } from '@/lib/class-labels';
+import { svCoatDisplayName } from '@/lib/class-labels';
+import { resolveJudgeForClass } from '@/lib/judge-resolution';
 import type { GradingCardEntry, GradingCardsInfo } from '@/components/reports/grading-cards-pdf';
 
 export interface GradingCardsLoad {
@@ -82,19 +83,25 @@ export async function loadGradingCardsData(
 
   const showClassById = new Map(showClasses.map((sc) => [sc.id, sc]));
 
-  // Judge resolution mirrors generatePrizeCardsPdf in pdf-generation.ts —
-  // one breed judge (keyed by showClass.breedId) plus an optional Special
-  // Award Classes judge.
-  const judgeByBreed = new Map<string | null, string>();
-  let sacJudgeName: string | null = null;
-  for (const ja of judgeAssignments) {
-    if (!ja.judge?.name) continue;
-    if (ja.isSpecialAwardsClassesJudge) {
-      sacJudgeName = ja.judge.name;
-    } else {
-      judgeByBreed.set(ja.breedId, ja.judge.name);
-    }
-  }
+  // Judge resolution is the SHARED one — the same resolver the catalogue, the
+  // schedule, the judges' book and the prize-cards route use.
+  //
+  // This file used to keep its own copy, copied from generatePrizeCardsPdf,
+  // which flattened every assignment into breed → judge. On a single-breed show
+  // every assignment carries breed_id = null, so they all collided on one key
+  // and the LAST one processed won. North East records Nikki Farley for the dogs
+  // and the bitches, and Mandy as the Junior Handling judge (no breed, no sex —
+  // that is how a JH judge is stored). Mandy's row was added two days later, so
+  // it overwrote Nikki on every grading card in the show, Baby Puppy included
+  // (Mandy 2026-08-21, caught proofing North East before print).
+  //
+  // resolveJudgeForClass diverts the JH judge and the Special Award Classes
+  // judge out of the breed/sex maps entirely, then resolves per class:
+  // JH → SAC → exact (breed, sex) → breed → sex → fallback. Its own history
+  // records this same collision twice before — Andrew over Helen in June, the
+  // SAC judge at South Western in August — which is the argument for having one
+  // implementation rather than a copy per document.
+  const judgeForClass = resolveJudgeForClass(judgeAssignments);
 
   // Primary owner name per dog (name only — no address, per the secretary's
   // explicit sign-off: grading cards never show an owner's address).
@@ -141,11 +148,9 @@ export async function loadGradingCardsData(
     const sc = sortedClasses[0];
 
     const className = sc?.classDefinition?.name?.replace(/^SV\s+/, '') ?? '';
-    const judgeName = sc
-      ? isSpecialAwardClass(sc)
-        ? (sacJudgeName ?? '')
-        : (judgeByBreed.get(sc.breedId) ?? judgeByBreed.get(null) ?? '')
-      : (judgeByBreed.get(null) ?? '');
+    // A dog with no resolvable class gets no judge name rather than a guess —
+    // a blank line on the card is honest; the wrong judge's name is not.
+    const judgeName = sc ? (judgeForClass(sc)?.name ?? '') : '';
 
     gradingEntries.push({
       ringNumber: e.catalogueNumber ?? '',

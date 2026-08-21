@@ -37,6 +37,7 @@ import { buildClassLabelMap, isSpecialAwardClass, buildCatalogueClassDefinitions
 import { buildScheduleJudges, aggregateJudgeAssignments } from '@/lib/schedule-judges';
 import { padPdfToMultiple, stripUnembeddedBase14Fonts } from '@/lib/pdf-pad';
 import { prepareAdvertsForRender } from '@/lib/advert-orientation';
+import { resolveJudgeForClass } from '@/lib/judge-resolution';
 
 // ── Catalogue PDF ──
 
@@ -448,16 +449,14 @@ export async function generatePrizeCardsPdf(
     }),
   ]);
 
-  const judgeByBreed = new Map<string | null, string>();
-  let sacJudgeName: string | null = null;
-  for (const ja of judgeAssignments) {
-    if (!ja.judge?.name) continue;
-    if (ja.isSpecialAwardsClassesJudge) {
-      sacJudgeName = ja.judge.name;
-    } else {
-      judgeByBreed.set(ja.breedId, ja.judge.name);
-    }
-  }
+  // Shared resolver, same as the /api/prize-cards route and the judges' book.
+  // This function previously kept its own flat breed -> judge map, which
+  // collided the Junior Handling judge (no breed, no sex) with the breed judge
+  // on a single-breed show, where every assignment carries breed_id = null.
+  // The grading cards were written by copying THIS block, and inherited the bug
+  // with it — Mandy caught it on North East's cards, 2026-08-21. Converged so
+  // there is one implementation to be right rather than three to keep in step.
+  const judgeForClass = resolveJudgeForClass(judgeAssignments);
 
   const prizeCardLabelMap = buildClassLabelMap(showClasses, show.showRuleset);
   const filteredShowClasses = onlySac
@@ -468,9 +467,7 @@ export async function generatePrizeCardsPdf(
     className: sc.classDefinition?.name ?? 'Unknown Class',
     sex: sc.sex,
     breedName: sc.breed?.name ?? null,
-    judgeName: isSpecialAwardClass(sc)
-      ? sacJudgeName
-      : judgeByBreed.get(sc.breedId) ?? judgeByBreed.get(null) ?? null,
+    judgeName: judgeForClass(sc)?.name ?? null,
   }));
 
   const showInfo: PrizeCardShowInfo = {

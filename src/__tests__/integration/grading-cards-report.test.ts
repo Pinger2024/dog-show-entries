@@ -24,6 +24,8 @@ import {
   makeJudgeAssignment,
 } from '../helpers/factories';
 import * as schema from '@/server/db/schema';
+import { eq } from 'drizzle-orm';
+import { loadGradingCardsData } from '@/server/services/grading-cards-data';
 
 beforeEach(() => {
   vi.mocked(auth).mockReset();
@@ -135,5 +137,58 @@ describe('GET /api/reports/[showId]/grading-cards', () => {
       expect(width).toBeCloseTo(595.28, 1);
       expect(height).toBeCloseTo(419.53, 1);
     }
+  });
+
+  /**
+   * North East GSD Regional Group, caught by Mandy proofing before print
+   * (2026-08-21). A single-breed regional records its breed judge with NO
+   * breed_id and only a sex, and its Junior Handling judge with neither. The
+   * grading cards kept their own flat breed -> judge map, so all three
+   * assignments collided on the null key and the last one written won: Mandy
+   * (Junior Handling, added two days later) replaced Nikki Farley on every card
+   * in the show, Baby Puppy included.
+   */
+  it('prints the breed judge, not the Junior Handling judge, when neither carries a breed', async () => {
+    const { org, breed } = await makeSecretaryWithOrgAndBreed();
+    const exhibitor = await makeUser({ role: 'exhibitor' });
+    const show = await makeShow({
+      organisationId: org.id,
+      showRuleset: 'wusv',
+      showScope: 'single_breed',
+      breedId: breed.id,
+      status: 'entries_open',
+    });
+    const babyPuppyDef = await makeClassDef({ name: 'Baby Puppy', type: 'sv_age' });
+    // breedId deliberately absent and sex set — the real shape on a
+    // single-breed regional's classes.
+    const showClass = await makeShowClass({ showId: show.id, classDefinitionId: babyPuppyDef.id });
+    await testDb
+      .update(schema.showClasses)
+      .set({ sex: 'bitch' })
+      .where(eq(schema.showClasses.id, showClass.id));
+
+    const gertie = await makeDog({
+      ownerId: exhibitor.id,
+      breedId: breed.id,
+      registeredName: 'Sadrias Gertie',
+      sex: 'bitch',
+      coatType: 'long_stock',
+    });
+    const order = await makeOrder({ showId: show.id, exhibitorId: exhibitor.id, status: 'paid' });
+    const e = await entry({ showId: show.id, exhibitorId: exhibitor.id, dogId: gertie.id, orderId: order.id, catalogueNumber: '2' });
+    await entryClass(e.id, showClass.id);
+
+    const nikki = await makeJudge({ name: 'Nikki Farley' });
+    await makeJudgeAssignment({ showId: show.id, judgeId: nikki.id, sex: 'dog' });
+    await makeJudgeAssignment({ showId: show.id, judgeId: nikki.id, sex: 'bitch' });
+    // The Junior Handling judge: no breed, no sex. Added LAST, as it was in prod.
+    const jhJudge = await makeJudge({ name: 'Mandy McAteer' });
+    await makeJudgeAssignment({ showId: show.id, judgeId: jhJudge.id, sex: null });
+
+    const data = await loadGradingCardsData(testDb, show.id);
+    expect(data).not.toBeNull();
+    expect(data!.entries).toHaveLength(1);
+    expect(data!.entries[0].judgeName).toBe('Nikki Farley');
+    expect(data!.entries[0].judgeName).not.toBe('Mandy McAteer');
   });
 });
