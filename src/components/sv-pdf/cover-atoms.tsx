@@ -88,18 +88,26 @@ export function MastheadBand() {
 
 export function ClubCrestSlot({ logoUrl, size = '36mm' }: { logoUrl?: string | null; size?: string }) {
   if (logoUrl) {
+    // The box hugs the artwork instead of forcing it into a square. Clubs don't
+    // all have a tidy round crest — North East's is a full landscape banner
+    // (flag, cathedral, dogs), and squeezing that into a 36mm square left a thin
+    // strip marooned in the middle of a bordered box (Mandy 2026-08-21).
+    //
+    // Fixed WIDTH, height follows the image, capped so a square crest can't tower
+    // over the "Official Catalogue" lockup beside it. Same reasoning as the
+    // class-sponsor banners in July: objectFit contain, no forced ratio, so every
+    // club's artwork sits at its own proportions — nothing stretched or cropped.
     return (
       <View
         style={{
-          width: size,
-          height: size,
+          width: '46mm',
           backgroundColor: SV.paper,
           borderWidth: 0.5,
           borderColor: SV.ink,
           padding: 4,
         }}
       >
-        <Image src={logoUrl} style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+        <Image src={logoUrl} style={{ width: '100%', maxHeight: size, objectFit: 'contain' }} />
       </View>
     );
   }
