@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { TRPCError } from '@trpc/server';
-import { and, eq, inArray, isNull, isNotNull, or, asc, desc, sql } from 'drizzle-orm';
+import { and, eq, ne, inArray, isNull, isNotNull, or, asc, desc, sql } from 'drizzle-orm';
 import { protectedProcedure, publicProcedure } from '../procedures';
 import { createTRPCRouter } from '../init';
 import { dogs, dogOwners, dogTitles, dogPhotos, users, entries, entryClasses, showClasses, shows, results, classDefinitions, achievements, judgeAssignments, judges, dogSvProfile } from '@/server/db/schema';
@@ -640,6 +640,30 @@ export const dogsRouter = createTRPCRouter({
           code: 'BAD_REQUEST',
           message: `Please don't clear ${list} — it's needed for the catalogue. You can change it to something else instead.`,
         });
+      }
+
+      // Same guard `create` has carried since bug hunt #23, which update never
+      // got: kc_reg_number is UNIQUE, so setting one that another dog already
+      // holds throws a raw Postgres violation. tRPC hands that message to the
+      // client verbatim — query text, every parameter, the lot — and the dog
+      // form puts it straight on screen. Rebecca Landgren added the same dog
+      // three times, then got a wall of SQL containing her own details when she
+      // tried to fix it (Mandy 2026-08-22). Catch it here and say what's wrong.
+      if (kcRegNumber !== undefined && kcRegNumber) {
+        const clash = await ctx.db.query.dogs.findFirst({
+          where: and(eq(dogs.kcRegNumber, kcRegNumber), ne(dogs.id, id)),
+          columns: { id: true, registeredName: true, deletedAt: true },
+        });
+        if (clash) {
+          // The overwhelmingly likely cause is the same dog entered twice, so
+          // say that rather than implying someone else has stolen the number.
+          throw new TRPCError({
+            code: 'BAD_REQUEST',
+            message: clash.deletedAt
+              ? `That registration number belongs to "${clash.registeredName}", a dog that was removed. Please contact the show secretary to have it freed up.`
+              : `That registration number is already on "${clash.registeredName}". If that's this dog added twice, edit that record instead — or remove the duplicate first.`,
+          });
+        }
       }
 
       const data = {
