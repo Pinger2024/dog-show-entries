@@ -23,6 +23,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { and, eq, isNull } from 'drizzle-orm';
 import { z } from 'zod';
 import { auth } from '@/lib/auth';
+import { getImpersonatedUserId } from '@/lib/impersonation';
 import { db } from '@/server/db';
 import { dogs, dogSvProfile } from '@/server/db/schema';
 import { dogAccessCondition } from '@/server/dog-access';
@@ -94,6 +95,32 @@ export async function POST(
   if (!session?.user?.id) {
     return NextResponse.json({ error: 'unauthorised' }, { status: 401 });
   }
+
+  // Honour admin impersonation, exactly as the tRPC context does.
+  //
+  // This is a PLAIN route, so it never went through that context and used the
+  // admin's own id — while every tRPC call on the same page used the
+  // impersonated one. The page therefore loaded an exhibitor's dog perfectly
+  // and then failed every autosave with "Couldn't save — check your
+  // connection", which is not what went wrong at all. Mandy hit it trying to
+  // add a working title to someone else's dog (2026-08-23); it would have hit
+  // every self-saving section of the dog form the same way.
+  //
+  // The admin check has to be repeated here: getImpersonatedUserId only reads
+  // a cookie and does no authorisation of its own — the gate lives in the
+  // caller. Without it, anyone who sent that cookie by hand would act as any
+  // user they named.
+  let actingUserId = session.user.id;
+  if ((session.user as { role?: string }).role === 'admin') {
+    try {
+      const impersonatedUserId = await getImpersonatedUserId();
+      if (impersonatedUserId && impersonatedUserId !== session.user.id) {
+        actingUserId = impersonatedUserId;
+      }
+    } catch {
+      // Cookie read failed — carry on as the admin themselves.
+    }
+  }
   if (!db) {
     return NextResponse.json({ error: 'db unavailable' }, { status: 500 });
   }
@@ -108,7 +135,7 @@ export async function POST(
   if (!dogExists) return NextResponse.json({ error: 'not found' }, { status: 404 });
 
   const dog = await db.query.dogs.findFirst({
-    where: and(eq(dogs.id, dogId), isNull(dogs.deletedAt), dogAccessCondition(db, session.user.id)),
+    where: and(eq(dogs.id, dogId), isNull(dogs.deletedAt), dogAccessCondition(db, actingUserId)),
     with: { svProfile: true },
   });
   if (!dog) {

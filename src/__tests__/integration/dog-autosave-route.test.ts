@@ -1,11 +1,16 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { NextRequest } from 'next/server';
 import { auth } from '@/lib/auth';
+import { getImpersonatedUserId } from '@/lib/impersonation';
 import { POST as dogAutosavePOST } from '@/app/api/dog-autosave/[dogId]/route';
 import { makeUser, makeDog } from '../helpers/factories';
 import { testDb } from '../helpers/db';
 import { dogs, dogOwners, dogSvProfile } from '@/server/db/schema';
 import { eq } from 'drizzle-orm';
+
+vi.mock('@/lib/impersonation', () => ({
+  getImpersonatedUserId: vi.fn(async () => null),
+}));
 
 /**
  * /api/dog-autosave/[dogId] — the beacon-friendly autosave behind the dog
@@ -33,6 +38,7 @@ function authedAs(user: { id: string; email: string; name: string | null; role: 
 
 beforeEach(() => {
   vi.mocked(auth).mockReset();
+  vi.mocked(getImpersonatedUserId).mockResolvedValue(null);
 });
 
 describe('POST /api/dog-autosave/[dogId]', () => {
@@ -332,5 +338,71 @@ describe('POST /api/dog-autosave/[dogId] — other qualifications', () => {
     });
     expect(profile?.wb).toBe(false);
     expect(profile?.bh).toBe(true);
+  });
+});
+
+/**
+ * Admin "view as" (impersonation), 2026-08-23.
+ *
+ * Every tRPC call on the dog page runs through a context that swaps in the
+ * impersonated user, so an admin viewing an exhibitor's dog loads it perfectly.
+ * This route is a PLAIN route — it never saw that context and used the admin's
+ * own id, so `dogAccessCondition` said "not your dog" and every autosave 403'd
+ * behind "Couldn't save — check your connection". Mandy hit it adding a working
+ * title to someone else's dog; it affected every self-saving section.
+ */
+describe('POST /api/dog-autosave/[dogId] — admin viewing as another user', () => {
+  it('saves against the impersonated owner, not the admin', async () => {
+    const owner = await makeUser({ role: 'exhibitor' });
+    const admin = await makeUser({ role: 'admin' });
+    const dog = await makeDog({ ownerId: owner.id });
+    authedAs(admin);
+    vi.mocked(getImpersonatedUserId).mockResolvedValue(owner.id);
+
+    const res = await dogAutosavePOST(
+      req(dog.id, { svProfile: { workingTitle: 'IGP2' } }),
+      params(dog.id),
+    );
+    expect(res.status).toBe(200);
+
+    const profile = await testDb.query.dogSvProfile.findFirst({
+      where: eq(dogSvProfile.dogId, dog.id),
+    });
+    expect(profile?.workingTitle).toBe('IGP2');
+  });
+
+  it('does NOT let a non-admin impersonate by sending the cookie', async () => {
+    // getImpersonatedUserId only reads a cookie — it authorises nothing. The
+    // admin check has to live here, or anyone sending that cookie by hand
+    // could write to any dog they named.
+    const owner = await makeUser({ role: 'exhibitor' });
+    const attacker = await makeUser({ role: 'exhibitor' });
+    const dog = await makeDog({ ownerId: owner.id });
+    authedAs(attacker);
+    vi.mocked(getImpersonatedUserId).mockResolvedValue(owner.id);
+
+    const res = await dogAutosavePOST(
+      req(dog.id, { svProfile: { workingTitle: 'IGP3' } }),
+      params(dog.id),
+    );
+    expect(res.status).toBe(403);
+
+    const profile = await testDb.query.dogSvProfile.findFirst({
+      where: eq(dogSvProfile.dogId, dog.id),
+    });
+    expect(profile?.workingTitle ?? null).toBeNull();
+  });
+
+  it('still works normally for an admin who is not viewing as anyone', async () => {
+    const admin = await makeUser({ role: 'admin' });
+    const ownDog = await makeDog({ ownerId: admin.id });
+    authedAs(admin);
+    vi.mocked(getImpersonatedUserId).mockResolvedValue(null);
+
+    const res = await dogAutosavePOST(
+      req(ownDog.id, { svProfile: { workingTitle: 'HGH' } }),
+      params(ownDog.id),
+    );
+    expect(res.status).toBe(200);
   });
 });
