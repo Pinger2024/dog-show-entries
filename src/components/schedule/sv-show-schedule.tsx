@@ -672,9 +672,15 @@ function SvClassificationPage({
 
   // Most Promising Young Dog/Bitch is judged from the young-class winners
   // (Minor Puppy → Junior — NOT Baby Puppy); Regional Sieger/Siegerin from
-  // the Adult + Working winners. Derive the class-number ranges from the
+  // YEARLING, Adult and Working. Derive the class-number ranges from the
   // actual numbering so the footer note can't drift when Baby Puppy is
   // present/absent or the card changes (Amanda 2026-05-28).
+  //
+  // Yearling was missing until 2026-08-23, so this footer printed "Cl. 11 – 14"
+  // while the Awards box on the SAME page said "From Yearling to Working class
+  // winners" — one rule stated twice, disagreeing, in one document. Mandy spotted
+  // the footer. Keep the two in step: the Awards descriptions above are the
+  // wording, this is the numbering, and they must always describe the same set.
   const rangeFor = (names: string[]): string | null => {
     const nums = breedClasses
       .filter((c) => names.includes(c.name))
@@ -685,7 +691,7 @@ function SvClassificationPage({
     return lo === hi ? `Cl. ${lo}` : `Cl. ${lo} – ${hi}`;
   };
   const youngRange = rangeFor(['Minor Puppy', 'Puppy', 'Junior']);
-  const siegerRange = rangeFor(['Adult', 'Working']);
+  const siegerRange = rangeFor(['Yearling', 'Adult', 'Working']);
 
   return (
     <Page size="A5" style={ss.page}>
