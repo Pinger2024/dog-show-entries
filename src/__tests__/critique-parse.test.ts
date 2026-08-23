@@ -293,3 +293,92 @@ describe('parseCritiqueDocument — numbered class headings (schedule style)', (
     expect(blocks.filter((b) => b.kind === 'critique')).toHaveLength(2);
   });
 });
+
+/**
+ * The second layout, from the BAGSD 2026 document (Mandy 2026-08-22).
+ *
+ * This judge writes no comma after the ordinal, names no owner, puts the
+ * breeding inline in brackets and runs the critique straight on from it. Under
+ * the original parser NOTHING matched — all 46 placements came through as
+ * unrecognised text and every one was matched by hand.
+ */
+describe('placement layout — no comma, no owner, inline breeding', () => {
+  const classList = gsdClassList();
+
+  it('reads the ordinal, dog, breeding and critique from a single line', () => {
+    const doc = [
+      'VETERAN DOG',
+      '1st GAYVILLE VARINKA WITH TRIMIKA (Gary vom Huhnegrab x Paris vom Simpor) 8 year old female, large black and gold with very good proportions. AWARDED BEST VETERAN',
+    ].join('\n');
+
+    const { blocks } = parseCritiqueDocument(doc, classList);
+    const placements = blocks.filter((b) => b.kind === 'critique');
+    expect(placements).toHaveLength(1);
+    const p = placements[0];
+    expect(p.position).toBe(1);
+    expect(p.dogNameCleaned).toBe('GAYVILLE VARINKA WITH TRIMIKA');
+    expect(p.pedigreeRaw).toBe('Gary vom Huhnegrab x Paris vom Simpor');
+    expect(p.critiqueText).toContain('8 year old female');
+    expect(p.critiqueText).toContain('AWARDED BEST VETERAN');
+    // The breeding must not be left inside the dog's name.
+    expect(p.dogNameCleaned).not.toContain('(');
+    expect(p.matchedShowClassId).not.toBeNull();
+  });
+
+  it('still reads the original layout — comma, owner, breeding on its own line', () => {
+    const doc = [
+      'VETERAN DOG',
+      '1st, Mrs J Smith – Rex vom Haus',
+      '(Sire vom X x Dam vom Y)',
+      'A powerful dog with excellent movement.',
+    ].join('\n');
+
+    const { blocks } = parseCritiqueDocument(doc, classList);
+    const p = blocks.filter((b) => b.kind === 'critique')[0];
+    expect(p.position).toBe(1);
+    expect(p.ownersRaw).toBe('Mrs J Smith');
+    expect(p.dogNameCleaned).toBe('Rex vom Haus');
+    expect(p.pedigreeRaw).toBe('Sire vom X x Dam vom Y');
+    expect(p.critiqueText).toBe('A powerful dog with excellent movement.');
+  });
+
+  it('does not mistake a parenthetical aside in the prose for breeding', () => {
+    const doc = [
+      'OPEN DOG',
+      '1st HANDSOME LAD (a lovely mover) covered the ground well.',
+    ].join('\n');
+
+    const p = parseCritiqueDocument(doc, classList).blocks.filter((b) => b.kind === 'critique')[0];
+    // No " x " or " - " inside the brackets, so it is prose, not a pedigree.
+    expect(p.pedigreeRaw).toBeNull();
+  });
+
+  it('does not read ordinary prose beginning with a number as a placement', () => {
+    const doc = [
+      'OPEN DOG',
+      '1st REAL DOG (Sire x Dam) good dog.',
+      '2 year old male shown in good condition.',
+    ].join('\n');
+
+    const placements = parseCritiqueDocument(doc, classList).blocks.filter((b) => b.kind === 'critique');
+    expect(placements).toHaveLength(1);
+    expect(placements[0].critiqueText).toContain('2 year old male');
+  });
+});
+
+describe('mixed-sex class headings', () => {
+  it('matches a mixed class however the judge heads it', () => {
+    // toClassList expands a sex-null class into both sexes; the judge heads it
+    // "VETERAN MIXED CLASS" or just "VETERAN".
+    const mixed: ClassListEntry[] = [
+      { showClassId: 'sc-vet', className: 'Veteran', sex: 'dog' },
+      { showClassId: 'sc-vet', className: 'Veteran', sex: 'bitch' },
+    ];
+    for (const heading of ['VETERAN MIXED CLASS', 'VETERAN', 'Veteran Mixed']) {
+      const doc = [heading, '1st A DOG (Sire x Dam) nice type.'].join('\n');
+      const p = parseCritiqueDocument(doc, mixed).blocks.filter((b) => b.kind === 'critique')[0];
+      expect(p, `heading: ${heading}`).toBeDefined();
+      expect(p.matchedShowClassId, `heading: ${heading}`).toBe('sc-vet');
+    }
+  });
+});

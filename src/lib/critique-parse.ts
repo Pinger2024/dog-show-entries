@@ -53,7 +53,24 @@ function isNoiseLine(line: string): boolean {
 }
 
 // ── Placement-line detection: "<ordinal>, <OWNERS> <dash> <DOG NAME>" ──
-const PLACEMENT_RE = /^(\d+)(?:st|nd|rd|th),\s*(.+)$/;
+// Judges write a placement in more than one way. The comma after the ordinal
+// was mandatory here until 2026-08-23, which meant a judge who wrote
+// "1st GAYVILLE VARINKA WITH TRIMIKA (...)" — no comma, no owner — had NOTHING
+// recognised: all 46 placements in the BAGSD 2026 document fell through as
+// unrecognised text and Mandy matched every one by hand.
+//
+// Now the ordinal may be followed by a comma OR simply a space. Deliberately no
+// looser than that: the separator must still be present, so ordinary prose
+// starting with a number ("2 year old male...") cannot be read as a placement.
+const PLACEMENT_RE = /^(\d+)(?:st|nd|rd|th)(?:,\s*|\s+)(.+)$/;
+
+// A pedigree written INLINE inside the placement line rather than on its own
+// line beneath it — "DOG NAME (Sire vom X x Dam vom Y) then the critique...".
+// Requires an " x " or " - " separator inside the brackets, so an ordinary
+// parenthetical aside in the prose ("(a lovely mover)") is never mistaken for
+// breeding. Captures what precedes it, the breeding itself, and any prose that
+// runs on after the closing bracket.
+const INLINE_PEDIGREE_RE = /^(.*?)\s*\(([^()]*(?:\s+x\s+|\s+-\s+)[^()]*)\)\s*(.*)$/i;
 
 // Owner/dog separator: an en dash or hyphen, always surrounded by single
 // spaces. Owners can contain commas/ampersands but never a spaced dash in
@@ -70,7 +87,11 @@ function splitOwnersAndDog(rest: string): { ownersRaw: string; dogRaw: string } 
     lastIndex = m.index;
     lastLen = m[0].length;
   }
-  if (lastIndex === -1) return { ownersRaw: rest.trim(), dogRaw: '' };
+  // No spaced dash at all: the judge has named the dog and no owner. Treat the
+  // whole segment as the DOG, not as owners — a placement that names only an
+  // owner and no dog is of no use to anyone, whereas "1st ROSEBUD EDIE" is the
+  // common shape once owners are omitted (BAGSD 2026).
+  if (lastIndex === -1) return { ownersRaw: '', dogRaw: rest.trim() };
   return {
     ownersRaw: rest.slice(0, lastIndex).trim(),
     dogRaw: rest.slice(lastIndex + lastLen).trim(),
@@ -149,6 +170,16 @@ function buildHeaderLookup(classList: ClassListEntry[]): Map<string, ClassListEn
   for (const entry of classList) {
     const sexLabel = entry.sex === 'dog' ? 'Dog' : 'Bitch';
     lookup.set(normalizeHeaderText(`${entry.className} ${sexLabel}`), entry);
+    // A mixed-sex class has no Dog/Bitch to name, and judges head it however
+    // they like — "VETERAN", "VETERAN MIXED CLASS" (BAGSD 2026). toClassList
+    // expands such a class into BOTH sexes, so registering the bare name and
+    // the "mixed class" phrasing here is enough for either to resolve. First
+    // writer wins, which is the dog entry — harmless, since both point at the
+    // same show_class.
+    for (const alias of [entry.className, `${entry.className} Mixed Class`, `${entry.className} Mixed`]) {
+      const key = normalizeHeaderText(alias);
+      if (!lookup.has(key)) lookup.set(key, entry);
+    }
   }
   return lookup;
 }
@@ -253,11 +284,27 @@ export function parseCritiqueDocument(
     const pm = PLACEMENT_RE.exec(line);
     if (pm) {
       const position = parseInt(pm[1], 10);
-      const { ownersRaw, dogRaw } = splitOwnersAndDog(pm[2]);
+
+      // The remainder may carry the breeding and the critique inline —
+      // "DOG (Sire x Dam) 8 year old female, ..." — or be just the dog, with
+      // the breeding on the next line and the prose below that. Peel off an
+      // inline pedigree first so it never ends up inside the dog's name.
+      let remainder = pm[2];
+      let pedigreeRaw: string | null = null;
+      let inlineProse = '';
+      const inline = INLINE_PEDIGREE_RE.exec(remainder);
+      if (inline) {
+        remainder = inline[1].trim();
+        pedigreeRaw = inline[2].trim();
+        inlineProse = inline[3].trim();
+      }
+
+      const { ownersRaw, dogRaw } = splitOwnersAndDog(remainder);
       i++;
 
-      let pedigreeRaw: string | null = null;
-      if (i < content.length) {
+      // Breeding on its own line beneath, the original layout. Only consulted
+      // when it wasn't already found inline.
+      if (pedigreeRaw === null && i < content.length) {
         const pedMatch = PEDIGREE_LINE_RE.exec(content[i]);
         if (pedMatch) {
           pedigreeRaw = pedMatch[1].trim();
@@ -267,7 +314,9 @@ export function parseCritiqueDocument(
 
       // Consume critique prose until the next header (recognised or
       // header-shaped) or placement line.
-      const proseLines: string[] = [];
+      // Prose that ran on after the inline pedigree comes first, then any
+      // further lines beneath, so both layouts produce one critique.
+      const proseLines: string[] = inlineProse ? [inlineProse] : [];
       while (i < content.length && !isAnyHeaderLine(content[i]) && !PLACEMENT_RE.test(content[i])) {
         proseLines.push(content[i]);
         i++;
