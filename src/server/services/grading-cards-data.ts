@@ -104,20 +104,30 @@ export async function loadGradingCardsData(
   // implementation rather than a copy per document.
   const judgeForClass = resolveJudgeForClass(judgeAssignments);
 
-  // Primary owner name per dog (name only — no address, per the secretary's
-  // explicit sign-off: grading cards never show an owner's address).
+  // EVERY owner's name per dog, in sort order (names only — no address, per
+  // the secretary's explicit sign-off: grading cards never show an owner's
+  // address). This used to keep just the primary owner, so a jointly-owned
+  // dog's card named one person — Mandy caught "Paul Williams" alone on
+  // Wakematt's Morty at Starkwill, owned by Williams AND Starkey (2026-08-24).
   const dogIds = [...new Set(entries.map((e) => e.dogId).filter((id): id is string => Boolean(id)))];
-  const ownerNameByDog = new Map<string, string>();
+  const ownerNamesByDog = new Map<string, string[]>();
   if (dogIds.length > 0) {
     const owners = await db.query.dogOwners.findMany({
       where: inArray(schema.dogOwners.dogId, dogIds),
       orderBy: (t, { asc }) => [asc(t.sortOrder)],
     });
     for (const o of owners) {
-      const existing = ownerNameByDog.get(o.dogId);
-      if (!existing || o.isPrimary) ownerNameByDog.set(o.dogId, o.ownerName);
+      const names = ownerNamesByDog.get(o.dogId) ?? [];
+      names.push(o.ownerName);
+      ownerNamesByDog.set(o.dogId, names);
     }
   }
+  // "A" · "A & B" · "A, B & C" — natural English list of the joint owners.
+  const joinOwnerNames = (names: string[]): string => {
+    const cased = names.map(smartOwnerTitleCase).filter(Boolean);
+    if (cased.length <= 1) return cased[0] ?? '';
+    return `${cased.slice(0, -1).join(', ')} & ${cased[cased.length - 1]}`;
+  };
 
   // ONE card per dog: a dog can have more than one entries row (multiple
   // classes) even though SV/WUSV is "one class per dog" in the common case —
@@ -164,7 +174,7 @@ export async function loadGradingCardsData(
       breederName: e.dog.breederName ?? '',
       // As-typed owner names ("mandy mcateer") print on the card — same
       // Title Case treatment the catalogue gives them (Mandy 2026-08-24).
-      ownerName: smartOwnerTitleCase(e.dogId ? (ownerNameByDog.get(e.dogId) ?? '') : ''),
+      ownerName: joinOwnerNames(e.dogId ? (ownerNamesByDog.get(e.dogId) ?? []) : []),
       sex: sexLabel(e.dog.sex),
       coat: coatLabel(e.dog.coatType),
       className,

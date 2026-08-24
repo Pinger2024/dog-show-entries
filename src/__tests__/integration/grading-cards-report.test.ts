@@ -233,4 +233,37 @@ describe('GET /api/reports/[showId]/grading-cards', () => {
     expect(data!.entries[0].regNumber).toBe('BC0926943');
     expect(data!.entries[0].ownerName).toBe('Mandy Mcateer');
   });
+
+  it('names EVERY owner on the card, not just the primary (Wakematt\'s Morty, Mandy 2026-08-24)', async () => {
+    // Paul Williams & Claire Starkey jointly own the dog; the card said just
+    // "Paul Williams". Joint owners join in sort order — "A & B", "A, B & C".
+    const { org, breed } = await makeSecretaryWithOrgAndBreed();
+    const exhibitor = await makeUser({ role: 'exhibitor' });
+    const show = await makeShow({
+      organisationId: org.id,
+      showRuleset: 'wusv',
+      showScope: 'single_breed',
+      breedId: breed.id,
+      status: 'entries_open',
+    });
+    const workingDef = await makeClassDef({ name: 'SV Working', type: 'sv_age' });
+    const showClass = await makeShowClass({ showId: show.id, classDefinitionId: workingDef.id, breedId: breed.id });
+
+    const dog = await makeDog({
+      ownerId: exhibitor.id,
+      breedId: breed.id,
+      registeredName: "Wakematt's Morty at Starkwill",
+    });
+    await testDb.insert(schema.dogOwners).values([
+      { dogId: dog.id, ownerName: 'Paul Williams', ownerAddress: '1 St', ownerEmail: 'p@test.local', isPrimary: true, sortOrder: 0 },
+      { dogId: dog.id, ownerName: 'Claire Starkey', ownerAddress: '1 St', ownerEmail: 'c@test.local', isPrimary: false, sortOrder: 1 },
+    ]);
+
+    const order = await makeOrder({ showId: show.id, exhibitorId: exhibitor.id, status: 'paid' });
+    const e = await entry({ showId: show.id, exhibitorId: exhibitor.id, dogId: dog.id, orderId: order.id, catalogueNumber: '1' });
+    await entryClass(e.id, showClass.id);
+
+    const data = await loadGradingCardsData(testDb, show.id);
+    expect(data!.entries[0].ownerName).toBe('Paul Williams & Claire Starkey');
+  });
 });
