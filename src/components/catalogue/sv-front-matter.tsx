@@ -17,11 +17,11 @@
  * tonal wash sitting behind the content so the document reads as one
  * continuous design from cover to last entry.
  */
-import { Page, Text, View } from '@react-pdf/renderer';
+import { Image, Page, Text, View } from '@react-pdf/renderer';
 import { TonalWash } from '@/components/sv-pdf/cover-atoms';
 import { SV, ss, SV_FONTS } from '@/components/schedule/shared/sv-styles';
 import { Numero } from '@/components/schedule/shared/numero';
-import type { CatalogueShowInfo, ShowClassInfo } from './catalogue-types';
+import type { CatalogueShowInfo, ShowClassInfo, ShowSponsorInfo } from './catalogue-types';
 import { SV_AGE_ORDER } from '@/lib/class-labels';
 
 const PAGE_STYLE = {
@@ -65,9 +65,61 @@ function SectionTitle({ title }: { title: string }) {
 
 // ── PAGE 2 — ACKNOWLEDGEMENTS ────────────────────────────────────────────
 
+/**
+ * A show-tier sponsor's prominent billing block — logo (if one was fetched)
+ * above the custom title and sponsor name in serif display type, clearly
+ * larger than the joined-names line below it. Previously every sponsor,
+ * show-tier included, was flattened into that one small 8.5pt line with no
+ * logo — Mandy caught this proofing the North East GSD Regional catalogue,
+ * where the show sponsor (The Tripe Factory Sunderland) had a logo on file
+ * that never appeared (2026-08-24).
+ *
+ * `logoBuffer` is fetched server-side through the SSRF-guarded
+ * `fetchClubImage()` — never a bare URL handed to react-pdf — and is only
+ * set for the 'show' tier, so this is the one place it's read. A missing
+ * buffer (no logo on file, fetch failed, or the host was blocked) degrades
+ * to the title + name alone.
+ */
+function ShowSponsorBilling({ sponsor }: { sponsor: ShowSponsorInfo }) {
+  return (
+    <View
+      style={{
+        alignItems: 'center',
+        backgroundColor: SV.accentSoft,
+        paddingVertical: 10,
+        paddingHorizontal: 12,
+        marginBottom: 8,
+      }}
+      wrap={false}
+    >
+      <Text style={[ss.eyebrow, { color: SV.accent, marginBottom: sponsor.logoBuffer ? 5 : 3 }]}>
+        {sponsor.customTitle ?? 'Official show sponsor'}
+      </Text>
+      {sponsor.logoBuffer ? (
+        // react-pdf resolves a raw Buffer locally (no network fetch of its
+        // own) — the `as unknown as string` cast only satisfies its
+        // (string | { data, format }) src type. Sized to the artwork's own
+        // aspect ratio via objectFit: contain, same idiom as the cover's
+        // ClubCrestSlot.
+        <Image
+          src={sponsor.logoBuffer as unknown as string}
+          style={{ maxWidth: 130, maxHeight: 46, objectFit: 'contain', marginBottom: 5 }}
+        />
+      ) : null}
+      <Text style={{ fontFamily: SV_FONTS.serif, fontSize: 16, color: SV.ink }}>
+        {sponsor.name}
+      </Text>
+    </View>
+  );
+}
+
 export function SvAcknowledgementsPage({ show }: { show: CatalogueShowInfo }) {
   const sponsors = show.showSponsors ?? [];
-  const namedSponsors = sponsors.filter((s) => s.name);
+  // Show-tier sponsors get the prominent billing block above; everyone else
+  // still runs together in the joined-names line. Excluded from that line
+  // here so a show-tier sponsor never appears twice on the page.
+  const showTierSponsors = sponsors.filter((s) => s.name && s.tier === 'show');
+  const namedSponsors = sponsors.filter((s) => s.name && s.tier !== 'show');
   const awardsLines = [
     'WUSV-GSDL-BRG Grading Cards for all classes',
     'Trophies for 1st place',
@@ -115,6 +167,9 @@ export function SvAcknowledgementsPage({ show }: { show: CatalogueShowInfo }) {
       {/* Thank-you message */}
       <View style={{ marginTop: 14 }}>
         <SectionTitle title="With grateful thanks" />
+        {showTierSponsors.map((sp, i) => (
+          <ShowSponsorBilling key={i} sponsor={sp} />
+        ))}
         <Text
           style={{
             fontFamily: SV_FONTS.serif,

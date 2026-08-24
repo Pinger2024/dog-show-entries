@@ -19,6 +19,7 @@ import type { MarkedResult, MarkedAchievement } from '@/components/catalogue/cat
 import React from 'react';
 import { sanitizeFilename } from '@/lib/slugify';
 import { authenticatePdfRequest, validateRasterLogoUrl, makePdfResponse } from '@/lib/pdf-utils';
+import { fetchClubImage } from '@/lib/safe-image-fetch';
 import { isShowDayReached } from '@/lib/date-utils';
 import { padPdfToMultiple, stripUnembeddedBase14Fonts } from '@/lib/pdf-pad';
 import { syncCatalogueNumbers } from '@/server/services/catalogue-numbering';
@@ -305,14 +306,21 @@ export async function GET(
     withholdFromPublication: entry.withholdFromPublication,
   }));
 
-  // Build show-level sponsor info for cover/front matter
-  const showSponsorInfos: ShowSponsorInfo[] = showSponsorRows.map((ss) => ({
+  // Build show-level sponsor info for cover/front matter. The show-tier
+  // sponsor's logo is embedded in the catalogue's "grateful thanks" billing
+  // block, fetched through the SSRF-guarded fetchClubImage() (never a bare
+  // fetch of a secretary-supplied URL) — a failed/blocked fetch resolves to
+  // null and the renderer degrades to a text-only billing block.
+  const showSponsorInfos: ShowSponsorInfo[] = await Promise.all(showSponsorRows.map(async (ss) => ({
     name: ss.sponsor.name,
     tier: ss.tier,
     logoUrl: ss.sponsor.logoUrl,
     website: ss.sponsor.website,
     customTitle: ss.customTitle,
-  }));
+    logoBuffer: ss.tier === 'show' && ss.sponsor.logoUrl
+      ? await fetchClubImage(ss.sponsor.logoUrl)
+      : null,
+  })));
 
   // Build all show classes list for rendering empty classes
   const allShowClasses: ShowClassInfo[] = showClassRows.map((sc) => ({

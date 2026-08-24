@@ -186,13 +186,23 @@ export async function generateCataloguePdf(
     }
   }
 
-  const showSponsorInfos = showSponsorRows.map((ss) => ({
+  // The show-tier sponsor gets its logo embedded in the catalogue's
+  // "grateful thanks" billing block — fetched through the SSRF-guarded
+  // fetchClubImage() (never a bare fetch of a secretary-supplied URL) so a
+  // malicious logo_url can't be used to probe internal network addresses.
+  // Only the 'show' tier renders a logo today, so that's the only tier
+  // fetched. A failed/blocked fetch resolves to null and the renderer
+  // degrades to a text-only billing block.
+  const showSponsorInfos = await Promise.all(showSponsorRows.map(async (ss) => ({
     name: ss.sponsor.name,
     tier: ss.tier,
     logoUrl: ss.sponsor.logoUrl,
     website: ss.sponsor.website,
     customTitle: ss.customTitle,
-  }));
+    logoBuffer: ss.tier === 'show' && ss.sponsor.logoUrl
+      ? await fetchClubImage(ss.sponsor.logoUrl)
+      : null,
+  })));
 
   const allShowClasses = showClassRows.map((sc) => ({
     className: sc.classDefinition?.name ?? 'Unknown Class',
