@@ -516,6 +516,10 @@ export function SvJudgesPage({ show }: { show: CatalogueShowInfo }) {
               <Text style={{ fontFamily: SV_FONTS.serif, fontSize: 14, color: SV.ink }}>
                 {name}
               </Text>
+              {/* No bio → just the name, deliberately. "Biography to follow."
+                  printed in a FINAL catalogue promises something that never
+                  arrives — Nikki Farley declined a bio for the NE Regional and
+                  the placeholder would have gone to print (Mandy 2026-08-24). */}
               {bio ? (
                 <Text
                   style={{
@@ -528,19 +532,7 @@ export function SvJudgesPage({ show }: { show: CatalogueShowInfo }) {
                 >
                   {bio}
                 </Text>
-              ) : (
-                <Text
-                  style={{
-                    fontFamily: SV_FONTS.serif,
-                    fontStyle: 'italic',
-                    fontSize: 8,
-                    color: SV.ink3,
-                    marginTop: 3,
-                  }}
-                >
-                  Biography to follow.
-                </Text>
-              )}
+              ) : null}
             </View>
           );
         })}
