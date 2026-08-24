@@ -66,11 +66,27 @@ export function svMissingRequirements(opts: {
    *  "make the registration number mandatory for SV shows". Omit (undefined)
    *  to skip the check for back-compat. */
   ownRegistrationNumber?: string | null;
+  /** Registration body (RKC / SV / IKC…) — required for regional entry, same
+   *  undefined-skips contract as ownRegistrationNumber. Mandy 2026-08-24: 15
+   *  dogs reached the NE Regional with it unset and the SV results
+   *  spreadsheet's Reg body column came out blank. Deliberately NOT required
+   *  when first registering a dog — only at regional entry. */
+  registrationBody?: string | null;
+  /** Microchip — required for regional entry (prints on the grading card and
+   *  the catalogue's entry line; GSDL CAS lookups key on reg + chip). Same
+   *  undefined-skips contract. */
+  microchipNumber?: string | null;
 }): string[] {
   const missing: string[] = [];
   if (!opts.coatType) missing.push('Coat type (Standard or Long Coat)');
   if (opts.ownRegistrationNumber !== undefined && blank(opts.ownRegistrationNumber)) {
     missing.push('Registration number');
+  }
+  if (opts.registrationBody !== undefined && blank(opts.registrationBody)) {
+    missing.push('Registration body (RKC, SV…)');
+  }
+  if (opts.microchipNumber !== undefined && blank(opts.microchipNumber)) {
+    missing.push('Microchip number');
   }
 
   const p = opts.pedigree;

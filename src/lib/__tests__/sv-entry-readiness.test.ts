@@ -67,6 +67,27 @@ describe('svMissingRequirements', () => {
       .toEqual([]);
   });
 
+  it('requires the registration body for a regional entry (Mandy 2026-08-24)', () => {
+    // 15 dogs reached the NE Regional catalogue with no registration body —
+    // the SV results spreadsheet has a Reg body column for every dog.
+    expect(svMissingRequirements({
+      coatType: 'stock', healthRequired: false, profile: null,
+      registrationBody: null,
+    })).toEqual(['Registration body (RKC, SV…)']);
+  });
+
+  it('requires the microchip number for a regional entry — it prints on the grading card', () => {
+    expect(svMissingRequirements({
+      coatType: 'stock', healthRequired: false, profile: null,
+      microchipNumber: '  ',
+    })).toEqual(['Microchip number']);
+  });
+
+  it('skips registration body and microchip when omitted (back-compat, same as own reg number)', () => {
+    expect(svMissingRequirements({ coatType: 'stock', healthRequired: false, profile: null }))
+      .toEqual([]);
+  });
+
   it('is empty when coat type is set and all health data is on file', () => {
     expect(svMissingRequirements({ coatType: 'stock', healthRequired: true, profile: full }))
       .toEqual([]);

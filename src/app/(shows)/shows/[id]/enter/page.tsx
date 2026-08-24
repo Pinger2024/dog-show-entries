@@ -1530,6 +1530,8 @@ export default function EnterShowPage() {
                 healthRequired: svHealthRequired,
                 profile: selectedDogSvProfile,
                 ownRegistrationNumber: selectedDog?.kcRegNumber,
+                registrationBody: selectedDog?.registrationBody,
+                microchipNumber: selectedDog?.microchipNumber,
                 pedigree: selectedDog
                   ? {
                       sireName: selectedDog.sireName,

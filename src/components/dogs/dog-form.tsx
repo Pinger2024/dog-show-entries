@@ -724,11 +724,13 @@ export function DogForm({ mode, defaultValues, dogId, svSection, returnTo, isReg
       // in step if the required set ever changes (Mandy 2026-07-12).
       if (isRegional) {
         const regionalRequired: Array<{
-          name: 'kcRegNumber' | 'coatType' | 'breederCity' | 'breederPostcode' | 'sireRegistrationNumber' | 'damRegistrationNumber';
+          name: 'kcRegNumber' | 'registrationBody' | 'microchipNumber' | 'coatType' | 'breederCity' | 'breederPostcode' | 'sireRegistrationNumber' | 'damRegistrationNumber';
           value: string | null | undefined;
           message: string;
         }> = [
           { name: 'kcRegNumber', value: data.kcRegNumber, message: "Your dog's registration number is required for regional shows" },
+          { name: 'registrationBody', value: data.registrationBody, message: 'The registration body (RKC, SV…) is required for regional shows' },
+          { name: 'microchipNumber', value: data.microchipNumber, message: 'The microchip number is required for regional shows' },
           { name: 'coatType', value: data.coatType, message: 'Coat type is required for regional shows' },
           { name: 'breederCity', value: data.breederCity, message: 'Breeder town/city is required for regional shows' },
           { name: 'breederPostcode', value: data.breederPostcode, message: 'Breeder postcode is required for regional shows' },
