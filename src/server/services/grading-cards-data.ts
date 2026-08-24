@@ -16,6 +16,7 @@ import * as schema from '@/server/db/schema';
 import { getPaidOrderIdsForShow } from '@/server/services/show-metrics';
 import { svCoatDisplayName } from '@/lib/class-labels';
 import { resolveJudgeForClass } from '@/lib/judge-resolution';
+import { formatRegNumber, smartOwnerTitleCase } from '@/components/catalogue/catalogue-utils';
 import type { GradingCardEntry, GradingCardsInfo } from '@/components/reports/grading-cards-pdf';
 
 export interface GradingCardsLoad {
@@ -157,11 +158,13 @@ export async function loadGradingCardsData(
       dogName: e.dog.registeredName,
       dob: safeDate(e.dog.dateOfBirth),
       microchipNumber: e.dog.microchipNumber ?? '',
-      regNumber: e.dog.kcRegNumber ?? '',
+      regNumber: formatRegNumber(e.dog.kcRegNumber),
       sireName: e.dog.sireName ?? '',
       damName: e.dog.damName ?? '',
       breederName: e.dog.breederName ?? '',
-      ownerName: e.dogId ? (ownerNameByDog.get(e.dogId) ?? '') : '',
+      // As-typed owner names ("mandy mcateer") print on the card — same
+      // Title Case treatment the catalogue gives them (Mandy 2026-08-24).
+      ownerName: smartOwnerTitleCase(e.dogId ? (ownerNameByDog.get(e.dogId) ?? '') : ''),
       sex: sexLabel(e.dog.sex),
       coat: coatLabel(e.dog.coatType),
       className,

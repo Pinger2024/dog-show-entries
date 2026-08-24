@@ -19,6 +19,15 @@ export function uppercaseName(name: string | null | undefined): string {
   return name.toUpperCase();
 }
 
+/** Registration numbers print UPPERCASE however the owner typed them —
+ *  "bc0926943" and "Bc0926943" both reached real print documents verbatim
+ *  (Mandy, grading cards + catalogue, 2026-08-24). One helper so the
+ *  catalogue, grading cards and SV results can't drift. */
+export function formatRegNumber(reg: string | null | undefined): string {
+  if (!reg) return '';
+  return reg.trim().toUpperCase();
+}
+
 /** Title Case a name (for sire/dam in "By [sire] ex [dam]" format) */
 export function titleCase(name: string | null | undefined): string {
   if (!name) return '';

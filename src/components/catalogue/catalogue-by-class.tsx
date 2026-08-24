@@ -3,7 +3,7 @@ import { Document, Page, View, Text, Image } from '@react-pdf/renderer';
 import { styles, C } from './catalogue-styles';
 import { CatalogueHeader } from './catalogue-header';
 import type { CatalogueEntry, CatalogueShowInfo, ClassSponsorshipInfo } from './catalogue-types';
-import { formatDobKC, titleCase, formatOwnerKC, formatRkcOwnerHeading, uppercaseName, buildSponsorLines, isJuniorHandlingClass, formatPedigreeSireDam, formatSvQualifications } from './catalogue-utils';
+import { formatDobKC, titleCase, formatOwnerKC, formatRegNumber, formatRkcOwnerHeading, uppercaseName, buildSponsorLines, isJuniorHandlingClass, formatPedigreeSireDam, formatSvQualifications } from './catalogue-utils';
 import { CoverPage, FrontMatterPage, TrophiesPage, ExhibitorIndexPage, BestsWriteInPage, NotForCompetitionPage } from './catalogue-front-matter';
 import {
   SvAcknowledgementsPage,
@@ -248,7 +248,7 @@ export function renderSvEntry(
   // (Mandy 2026-06-14 — fewer lines per dog, smaller catalogue pages).
   // Hips/Elbows always show (formatHealthSide returns "Not yet required").
   const vitals: Array<{ label: string; value: string }> = [];
-  if (entry.kcRegNumber) vitals.push({ label: 'Reg', value: entry.kcRegNumber });
+  if (entry.kcRegNumber) vitals.push({ label: 'Reg', value: formatRegNumber(entry.kcRegNumber) });
   if (dob) vitals.push({ label: 'DOB', value: dob });
   vitals.push({ label: 'Hips', value: hip });
   vitals.push({ label: 'Elbows', value: elbow });

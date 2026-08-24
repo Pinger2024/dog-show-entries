@@ -191,4 +191,46 @@ describe('GET /api/reports/[showId]/grading-cards', () => {
     expect(data!.entries[0].judgeName).toBe('Nikki Farley');
     expect(data!.entries[0].judgeName).not.toBe('Mandy McAteer');
   });
+
+  it('uppercases the reg number and title-cases the owner name (Mandy 2026-08-24)', async () => {
+    // Owners type reg numbers and their own names however they like —
+    // "bc0926943" and "mandy mcateer" both reached real grading cards
+    // verbatim. Reg numbers print uppercase; owner names go through
+    // smartOwnerTitleCase (which preserves already-mixed-case McAteer).
+    const { org, breed } = await makeSecretaryWithOrgAndBreed();
+    const exhibitor = await makeUser({ role: 'exhibitor' });
+    const show = await makeShow({
+      organisationId: org.id,
+      showRuleset: 'wusv',
+      showScope: 'single_breed',
+      breedId: breed.id,
+      status: 'entries_open',
+    });
+    const workingDef = await makeClassDef({ name: 'SV Working', type: 'sv_age' });
+    const showClass = await makeShowClass({ showId: show.id, classDefinitionId: workingDef.id, breedId: breed.id });
+
+    const dog = await makeDog({
+      ownerId: exhibitor.id,
+      breedId: breed.id,
+      registeredName: 'Fluffycox Von Shotaan',
+      kcRegNumber: 'bc0926943',
+    });
+    await testDb.insert(schema.dogOwners).values({
+      dogId: dog.id,
+      ownerName: 'mandy mcateer',
+      ownerAddress: '1 High St',
+      ownerEmail: 'owner@test.local',
+      isPrimary: true,
+      sortOrder: 0,
+    });
+
+    const order = await makeOrder({ showId: show.id, exhibitorId: exhibitor.id, status: 'paid' });
+    const e = await entry({ showId: show.id, exhibitorId: exhibitor.id, dogId: dog.id, orderId: order.id, catalogueNumber: '1' });
+    await entryClass(e.id, showClass.id);
+
+    const data = await loadGradingCardsData(testDb, show.id);
+    expect(data).not.toBeNull();
+    expect(data!.entries[0].regNumber).toBe('BC0926943');
+    expect(data!.entries[0].ownerName).toBe('Mandy Mcateer');
+  });
 });

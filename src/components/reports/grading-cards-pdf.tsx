@@ -186,7 +186,7 @@ function InsidePage({ info, entry }: { info: GradingCardsInfo; entry: GradingCar
           <DetailRow label="Name of exhibit" value={entry.dogName} />
           <DetailRow label="DOB" value={entry.dob} />
           <DetailRow label="Microchip no" value={entry.microchipNumber} />
-          <DetailRow label="KC / SV Reg no" value={entry.regNumber} />
+          <DetailRow label="RKC / SV Reg no" value={entry.regNumber} />
           <DetailRow label="Sire" value={entry.sireName} />
           <DetailRow label="Dam" value={entry.damName} />
           <DetailRow label="Breeder" value={entry.breederName} />

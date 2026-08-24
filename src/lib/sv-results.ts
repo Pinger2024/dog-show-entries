@@ -25,6 +25,7 @@
  */
 
 import { SV_AGE_ORDER, svDisplayAge } from './class-labels';
+import { formatRegNumber } from '@/components/catalogue/catalogue-utils';
 
 export type SvCoat = 'stock' | 'long_stock';
 
@@ -683,7 +684,7 @@ export function buildSvResultsXlsxRows(
           dogAdditionalAffix: dogNm.additionalAffix,
           dogAffix: dogNm.affix,
           registrationBody: regBody(dog?.registrationBody ?? null, dog?.registrationBodyOther ?? null),
-          registrationNumber: dog?.kcRegNumber ?? '',
+          registrationNumber: formatRegNumber(dog?.kcRegNumber),
           dateOfBirth: dog?.dateOfBirth ?? '',
           microchip: dog?.microchipNumber ?? '',
           sireName: sireNm.name,
