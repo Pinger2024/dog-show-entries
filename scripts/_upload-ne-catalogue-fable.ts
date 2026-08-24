@@ -6,7 +6,7 @@ import { readFileSync } from 'fs';
 import { randomUUID } from 'crypto';
 import { uploadToR2, getPublicUrl } from '../src/server/services/storage';
 const buf = readFileSync('/private/tmp/claude-501/-Users-michaeljames-Projects-dog-show-entries/c809a988-5136-48b1-9c06-4ae192b27bd2/scratchpad/ne-final-postclose.pdf');
-const key = `print-files/ne-regional-catalogue-DEFINITIVE-v5-${randomUUID().slice(0, 8)}.pdf`;
+const key = `print-files/ne-regional-catalogue-DEFINITIVE-v6-${randomUUID().slice(0, 8)}.pdf`;
 uploadToR2(key, buf, 'application/pdf').then(() => {
   console.log(getPublicUrl(key));
   process.exit(0);

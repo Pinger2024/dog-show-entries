@@ -537,6 +537,12 @@ export function SvJudgesPage({ show }: { show: CatalogueShowInfo }) {
       <View style={{ marginTop: 14 }}>
         {judgeNames.map((name, i) => {
           const bio = bios[name];
+          // Judge photos have always printed on the RKC front matter; this
+          // page ignored show.judgePhotos until both NE Regional judges
+          // uploaded theirs and neither appeared (Mandy 2026-08-24). A
+          // 56pt circle, objectFit cover so portrait and landscape uploads
+          // both fill it — the RKC page's treatment, scaled to this layout.
+          const photoUrl = show.judgePhotos?.[name];
           return (
             <View
               key={`${name}-${i}`}
@@ -544,9 +550,19 @@ export function SvJudgesPage({ show }: { show: CatalogueShowInfo }) {
                 paddingVertical: 8,
                 borderTopWidth: i === 0 ? 1 : 0.5,
                 borderTopColor: i === 0 ? SV.ink : SV.rule,
+                flexDirection: 'row',
+                alignItems: 'flex-start',
+                gap: 10,
               }}
               wrap={false}
             >
+              {photoUrl ? (
+                <Image
+                  src={photoUrl}
+                  style={{ width: 56, height: 56, borderRadius: 28, objectFit: 'cover', marginTop: 2 }}
+                />
+              ) : null}
+              <View style={{ flex: 1 }}>
               <Text style={{ fontFamily: SV_FONTS.serif, fontSize: 14, color: SV.ink }}>
                 {name}
               </Text>
@@ -567,6 +583,7 @@ export function SvJudgesPage({ show }: { show: CatalogueShowInfo }) {
                   {bio}
                 </Text>
               ) : null}
+              </View>
             </View>
           );
         })}

@@ -24,6 +24,7 @@ vi.mock('@react-pdf/renderer', () => ({
   Image: ({ src }: { src?: unknown }) =>
     React.createElement('span', {
       'data-pdf-image': Buffer.isBuffer(src) ? 'buffer' : typeof src === 'string' ? 'string' : 'none',
+      'data-src': typeof src === 'string' ? src : undefined,
     }),
   Link: ({ children }: { children?: React.ReactNode }) =>
     React.createElement('a', null, children),
@@ -38,7 +39,7 @@ vi.mock('@react-pdf/renderer', () => ({
   },
 }));
 
-import { SvAcknowledgementsPage } from '@/components/catalogue/sv-front-matter';
+import { SvAcknowledgementsPage, SvJudgesPage } from '@/components/catalogue/sv-front-matter';
 import type { CatalogueShowInfo, ShowSponsorInfo } from '@/components/catalogue/catalogue-types';
 
 function baseShow(overrides: Partial<CatalogueShowInfo> = {}): CatalogueShowInfo {
@@ -148,5 +149,32 @@ describe('SV catalogue acknowledgements — show-tier sponsor billing (Mandy 202
 
   it('renders nothing extra when there is no welcome note', () => {
     expect(() => renderAcknowledgements(baseShow({ welcomeNote: undefined }))).not.toThrow();
+  });
+});
+
+describe('SvJudgesPage — judge photos', () => {
+  const judgesShow = (photos?: Record<string, string>) =>
+    baseShow({
+      judgesByBreedName: { 'German Shepherd Dog': 'Nikki Farley' },
+      judgeDisplayList: ['Junior Handling — Mandy McAteer'],
+      judgeBios: { 'Mandy McAteer': 'Thirty years in the breed.' },
+      judgePhotos: photos,
+    } as Partial<CatalogueShowInfo>);
+
+  it('prints each judge\'s photo beside their name (Mandy 2026-08-24 — both uploaded, neither printed)', () => {
+    // The RKC front matter has always shown judge photos; the SV judges page
+    // ignored show.judgePhotos entirely — third front-matter drift today.
+    const html = renderToStaticMarkup(
+      SvJudgesPage({ show: judgesShow({ 'Nikki Farley': 'https://x/nikki.jpg', 'Mandy McAteer': 'https://x/mandy.jpg' }) }) as React.ReactElement,
+    );
+    expect(html).toContain('data-src="https://x/nikki.jpg"');
+    expect(html).toContain('data-src="https://x/mandy.jpg"');
+    expect(html).toMatch(/Nikki Farley/);
+    expect(html).toMatch(/Mandy McAteer/);
+  });
+
+  it('renders no photo for a judge without one (the page logo is not a judge photo)', () => {
+    const html = renderToStaticMarkup(SvJudgesPage({ show: judgesShow(undefined) }) as React.ReactElement);
+    expect(html).not.toContain('data-src="https://x/');
   });
 });
