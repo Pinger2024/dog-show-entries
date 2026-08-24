@@ -660,7 +660,7 @@ export function DogForm({ mode, defaultValues, dogId, svSection, returnTo, isReg
     // "At least one owner" and "up to 4" are enforced here rather than in
     // the schema — see the comment above dogFormSchema for why. Checked for
     // both modes: the UI already blocks removing Owner 1 and hides "Add
-    // Joint Owner" past 4, so these are a backstop, not the primary gate.
+    // Joint Owner" past 10, so these are a backstop, not the primary gate.
     if (!data.owners || data.owners.length === 0) {
       form.setError('owners', {
         type: 'manual',
@@ -669,12 +669,12 @@ export function DogForm({ mode, defaultValues, dogId, svSection, returnTo, isReg
       toast.error('Please add at least one owner');
       return;
     }
-    if (data.owners.length > 4) {
+    if (data.owners.length > 10) {
       form.setError('owners', {
         type: 'manual',
-        message: 'Up to 4 owners are allowed',
+        message: 'Up to 10 owners are allowed',
       });
-      toast.error('Up to 4 owners are allowed');
+      toast.error('Up to 10 owners are allowed');
       return;
     }
 
@@ -1568,14 +1568,14 @@ export function DogForm({ mode, defaultValues, dogId, svSection, returnTo, isReg
                   <strong>You&apos;re already saved as Owner 1.</strong> If the dog
                   is jointly owned with a partner, family member or co-breeder,
                   tap <em>Add Joint Owner</em> below — every name will appear
-                  together on the show catalogue. Up to 4 owners.
+                  together on the show catalogue.
                 </>
               ) : (
                 <>
                   These names appear on the show catalogue exactly as
                   written — one entry per person. Correct a name below, or
                   tap <em>Add Joint Owner</em> to split a joint entry into
-                  separate people. Up to 4 owners.
+                  separate people.
                 </>
               )}
             </CardDescription>
@@ -1738,7 +1738,7 @@ export function DogForm({ mode, defaultValues, dogId, svSection, returnTo, isReg
               </div>
             ))}
 
-            {ownerFields.length < 4 && (
+            {ownerFields.length < 10 && (
               <div className="flex flex-wrap gap-2">
                 <Button
                   type="button"

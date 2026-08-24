@@ -158,7 +158,37 @@ describe('dogs.update — editing a dog\'s saved owners', () => {
     expect(owners[0]?.ownerName).toBe('Real Owner');
   });
 
-  it('rejects more than 4 owners', async () => {
+  it('accepts five owners — real dog, real cap bug (Fluffycox Von Shotaan, 2026-08-24)', async () => {
+    // The old "up to 4" cap existed only on update (create never had it) and
+    // matched no RKC rule — Mandy hit it editing a genuinely five-owned dog.
+    const exhibitor = await makeUser({ role: 'exhibitor' });
+    const breed = await makeBreed();
+    const caller = createTestCaller(exhibitor);
+    const dog = await caller.dogs.create({
+      registeredName: 'Fluffycox Von Shotaan',
+      breedId: breed.id,
+      sex: 'dog',
+      dateOfBirth: '2024-01-01',
+      ...pedigree,
+      owners: [{ ownerName: 'Owner One', ownerAddress: '1 St', ownerEmail: 'o1@test.local', isPrimary: true }],
+    });
+
+    await caller.dogs.update({
+      id: dog.id,
+      owners: Array.from({ length: 5 }, (_, i) => ({
+        ownerName: `Owner ${i + 1}`,
+        ownerAddress: `${i + 1} St`,
+        ownerEmail: `o${i + 1}@test.local`,
+        isPrimary: i === 0,
+      })),
+    });
+
+    const owners = await loadOwners(dog.id);
+    expect(owners).toHaveLength(5);
+    expect(owners.map((o) => o.sortOrder)).toEqual([0, 1, 2, 3, 4]);
+  });
+
+  it('rejects more than 10 owners (sanity bound, not a domain rule)', async () => {
     const exhibitor = await makeUser({ role: 'exhibitor' });
     const breed = await makeBreed();
     const caller = createTestCaller(exhibitor);
@@ -174,7 +204,7 @@ describe('dogs.update — editing a dog\'s saved owners', () => {
     await expect(
       caller.dogs.update({
         id: dog.id,
-        owners: Array.from({ length: 5 }, (_, i) => ({
+        owners: Array.from({ length: 11 }, (_, i) => ({
           ownerName: `Owner ${i + 1}`,
           ownerAddress: `${i + 1} St`,
           ownerEmail: `o${i + 1}@test.local`,

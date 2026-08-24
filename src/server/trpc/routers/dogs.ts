@@ -441,7 +441,10 @@ export const dogsRouter = createTRPCRouter({
           ownerEmail: z.string().email(),
           ownerPhone: z.string().optional(),
           isPrimary: z.boolean().default(false),
-        })).min(1, 'At least one owner with name and address is required'),
+        }))
+          .min(1, 'At least one owner with name and address is required')
+          // Same sanity bound as update — see the comment there.
+          .max(10, 'Up to 10 owners are allowed'),
       })
     )
     .mutation(async ({ ctx, input }) => {
@@ -590,7 +593,11 @@ export const dogsRouter = createTRPCRouter({
           isPrimary: z.boolean().default(false),
         }))
           .min(1, 'At least one owner with name and address is required')
-          .max(4, 'Up to 4 owners are allowed')
+          // Sanity bound only, NOT a domain rule — the RKC doesn't cap joint
+          // owners at anything Remi should second-guess. The old max(4)
+          // matched no rule and blocked Mandy saving a genuinely five-owned
+          // dog (Fluffycox Von Shotaan, 2026-08-24). Create has never capped.
+          .max(10, 'Up to 10 owners are allowed')
           .optional(),
       })
     )
