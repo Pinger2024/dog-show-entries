@@ -1,9 +1,25 @@
 import sharp from 'sharp';
+import resolveImage from '@react-pdf/image';
 
 // A landscape advert rotated 90° anticlockwise puts its top edge on the LEFT of
 // the portrait page, so the reader turns the booklet clockwise to read it — the
 // usual convention for landscape adverts in a portrait-bound programme.
 const ROTATE_LANDSCAPE_DEG = 270;
+
+/**
+ * Can react-pdf actually embed these bytes? Its bundled JPEG reader rejects
+ * some real-world JPEGs (e.g. "Unknown version 49664") and the renderer then
+ * silently drops the image — the page still renders, just blank. Asking its
+ * own resolver is the only reliable predicate: progressive-ness alone isn't
+ * it (most progressive JPEGs embed fine).
+ */
+async function reactPdfCanEmbed(buffer: Buffer): Promise<boolean> {
+  try {
+    return Boolean(await resolveImage(buffer, { cache: false }));
+  } catch {
+    return false;
+  }
+}
 
 /**
  * Prepare catalogue/schedule adverts for rendering. Catalogues print as uniform
@@ -30,7 +46,15 @@ export async function prepareAdvertsForRender<T extends { imageUrl: string | nul
       const oriented = await sharp(buf).rotate().toBuffer();
       const meta = await sharp(oriented).metadata();
       if (!meta.width || !meta.height || meta.width <= meta.height) {
-        return ad; // portrait or square — leave as-is
+        // Portrait or square — the original URL is normally used untouched,
+        // but only if react-pdf can actually embed those bytes; otherwise
+        // re-encode the SAME pixels as a full-resolution PNG (lossless —
+        // print artwork is never downsampled or recompressed lossily here).
+        if (await reactPdfCanEmbed(buf)) {
+          return ad;
+        }
+        const safe = await sharp(oriented).png().toBuffer();
+        return { ...ad, imageUrl: `data:image/png;base64,${safe.toString('base64')}` };
       }
       const format = meta.format === 'jpeg' ? 'jpeg' : 'png';
       const rotated = await sharp(oriented)

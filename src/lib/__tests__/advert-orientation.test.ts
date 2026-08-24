@@ -2,11 +2,37 @@ import { describe, it, expect, vi, afterEach } from 'vitest';
 import sharp from 'sharp';
 import { prepareAdvertsForRender } from '@/lib/advert-orientation';
 
+// react-pdf's own image resolver is the embeddability predicate inside
+// prepareAdvertsForRender. Tests default to the REAL resolver (sharp-made
+// fixtures all resolve); a test sets `impl` to force the rejection path,
+// since the JPEGs that genuinely desync jay-peg can't be synthesised.
+const resolveImageCtl = vi.hoisted(
+  () => ({ impl: null as null | ((...args: unknown[]) => unknown) }),
+);
+vi.mock('@react-pdf/image', async (importOriginal) => {
+  const orig = await importOriginal<typeof import('@react-pdf/image')>();
+  return {
+    ...orig,
+    default: (...args: unknown[]) =>
+      resolveImageCtl.impl
+        ? resolveImageCtl.impl(...args)
+        : (orig.default as (...a: unknown[]) => unknown)(...args),
+  };
+});
+
 async function png(width: number, height: number): Promise<Buffer> {
   return sharp({
     create: { width, height, channels: 3, background: { r: 0, g: 0, b: 0 } },
   })
     .png()
+    .toBuffer();
+}
+
+async function jpeg(width: number, height: number): Promise<Buffer> {
+  return sharp({
+    create: { width, height, channels: 3, background: { r: 40, g: 80, b: 120 } },
+  })
+    .jpeg()
     .toBuffer();
 }
 
@@ -25,7 +51,10 @@ async function dataUriDimensions(uri: string) {
 
 const ad = (imageUrl: string | null) => ({ id: 'a', imageUrl });
 
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => {
+  vi.unstubAllGlobals();
+  resolveImageCtl.impl = null;
+});
 
 describe('prepareAdvertsForRender', () => {
   it('rotates a landscape advert into a portrait-shaped data URI so it fills a portrait page', async () => {
@@ -63,6 +92,30 @@ describe('prepareAdvertsForRender', () => {
     vi.stubGlobal('fetch', vi.fn(async () => ({ ok: false, arrayBuffer: async () => Buffer.alloc(0) })));
     const [out] = await prepareAdvertsForRender([ad('https://x/a.png')]);
     expect(out.imageUrl).toBe('https://x/a.png');
+  });
+
+  it('re-encodes a portrait advert react-pdf cannot embed into a same-size lossless PNG data URI', async () => {
+    // The real defect: react-pdf's resolver rejects certain JPEGs (e.g. the
+    // NE Regional's page-29 advert, "Unknown version 49664") and then
+    // silently renders the page with the image absent — a blank page in a
+    // printed catalogue.
+    stubFetchWith(await jpeg(100, 200)); // portrait — would pass through as a URL
+    resolveImageCtl.impl = () => {
+      throw new Error('Unknown version 49664');
+    };
+    const [out] = await prepareAdvertsForRender([ad('https://x/a.jpg')]);
+    expect(out.imageUrl).toMatch(/^data:image\/png;base64,/);
+    const dims = await dataUriDimensions(out.imageUrl!);
+    expect(dims).toEqual({ width: 100, height: 200 }); // full resolution, never downsampled
+  });
+
+  it('falls back to the original advert when the rejected file cannot be re-encoded either', async () => {
+    stubFetchWith(Buffer.from('not an image at all'));
+    resolveImageCtl.impl = () => {
+      throw new Error('Unknown version 49664');
+    };
+    const [out] = await prepareAdvertsForRender([ad('https://x/a.jpg')]);
+    expect(out.imageUrl).toBe('https://x/a.jpg');
   });
 
   it('preserves other advert fields', async () => {
