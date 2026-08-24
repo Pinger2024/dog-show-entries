@@ -19,7 +19,7 @@ import { CatalogueByClass } from '@/components/catalogue/catalogue-by-class';
 import { CatalogueByBreed } from '@/components/catalogue/catalogue-by-breed';
 import { CatalogueJudging } from '@/components/catalogue/catalogue-judging';
 import type { CatalogueEntry, CatalogueShowInfo } from '@/components/catalogue/catalogue-types';
-import { fetchClubImage } from '@/lib/safe-image-fetch';
+import { fetchClubImage, fetchPdfSafeImage } from '@/lib/safe-image-fetch';
 import { PrizeCards } from '@/components/prize-cards/prize-cards';
 import type { PrizeCardShowInfo, PrizeCardClass } from '@/components/prize-cards/prize-cards';
 import { pickScheduleComponent, designedSchedulePageCount } from '@/components/schedule';
@@ -187,11 +187,12 @@ export async function generateCataloguePdf(
   }
 
   // The show-tier sponsor gets its logo embedded in the catalogue's
-  // "grateful thanks" billing block — fetched through the SSRF-guarded
-  // fetchClubImage() (never a bare fetch of a secretary-supplied URL) so a
-  // malicious logo_url can't be used to probe internal network addresses.
-  // Only the 'show' tier renders a logo today, so that's the only tier
-  // fetched. A failed/blocked fetch resolves to null and the renderer
+  // "grateful thanks" billing block — fetched + normalised to a format
+  // react-pdf can reliably render via fetchPdfSafeImage() (SSRF-guarded,
+  // and re-encoded so a progressive JPEG export doesn't silently vanish
+  // from the page — see safe-image-fetch.ts). Only the 'show' tier renders
+  // a logo today, so that's the only tier fetched. A failed/blocked fetch
+  // or an image sharp can't decode resolves to null and the renderer
   // degrades to a text-only billing block.
   const showSponsorInfos = await Promise.all(showSponsorRows.map(async (ss) => ({
     name: ss.sponsor.name,
@@ -200,7 +201,7 @@ export async function generateCataloguePdf(
     website: ss.sponsor.website,
     customTitle: ss.customTitle,
     logoBuffer: ss.tier === 'show' && ss.sponsor.logoUrl
-      ? await fetchClubImage(ss.sponsor.logoUrl)
+      ? await fetchPdfSafeImage(ss.sponsor.logoUrl)
       : null,
   })));
 

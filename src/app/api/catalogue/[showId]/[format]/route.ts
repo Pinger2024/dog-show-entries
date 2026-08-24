@@ -19,7 +19,7 @@ import type { MarkedResult, MarkedAchievement } from '@/components/catalogue/cat
 import React from 'react';
 import { sanitizeFilename } from '@/lib/slugify';
 import { authenticatePdfRequest, validateRasterLogoUrl, makePdfResponse } from '@/lib/pdf-utils';
-import { fetchClubImage } from '@/lib/safe-image-fetch';
+import { fetchPdfSafeImage } from '@/lib/safe-image-fetch';
 import { isShowDayReached } from '@/lib/date-utils';
 import { padPdfToMultiple, stripUnembeddedBase14Fonts } from '@/lib/pdf-pad';
 import { syncCatalogueNumbers } from '@/server/services/catalogue-numbering';
@@ -308,9 +308,12 @@ export async function GET(
 
   // Build show-level sponsor info for cover/front matter. The show-tier
   // sponsor's logo is embedded in the catalogue's "grateful thanks" billing
-  // block, fetched through the SSRF-guarded fetchClubImage() (never a bare
-  // fetch of a secretary-supplied URL) — a failed/blocked fetch resolves to
-  // null and the renderer degrades to a text-only billing block.
+  // block, fetched + normalised to a format react-pdf can reliably render
+  // via fetchPdfSafeImage() (SSRF-guarded, and re-encoded so a progressive
+  // JPEG export doesn't silently vanish from the page — see
+  // safe-image-fetch.ts). A failed/blocked fetch or an image sharp can't
+  // decode resolves to null and the renderer degrades to a text-only
+  // billing block.
   const showSponsorInfos: ShowSponsorInfo[] = await Promise.all(showSponsorRows.map(async (ss) => ({
     name: ss.sponsor.name,
     tier: ss.tier,
@@ -318,7 +321,7 @@ export async function GET(
     website: ss.sponsor.website,
     customTitle: ss.customTitle,
     logoBuffer: ss.tier === 'show' && ss.sponsor.logoUrl
-      ? await fetchClubImage(ss.sponsor.logoUrl)
+      ? await fetchPdfSafeImage(ss.sponsor.logoUrl)
       : null,
   })));
 

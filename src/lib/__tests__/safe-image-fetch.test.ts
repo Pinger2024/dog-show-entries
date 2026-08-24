@@ -1,5 +1,8 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { isBlockedAddress, fetchClubImage } from '@/lib/safe-image-fetch';
+import { describe, it, expect, vi, beforeEach, afterEach, beforeAll } from 'vitest';
+import sharp from 'sharp';
+import React from 'react';
+import { Document, Page, Image, renderToBuffer } from '@react-pdf/renderer';
+import { isBlockedAddress, fetchClubImage, fetchPdfSafeImage } from '@/lib/safe-image-fetch';
 
 describe('isBlockedAddress', () => {
   it.each([
@@ -111,5 +114,148 @@ describe('fetchClubImage — response handling', () => {
   it('never throws — a network failure is just no logo', async () => {
     fetchSpy.mockRejectedValue(new Error('ECONNREFUSED'));
     await expect(fetchClubImage(ALLOWED)).resolves.toBeNull();
+  });
+});
+
+// fetchPdfSafeImage — react-pdf's bundled JPEG reader can't reliably handle
+// every JPEG a phone/Canva/Photoshop export produces (a progressive-encoded
+// JPEG in particular can desync its marker walk and silently vanish from
+// the page with no error). This is what caused the North East GSD Regional
+// catalogue's real show-sponsor logo (a progressive JPEG) to never appear
+// even though the billing block itself rendered correctly (Mandy/Michael,
+// 2026-08-24). fetchPdfSafeImage() decodes + re-encodes through sharp so
+// react-pdf always gets a clean baseline JPEG (or PNG, for transparency).
+describe('fetchPdfSafeImage — normalises fetched images for react-pdf (Mandy catalogue, 2026-08-24)', () => {
+  const fetchSpy = vi.fn();
+  const ALLOWED = 'https://pub-example.r2.dev/uploads/sponsor-logo.jpg';
+
+  beforeAll(async () => {
+    // react-pdf's layout engine (yoga-layout) lazy-loads its WASM binary via
+    // a `fetch()` of its own on first use. If that first use happens while
+    // a test below has global `fetch` stubbed, our mock response (image
+    // bytes, not WASM) gets fed to WebAssembly.instantiate and blows up
+    // with an unrelated "expected magic word" error. Render once here,
+    // before any test in this block stubs fetch, so yoga is warm.
+    await renderToBuffer(
+      React.createElement(Document, null, React.createElement(Page, { size: 'A5' })) as never,
+    );
+  });
+
+  beforeEach(() => {
+    vi.stubGlobal('fetch', fetchSpy);
+    fetchSpy.mockReset();
+    vi.stubEnv('R2_PUBLIC_URL', 'https://pub-example.r2.dev');
+  });
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.unstubAllEnvs();
+  });
+
+  const replyImage = (body: Buffer, contentType: string) => ({
+    ok: true,
+    status: 200,
+    headers: {
+      get: (k: string) =>
+        k.toLowerCase() === 'content-type' ? contentType
+        : k.toLowerCase() === 'content-length' ? String(body.length)
+        : null,
+    },
+    arrayBuffer: async () => body.buffer.slice(body.byteOffset, body.byteOffset + body.byteLength),
+  });
+
+  // 800×300 noise, not a flat colour — a solid-colour source can round-trip
+  // through progressive encoding too cleanly (too few real scan passes) to
+  // exercise the same code path a real photographic sponsor logo would.
+  async function progressiveJpegFixture(width = 800, height = 300): Promise<Buffer> {
+    const raw = Buffer.alloc(width * height * 3);
+    for (let i = 0; i < raw.length; i++) raw[i] = (i * 37) % 256;
+    return sharp(raw, { raw: { width, height, channels: 3 } })
+      .jpeg({ progressive: true, quality: 85 })
+      .toBuffer();
+  }
+
+  // Renders the given buffer as the only content of a real (unmocked)
+  // react-pdf document and compares its size against an empty control page
+  // — a dropped/failed image leaves the page at roughly PDF-scaffolding
+  // size, while a genuinely embedded image adds its own compressed bytes.
+  async function pdfHasEmbeddedImage(imageBuffer: Buffer): Promise<boolean> {
+    const emptyPdf = await renderToBuffer(
+      React.createElement(Document, null, React.createElement(Page, { size: 'A5' })) as never,
+    );
+    const withImagePdf = await renderToBuffer(
+      React.createElement(
+        Document,
+        null,
+        React.createElement(Page, { size: 'A5' }, React.createElement(Image, { src: imageBuffer as unknown as string })),
+      ) as never,
+    );
+    return withImagePdf.length > emptyPdf.length + 500;
+  }
+
+  it('re-encodes a progressive JPEG to baseline', async () => {
+    const progressive = await progressiveJpegFixture();
+    // Precondition — the fixture really is progressive, not a fluke of the
+    // encoder settings, so the test below is meaningful.
+    expect((await sharp(progressive).metadata()).isProgressive).toBe(true);
+
+    fetchSpy.mockResolvedValue(replyImage(progressive, 'image/jpeg'));
+    const safe = await fetchPdfSafeImage(ALLOWED);
+    expect(safe).not.toBeNull();
+
+    const meta = await sharp(safe!).metadata();
+    expect(meta.format).toBe('jpeg');
+    expect(meta.isProgressive).toBe(false);
+  });
+
+  it('the normalised buffer renders as a real embedded image via react-pdf', async () => {
+    const progressive = await progressiveJpegFixture();
+    fetchSpy.mockResolvedValue(replyImage(progressive, 'image/jpeg'));
+    const safe = await fetchPdfSafeImage(ALLOWED);
+    expect(safe).not.toBeNull();
+    await expect(pdfHasEmbeddedImage(safe!)).resolves.toBe(true);
+  });
+
+  it('preserves transparency by emitting PNG when the source has an alpha channel', async () => {
+    const rgba = await sharp({
+      create: { width: 120, height: 60, channels: 4, background: { r: 10, g: 10, b: 10, alpha: 0 } },
+    }).png().toBuffer();
+
+    fetchSpy.mockResolvedValue(replyImage(rgba, 'image/png'));
+    const safe = await fetchPdfSafeImage(ALLOWED);
+    expect(safe).not.toBeNull();
+
+    const meta = await sharp(safe!).metadata();
+    expect(meta.format).toBe('png');
+    expect(meta.hasAlpha).toBe(true);
+  });
+
+  it('downsizes an oversized source to fit within bounds, without upscaling a smaller one', async () => {
+    const huge = await sharp({
+      create: { width: 3000, height: 1000, channels: 3, background: { r: 5, g: 5, b: 5 } },
+    }).jpeg().toBuffer();
+    fetchSpy.mockResolvedValue(replyImage(huge, 'image/jpeg'));
+    const safeHuge = await fetchPdfSafeImage(ALLOWED);
+    const hugeMeta = await sharp(safeHuge!).metadata();
+    expect(hugeMeta.width).toBeLessThanOrEqual(1300);
+    expect(hugeMeta.height).toBeLessThanOrEqual(460);
+
+    const tiny = await sharp({
+      create: { width: 40, height: 20, channels: 3, background: { r: 5, g: 5, b: 5 } },
+    }).jpeg().toBuffer();
+    fetchSpy.mockResolvedValue(replyImage(tiny, 'image/jpeg'));
+    const safeTiny = await fetchPdfSafeImage(ALLOWED);
+    const tinyMeta = await sharp(safeTiny!).metadata();
+    expect(tinyMeta.width).toBe(40);
+    expect(tinyMeta.height).toBe(20);
+  });
+
+  it('degrades to null (never throws) when the fetched bytes are not a decodable image', async () => {
+    fetchSpy.mockResolvedValue(replyImage(Buffer.from('not an image, just text'), 'image/jpeg'));
+    await expect(fetchPdfSafeImage(ALLOWED)).resolves.toBeNull();
+  });
+
+  it('delegates the SSRF guard to fetchClubImage — a blocked host is refused before any fetch', async () => {
+    await expect(fetchPdfSafeImage('https://10.0.0.5/logo.png')).resolves.toBeNull();
+    expect(fetchSpy).not.toHaveBeenCalled();
   });
 });

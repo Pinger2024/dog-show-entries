@@ -23,6 +23,7 @@
  */
 import { lookup } from 'dns/promises';
 import net from 'net';
+import sharp from 'sharp';
 
 /** Logos are small; anything larger is not a club badge. */
 const MAX_BYTES = 8 * 1024 * 1024;
@@ -122,6 +123,60 @@ export async function fetchClubImage(rawUrl: string): Promise<Buffer | null> {
     const buf = Buffer.from(await res.arrayBuffer());
     if (buf.length === 0 || buf.length > MAX_BYTES) return null;
     return buf;
+  } catch {
+    return null;
+  }
+}
+
+/** Nothing on a catalogue/schedule page displays a logo larger than this —
+ *  plenty of headroom over the ~130×46pt the sponsor billing block prints
+ *  at, even at print resolution. Also caps how much any one club/sponsor
+ *  image can bloat the PDF. */
+const MAX_LOGO_DIMENSIONS = { width: 1300, height: 460 } as const;
+
+/**
+ * Fetch a club/sponsor-supplied image AND normalise it into a form
+ * react-pdf can reliably embed.
+ *
+ * react-pdf's bundled JPEG reader (`jay-peg`) doesn't handle every JPEG a
+ * phone, Canva, or Photoshop export can produce — a progressive-encoded
+ * JPEG in particular can desync its marker walk (an "Unknown version
+ * <n>" warning, or the image silently missing from the page) with no
+ * error surfaced to the caller. Uploaded sponsor/club artwork is exactly
+ * the kind of file that arrives progressive, so any caller that hands
+ * react-pdf a fetched image should go through here rather than
+ * `fetchClubImage()` directly, wherever that image is meant to actually
+ * render (not just get format/SSRF-validated, as `validateRasterLogoUrl`
+ * does elsewhere).
+ *
+ * Decodes with sharp (already a project dependency) — which applies EXIF
+ * rotation and re-encodes from scratch — then always re-emits a fresh,
+ * guaranteed-baseline file: JPEG quality 90 normally, or PNG when the
+ * source has an alpha channel so transparency survives (sharp's JPEG
+ * encoder has no alpha support and would otherwise flatten it to black).
+ * Also caps dimensions to `MAX_LOGO_DIMENSIONS` without ever enlarging a
+ * smaller source.
+ *
+ * Returns null — never throws — on a blocked/failed fetch or a sharp
+ * decode failure (corrupt or unsupported source image). A logo is
+ * decoration: callers must degrade to a text-only fallback rather than
+ * fail a secretary's document over it.
+ */
+export async function fetchPdfSafeImage(rawUrl: string): Promise<Buffer | null> {
+  const raw = await fetchClubImage(rawUrl);
+  if (!raw) return null;
+
+  try {
+    const { hasAlpha } = await sharp(raw).metadata();
+    const pipeline = sharp(raw)
+      .rotate()
+      .resize({ ...MAX_LOGO_DIMENSIONS, fit: 'inside', withoutEnlargement: true });
+
+    // sharp's JPEG encoder defaults to baseline (progressive is opt-in via
+    // `progressive: true`) — leave that alone, that default IS the fix.
+    return hasAlpha
+      ? await pipeline.png().toBuffer()
+      : await pipeline.jpeg({ quality: 90 }).toBuffer();
   } catch {
     return null;
   }
