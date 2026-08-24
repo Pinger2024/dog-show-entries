@@ -69,19 +69,30 @@ function splitTownPostcode(address: string | null | undefined): { town: string; 
 // was ~30 for 65 entries, target is the SPGSD norm of ~20-22.
 const svEntry = {
   row: { marginTop: 2 } as const,
-  line1: { flexDirection: 'row', alignItems: 'baseline', gap: 6 } as const,
+  // flex-start, not baseline: with the name row as a wrapping paragraph,
+  // baseline alignment hangs the number off the paragraph's LAST line when a
+  // long name wraps — the number must sit with the FIRST line.
+  line1: { flexDirection: 'row', alignItems: 'flex-start', gap: 6 } as const,
   catNumber: {
     fontFamily: SV_FONTS.serif,
     fontSize: 11,
     color: SV.accent,
     width: 20,
   } as const,
+  /** The flowing paragraph beside the hanging number column: name + quals +
+   *  chip wrap together within the remaining width. Base metrics match the
+   *  name so the first line sits exactly as before. */
+  nameLine: {
+    flex: 1,
+    fontFamily: SV_FONTS.sans,
+    fontSize: 8.5,
+    lineHeight: 1.15,
+  } as const,
   dogName: {
     fontFamily: SV_FONTS.sans,
     fontSize: 8.5,
     fontWeight: 'bold' as const,
     color: SV.ink,
-    flexShrink: 1,
   } as const,
   microchip: {
     fontFamily: SV_FONTS.sans,
@@ -96,8 +107,8 @@ const svEntry = {
   qualifications: {
     fontFamily: SV_FONTS.sans,
     fontSize: 8,
+    fontWeight: 'normal' as const,
     color: SV.ink,
-    flexShrink: 1,
   } as const,
   meta: {
     fontFamily: SV_FONTS.sans,
@@ -195,7 +206,7 @@ function renderSvPlacings(count: number): React.ReactElement {
   );
 }
 
-function renderSvEntry(
+export function renderSvEntry(
   entry: CatalogueEntry,
   rowKey: string,
 ): React.ReactElement {
@@ -247,16 +258,23 @@ function renderSvEntry(
     <View key={rowKey} style={svEntry.row} wrap={false}>
       {/* Line 1 — cat# · DOG NAME (bold) · microchip (bold). The chip
           number sits on the name line because WUSV/GSDL require every
-          exhibit's microchip published prominently (Amanda 2026-05-28). */}
+          exhibit's microchip published prominently (Amanda 2026-05-28).
+          Name, qualifications and chip are ONE nested-Text paragraph, not
+          flex siblings: react-pdf paints an overflowing sibling Text OVER
+          the next one instead of flowing, so a long name (no. 30 at the NE
+          Regional, 2026-08-24) printed on top of its WB. As a single
+          paragraph the tail wraps under the name instead. */}
       <View style={svEntry.line1}>
         <Text style={svEntry.catNumber}>{entry.catalogueNumber ?? '—'}</Text>
-        <Text style={svEntry.dogName}>{uppercaseName(entry.dogName) || 'Unnamed'}</Text>
-        {qualifications ? (
-          <Text style={svEntry.qualifications}>{qualifications}</Text>
-        ) : null}
-        {entry.microchipNumber ? (
-          <Text style={svEntry.microchip}>· Chip {entry.microchipNumber}</Text>
-        ) : null}
+        <Text style={svEntry.nameLine}>
+          <Text style={svEntry.dogName}>{uppercaseName(entry.dogName) || 'Unnamed'}</Text>
+          {qualifications ? (
+            <Text style={svEntry.qualifications}>{'  '}{qualifications}</Text>
+          ) : null}
+          {entry.microchipNumber ? (
+            <Text style={svEntry.microchip}>{'  '}· Chip {entry.microchipNumber}</Text>
+          ) : null}
+        </Text>
       </View>
 
       {/* Line 2 — vitals: Reg · DOB · Hips · Elbows · Titles */}
