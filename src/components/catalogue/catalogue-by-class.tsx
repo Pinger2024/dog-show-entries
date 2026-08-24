@@ -3,7 +3,7 @@ import { Document, Page, View, Text, Image } from '@react-pdf/renderer';
 import { styles, C } from './catalogue-styles';
 import { CatalogueHeader } from './catalogue-header';
 import type { CatalogueEntry, CatalogueShowInfo, ClassSponsorshipInfo } from './catalogue-types';
-import { formatDobKC, titleCase, formatOwnerKC, formatRegNumber, formatRkcOwnerHeading, uppercaseName, buildSponsorLines, isJuniorHandlingClass, formatPedigreeSireDam, formatSvQualifications } from './catalogue-utils';
+import { formatDobKC, titleCase, formatOwnerKC, formatRegNumber, formatRkcOwnerHeading, uppercaseName, smartOwnerTitleCase, buildSponsorLines, buildPrizeLinesUnderBanner, isJuniorHandlingClass, formatPedigreeSireDam, formatSvQualifications } from './catalogue-utils';
 import { CoverPage, FrontMatterPage, TrophiesPage, ExhibitorIndexPage, BestsWriteInPage, NotForCompetitionPage } from './catalogue-front-matter';
 import {
   SvAcknowledgementsPage,
@@ -668,7 +668,9 @@ export function CatalogueByClass({ show, entries, compact }: Props) {
             return renderSvEntry(entry, rowKey);
           }
           if (isJH) {
-            const handlerName = entry.jhHandlerName ?? entry.exhibitor ?? 'Unnamed Handler';
+            // Typed however the parent typed it ("alexxa cowan") — same
+            // Title Case rule as owners everywhere else (Mandy 2026-08-24).
+            const handlerName = smartOwnerTitleCase(entry.jhHandlerName ?? entry.exhibitor) || 'Unnamed Handler';
             return (
               <View key={rowKey} style={styles.entryRowWrap} wrap={false}>
                 <View style={{ flexDirection: 'row', alignItems: 'baseline' }}>
@@ -861,8 +863,14 @@ export function CatalogueByClass({ show, entries, compact }: Props) {
                   )}
                 </View>
               )}
-              {classLabel && sponsorsByClassLabel.has(classLabel) && !hasBanner &&
-                buildSponsorLines(sponsorsByClassLabel.get(classLabel)!).map((line, i) => (
+              {/* Under a banner the sponsor is already named by the artwork,
+                  but the trophy / prize line must still print — see
+                  buildPrizeLinesUnderBanner. */}
+              {classLabel && sponsorsByClassLabel.has(classLabel) &&
+                (hasBanner
+                  ? buildPrizeLinesUnderBanner(sponsorsByClassLabel.get(classLabel)!)
+                  : buildSponsorLines(sponsorsByClassLabel.get(classLabel)!)
+                ).map((line, i) => (
                   <Text
                     key={i}
                     style={

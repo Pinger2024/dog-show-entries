@@ -106,7 +106,30 @@ function findBanner(node: unknown): { boxStyle: any; imageStyle: any } | null {
   return findBanner(el.props.children);
 }
 
+/** Every string anywhere in the element tree, concatenated. */
+function allText(node: unknown): string {
+  if (node == null || typeof node === 'boolean') return '';
+  if (typeof node === 'string' || typeof node === 'number') return String(node);
+  if (Array.isArray(node)) return node.map(allText).join('\n');
+  if (isValidElement(node)) return allText((node as ReactElement<any>).props.children);
+  return '';
+}
+
 describe('CatalogueByClass — class-sponsor banner', () => {
+  it('still prints the trophy / prize line under a banner (JH "£10 per handler", Mandy 2026-08-24)', () => {
+    // The banner replaces the "Sponsored by X" line — it must NOT also swallow
+    // the prize: the NE Regional's JH classes had "£10 sponsorship for each
+    // handler" saved against a banner sponsorship and it never printed.
+    const show = makeShow();
+    show.classSponsorships![0] = {
+      ...show.classSponsorships![0],
+      trophyName: '£10 sponsorship for each handler',
+    };
+    const text = allText(CatalogueByClass({ show, entries: [makeEntry()] }));
+    expect(text).toContain('£10 sponsorship for each handler');
+    expect(text).not.toContain('Sponsored by Mandy McAteer'); // the banner says who
+  });
+
   it('renders the banner full-width at its own aspect ratio (no fixed-height box, no distortion)', () => {
     const tree = CatalogueByClass({ show: makeShow(), entries: [makeEntry()] });
 

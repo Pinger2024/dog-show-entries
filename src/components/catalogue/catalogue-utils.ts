@@ -602,6 +602,27 @@ export function buildSponsorLines(
   return lines;
 }
 
+/**
+ * The lines that still print UNDER a class-sponsor banner. The banner replaces
+ * "Sponsored by X (affix)", so only the trophy / prize wording remains — it
+ * used to be dropped along with the sponsor line, so a banner sponsorship
+ * could never state its prize ("£10 sponsorship for each handler" on the NE
+ * Regional's JH classes, Mandy 2026-08-24).
+ */
+export function buildPrizeLinesUnderBanner(
+  sps: { trophyName: string | null; trophyDonor: string | null; prizeDescription: string | null }[],
+): string[] {
+  const lines: string[] = [];
+  for (const sp of sps) {
+    if (sp.trophyName) {
+      lines.push(sp.trophyDonor ? `${sp.trophyName} — donated by ${sp.trophyDonor}` : sp.trophyName);
+    } else if (sp.prizeDescription) {
+      lines.push(sp.prizeDescription);
+    }
+  }
+  return lines;
+}
+
 /** The Körung wording the regional catalogue prints, keyed by our enum.
  *  Taken from Mandy's own working-class catalogue (2026-08-19): a current
  *  survey reads "Current Year Kkl", a lifetime one "KKL Lebenzeit". */
