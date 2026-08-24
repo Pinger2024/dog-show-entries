@@ -4,6 +4,25 @@ import React from 'react';
 import { Document, Page, Image, renderToBuffer } from '@react-pdf/renderer';
 import { isBlockedAddress, fetchClubImage, fetchPdfSafeImage } from '@/lib/safe-image-fetch';
 
+// react-pdf's own image resolver is the embeddability predicate
+// fetchPdfSafeImage verifies its output against (see pdf-safe-image.ts).
+// Tests default to the REAL resolver (sharp-made fixtures all resolve); a
+// test sets `resolveImageCtl.impl` to force the rejection path, matching
+// the pattern in advert-orientation.test.ts.
+const resolveImageCtl = vi.hoisted(
+  () => ({ impl: null as null | ((...args: unknown[]) => unknown) }),
+);
+vi.mock('@react-pdf/image', async (importOriginal) => {
+  const orig = await importOriginal<typeof import('@react-pdf/image')>();
+  return {
+    ...orig,
+    default: (...args: unknown[]) =>
+      resolveImageCtl.impl
+        ? resolveImageCtl.impl(...args)
+        : (orig.default as (...a: unknown[]) => unknown)(...args),
+  };
+});
+
 describe('isBlockedAddress', () => {
   it.each([
     ['127.0.0.1', 'loopback'],
@@ -117,14 +136,15 @@ describe('fetchClubImage — response handling', () => {
   });
 });
 
-// fetchPdfSafeImage — react-pdf's bundled JPEG reader can't reliably handle
-// every JPEG a phone/Canva/Photoshop export produces (a progressive-encoded
-// JPEG in particular can desync its marker walk and silently vanish from
-// the page with no error). This is what caused the North East GSD Regional
-// catalogue's real show-sponsor logo (a progressive JPEG) to never appear
-// even though the billing block itself rendered correctly (Mandy/Michael,
-// 2026-08-24). fetchPdfSafeImage() decodes + re-encodes through sharp so
-// react-pdf always gets a clean baseline JPEG (or PNG, for transparency).
+// fetchPdfSafeImage — react-pdf's bundled image reader can silently fail to
+// parse some real-world files with no error surfaced anywhere (confirmed
+// directly against the real North East GSD Regional show-sponsor logo,
+// "Unknown version 49664" from resolveImage() — see pdf-safe-image.ts for
+// why "progressive JPEG" alone is NOT the actual discriminator). The
+// billing block itself rendered correctly; only the logo silently vanished
+// (Mandy/Michael, 2026-08-24). fetchPdfSafeImage() resizes + re-encodes
+// through sharp for display, then verifies the result against react-pdf's
+// own resolveImage predicate before returning it.
 describe('fetchPdfSafeImage — normalises fetched images for react-pdf (Mandy catalogue, 2026-08-24)', () => {
   const fetchSpy = vi.fn();
   const ALLOWED = 'https://pub-example.r2.dev/uploads/sponsor-logo.jpg';
@@ -149,6 +169,7 @@ describe('fetchPdfSafeImage — normalises fetched images for react-pdf (Mandy c
   afterEach(() => {
     vi.unstubAllGlobals();
     vi.unstubAllEnvs();
+    resolveImageCtl.impl = null;
   });
 
   const replyImage = (body: Buffer, contentType: string) => ({
@@ -257,5 +278,18 @@ describe('fetchPdfSafeImage — normalises fetched images for react-pdf (Mandy c
   it('delegates the SSRF guard to fetchClubImage — a blocked host is refused before any fetch', async () => {
     await expect(fetchPdfSafeImage('https://10.0.0.5/logo.png')).resolves.toBeNull();
     expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it('returns null (belt and braces) when react-pdf would still reject the resized/re-encoded candidate', async () => {
+    // Even a fresh sharp re-encode can, in principle, still fail react-pdf's
+    // own resolver — this is the final gate, not a rubber stamp. Force that
+    // rejection and confirm the sponsor billing block gets nothing to
+    // render rather than a logo that silently vanishes anyway.
+    const progressive = await progressiveJpegFixture();
+    fetchSpy.mockResolvedValue(replyImage(progressive, 'image/jpeg'));
+    resolveImageCtl.impl = () => {
+      throw new Error('Unknown version 49664');
+    };
+    await expect(fetchPdfSafeImage(ALLOWED)).resolves.toBeNull();
   });
 });

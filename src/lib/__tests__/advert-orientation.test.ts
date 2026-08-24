@@ -49,6 +49,21 @@ async function dataUriDimensions(uri: string) {
   return { width: meta.width!, height: meta.height! };
 }
 
+// PNG magic bytes (0x89 0x50 'PN'...) — cheap, synchronous way for a mock
+// resolveImage impl to tell "the original/rotated JPEG" apart from "the
+// lossless PNG re-encode" without decoding anything.
+function isPngBuffer(buf: unknown): boolean {
+  return Buffer.isBuffer(buf) && buf[0] === 0x89 && buf[1] === 0x50;
+}
+
+/** Rejects any JPEG-shaped buffer (simulating the real jay-peg parser bug)
+ *  but accepts PNG — a sharp PNG re-encode never trips it in practice, so
+ *  this is a realistic stand-in for "the fallback re-encode succeeds". */
+function rejectJpegAcceptPng(buf: unknown) {
+  if (isPngBuffer(buf)) return { width: 1, height: 1, data: buf, format: 'png' };
+  throw new Error('Unknown version 49664');
+}
+
 const ad = (imageUrl: string | null) => ({ id: 'a', imageUrl });
 
 afterEach(() => {
@@ -100,9 +115,7 @@ describe('prepareAdvertsForRender', () => {
     // silently renders the page with the image absent — a blank page in a
     // printed catalogue.
     stubFetchWith(await jpeg(100, 200)); // portrait — would pass through as a URL
-    resolveImageCtl.impl = () => {
-      throw new Error('Unknown version 49664');
-    };
+    resolveImageCtl.impl = rejectJpegAcceptPng;
     const [out] = await prepareAdvertsForRender([ad('https://x/a.jpg')]);
     expect(out.imageUrl).toMatch(/^data:image\/png;base64,/);
     const dims = await dataUriDimensions(out.imageUrl!);
@@ -111,6 +124,35 @@ describe('prepareAdvertsForRender', () => {
 
   it('falls back to the original advert when the rejected file cannot be re-encoded either', async () => {
     stubFetchWith(Buffer.from('not an image at all'));
+    resolveImageCtl.impl = () => {
+      throw new Error('Unknown version 49664');
+    };
+    const [out] = await prepareAdvertsForRender([ad('https://x/a.jpg')]);
+    expect(out.imageUrl).toBe('https://x/a.jpg');
+  });
+
+  it('falls back to the original advert when even the lossless PNG re-encode is rejected', async () => {
+    // Belt and braces: the PNG fallback itself is verified against the same
+    // predicate before being trusted, not assumed to always work.
+    stubFetchWith(await jpeg(100, 200)); // portrait, decodes fine — just always rejected
+    resolveImageCtl.impl = () => {
+      throw new Error('Unknown version 49664');
+    };
+    const [out] = await prepareAdvertsForRender([ad('https://x/a.jpg')]);
+    expect(out.imageUrl).toBe('https://x/a.jpg');
+  });
+
+  it('re-encodes a landscape advert react-pdf cannot embed (even after rotation) into a lossless PNG', async () => {
+    stubFetchWith(await jpeg(200, 100)); // landscape
+    resolveImageCtl.impl = rejectJpegAcceptPng;
+    const [out] = await prepareAdvertsForRender([ad('https://x/a.jpg')]);
+    expect(out.imageUrl).toMatch(/^data:image\/png;base64,/);
+    const dims = await dataUriDimensions(out.imageUrl!);
+    expect(dims).toEqual({ width: 100, height: 200 }); // rotated into portrait, full resolution
+  });
+
+  it('falls back to the original advert when a landscape advert is rejected even after every re-encode', async () => {
+    stubFetchWith(await jpeg(200, 100)); // landscape
     resolveImageCtl.impl = () => {
       throw new Error('Unknown version 49664');
     };
