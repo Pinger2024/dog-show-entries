@@ -141,6 +141,33 @@ export function SvAcknowledgementsPage({ show }: { show: CatalogueShowInfo }) {
         </Text>
       </View>
 
+      {/* The secretary's welcome note (catalogue settings → welcomeNote).
+          The RKC front matter has always printed this; the SV page dropped
+          it — Mandy's five-paragraph welcome for the first NE Regional never
+          appeared (2026-08-24). Same drift as the sponsor billing. */}
+      {show.welcomeNote ? (
+        <View style={{ marginTop: 8 }}>
+          {show.welcomeNote
+            .split(/\n+/)
+            .map((p) => p.trim())
+            .filter(Boolean)
+            .map((para, i) => (
+              <Text
+                key={i}
+                style={{
+                  fontFamily: SV_FONTS.sans,
+                  fontSize: 8.5,
+                  color: SV.ink2,
+                  lineHeight: 1.5,
+                  marginBottom: 4,
+                }}
+              >
+                {para}
+              </Text>
+            ))}
+        </View>
+      ) : null}
+
       {/* Event Manager */}
       {show.showManager ? (
         <View style={{ marginTop: 14 }}>
@@ -164,12 +191,19 @@ export function SvAcknowledgementsPage({ show }: { show: CatalogueShowInfo }) {
         ))}
       </View>
 
-      {/* Thank-you message */}
+      {/* Thank-you message. The title and the sponsor billing box are ONE
+          unbreakable unit — with a long welcome note above, this section
+          crosses the page break, and minPresenceAhead (even on the outer
+          View) still let the title strand at the foot of the page while the
+          wrap={false} billing box jumped overleaf. Title + box is ~150pt,
+          far below a page, so the atomic group is safe. */}
       <View style={{ marginTop: 14 }}>
-        <SectionTitle title="With grateful thanks" />
-        {showTierSponsors.map((sp, i) => (
-          <ShowSponsorBilling key={i} sponsor={sp} />
-        ))}
+        <View wrap={false}>
+          <SectionTitle title="With grateful thanks" />
+          {showTierSponsors.map((sp, i) => (
+            <ShowSponsorBilling key={i} sponsor={sp} />
+          ))}
+        </View>
         <Text
           style={{
             fontFamily: SV_FONTS.serif,

@@ -132,4 +132,21 @@ describe('SV catalogue acknowledgements — show-tier sponsor billing (Mandy 202
   it('does not crash and renders no billing block when the show has no sponsors', () => {
     expect(() => renderAcknowledgements(baseShow({ showSponsors: undefined }))).not.toThrow();
   });
+
+  it('prints the secretary\'s welcome note under the thank-you heading (Mandy 2026-08-24)', () => {
+    // She wrote a five-paragraph welcome in catalogue settings; the RKC front
+    // matter prints it but the SV page silently dropped it — the same
+    // two-front-matters drift as the sponsor billing.
+    const html = renderAcknowledgements(
+      baseShow({
+        welcomeNote: 'A very warm welcome to the first show!\nBest of luck to every exhibitor.',
+      }),
+    );
+    expect(html).toMatch(/A very warm welcome to the first show!/);
+    expect(html).toMatch(/Best of luck to every exhibitor\./);
+  });
+
+  it('renders nothing extra when there is no welcome note', () => {
+    expect(() => renderAcknowledgements(baseShow({ welcomeNote: undefined }))).not.toThrow();
+  });
 });
