@@ -59,7 +59,7 @@ type Line = { desc: string; sub?: string; amount: number };
 
 function Invoice() {
   const invoiceNo = 'INV-GSDL-BRG-0001';
-  const invoiceDate = '24 August 2026';
+  const invoiceDate = '25 August 2026';
   // Doxzoo order confirmation, 24 Aug 2026 21:58 (Mandy's screenshot).
   const lines: Line[] = [
     { desc: 'Grading cards — printing', sub: '69 cards (138 printed pages), A5 landscape, double-sided, silk 350gsm, full colour. Printed by Doxzoo.', amount: 20.80 },
