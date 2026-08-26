@@ -1,0 +1,343 @@
+import { describe, it, expect } from 'vitest';
+import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFPage } from 'pdf-lib';
+import fontkit from '@pdf-lib/fontkit';
+import { readFileSync } from 'fs';
+import path from 'path';
+import {
+  runCataloguePreflight,
+  type CatalogueSnapshotMeta,
+} from '../catalogue-preflight';
+
+/**
+ * Fixture PDFs built IN-TEST with pdf-lib — never against prod data (per the
+ * brief). Every failing check is proved to actually fail before trusting it
+ * passes elsewhere (CLAUDE.md — "prove the test fails").
+ */
+
+const A5 = [420, 595] as const;
+
+function baseSnapshot(overrides: Partial<CatalogueSnapshotMeta> = {}): CatalogueSnapshotMeta {
+  return {
+    showStatus: 'entries_closed',
+    entryCloseDate: '2026-08-01T00:00:00.000Z',
+    catalogueNumbersLockedAt: '2026-08-02T09:00:00.000Z',
+    capturedAt: '2026-08-02T09:05:00.000Z',
+    rendererGitSha: 'abc1234',
+    expectedNumbers: [1, 2, 3, 4],
+    entryNames: [
+      { number: 1, name: 'FIDO OF SOMEWHERE' },
+      { number: 2, name: 'REX OF ELSEWHERE' },
+      { number: 3, name: 'BELLA OF NOWHERE' },
+      { number: 4, name: 'ZEUS OF EVERYWHERE' },
+    ],
+    ...overrides,
+  };
+}
+
+async function embeddedInterFont(doc: PDFDocument): Promise<PDFFont> {
+  doc.registerFontkit(fontkit);
+  const bytes = readFileSync(path.join(process.cwd(), 'public', 'fonts', 'inter-regular.ttf'));
+  return doc.embedFont(bytes);
+}
+
+// Realistic catalogue-entry ink density matters here, not just the text
+// content: at 40dpi (the no-blank-pages check's rasterisation resolution),
+// a couple of short lines measures indistinguishable from a genuinely blank
+// page (empirically ~0.998 white — inside the 0.997 threshold), where a real
+// multi-field catalogue record (name/reg/sire/dam/breeder/owner) measures
+// ~0.99 white, comfortably clear of it — confirmed against the fixtures
+// below before trusting any "non-blank" assertion. The filler fields keep
+// every "content" fixture page realistically dense regardless of which
+// specific `lines` a test needs findable by a given check.
+const DENSITY_FILLER = [
+  'Reg No: ABC123456  Microchip: 980000123456789',
+  'Sire: Champion Sire Dog Of Somewhere',
+  'Dam: Champion Dam Dog Of Elsewhere',
+  'Breeder: The Breeder Person',
+  '4 The Lane, Trowbridge, Wiltshire, BA14 1AA',
+];
+
+function drawEntryPage(page: PDFPage, font: PDFFont, lines: string[]): void {
+  let y = 550;
+  for (const line of [...lines, ...DENSITY_FILLER]) {
+    page.drawText(line, { x: 30, y, size: 10, font });
+    y -= 16;
+  }
+}
+
+/** A well-formed 4-page catalogue: embedded-font text on every page, one
+ *  entry name per page, matching `baseSnapshot()`'s entryNames/expectedNumbers. */
+async function buildWellFormedFixture(): Promise<Buffer> {
+  const doc = await PDFDocument.create();
+  const font = await embeddedInterFont(doc);
+  const names = ['1  FIDO OF SOMEWHERE', '2  REX OF ELSEWHERE', '3  BELLA OF NOWHERE', '4  ZEUS OF EVERYWHERE'];
+  for (const line of names) {
+    const page = doc.addPage(A5 as unknown as [number, number]);
+    drawEntryPage(page, font, [line, 'Owner: J Smith, 4 The Lane, Trowbridge', 'Sire: Some Dog  Dam: Some Bitch']);
+  }
+  return Buffer.from(await doc.save());
+}
+
+async function buildFixture(pageCount: number, opts: { blankPageIndex?: number; useBase14?: boolean } = {}): Promise<Buffer> {
+  const doc = await PDFDocument.create();
+  const font = opts.useBase14 ? await doc.embedFont(StandardFonts.Helvetica) : await embeddedInterFont(doc);
+  for (let i = 0; i < pageCount; i++) {
+    const page = doc.addPage(A5 as unknown as [number, number]);
+    if (i === opts.blankPageIndex) continue; // truly nothing drawn
+    drawEntryPage(page, font, [`${i + 1}  DOG NUMBER ${i + 1}`, 'Owner: Someone, Somewhere']);
+  }
+  return Buffer.from(await doc.save());
+}
+
+/** A ruled "Notes"-style padding page, matching pdf-pad.ts's drawNotesPage —
+ *  real content, must NOT be flagged blank even though it's mostly white. */
+async function buildFixtureWithNotesPage(): Promise<Buffer> {
+  const doc = await PDFDocument.create();
+  const font = await embeddedInterFont(doc);
+  const entryPage = doc.addPage(A5 as unknown as [number, number]);
+  drawEntryPage(entryPage, font, ['1  FIDO OF SOMEWHERE', 'Owner: J Smith, 4 The Lane']);
+
+  const [width, height] = A5;
+  const notesPage = doc.addPage(A5 as unknown as [number, number]);
+  const titleY = height - 32 - 14;
+  notesPage.drawText('NOTES', { x: (width - 40) / 2, y: titleY, size: 14, font, color: rgb(0.12, 0.29, 0.23) });
+  notesPage.drawLine({
+    start: { x: (width - 36) / 2, y: titleY - 6 },
+    end: { x: (width + 36) / 2, y: titleY - 6 },
+    thickness: 0.8,
+    color: rgb(0.12, 0.29, 0.23),
+  });
+  let ly = titleY - 6 - 28;
+  const lastLineY = 32 + 16;
+  while (ly >= lastLineY) {
+    notesPage.drawLine({ start: { x: 24, y: ly }, end: { x: width - 24, y: ly }, thickness: 0.4, color: rgb(0.78, 0.78, 0.78) });
+    ly -= 22;
+  }
+  notesPage.drawText('Notes  ·  Generated by Remi', { x: (width - 100) / 2, y: 16, size: 7, font, color: rgb(0.55, 0.55, 0.55) });
+
+  const p3 = doc.addPage(A5 as unknown as [number, number]);
+  drawEntryPage(p3, font, ['2  REX OF ELSEWHERE', 'Owner: A Jones, Elsewhere']);
+  const p4 = doc.addPage(A5 as unknown as [number, number]);
+  drawEntryPage(p4, font, ['3  BELLA OF NOWHERE', 'Owner: B King, Nowhere']);
+
+  return Buffer.from(await doc.save());
+}
+
+describe('runCataloguePreflight', () => {
+  it('passes every check on a well-formed 4-page embedded-font catalogue', async () => {
+    const pdf = await buildWellFormedFixture();
+    const report = await runCataloguePreflight(pdf, baseSnapshot());
+
+    expect(report.artefact.pages).toBe(4);
+    expect(report.artefact.bytes).toBe(pdf.length);
+    expect(report.artefact.sha256).toMatch(/^[0-9a-f]{64}$/);
+    expect(report.passed).toBe(true);
+    for (const check of report.checks) {
+      if (check.level === 'fail') expect(check.passed, `${check.id}: ${check.detail}`).toBe(true);
+    }
+  });
+
+  describe('post-close-snapshot', () => {
+    it('fails when captured before entry close', async () => {
+      const pdf = await buildWellFormedFixture();
+      const report = await runCataloguePreflight(
+        pdf,
+        baseSnapshot({ capturedAt: '2026-07-31T00:00:00.000Z', entryCloseDate: '2026-08-01T00:00:00.000Z' }),
+      );
+      const check = report.checks.find((c) => c.id === 'post-close-snapshot')!;
+      expect(check.level).toBe('fail');
+      expect(check.passed).toBe(false);
+      expect(report.passed).toBe(false);
+    });
+
+    it('fails when show status is not post-close', async () => {
+      const pdf = await buildWellFormedFixture();
+      const report = await runCataloguePreflight(pdf, baseSnapshot({ showStatus: 'open' }));
+      const check = report.checks.find((c) => c.id === 'post-close-snapshot')!;
+      expect(check.passed).toBe(false);
+    });
+
+    it('warns (not fails) when there is no entry close date', async () => {
+      const pdf = await buildWellFormedFixture();
+      const report = await runCataloguePreflight(pdf, baseSnapshot({ entryCloseDate: null }));
+      const check = report.checks.find((c) => c.id === 'post-close-snapshot')!;
+      expect(check.level).toBe('warn');
+      expect(check.passed).toBe(true);
+      expect(check.detail.toLowerCase()).toContain('no entry close date');
+    });
+  });
+
+  describe('catalogue-number-completeness', () => {
+    it('fails when expectedNumbers has a gap', async () => {
+      const pdf = await buildWellFormedFixture();
+      const report = await runCataloguePreflight(pdf, baseSnapshot({ expectedNumbers: [1, 2, 4] }));
+      const check = report.checks.find((c) => c.id === 'catalogue-number-completeness')!;
+      expect(check.passed).toBe(false);
+      expect(check.detail).toMatch(/gap/i);
+    });
+
+    it('fails when expectedNumbers has a duplicate', async () => {
+      const pdf = await buildWellFormedFixture();
+      const report = await runCataloguePreflight(pdf, baseSnapshot({ expectedNumbers: [1, 2, 2, 3] }));
+      const check = report.checks.find((c) => c.id === 'catalogue-number-completeness')!;
+      expect(check.passed).toBe(false);
+      expect(check.detail).toMatch(/duplicate/i);
+    });
+
+    it('fails when an entry name is missing from the rendered text', async () => {
+      const pdf = await buildWellFormedFixture();
+      const report = await runCataloguePreflight(
+        pdf,
+        baseSnapshot({ entryNames: [...baseSnapshot().entryNames, { number: 5, name: 'GHOST DOG NOT IN PDF' }], expectedNumbers: [1, 2, 3, 4, 5] }),
+      );
+      const check = report.checks.find((c) => c.id === 'catalogue-number-completeness')!;
+      expect(check.passed).toBe(false);
+      expect(check.detail).toContain('GHOST DOG NOT IN PDF');
+    });
+
+    it('passes when numbers are gapless and every name is present', async () => {
+      const pdf = await buildWellFormedFixture();
+      const report = await runCataloguePreflight(pdf, baseSnapshot());
+      const check = report.checks.find((c) => c.id === 'catalogue-number-completeness')!;
+      expect(check.passed).toBe(true);
+    });
+  });
+
+  describe('page-count-booklet', () => {
+    it('fails on a 3-page document (not a multiple of 4)', async () => {
+      const pdf = await buildFixture(3);
+      const report = await runCataloguePreflight(
+        pdf,
+        baseSnapshot({ expectedNumbers: [1, 2, 3], entryNames: [1, 2, 3].map((n) => ({ number: n, name: `DOG NUMBER ${n}` })) }),
+      );
+      const check = report.checks.find((c) => c.id === 'page-count-booklet')!;
+      expect(check.passed).toBe(false);
+      expect(report.artefact.pages).toBe(3);
+      expect(report.passed).toBe(false);
+    });
+
+    it('passes on a 4-page document', async () => {
+      const pdf = await buildWellFormedFixture();
+      const report = await runCataloguePreflight(pdf, baseSnapshot());
+      const check = report.checks.find((c) => c.id === 'page-count-booklet')!;
+      expect(check.passed).toBe(true);
+    });
+  });
+
+  describe('fonts-embedded', () => {
+    it('fails on a document using an unembedded base-14 font', async () => {
+      const pdf = await buildFixture(4, { useBase14: true });
+      const report = await runCataloguePreflight(
+        pdf,
+        baseSnapshot({ expectedNumbers: [1, 2, 3, 4], entryNames: [1, 2, 3, 4].map((n) => ({ number: n, name: `DOG NUMBER ${n}` })) }),
+      );
+      const check = report.checks.find((c) => c.id === 'fonts-embedded')!;
+      expect(check.passed).toBe(false);
+      expect(check.detail).toMatch(/helvetica/i);
+      expect(report.passed).toBe(false);
+    });
+
+    it('passes on a document with an embedded (subsetted) font', async () => {
+      const pdf = await buildWellFormedFixture();
+      const report = await runCataloguePreflight(pdf, baseSnapshot());
+      const check = report.checks.find((c) => c.id === 'fonts-embedded')!;
+      expect(check.passed).toBe(true);
+    });
+  });
+
+  describe('no-blank-pages', () => {
+    it('fails when one page is genuinely blank', async () => {
+      const pdf = await buildFixture(4, { blankPageIndex: 1 });
+      const report = await runCataloguePreflight(
+        pdf,
+        baseSnapshot({ expectedNumbers: [1, 2, 3, 4], entryNames: [1, 2, 3, 4].map((n) => ({ number: n, name: `DOG NUMBER ${n}` })) }),
+      );
+      const check = report.checks.find((c) => c.id === 'no-blank-pages')!;
+      expect(check.passed).toBe(false);
+      expect(check.detail).toMatch(/position\(s\) 2/);
+      expect(report.passed).toBe(false);
+    });
+
+    it('does NOT flag a ruled Notes-style padding page as blank', async () => {
+      const pdf = await buildFixtureWithNotesPage();
+      const report = await runCataloguePreflight(
+        pdf,
+        baseSnapshot({
+          expectedNumbers: [1, 2, 3],
+          entryNames: [
+            { number: 1, name: 'FIDO OF SOMEWHERE' },
+            { number: 2, name: 'REX OF ELSEWHERE' },
+            { number: 3, name: 'BELLA OF NOWHERE' },
+          ],
+        }),
+      );
+      const check = report.checks.find((c) => c.id === 'no-blank-pages')!;
+      expect(check.passed, check.detail).toBe(true);
+    });
+
+    it('passes a fully populated 4-page document', async () => {
+      const pdf = await buildWellFormedFixture();
+      const report = await runCataloguePreflight(pdf, baseSnapshot());
+      const check = report.checks.find((c) => c.id === 'no-blank-pages')!;
+      expect(check.passed).toBe(true);
+    });
+  });
+
+  describe('rkc-wording (warn only)', () => {
+    it('warns, but does not fail the report, when standalone "KC" appears', async () => {
+      const doc = await PDFDocument.create();
+      const font = await embeddedInterFont(doc);
+      const p1 = doc.addPage(A5 as unknown as [number, number]);
+      drawEntryPage(p1, font, ['1  FIDO OF SOMEWHERE', 'Judge: A Person (KC A-List)']);
+      for (let i = 1; i < 4; i++) {
+        const p = doc.addPage(A5 as unknown as [number, number]);
+        drawEntryPage(p, font, [`${i + 1}  DOG NUMBER ${i + 1}`]);
+      }
+      const pdf = Buffer.from(await doc.save());
+      const report = await runCataloguePreflight(
+        pdf,
+        baseSnapshot({ expectedNumbers: [1, 2, 3, 4], entryNames: [{ number: 1, name: 'FIDO OF SOMEWHERE' }, ...[2, 3, 4].map((n) => ({ number: n, name: `DOG NUMBER ${n}` }))] }),
+      );
+      const check = report.checks.find((c) => c.id === 'rkc-wording')!;
+      expect(check.level).toBe('warn');
+      expect(check.passed).toBe(false);
+      // A warn-level failure must never flip the overall report to failed.
+      expect(report.passed).toBe(true);
+    });
+
+    it('does not false-positive on "RKC" itself', async () => {
+      const pdf = await buildWellFormedFixture();
+      const report = await runCataloguePreflight(pdf, baseSnapshot());
+      const check = report.checks.find((c) => c.id === 'rkc-wording')!;
+      expect(check.passed).toBe(true);
+    });
+  });
+
+  describe('stable-identity', () => {
+    it('warns (not fails) when rendererGitSha is explicitly null', async () => {
+      const pdf = await buildWellFormedFixture();
+      const report = await runCataloguePreflight(pdf, baseSnapshot({ rendererGitSha: null }));
+      const check = report.checks.find((c) => c.id === 'stable-identity')!;
+      expect(check.level).toBe('warn');
+      expect(check.passed).toBe(true);
+      expect(report.passed).toBe(true);
+    });
+
+    it('passes at fail-level when rendererGitSha is recorded', async () => {
+      const pdf = await buildWellFormedFixture();
+      const report = await runCataloguePreflight(pdf, baseSnapshot({ rendererGitSha: 'deadbeef' }));
+      const check = report.checks.find((c) => c.id === 'stable-identity')!;
+      expect(check.level).toBe('fail');
+      expect(check.passed).toBe(true);
+    });
+  });
+
+  it('produces a JSON-serialisable report', async () => {
+    const pdf = await buildWellFormedFixture();
+    const report = await runCataloguePreflight(pdf, baseSnapshot());
+    expect(() => JSON.stringify(report)).not.toThrow();
+    const roundTripped = JSON.parse(JSON.stringify(report));
+    expect(roundTripped.passed).toBe(report.passed);
+    expect(roundTripped.checks).toHaveLength(report.checks.length);
+  });
+});
