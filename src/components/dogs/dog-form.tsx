@@ -216,7 +216,7 @@ function DogFormAutosaveBridge({
       {status === 'saving' ? (
         'Saving your changes…'
       ) : status === 'saved' ? (
-        <span className="text-green-700 dark:text-green-500">Saved ✓</span>
+        <span className="text-green-700">Saved ✓</span>
       ) : status === 'error' ? (
         <span className="text-destructive">
           Some details couldn&apos;t save — check your connection, then press Save Dog Details.
@@ -770,11 +770,11 @@ export function DogForm({ mode, defaultValues, dogId, svSection, returnTo, isReg
     <Form {...form}>
       <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
         {isRegional && (
-          <div className="rounded-lg border border-amber-300/70 bg-amber-50 p-4 dark:border-amber-900/50 dark:bg-amber-950/30">
-            <p className="text-sm font-medium text-amber-900 dark:text-amber-200">
+          <div className="rounded-lg border border-se-honey-line bg-se-honey-soft p-4">
+            <p className="text-sm font-medium text-se-honey-ink">
               You&apos;re adding a dog for a regional show
             </p>
-            <p className="mt-1 text-sm text-amber-800/90 dark:text-amber-200/80">
+            <p className="mt-1 text-sm text-se-honey-ink/80">
               Regional (SV / WUSV) entries need a little more detail than a normal
               show. The fields marked <span className="font-semibold">Required</span>{' '}
               must be completed — they print in the show catalogue and we need them
