@@ -6,7 +6,6 @@ import { format, parseISO } from 'date-fns';
 import {
   BookOpen,
   CalendarDays,
-  Download,
   Eye,
   Loader2,
   Lock,
@@ -20,6 +19,7 @@ import {
 } from '@/components/ui/card';
 import { SE_H } from '@/components/show-experience/tokens';
 import { cn } from '@/lib/utils';
+import { CatalogueJobButton } from '@/components/catalogue/catalogue-job-button';
 
 export default function CataloguePage() {
   const params = useParams();
@@ -53,7 +53,6 @@ export default function CataloguePage() {
   }
 
   const { showId, showName, hasPurchased, isAvailable, startDate } = data;
-  const catalogueUrl = `/api/catalogue/${showId}/standard`;
 
   // Not purchased
   if (!hasPurchased) {
@@ -133,21 +132,19 @@ export default function CataloguePage() {
             </h2>
           </div>
           <div className="flex flex-col gap-3">
-            <Button asChild className="min-h-[2.75rem] w-full">
-              <a href={`${catalogueUrl}?preview`} target="_blank" rel="noopener noreferrer">
-                <Eye className="mr-2 size-4" />
-                View Catalogue
-              </a>
-            </Button>
-            <Button asChild variant="outline" className="min-h-[2.75rem] w-full">
-              <a href={catalogueUrl} download>
-                <Download className="mr-2 size-4" />
-                Download PDF
-              </a>
-            </Button>
+            <CatalogueJobButton
+              icon={<Eye className="mr-2 size-4" />}
+              label="View Catalogue"
+              readyLabel="Ready — Open Catalogue"
+              showId={showId}
+              format="standard"
+              className="w-full"
+            />
           </div>
           <p className="text-xs text-muted-foreground">
-            Opens as a PDF. On mobile, your phone&apos;s PDF viewer will open automatically.
+            Tap to prepare your catalogue, then open it as a PDF — this can take a
+            minute for a large show. On mobile, your phone&apos;s PDF viewer will
+            open automatically.
           </p>
         </CardContent>
       </Card>

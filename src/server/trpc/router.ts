@@ -24,6 +24,7 @@ import { followsRouter } from './routers/follows';
 import { printOrdersRouter } from './routers/print-orders';
 import { dashboardRouter } from './routers/dashboard';
 import { critiquesRouter } from './routers/critiques';
+import { documentJobsRouter } from './routers/document-jobs';
 
 export const appRouter = createTRPCRouter({
   shows: showsRouter,
@@ -51,6 +52,7 @@ export const appRouter = createTRPCRouter({
   printOrders: printOrdersRouter,
   dashboard: dashboardRouter,
   critiques: critiquesRouter,
+  documentJobs: documentJobsRouter,
 });
 
 export type AppRouter = typeof appRouter;

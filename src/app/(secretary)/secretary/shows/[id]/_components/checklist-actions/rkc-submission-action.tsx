@@ -13,6 +13,7 @@ import { toast } from 'sonner';
 import { trpc } from '@/lib/trpc';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { CatalogueJobButton } from '@/components/catalogue/catalogue-job-button';
 import type { ActionPanelProps } from '../checklist-action-registry';
 
 export function RkcSubmissionAction({ showId, onComplete }: ActionPanelProps) {
@@ -88,17 +89,13 @@ export function RkcSubmissionAction({ showId, onComplete }: ActionPanelProps) {
       )}
 
       {/* Download marked catalogue */}
-      <Button
-        variant="outline"
-        size="sm"
+      <CatalogueJobButton
+        icon={<Download className="size-3" />}
+        label="Open Marked Catalogue"
+        showId={showId}
+        format="marked"
         className="w-full gap-1.5"
-        asChild
-      >
-        <a href={`/api/catalogue/${showId}/marked`} target="_blank" rel="noopener noreferrer">
-          <Download className="size-3" />
-          Open Marked Catalogue
-        </a>
-      </Button>
+      />
 
       {/* Download absentee report */}
       <Button

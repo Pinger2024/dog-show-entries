@@ -171,3 +171,9 @@ export {
   type CritiqueParsedBlock,
   type CritiqueParsedJson,
 } from './critique-documents';
+export {
+  documentRenderJobs,
+  documentRenderJobsRelations,
+  type DocumentRenderJobStatus,
+  type DocumentRenderJobFormat,
+} from './document-render-jobs';

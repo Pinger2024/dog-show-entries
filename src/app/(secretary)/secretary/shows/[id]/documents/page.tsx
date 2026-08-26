@@ -45,6 +45,7 @@ import { downloadCsv } from '../_lib/show-utils';
 import { useShowId } from '../_lib/show-context';
 import { documentRowVisible } from '../_lib/document-eligibility';
 import { PdfViewerButton } from '../_components/pdf-viewer-button';
+import { CatalogueJobButton } from '@/components/catalogue/catalogue-job-button';
 import { buildAbsenteeRow, buildFinancialStatementRow, membershipClaimLabel } from '@/lib/report-rows';
 
 /**
@@ -379,7 +380,7 @@ export default function DocumentsPage() {
               label="Catalogue — By Class"
               description="Entries grouped by class number"
             >
-              <PdfViewerButton icon={<List className="size-4" />} label="View" url={`/api/catalogue/${showId}/by-class`} />
+              <CatalogueJobButton icon={<List className="size-4" />} label="View" showId={showId} format="by-class" />
             </DocRow>
             {documentRowVisible('grading-cards', docCtx) && (
               <DocRow
@@ -397,7 +398,7 @@ export default function DocumentsPage() {
                 label="Catalogue — Standard"
                 description="RKC-format catalogue grouped by breed and sex"
               >
-                <PdfViewerButton icon={<BookOpen className="size-4" />} label="View" url={`/api/catalogue/${showId}/standard`} />
+                <CatalogueJobButton icon={<BookOpen className="size-4" />} label="View" showId={showId} format="standard" />
               </DocRow>
             )}
             {documentRowVisible('catalogue-steward', docCtx) && (
@@ -406,7 +407,7 @@ export default function DocumentsPage() {
                 label="Catalogue — Steward"
                 description="Condensed two-column format with write-in placements — minimises print cost"
               >
-                <PdfViewerButton icon={<Gavel className="size-4" />} label="View" url={`/api/catalogue/${showId}/judging`} />
+                <CatalogueJobButton icon={<Gavel className="size-4" />} label="View" showId={showId} format="judging" />
               </DocRow>
             )}
           </DocSection>
@@ -549,7 +550,7 @@ export default function DocumentsPage() {
               description="Full catalogue with results, placements, absentees, and awards annotated — required by the RKC within 14 days for championship shows"
               note={!resultsFinalised ? 'Will be empty until results are published' : undefined}
             >
-              <PdfViewerButton icon={<CheckSquare className="size-4" />} label="View" url={`/api/catalogue/${showId}/marked`} />
+              <CatalogueJobButton icon={<CheckSquare className="size-4" />} label="View" showId={showId} format="marked" />
             </DocRow>
           )}
           <DocRow
@@ -557,7 +558,7 @@ export default function DocumentsPage() {
             label="Absentees (Catalogue PDF)"
             description="Dogs marked absent on paid entries — matches your printed catalogue, excludes Junior Handling"
           >
-            <PdfViewerButton icon={<UserX className="size-4" />} label="View" url={`/api/catalogue/${showId}/absentees`} />
+            <CatalogueJobButton icon={<UserX className="size-4" />} label="View" showId={showId} format="absentees" />
             <XlsxButton href={`/api/reports/${showId}/absentee-catalogue-xlsx`} filename={`Absentees-${showId}.xlsx`} />
           </DocRow>
           <DocRow

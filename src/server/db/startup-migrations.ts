@@ -222,5 +222,48 @@ export async function runStartupMigrations() {
       ADD COLUMN IF NOT EXISTS other_qualifications TEXT;
   `);
 
+  // ── 2026-08-26: document_render_jobs — catalogue PDFs move off the web
+  // request process. A heavy render OOM-killed the single prod web
+  // instance mid-entries (2026-08-15); rendering now happens in a
+  // separate worker process from a closed-show snapshot captured at
+  // enqueue time. See src/server/services/catalogue-snapshot.ts and
+  // src/server/workers/document-render-worker.ts.
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS document_render_jobs (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      show_id UUID NOT NULL REFERENCES shows(id) ON DELETE CASCADE,
+      document_type TEXT NOT NULL,
+      format TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'queued',
+      attempts INTEGER NOT NULL DEFAULT 0,
+      max_attempts INTEGER NOT NULL DEFAULT 3,
+      error TEXT,
+      requested_by_user_id UUID REFERENCES users(id) ON DELETE SET NULL,
+      snapshot JSONB NOT NULL,
+      snapshot_hash TEXT NOT NULL,
+      file_sha256 TEXT,
+      storage_key TEXT,
+      page_count INTEGER,
+      file_bytes INTEGER,
+      preflight JSONB,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      started_at TIMESTAMPTZ,
+      finished_at TIMESTAMPTZ
+    );
+  `);
+  await db.execute(sql`
+    CREATE INDEX IF NOT EXISTS document_render_jobs_status_created_idx
+      ON document_render_jobs(status, created_at);
+  `);
+  await db.execute(sql`
+    CREATE INDEX IF NOT EXISTS document_render_jobs_show_format_hash_idx
+      ON document_render_jobs(show_id, format, snapshot_hash);
+  `);
+
+  await db.execute(sql`
+    ALTER TABLE print_order_items
+      ADD COLUMN IF NOT EXISTS render_job_id UUID REFERENCES document_render_jobs(id) ON DELETE SET NULL;
+  `);
+
   console.log(`[startup-migrations] done in ${Date.now() - started}ms`);
 }

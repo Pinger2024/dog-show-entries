@@ -26,6 +26,8 @@ import { sendPrintOrderDispatchEmail, sendPrintOrderAdminNotificationEmail, send
 import { createPaymentIntent } from '@/server/services/stripe';
 import { generateAndUploadForPrint } from '@/server/services/pdf-generation';
 import { computeShowMetrics } from '@/server/services/show-metrics';
+import { requestCatalogueJob, isCatalogueFormat } from '@/server/services/catalogue-jobs';
+import type { Database } from '@/server/db';
 
 type OrderItemForProof = {
   id: string;
@@ -34,44 +36,84 @@ type OrderItemForProof = {
   documentLabel: string;
 };
 
+type ProofResult =
+  | { itemId: string; kind: 'ready'; storageKey: string; publicUrl: string }
+  | { itemId: string; kind: 'job'; renderJobId: string };
+
 /**
- * Generate + upload a proof PDF for each order item before taking payment.
+ * Generate a proof for each order item before taking payment — a catalogue
+ * enqueues a background render job (2026-08-26: catalogue rendering moved
+ * off the web request process after a heavy render OOM-killed the single
+ * prod web instance), everything else still renders synchronously via
+ * generateAndUploadForPrint.
  *
- * The catalogue is the core printed product, so a generation failure there is
- * fatal — we don't want to charge for an order we can't fulfil. The bundled
- * sundries (prize cards, ring numbers, ring boards) are prepared by hand at
- * fulfilment and may not be generatable yet — e.g. ring numbers need catalogue
- * numbers, which aren't assigned until the show is numbered — so those are
- * deferred rather than blocking payment. A deferred item keeps its place on the
- * order (and the pack list) but with no proof PDF yet — fine for today's manual
- * fulfilment (the admin order email flags it as pending and the asset is produced
- * at fulfilment). NOTE: nothing re-runs generation automatically once the order
- * is paid, so a deferred PDF must be produced out-of-band (regenerate path = TODO).
+ * The catalogue proof used to be fatal to the order — a generation failure
+ * meant refusing to charge for an order that couldn't be fulfilled. That no
+ * longer applies: enqueuing is fast and near-impossible to fail on its own
+ * merits (it's a snapshot + an insert, not a render), so any failure here is
+ * treated the same as the other bundled sundries — deferred, not blocking.
+ * The bundled sundries (prize cards, ring numbers, ring boards) are prepared
+ * by hand at fulfilment and may not be generatable yet — e.g. ring numbers
+ * need catalogue numbers, which aren't assigned until the show is numbered —
+ * so those are deferred rather than blocking payment too. A deferred item
+ * keeps its place on the order (and the pack list) but with no proof yet —
+ * fine for today's manual fulfilment (the admin order email flags it as
+ * pending). The worker backfills pdfStorageKey/pdfPublicUrl/pdfGeneratedAt on
+ * the item once its render job completes (see document-render-worker.ts).
  */
-async function generateOrderItemProofs(showId: string, items: OrderItemForProof[]) {
+async function generateOrderItemProofs(
+  database: Database,
+  showId: string,
+  items: OrderItemForProof[],
+  requestedByUserId: string,
+): Promise<ProofResult[]> {
   const results = await Promise.all(
-    items.map(async (item) => {
+    items.map(async (item): Promise<ProofResult | null> => {
+      if (item.documentType === 'catalogue') {
+        try {
+          const format = item.documentFormat ?? 'standard';
+          if (!isCatalogueFormat(format)) {
+            throw new Error(`Unsupported catalogue format: ${item.documentFormat}`);
+          }
+          const { jobId } = await requestCatalogueJob(database, { showId, format, requestedByUserId });
+          return { itemId: item.id, kind: 'job', renderJobId: jobId };
+        } catch (err) {
+          console.error(`[print-orders] catalogue job enqueue failed for ${item.documentLabel}:`, err);
+          return null;
+        }
+      }
       try {
         const { storageKey, publicUrl } = await generateAndUploadForPrint(
           showId,
           item.documentType,
           item.documentFormat ?? undefined,
         );
-        return { itemId: item.id, storageKey, publicUrl };
+        return { itemId: item.id, kind: 'ready', storageKey, publicUrl };
       } catch (err) {
         console.error(`[print-orders] PDF generation failed for ${item.documentType}:`, err);
-        if (item.documentType === 'catalogue') {
-          throw new TRPCError({
-            code: 'INTERNAL_SERVER_ERROR',
-            message: `Failed to generate ${item.documentLabel} PDF`,
-          });
-        }
         return null;
       }
     }),
   );
-  return results.filter(
-    (r): r is { itemId: string; storageKey: string; publicUrl: string } => r !== null,
+  return results.filter((r): r is ProofResult => r !== null);
+}
+
+/** Apply generateOrderItemProofs' results to their print_order_items rows —
+ *  a 'ready' proof fills the PDF fields directly, a 'job' proof only points
+ *  at the render job; the worker fills the PDF fields once that job finishes. */
+async function applyOrderItemProofs(database: Database, results: ProofResult[]) {
+  await Promise.all(
+    results.map((r) =>
+      r.kind === 'ready'
+        ? database
+            .update(printOrderItems)
+            .set({ pdfStorageKey: r.storageKey, pdfPublicUrl: r.publicUrl, pdfGeneratedAt: new Date() })
+            .where(eq(printOrderItems.id, r.itemId))
+        : database
+            .update(printOrderItems)
+            .set({ renderJobId: r.renderJobId })
+            .where(eq(printOrderItems.id, r.itemId)),
+    ),
   );
 }
 
@@ -255,21 +297,10 @@ export const printOrdersRouter = createTRPCRouter({
         });
       }
 
-      // Generate proof PDFs for each item (catalogue fatal, sundries deferred).
-      const pdfResults = await generateOrderItemProofs(order.showId, order.items);
-
-      await Promise.all(
-        pdfResults.map((r) =>
-          ctx.db
-            .update(printOrderItems)
-            .set({
-              pdfStorageKey: r.storageKey,
-              pdfPublicUrl: r.publicUrl,
-              pdfGeneratedAt: new Date(),
-            })
-            .where(eq(printOrderItems.id, r.itemId))
-        )
-      );
+      // Generate proofs for each item — catalogue items enqueue a render
+      // job, everything else renders synchronously; neither blocks payment.
+      const pdfResults = await generateOrderItemProofs(ctx.db, order.showId, order.items, ctx.session.user.id);
+      await applyOrderItemProofs(ctx.db, pdfResults);
 
       // Create Stripe PaymentIntent
       const paymentIntent = await createPaymentIntent(order.totalAmount, {
@@ -390,17 +421,10 @@ export const printOrdersRouter = createTRPCRouter({
         });
       }
 
-      // Generate proof PDFs for each item (catalogue fatal, sundries deferred).
-      const pdfResults = await generateOrderItemProofs(order.showId, order.items);
-
-      await Promise.all(
-        pdfResults.map((r) =>
-          ctx.db
-            .update(printOrderItems)
-            .set({ pdfStorageKey: r.storageKey, pdfPublicUrl: r.publicUrl, pdfGeneratedAt: new Date() })
-            .where(eq(printOrderItems.id, r.itemId))
-        )
-      );
+      // Generate proofs for each item — catalogue items enqueue a render
+      // job, everything else renders synchronously; neither blocks payment.
+      const pdfResults = await generateOrderItemProofs(ctx.db, order.showId, order.items, ctx.session.user.id);
+      await applyOrderItemProofs(ctx.db, pdfResults);
 
       await ctx.db
         .update(printOrders)
