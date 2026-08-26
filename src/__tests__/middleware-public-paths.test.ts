@@ -82,3 +82,17 @@ describe('isPublicRoute allows the token-gated critique pages', () => {
     expect(isPublicRoute('/secretary/shows/abc-123/critiques')).toBe(false);
   });
 });
+
+/**
+ * /api/health (2026-08-26): an unauthenticated liveness/readiness probe for
+ * the render-job acceptance rehearsal (curl it every second while a worker
+ * renders, to prove the web process stays up). Caught live during that
+ * rehearsal — without this, the middleware redirected it to /login (a 307,
+ * not the 200 the probe needs), which would have made every health check
+ * during the rehearsal look like a false failure.
+ */
+describe('isPublicRoute allows the unauthenticated health probe', () => {
+  it('treats /api/health as public (no login redirect)', () => {
+    expect(isPublicRoute('/api/health')).toBe(true);
+  });
+});

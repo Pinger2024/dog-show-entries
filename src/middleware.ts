@@ -5,7 +5,7 @@ const publicRoutes = ['/', '/login', '/register', '/forgot-password', '/reset-pa
 // `/critiques` (judge review page) and `/api/critique-upload` (its upload
 // route) are token-gated, not session-gated — the judge never logs in. See
 // research/DESIGN-judge-critique-upload-2026-07-31.md.
-const publicPrefixes = ['/shows', '/dog', '/api/auth', '/api/trpc', '/api/upload', '/api/webhooks', '/api/catalogue', '/api/schedule', '/api/judge-contract', '/api/critique-upload', '/api/share-events', '/api/shares', '/api/cron', '/about', '/help', '/privacy', '/terms', '/invite', '/critiques', '/pricing', '/promo', '/features', '/for-secretaries'];
+const publicPrefixes = ['/shows', '/dog', '/api/auth', '/api/trpc', '/api/upload', '/api/webhooks', '/api/catalogue', '/api/schedule', '/api/judge-contract', '/api/critique-upload', '/api/share-events', '/api/shares', '/api/cron', '/api/health', '/about', '/help', '/privacy', '/terms', '/invite', '/critiques', '/pricing', '/promo', '/features', '/for-secretaries'];
 
 // Routes that match a public prefix but require authentication
 const authRequiredPatterns = [
