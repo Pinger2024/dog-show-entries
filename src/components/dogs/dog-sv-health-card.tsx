@@ -583,7 +583,7 @@ export function DogSvHealthCard({ dogId, isOwner, sex, kcHealthSuggestions }: Do
               ) : autosaveStatus === 'saved' ? (
                 <>
                   <Check className="size-3.5 text-green-600" />
-                  <span className="text-green-700 dark:text-green-500">Saved</span>
+                  <span className="text-green-700">Saved</span>
                 </>
               ) : autosaveStatus === 'error' ? (
                 <>

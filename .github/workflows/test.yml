@@ -38,5 +38,9 @@ jobs:
 
       - run: npm ci
 
+      # admin-invoices-settlement.test.ts and catalogue-preflight.test.ts shell
+      # out to pdftotext/pdfinfo/pdffonts/pdftoppm unconditionally.
+      - run: sudo apt-get update && sudo apt-get install -y poppler-utils
+
       # pretest hook handles `db:push:test`, which respects DATABASE_URL above.
       - run: npm test
