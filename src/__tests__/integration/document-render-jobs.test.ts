@@ -47,7 +47,7 @@ import {
   makeEntry,
   makeEntryClass,
 } from '../helpers/factories';
-import { documentRenderJobs, entries as entriesTable } from '@/server/db/schema';
+import { documentRenderJobs, entries as entriesTable, juniorHandlerDetails } from '@/server/db/schema';
 import { requestCatalogueJob } from '@/server/services/catalogue-jobs';
 import { buildCatalogueSnapshot } from '@/server/services/catalogue-snapshot';
 import {
@@ -387,7 +387,7 @@ describe('buildCatalogueSnapshot — meta.expectedNumbers / meta.entryNames', ()
         .values({ showId: show.id, dogId: null, exhibitorId: exhibitor.id, status: 'confirmed', totalFee: 300, entryType: 'junior_handler' })
         .returning();
       await makeEntryClass({ entryId: e.id, showClassId: jhClass.id });
-      await testDb.insert((await import('@/server/db/schema')).juniorHandlerDetails).values({
+      await testDb.insert(juniorHandlerDetails).values({
         entryId: e.id,
         handlerName,
         dateOfBirth: '2012-01-01',
