@@ -17,6 +17,15 @@ vi.mock('@/server/services/pdf-generation', () => ({
   })),
 }));
 
+// Catalogue items enqueue a render job instead of calling
+// generateAndUploadForPrint (2026-08-26) — real by default (a real DB-backed
+// snapshot + insert, no network), overridden per-test to simulate an enqueue
+// failure.
+vi.mock('@/server/services/catalogue-jobs', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/server/services/catalogue-jobs')>();
+  return { ...actual, requestCatalogueJob: vi.fn(actual.requestCatalogueJob) };
+});
+
 async function makePackageOrderSetup() {
   const { user, org } = await makeSecretaryWithOrg();
   const show = await makeShow({ organisationId: org.id });
@@ -219,9 +228,14 @@ describe('printOrders.completeByDeduction', () => {
     });
     expect(refreshed?.status).toBe('paid');
     expect(refreshed?.paymentMethod).toBe(PRINT_PAYMENT_METHODS.DEDUCTED_FROM_PAYOUT);
-    // PDF URLs should be set on items
-    expect(refreshed?.items.every((i) => i.pdfPublicUrl !== null)).toBe(true);
-
+    // Non-catalogue items still render synchronously and get a PDF URL
+    // straight away. The catalogue item enqueues a render job instead
+    // (2026-08-26) — its pdfPublicUrl is filled later by the worker once
+    // that job completes, not here.
+    expect(
+      refreshed?.items.filter((i) => i.documentType !== 'catalogue').every((i) => i.pdfPublicUrl !== null)
+    ).toBe(true);
+    expect(refreshed?.items.find((i) => i.documentType === 'catalogue')?.renderJobId).toBeTruthy();
   });
 
   it('rejects when balance is insufficient', async () => {
@@ -295,8 +309,12 @@ describe('printOrders payment — un-generatable sundries defer instead of faili
     });
     // ring numbers deferred — no PDF yet, but still on the order / pack list
     expect(items.find((i) => i.documentType === 'ring_numbers')?.pdfStorageKey).toBeNull();
-    // the catalogue and the other sundries still get their proof
-    expect(items.find((i) => i.documentType === 'catalogue')?.pdfStorageKey).toBe('test/catalogue.pdf');
+    // the catalogue enqueues a render job (no PDF yet — the worker fills that
+    // in once the job completes); the other sundries still get their proof
+    // synchronously.
+    const catalogueItem = items.find((i) => i.documentType === 'catalogue');
+    expect(catalogueItem?.renderJobId).toBeTruthy();
+    expect(catalogueItem?.pdfStorageKey).toBeNull();
     expect(items.find((i) => i.documentType === 'prize_cards')?.pdfStorageKey).toBe('test/prize_cards.pdf');
   });
 
@@ -316,16 +334,29 @@ describe('printOrders payment — un-generatable sundries defer instead of faili
       where: eq(printOrderItems.printOrderId, orderId),
     });
     expect(items.find((i) => i.documentType === 'ring_numbers')?.pdfStorageKey).toBeNull();
-    expect(items.find((i) => i.documentType === 'catalogue')?.pdfStorageKey).toBe('test/catalogue.pdf');
+    const catalogueItem = items.find((i) => i.documentType === 'catalogue');
+    expect(catalogueItem?.renderJobId).toBeTruthy();
+    expect(catalogueItem?.pdfStorageKey).toBeNull();
   });
 
-  it('initiatePayment still fails loudly when the catalogue itself cannot be generated', async () => {
+  it('initiatePayment no longer fails when the catalogue job can\'t even be enqueued — deferred like any other sundry', async () => {
+    // Catalogue proofs used to be fatal (a generation failure meant refusing
+    // to charge for an order that couldn't be fulfilled). That no longer
+    // applies: enqueuing is fast and near-impossible to fail on its own
+    // merits, so a failure here is treated the same as the other bundled
+    // sundries — deferred, not blocking (2026-08-26).
     const { show, caller } = await makePackageOrderSetup();
     const { orderId } = await caller.printOrders.createPackageOrder(packageOrderInput(show.id));
-    await setGen(async (_showId, documentType) => {
-      if (documentType === 'catalogue') throw new Error('catalogue render failed');
-      return okFor(documentType);
+    const { requestCatalogueJob } = await import('@/server/services/catalogue-jobs');
+    vi.mocked(requestCatalogueJob).mockRejectedValueOnce(new Error('catalogue snapshot failed'));
+
+    await expect(caller.printOrders.initiatePayment({ orderId })).resolves.toMatchObject({
+      clientSecret: expect.any(String),
     });
-    await expect(caller.printOrders.initiatePayment({ orderId })).rejects.toThrow(/Failed to generate/);
+
+    const items = await testDb.query.printOrderItems.findMany({
+      where: eq(printOrderItems.printOrderId, orderId),
+    });
+    expect(items.find((i) => i.documentType === 'catalogue')?.renderJobId).toBeNull();
   });
 });
