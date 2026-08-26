@@ -99,7 +99,12 @@ const PREFLIGHT_MODULE_SPECIFIER: string = '@/lib/catalogue-preflight';
 /** Dynamic-import seam for the preflight module another agent builds
  *  (src/lib/catalogue-preflight.ts) in parallel. No-ops — returns null,
  *  never throws — if the module doesn't exist yet or itself errors, so
- *  landing this worker never depends on that module's timing. */
+ *  landing this worker never depends on that module's timing.
+ *
+ *  Firm contract: `runCataloguePreflight(pdf, snapshotMeta, opts)`, where
+ *  `snapshotMeta` is exactly `snapshot.meta` (CatalogueSnapshotMeta —
+ *  includes expectedNumbers/entryNames for the gapless-1..N and
+ *  every-entry-printed checks). */
 async function runPreflightIfAvailable(
   job: RawDocumentRenderJobRow,
   buffer: Buffer,
@@ -111,10 +116,10 @@ async function runPreflightIfAvailable(
       | null;
     if (!mod) return null;
     const fn = (mod.runCataloguePreflight ?? mod.runPreflight ?? mod.default) as
-      | ((args: { job: RawDocumentRenderJobRow; buffer: Buffer; snapshot: CatalogueSnapshot }) => unknown)
+      | ((pdf: Buffer, snapshotMeta: CatalogueSnapshot['meta'], opts: Record<string, unknown>) => unknown)
       | undefined;
     if (typeof fn !== 'function') return null;
-    return await fn({ job, buffer, snapshot });
+    return await fn(buffer, snapshot.meta, {});
   } catch (err) {
     console.error(`[document-render-worker] preflight failed for job ${job.id}:`, err);
     return null;

@@ -115,13 +115,28 @@ export interface CatalogueSnapshot {
    *  time via getTonalWash() rather than storing the rendered wash buffers,
    *  since only WUSV shows need it and it's cheap to redo. */
   orgColors: { primary: string | null; secondary: string | null; monochrome: boolean } | null;
-  meta: {
-    showStatus: string;
-    catalogueNumbersLockedAt: string | null;
-    entryCloseDate: string | null;
-    capturedAt: string;
-    rendererGitSha: string;
-  };
+  meta: CatalogueSnapshotMeta;
+}
+
+/** Handed to the preflight module (src/lib/catalogue-preflight.ts, built in
+ *  parallel) as its `snapshotMeta` argument — this is a firm, shared
+ *  contract, not just render bookkeeping. */
+export interface CatalogueSnapshotMeta {
+  showStatus: string;
+  catalogueNumbersLockedAt: string | null;
+  entryCloseDate: string | null;
+  capturedAt: string;
+  rendererGitSha: string;
+  /** Every catalogue number that SHOULD exist, deduped per dog exactly as
+   *  assignNumbers() in catalogue-numbering.ts dedupes (a dog holding
+   *  multiple entry rows counts once, at its first appearance; Junior
+   *  Handler entries have no dog and are never deduped against each other).
+   *  Feeds the preflight's gapless-1..N check. */
+  expectedNumbers: number[];
+  /** Catalogue number -> display name (dog registered name, or the Junior
+   *  Handler's handler name) for every confirmed entry that has a number.
+   *  Feeds the preflight's every-entry-printed check. */
+  entryNames: { number: number; name: string }[];
 }
 
 // ── Renderer identity ────────────────────────────────────────────────────
@@ -514,7 +529,60 @@ export async function buildCatalogueSnapshot(db: Database, showId: string): Prom
       entryCloseDate: show.entryCloseDate ? new Date(show.entryCloseDate).toISOString() : null,
       capturedAt: new Date().toISOString(),
       rendererGitSha: getRendererGitSha(),
+      ...buildExpectedNumbersAndNames(entries),
     },
+  };
+}
+
+/** Every catalogue number that should exist, deduped per dog exactly as
+ *  assignNumbers() in catalogue-numbering.ts dedupes, plus a number->name
+ *  lookup for every confirmed entry that has one — the preflight module's
+ *  gapless-1..N and every-entry-printed checks. */
+function buildExpectedNumbersAndNames(
+  entries: Array<{
+    dogId: string | null;
+    catalogueNumber: string | null;
+    entryType: string;
+    dog?: { registeredName?: string | null } | null;
+    juniorHandlerDetails?: { handlerName?: string | null } | null;
+  }>,
+): Pick<CatalogueSnapshotMeta, 'expectedNumbers' | 'entryNames'> {
+  const seenDogIds = new Set<string>();
+  const expectedNumbersSet = new Set<number>();
+  const nameByNumber = new Map<number, string>();
+
+  for (const entry of entries) {
+    if (!entry.catalogueNumber) continue;
+    const num = Number(entry.catalogueNumber);
+    if (!Number.isFinite(num)) continue;
+
+    // Dog-aware dedup, mirroring assignNumbers(): a dog's second (or third...)
+    // entry row shares its first row's number and must not count again.
+    // Junior Handler entries carry no dog (dogId null) and are always
+    // numbered — and counted — individually.
+    if (entry.dogId) {
+      if (!seenDogIds.has(entry.dogId)) {
+        seenDogIds.add(entry.dogId);
+        expectedNumbersSet.add(num);
+      }
+    } else {
+      expectedNumbersSet.add(num);
+    }
+
+    if (!nameByNumber.has(num)) {
+      const name =
+        entry.entryType === 'junior_handler'
+          ? entry.juniorHandlerDetails?.handlerName
+          : entry.dog?.registeredName;
+      nameByNumber.set(num, name ?? 'Unknown');
+    }
+  }
+
+  return {
+    expectedNumbers: [...expectedNumbersSet].sort((a, b) => a - b),
+    entryNames: [...nameByNumber.entries()]
+      .map(([number, name]) => ({ number, name }))
+      .sort((a, b) => a.number - b.number),
   };
 }
 

@@ -47,8 +47,9 @@ import {
   makeEntry,
   makeEntryClass,
 } from '../helpers/factories';
-import { documentRenderJobs } from '@/server/db/schema';
+import { documentRenderJobs, entries as entriesTable } from '@/server/db/schema';
 import { requestCatalogueJob } from '@/server/services/catalogue-jobs';
+import { buildCatalogueSnapshot } from '@/server/services/catalogue-snapshot';
 import {
   claimNextJob,
   processJob,
@@ -254,7 +255,28 @@ describe('worker: processJob — real render', () => {
     // strip-only.
     expect(padPdfToMultiple).toHaveBeenCalledTimes(1);
     expect(stripUnembeddedBase14Fonts).not.toHaveBeenCalled();
+    // The preflight report is persisted on the job and names the exact
+    // artefact — the "make the generated file prove itself" half of the
+    // pipeline (poppler-utils required; CI installs it).
+    const preflight = row?.preflight as { artefact?: { sha256?: string }; checks?: unknown[] } | null;
+    expect(preflight?.checks?.length).toBeGreaterThan(0);
+    expect(preflight?.artefact?.sha256).toBe(row?.fileSha256);
   }, 20_000);
+
+  it('snapshots the preflight contract meta: gapless expectedNumbers and entryNames', async () => {
+    const { user, show } = await makeMinimalShowWithEntry();
+    const { jobId } = await requestCatalogueJob(testDb, { showId: show.id, format: 'standard', requestedByUserId: user.id });
+    const row = await testDb.query.documentRenderJobs.findFirst({ where: eq(documentRenderJobs.id, jobId) });
+    const meta = (row?.snapshot as { meta?: { expectedNumbers?: number[]; entryNames?: { number: number; name: string }[] } }).meta;
+    expect(meta?.expectedNumbers?.length).toBeGreaterThan(0);
+    const sorted = [...(meta?.expectedNumbers ?? [])].sort((a, b) => a - b);
+    sorted.forEach((n, i) => expect(n).toBe(i + 1)); // gapless 1..N
+    expect(meta?.entryNames?.length).toBe(sorted.length);
+    for (const en of meta?.entryNames ?? []) {
+      expect(en.name.trim().length).toBeGreaterThan(0);
+      expect(sorted).toContain(en.number);
+    }
+  });
 
   it('strips (not pads) a non-booklet format — the judging steward catalogue', async () => {
     const { user, show } = await makeMinimalShowWithEntry();
@@ -324,5 +346,72 @@ describe('worker: resetStaleRunningJobs', () => {
 
     const row = await testDb.query.documentRenderJobs.findFirst({ where: eq(documentRenderJobs.id, jobId) });
     expect(row?.status).toBe('running');
+  });
+});
+
+describe('buildCatalogueSnapshot — meta.expectedNumbers / meta.entryNames', () => {
+  // Handed to the preflight module (src/lib/catalogue-preflight.ts, built in
+  // parallel) for its gapless-1..N and every-entry-printed checks — a firm
+  // contract, so the dog-aware dedup must exactly match assignNumbers() in
+  // catalogue-numbering.ts: a dog holding two entry rows (e.g. a breed class
+  // then a later Special Award Class purchase) counts once; dogless Junior
+  // Handler entries are never deduped against each other.
+  it('dedupes a two-entry dog to one number but counts JH entries individually', async () => {
+    const { user, org } = await makeSecretaryWithOrg();
+    const show = await makeShow({ organisationId: org.id, status: 'entries_closed' });
+
+    const breedDef = await makeClassDef({ name: 'Open', type: 'age' });
+    const breedClass = await makeShowClass({ showId: show.id, classDefinitionId: breedDef.id });
+    const sacDef = await makeClassDef({ name: 'Special Award Class - Best Puppy', type: 'special' });
+    const sacClass = await makeShowClass({ showId: show.id, classDefinitionId: sacDef.id });
+    const jhDef = await makeClassDef({ type: 'junior_handler', name: 'JHA Handling (12-16)' });
+    const jhClass = await makeShowClass({ showId: show.id, classDefinitionId: jhDef.id });
+
+    const exhibitor = await makeUser({ role: 'exhibitor' });
+    const dog = await makeDog({ ownerId: exhibitor.id, registeredName: 'Meadowvale Rewa' });
+
+    // The dog's two entry rows (breed class, then a later SAC purchase) —
+    // must share one catalogue number, not two.
+    const entry1 = await makeEntry({ showId: show.id, dogId: dog.id, exhibitorId: exhibitor.id });
+    await makeEntryClass({ entryId: entry1.id, showClassId: breedClass.id });
+    const entry2 = await makeEntry({ showId: show.id, dogId: dog.id, exhibitorId: exhibitor.id });
+    await makeEntryClass({ entryId: entry2.id, showClassId: sacClass.id });
+
+    // Two dogless Junior Handler entries — each numbered (and counted)
+    // individually, per the schema's own comment and the numbering test's
+    // regression case ("still numbers dogless Junior Handler entries
+    // individually").
+    const mkJh = async (handlerName: string) => {
+      const [e] = await testDb
+        .insert(entriesTable)
+        .values({ showId: show.id, dogId: null, exhibitorId: exhibitor.id, status: 'confirmed', totalFee: 300, entryType: 'junior_handler' })
+        .returning();
+      await makeEntryClass({ entryId: e.id, showClassId: jhClass.id });
+      await testDb.insert((await import('@/server/db/schema')).juniorHandlerDetails).values({
+        entryId: e.id,
+        handlerName,
+        dateOfBirth: '2012-01-01',
+      });
+      return e;
+    };
+    await mkJh('Priya Shah');
+    await mkJh('Tom Reid');
+
+    const snapshot = await buildCatalogueSnapshot(testDb, show.id);
+
+    // 4 entry rows total, but only 3 distinct "should print a number" slots:
+    // the dog once + two dogless JH entries.
+    expect(snapshot.meta.expectedNumbers).toHaveLength(3);
+    expect(snapshot.meta.expectedNumbers).toEqual([1, 2, 3]); // gapless 1..N
+    expect(snapshot.meta.entryNames).toHaveLength(3);
+
+    const namesByNumber = new Map(snapshot.meta.entryNames.map((n) => [n.number, n.name]));
+    const dogNumbers = snapshot.entries
+      .filter((e) => e.exhibitorId === exhibitor.id && e.entryType !== 'junior_handler')
+      .map((e) => Number(e.catalogueNumber));
+    // Both of the dog's entry rows resolve to the SAME number.
+    expect(new Set(dogNumbers).size).toBe(1);
+    expect(namesByNumber.get(dogNumbers[0])).toBe('Meadowvale Rewa');
+    expect([...namesByNumber.values()]).toEqual(expect.arrayContaining(['Meadowvale Rewa', 'Priya Shah', 'Tom Reid']));
   });
 });
