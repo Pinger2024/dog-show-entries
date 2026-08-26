@@ -23,7 +23,12 @@
     "demo:service:stop": "launchctl stop co.remishowmanager.demo",
     "demo:service:restart": "launchctl stop co.remishowmanager.demo && sleep 3 && launchctl start co.remishowmanager.demo",
     "demo:service:logs": "tail -f ~/Library/Logs/remi-demo.log",
-    "demo:service:uninstall": "launchctl unload ~/Library/LaunchAgents/co.remishowmanager.demo.plist"
+    "demo:service:uninstall": "launchctl unload ~/Library/LaunchAgents/co.remishowmanager.demo.plist",
+    "demo:worker:start": "launchctl load ~/Library/LaunchAgents/co.remishowmanager.demo-worker.plist",
+    "demo:worker:stop": "launchctl stop co.remishowmanager.demo-worker",
+    "demo:worker:restart": "launchctl stop co.remishowmanager.demo-worker && sleep 3 && launchctl start co.remishowmanager.demo-worker",
+    "demo:worker:logs": "tail -f ~/Library/Logs/remi-demo-worker.log",
+    "demo:worker:uninstall": "launchctl unload ~/Library/LaunchAgents/co.remishowmanager.demo-worker.plist"
   },
   "dependencies": {
     "@auth/drizzle-adapter": "^1.11.1",
