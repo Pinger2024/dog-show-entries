@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import sharp from 'sharp';
 import { prepareAdvertsForRender } from '@/lib/advert-orientation';
+import { fetchClubImage } from '@/lib/safe-image-fetch';
 
 // react-pdf's own image resolver is the embeddability predicate inside
 // prepareAdvertsForRender. Tests default to the REAL resolver (sharp-made
@@ -20,6 +21,19 @@ vi.mock('@react-pdf/image', async (importOriginal) => {
   };
 });
 
+// prepareAdvertsForRender fetches through the SSRF-guarded fetchClubImage()
+// (safe-image-fetch.ts), not bare fetch() — mocked here at that boundary
+// rather than global fetch, so these tests don't have to also satisfy
+// fetchClubImage's own allowlist/DNS checks (those are safe-image-fetch's
+// own test file's job). `fetchClubImage` itself never throws and resolves
+// null on any failure (network error, non-ok response, blocked host,
+// oversized body) — see safe-image-fetch.test.ts — so every "fetch failed"
+// scenario here is exercised as fetchClubImage resolving null.
+vi.mock('@/lib/safe-image-fetch', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/lib/safe-image-fetch')>();
+  return { ...actual, fetchClubImage: vi.fn(actual.fetchClubImage) };
+});
+
 async function png(width: number, height: number): Promise<Buffer> {
   return sharp({
     create: { width, height, channels: 3, background: { r: 0, g: 0, b: 0 } },
@@ -37,10 +51,7 @@ async function jpeg(width: number, height: number): Promise<Buffer> {
 }
 
 function stubFetchWith(buf: Buffer) {
-  vi.stubGlobal(
-    'fetch',
-    vi.fn(async () => ({ ok: true, arrayBuffer: async () => buf })),
-  );
+  vi.mocked(fetchClubImage).mockResolvedValue(buf);
 }
 
 async function dataUriDimensions(uri: string) {
@@ -68,6 +79,7 @@ const ad = (imageUrl: string | null) => ({ id: 'a', imageUrl });
 
 afterEach(() => {
   vi.unstubAllGlobals();
+  vi.mocked(fetchClubImage).mockReset();
   resolveImageCtl.impl = null;
 });
 
@@ -98,15 +110,32 @@ describe('prepareAdvertsForRender', () => {
   });
 
   it('falls back to the original URL when the fetch fails', async () => {
-    vi.stubGlobal('fetch', vi.fn(async () => { throw new Error('network'); }));
+    // fetchClubImage never throws — a network failure resolves null
+    // (safe-image-fetch.test.ts covers that translation directly).
+    vi.mocked(fetchClubImage).mockResolvedValue(null);
     const [out] = await prepareAdvertsForRender([ad('https://x/a.png')]);
     expect(out.imageUrl).toBe('https://x/a.png');
   });
 
-  it('falls back to the original URL on a non-ok response', async () => {
-    vi.stubGlobal('fetch', vi.fn(async () => ({ ok: false, arrayBuffer: async () => Buffer.alloc(0) })));
+  it('falls back to the original URL when fetchClubImage refuses the host (blocked/non-ok/oversized)', async () => {
+    // Same observable outcome for a blocked SSRF target, a non-ok response,
+    // or an over-cap body — fetchClubImage collapses all of them to null.
+    vi.mocked(fetchClubImage).mockResolvedValue(null);
     const [out] = await prepareAdvertsForRender([ad('https://x/a.png')]);
     expect(out.imageUrl).toBe('https://x/a.png');
+  });
+
+  it('passes a print-appropriate 40 MB ceiling to fetchClubImage, not the 8 MB logo default', async () => {
+    stubFetchWith(await png(200, 100));
+    await prepareAdvertsForRender([ad('https://x/a.png')]);
+    expect(fetchClubImage).toHaveBeenCalledWith('https://x/a.png', { maxBytes: 40 * 1024 * 1024 });
+  });
+
+  it('leaves an already-rendered data: URI advert untouched and never calls fetchClubImage — backward compat with a pre-refactor job snapshot', async () => {
+    const preRotated = `data:image/png;base64,${(await png(100, 200)).toString('base64')}`;
+    const [out] = await prepareAdvertsForRender([ad(preRotated)]);
+    expect(out.imageUrl).toBe(preRotated);
+    expect(fetchClubImage).not.toHaveBeenCalled();
   });
 
   it('re-encodes a portrait advert react-pdf cannot embed into a same-size lossless PNG data URI', async () => {

@@ -29,6 +29,13 @@ import { resolveImageSafely } from './pdf-safe-image';
 /** Logos are small; anything larger is not a club badge. */
 const MAX_BYTES = 8 * 1024 * 1024;
 
+export interface FetchClubImageOptions {
+  /** Override the default 8 MB cap. Tuned for club/sponsor logos — a
+   *  full-resolution print advert (see advert-orientation.ts) can
+   *  legitimately be much bigger and passes its own, larger ceiling. */
+  maxBytes?: number;
+}
+
 function ipv4ToLong(ip: string): number {
   return ip.split('.').reduce((acc, part) => (acc << 8) + Number(part), 0) >>> 0;
 }
@@ -80,7 +87,8 @@ function allowlistedHost(url: URL): boolean {
  * reports why to the caller — a logo is decoration, and a failure must
  * degrade to "no logo" rather than cost a secretary her document.
  */
-export async function fetchClubImage(rawUrl: string): Promise<Buffer | null> {
+export async function fetchClubImage(rawUrl: string, opts: FetchClubImageOptions = {}): Promise<Buffer | null> {
+  const maxBytes = opts.maxBytes ?? MAX_BYTES;
   let url: URL;
   try {
     url = new URL(rawUrl);
@@ -119,10 +127,10 @@ export async function fetchClubImage(rawUrl: string): Promise<Buffer | null> {
     if (!contentType.toLowerCase().startsWith('image/')) return null;
 
     const declared = Number(res.headers.get('content-length') ?? '0');
-    if (declared > MAX_BYTES) return null;
+    if (declared > maxBytes) return null;
 
     const buf = Buffer.from(await res.arrayBuffer());
-    if (buf.length === 0 || buf.length > MAX_BYTES) return null;
+    if (buf.length === 0 || buf.length > maxBytes) return null;
     return buf;
   } catch {
     return null;

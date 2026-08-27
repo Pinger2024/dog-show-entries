@@ -7,11 +7,25 @@ import sharp from 'sharp';
 // JPEGs embed fine). Shared with fetchPdfSafeImage() (safe-image-fetch.ts),
 // which runs the same check on the sponsor-logo path — see pdf-safe-image.ts.
 import { resolveImageSafely } from './pdf-safe-image';
+// `catalogueAdverts.imageUrl` is secretary-supplied (uploaded via the same
+// presigned-upload flow as club logos), so it's the same SSRF sink
+// fetchClubImage() exists to close — an unguarded `fetch()` here could be
+// aimed at cloud metadata or an internal host exactly like an org logo
+// could. Print advert artwork legitimately runs bigger than a club logo,
+// so this path overrides fetchClubImage's default 8 MB cap.
+import { fetchClubImage } from './safe-image-fetch';
 
 // A landscape advert rotated 90° anticlockwise puts its top edge on the LEFT of
 // the portrait page, so the reader turns the booklet clockwise to read it — the
 // usual convention for landscape adverts in a portrait-bound programme.
 const ROTATE_LANDSCAPE_DEG = 270;
+
+/** Full-page A5 print artwork can legitimately run well past a club logo's
+ *  size — 40 MB gives generous headroom over any real advert on file while
+ *  still bounding the worst case (this runs in the render WORKER process
+ *  now, not the web process, but it still shouldn't be unbounded). Never
+ *  compressed or downscaled — founder rule: never compress print. */
+const ADVERT_MAX_BYTES = 40 * 1024 * 1024;
 
 /**
  * Prepare catalogue/schedule adverts for rendering. Catalogues print as uniform
@@ -30,10 +44,15 @@ export async function prepareAdvertsForRender<T extends { imageUrl: string | nul
 ): Promise<T[]> {
   return Promise.all(adverts.map(async (ad) => {
     if (!ad.imageUrl) return ad;
+    // Backward compat: a document-render job enqueued before this render
+    // step moved out of buildCatalogueSnapshot (2026-08-27) may still carry
+    // a pre-rotated `data:` URI baked in at snapshot-build time — the OLD
+    // behaviour. It's already render-ready; nothing to fetch or re-rotate,
+    // and fetchClubImage would reject the `data:` scheme anyway.
+    if (ad.imageUrl.startsWith('data:')) return ad;
     try {
-      const res = await fetch(ad.imageUrl);
-      if (!res.ok) return ad;
-      const buf = Buffer.from(await res.arrayBuffer());
+      const buf = await fetchClubImage(ad.imageUrl, { maxBytes: ADVERT_MAX_BYTES });
+      if (!buf) return ad;
       // Apply any EXIF orientation first so we measure/rotate the displayed image.
       const oriented = await sharp(buf).rotate().toBuffer();
       const meta = await sharp(oriented).metadata();

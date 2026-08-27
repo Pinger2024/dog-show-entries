@@ -136,6 +136,75 @@ describe('fetchClubImage — response handling', () => {
   });
 });
 
+// `maxBytes` — the advert path (advert-orientation.ts) overrides the 8 MB
+// logo default with a 40 MB print-artwork ceiling; these prove the option
+// is actually honoured (both directions) rather than just accepted and
+// ignored, and that the SSRF host checks still apply regardless of it.
+describe('fetchClubImage — maxBytes option', () => {
+  const fetchSpy = vi.fn();
+  const ALLOWED = 'https://pub-example.r2.dev/uploads/advert.png';
+
+  beforeEach(() => {
+    vi.stubGlobal('fetch', fetchSpy);
+    fetchSpy.mockReset();
+    vi.stubEnv('R2_PUBLIC_URL', 'https://pub-example.r2.dev');
+  });
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.unstubAllEnvs();
+  });
+
+  const reply = (body: Buffer, headers: Record<string, string>) => ({
+    ok: true,
+    status: 200,
+    headers: { get: (k: string) => headers[k.toLowerCase()] ?? null },
+    arrayBuffer: async () => body.buffer.slice(body.byteOffset, body.byteOffset + body.byteLength),
+  });
+
+  it('rejects (by declared content-length) a body over the default 8 MB when no maxBytes is passed', async () => {
+    fetchSpy.mockResolvedValue(
+      reply(Buffer.from([1]), { 'content-type': 'image/png', 'content-length': String(9 * 1024 * 1024) }),
+    );
+    await expect(fetchClubImage(ALLOWED)).resolves.toBeNull();
+  });
+
+  it('accepts a body between the 8 MB default and a 40 MB maxBytes override', async () => {
+    // Just over the 8 MB default is enough to prove the override raised the
+    // ceiling — sized to stay just past the boundary rather than up near
+    // 40 MB, so the deep byte comparison below stays fast.
+    const body = Buffer.alloc(8 * 1024 * 1024 + 1024, 7);
+    fetchSpy.mockResolvedValue(
+      reply(body, { 'content-type': 'image/png', 'content-length': String(body.length) }),
+    );
+    const result = await fetchClubImage(ALLOWED, { maxBytes: 40 * 1024 * 1024 });
+    expect(result).not.toBeNull();
+    expect(result?.length).toBe(body.length);
+    expect(result?.equals(body)).toBe(true);
+  });
+
+  it('still rejects (by declared content-length) a body over an explicit maxBytes override', async () => {
+    fetchSpy.mockResolvedValue(
+      reply(Buffer.from([1]), { 'content-type': 'image/png', 'content-length': String(41 * 1024 * 1024) }),
+    );
+    await expect(fetchClubImage(ALLOWED, { maxBytes: 40 * 1024 * 1024 })).resolves.toBeNull();
+  });
+
+  it('also enforces maxBytes against the actual body length, not just the declared header', async () => {
+    const body = Buffer.alloc(41 * 1024 * 1024, 7);
+    // Declared length understates the real body — the actual-length check
+    // must still catch it rather than trusting the header alone.
+    fetchSpy.mockResolvedValue(reply(body, { 'content-type': 'image/png', 'content-length': '1' }));
+    await expect(fetchClubImage(ALLOWED, { maxBytes: 40 * 1024 * 1024 })).resolves.toBeNull();
+  });
+
+  it('still refuses a blocked/internal host even with a raised maxBytes', async () => {
+    await expect(
+      fetchClubImage('https://10.0.0.5/logo.png', { maxBytes: 40 * 1024 * 1024 }),
+    ).resolves.toBeNull();
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+});
+
 // fetchPdfSafeImage — react-pdf's bundled image reader can silently fail to
 // parse some real-world files with no error surfaced anywhere (confirmed
 // directly against the real North East GSD Regional show-sponsor logo,

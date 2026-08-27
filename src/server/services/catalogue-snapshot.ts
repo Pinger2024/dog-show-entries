@@ -20,6 +20,17 @@
  * rendered from the same snapshot. This mirrors (and was extracted from)
  * `/api/catalogue/[showId]/[format]/route.ts`'s data-building — that route
  * now enqueues instead of rendering; see `catalogue-jobs.ts`.
+ *
+ * 2026-08-27 — a SECOND OOM risk in this same file: buildCatalogueSnapshot()
+ * used to fetch every advert's and show-sponsor's image BYTES and embed
+ * them in the snapshot it just got done moving off the web process. A
+ * 20-advert show produced a 13.2 MB snapshot ROW and a +530 MB memory spike
+ * — in the web process, at enqueue time, which is exactly the process this
+ * whole file exists to protect. The snapshot now carries plain URLs only
+ * (adverts keep their `imageUrl`; sponsors carry `logoUrl`) — see
+ * `hydrateSnapshotForRender()`, which fetches the bytes in the WORKER
+ * process, immediately before the PDF is actually built, into a
+ * non-persisted copy of the snapshot.
  */
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
@@ -57,27 +68,29 @@ import type { MarkedResult, MarkedAchievement } from '@/components/catalogue/cat
 export const CATALOGUE_FORMATS = ['standard', 'by-class', 'judging', 'absentees', 'marked'] as const;
 export type CatalogueFormat = (typeof CATALOGUE_FORMATS)[number];
 
-// ── Buffer <-> JSON marker ──────────────────────────────────────────────
-// jsonb can't hold a Buffer; a plain `{type:'Buffer',data:[...]}` round trip
-// works but bloats the row and requires guessing the shape back out. Instead
-// every Buffer becomes an explicit marker object with a base64 string, and is
-// revived to a real Buffer immediately before it's handed to react-pdf.
+// ── Legacy buffer marker (backward compat only) ─────────────────────────
+// Before 2026-08-27, buildCatalogueSnapshot() fetched sponsor logo bytes
+// itself and stored them as `{__bufferBase64}` (jsonb can't hold a raw
+// Buffer). A document-render job enqueued before that date may still carry
+// one of these on its persisted `snapshot` column — hydrateSnapshotForRender()
+// below decodes it directly rather than re-fetching from `logoUrl`. Nothing
+// written from here on ever produces one; this exists purely to read old rows.
 
 interface BufferMarker {
   __bufferBase64: string;
 }
 
-function toBufferMarker(buf: Buffer | null | undefined): BufferMarker | null {
-  return buf ? { __bufferBase64: buf.toString('base64') } : null;
+function isLegacyBufferMarker(value: unknown): value is BufferMarker {
+  return (
+    !!value &&
+    typeof value === 'object' &&
+    typeof (value as { __bufferBase64?: unknown }).__bufferBase64 === 'string'
+  );
 }
 
-function fromBufferMarker(marker: BufferMarker | null | undefined): Buffer | null {
-  return marker ? Buffer.from(marker.__bufferBase64, 'base64') : null;
+function fromBufferMarker(marker: BufferMarker): Buffer {
+  return Buffer.from(marker.__bufferBase64, 'base64');
 }
-
-type SnapshotShowSponsorInfo = Omit<ShowSponsorInfo, 'logoBuffer'> & {
-  logoBuffer: BufferMarker | null;
-};
 
 type SnapshotEntryClass = CatalogueEntry['classes'][number] & {
   absent: boolean;
@@ -96,15 +109,22 @@ export interface SnapshotEntry extends Omit<CatalogueEntry, 'dogName' | 'classes
   classes: SnapshotEntryClass[];
 }
 
-/** Everything in CatalogueShowInfo EXCEPT the two fields that need reviving
- *  (showSponsors' logo buffers) or recomputing (svWashes) at render time. */
+/** Everything in CatalogueShowInfo EXCEPT the two fields that need
+ *  hydrating (showSponsors' logo bytes) or recomputing (svWashes) at
+ *  render time. */
 type SnapshotShowInfoBase = Omit<CatalogueShowInfo, 'showSponsors' | 'svWashes'>;
 
 export interface CatalogueSnapshot {
   version: 1;
   showId: string;
   showInfoBase: SnapshotShowInfoBase;
-  showSponsors: SnapshotShowSponsorInfo[];
+  /** As BUILT (buildCatalogueSnapshot), every sponsor here carries only
+   *  `logoUrl` — `logoBuffer` is left unset, so the persisted row never
+   *  carries image bytes. `logoBuffer` is populated ONLY on the
+   *  non-persisted, render-time copy hydrateSnapshotForRender() returns.
+   *  `ShowSponsorInfo.logoBuffer` being optional is what lets one type
+   *  describe both states rather than needing a separate "hydrated" type. */
+  showSponsors: ShowSponsorInfo[];
   entries: SnapshotEntry[];
   achievements: MarkedAchievement[];
   paidOrderIds: string[];
@@ -180,7 +200,15 @@ function canonicalStringify(value: unknown): string {
 
 /** sha256 of the snapshot's canonical JSON, EXCLUDING `meta.capturedAt` —
  *  two enqueues of an unchanged show a minute apart must hash identically
- *  so the second one dedupes onto the first's job. */
+ *  so the second one dedupes onto the first's job.
+ *
+ *  This now hashes advert/sponsor-logo URLS rather than image bytes (the
+ *  snapshot no longer carries the bytes at all — see the file header). That
+ *  is still a sound change-fingerprint: every upload — advert or logo —
+ *  mints a fresh `randomUUID()` storage key (api/upload/presign/route.ts,
+ *  judge-photo/route.ts), so a re-upload of "the same" artwork always
+ *  produces a different URL. A URL changing IS the content changing; there
+ *  is no case where the bytes change but the URL doesn't. */
 export function computeSnapshotHash(snapshot: CatalogueSnapshot): string {
   const { meta, ...rest } = snapshot;
   const stableMeta = { ...meta, capturedAt: undefined };
@@ -405,18 +433,18 @@ export async function buildCatalogueSnapshot(db: Database, showId: string): Prom
     };
   });
 
-  const showSponsorInfos: SnapshotShowSponsorInfo[] = await Promise.all(
-    showSponsorRows.map(async (ss) => ({
-      name: ss.sponsor.name,
-      tier: ss.tier,
-      logoUrl: ss.sponsor.logoUrl,
-      website: ss.sponsor.website,
-      customTitle: ss.customTitle,
-      logoBuffer: toBufferMarker(
-        ss.tier === 'show' && ss.sponsor.logoUrl ? await fetchPdfSafeImage(ss.sponsor.logoUrl) : null,
-      ),
-    })),
-  );
+  // URL only — no fetch, no bytes. This used to `await fetchPdfSafeImage()`
+  // here, at enqueue time, in the web process; that fetch (and the advert
+  // one below) is exactly what produced the 2026-08-27 OOM risk this
+  // function exists to avoid. The logo is fetched later, in the worker
+  // process, by hydrateSnapshotForRender() — see the file header.
+  const showSponsorInfos: ShowSponsorInfo[] = showSponsorRows.map((ss) => ({
+    name: ss.sponsor.name,
+    tier: ss.tier,
+    logoUrl: ss.sponsor.logoUrl,
+    website: ss.sponsor.website,
+    customTitle: ss.customTitle,
+  }));
 
   const allShowClasses: ShowClassInfo[] = showClassRows.map((sc) => ({
     className: sc.classDefinition?.name ?? 'Unknown Class',
@@ -430,15 +458,17 @@ export async function buildCatalogueSnapshot(db: Database, showId: string): Prom
 
   const scheduleData = show.scheduleData;
 
-  const advertsForCatalogue = await prepareAdvertsForRender(
-    catalogueAdvertRows.map((ad) => ({
-      id: ad.id,
-      advertiserName: ad.advertiserName,
-      position: ad.position,
-      imageUrl: ad.imageUrl,
-      sortOrder: ad.sortOrder,
-    })),
-  );
+  // Original URL only — no fetch, no rotation. prepareAdvertsForRender()
+  // (which fetches the artwork and, for landscape adverts, rotates it into
+  // a data: URI) now runs in hydrateSnapshotForRender() at render time
+  // instead — see the file header.
+  const advertsForCatalogue = catalogueAdvertRows.map((ad) => ({
+    id: ad.id,
+    advertiserName: ad.advertiserName,
+    position: ad.position,
+    imageUrl: ad.imageUrl,
+    sortOrder: ad.sortOrder,
+  }));
 
   const achievements: MarkedAchievement[] = achievementRows.map((a) => ({
     type: a.type,
@@ -634,23 +664,70 @@ export function materializeCatalogueEntries(
     })),
   }));
 
-  const revivedShowSponsors: ShowSponsorInfo[] = snapshot.showSponsors.map((s) => ({
-    ...s,
-    logoBuffer: fromBufferMarker(s.logoBuffer),
-  }));
-
+  // Sponsors pass through as-is: `logoBuffer` is simply absent on a
+  // freshly-built snapshot (this function also serves the `?output=json`
+  // export, which never needs it) and is a real Buffer only when `snapshot`
+  // is the hydrated, render-ready copy hydrateSnapshotForRender() produced.
   const showInfo: CatalogueShowInfo = {
     ...snapshot.showInfoBase,
-    showSponsors: revivedShowSponsors.length > 0 ? revivedShowSponsors : undefined,
+    showSponsors: snapshot.showSponsors.length > 0 ? snapshot.showSponsors : undefined,
   };
 
   return { showInfo, entries: catalogueEntries, filteredEntries };
 }
 
+/**
+ * Produce a render-ready COPY of `snapshot` with real image bytes wired in:
+ * advert portrait/landscape orientation (prepareAdvertsForRender, which
+ * rotates landscape artwork into a data: URI) and show-tier sponsor logos
+ * (fetchPdfSafeImage, into `logoBuffer` — exactly the field the components
+ * already read, e.g. sv-front-matter.tsx's ShowSponsorBilling). This is
+ * what used to happen inside buildCatalogueSnapshot(), at enqueue time, in
+ * the web process — see the file header for why that OOM'd prod. It now
+ * happens HERE, at render time, in the worker process, against a copy —
+ * `snapshot` itself is never mutated, since the same persisted row can be
+ * rendered again later (a retry, or a second format sharing the dedupe
+ * hash) and the entire point is that the STORED row never carries bytes.
+ *
+ * Backward compatible with a job row enqueued before this refactor
+ * shipped, whose persisted snapshot may still carry bytes from the OLD
+ * buildCatalogueSnapshot: an advert `imageUrl` that's already a `data:` URI
+ * is left untouched by prepareAdvertsForRender (nothing to fetch or
+ * re-rotate), and a sponsor `logoBuffer` still in its legacy
+ * `{__bufferBase64}` marker shape is decoded directly rather than
+ * re-fetched from `logoUrl`.
+ */
+export async function hydrateSnapshotForRender(snapshot: CatalogueSnapshot): Promise<CatalogueSnapshot> {
+  const adverts = snapshot.showInfoBase.adverts;
+  const hydratedAdverts = adverts && adverts.length > 0 ? await prepareAdvertsForRender(adverts) : adverts;
+
+  const hydratedSponsors: ShowSponsorInfo[] = await Promise.all(
+    snapshot.showSponsors.map(async (s) => {
+      const legacy = (s as { logoBuffer?: unknown }).logoBuffer;
+      if (isLegacyBufferMarker(legacy)) {
+        return { ...s, logoBuffer: fromBufferMarker(legacy) };
+      }
+      const logoBuffer = s.tier === 'show' && s.logoUrl ? await fetchPdfSafeImage(s.logoUrl) : null;
+      return { ...s, logoBuffer };
+    }),
+  );
+
+  return {
+    ...snapshot,
+    showInfoBase: { ...snapshot.showInfoBase, adverts: hydratedAdverts },
+    showSponsors: hydratedSponsors,
+  };
+}
+
 export async function renderCatalogueFromSnapshot(
-  snapshot: CatalogueSnapshot,
+  rawSnapshot: CatalogueSnapshot,
   format: CatalogueFormat,
 ): Promise<Buffer> {
+  // Everything below reads `snapshot` — binding it to the hydrated copy
+  // here (rather than threading a second variable through the rest of the
+  // function) is what guarantees every downstream read sees real image
+  // bytes while `rawSnapshot`, the caller's object, is never touched.
+  const snapshot = await hydrateSnapshotForRender(rawSnapshot);
   const { showInfo, entries: catalogueEntries, filteredEntries } = materializeCatalogueEntries(snapshot, format);
   const isAllBreed = snapshot.showInfoBase.showScope !== 'single_breed';
 
