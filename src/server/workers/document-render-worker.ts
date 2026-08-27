@@ -195,6 +195,48 @@ function sleep(ms: number, signal?: AbortSignal): Promise<void> {
   });
 }
 
+const DEFAULT_JOBS_TABLE_POLL_INTERVAL_MS = 5000;
+
+/** Waits for `document_render_jobs` to exist before the worker touches it.
+ *
+ *  This worker is deployed as its own Render Background Worker, separate
+ *  from the web service — and only the WEB process runs startup migrations
+ *  (src/instrumentation.ts, on boot, production only), which is what
+ *  CREATEs this table. On a first deploy there's no guarantee the web
+ *  instance wins that race: if this worker starts first and calls straight
+ *  into `resetStaleRunningJobs`, Postgres throws `relation
+ *  "document_render_jobs" does not exist`, `main()` (run-render-worker.ts)
+ *  catches it and `process.exit(1)`s, and the worker crash-loops until the
+ *  web process happens to catch up — noisy and slow to recover from.
+ *  Polling `to_regclass` (a plain read, no lock, safe to hammer) sidesteps
+ *  the race entirely: the worker just waits.
+ */
+export async function waitForJobsTable(
+  db: Database,
+  opts: { pollIntervalMs?: number; signal?: AbortSignal } = {},
+): Promise<void> {
+  const pollIntervalMs = opts.pollIntervalMs ?? DEFAULT_JOBS_TABLE_POLL_INTERVAL_MS;
+  let waited = false;
+
+  while (!opts.signal?.aborted) {
+    const result = await db.execute(sql`SELECT to_regclass('public.document_render_jobs') AS tbl`);
+    const [row] = extractRows<{ tbl: string | null }>(result);
+    if (row?.tbl) {
+      if (waited) {
+        console.log('[document-render-worker] document_render_jobs table present');
+      }
+      return;
+    }
+    if (!waited) {
+      console.log(
+        '[document-render-worker] waiting for document_render_jobs table (web startup migrations create it)…',
+      );
+      waited = true;
+    }
+    await sleep(pollIntervalMs, opts.signal);
+  }
+}
+
 /** Poll-claim-render loop. Runs until `signal` aborts. */
 export async function runWorkerLoop(
   db: Database,
@@ -203,6 +245,8 @@ export async function runWorkerLoop(
   const pollIntervalMs = opts.pollIntervalMs ?? DEFAULT_POLL_INTERVAL_MS;
 
   console.log('[document-render-worker] starting');
+  await waitForJobsTable(db, { signal: opts.signal });
+  if (opts.signal?.aborted) return;
   const resetCount = await resetStaleRunningJobs(db);
   if (resetCount > 0) {
     console.log(`[document-render-worker] reset ${resetCount} stale running job(s) back to queued`);
