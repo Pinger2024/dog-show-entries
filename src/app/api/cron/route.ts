@@ -4,6 +4,7 @@ import { db } from '@/server/db';
 import { shows, orders, orderSundryItems, sundryItems } from '@/server/db/schema';
 import { and, eq, ne, or, ilike, isNull, lte, gte, lt, isNotNull, sql } from 'drizzle-orm';
 import { syncCatalogueNumbers } from '@/server/services/catalogue-numbering';
+import { refreshCatalogueJobs, scheduleCatalogueRefresh } from '@/server/services/catalogue-jobs';
 import { sendCatalogueReadyEmail, sendParkingPassEmail } from '@/server/services/email';
 import { CATALOGUE_NAME_PATTERN } from '@/lib/catalogue-utils';
 import { PARKING_NAME_PATTERNS } from '@/lib/parking-utils';
@@ -69,6 +70,7 @@ export async function GET(request: Request) {
     } catch (err) {
       console.error(`[cron] syncCatalogueNumbers failed for ${show.id}:`, err);
     }
+    scheduleCatalogueRefresh(db, show.id, 'auto-close'); // numbers just locked in — render the catalogue now, not on the secretary's first View
   }
 
   // Start of today in server-local time, expressed as a date string —
@@ -101,6 +103,51 @@ export async function GET(request: Request) {
       ),
     )
     .returning({ id: shows.id, name: shows.name });
+
+  // Hourly catalogue-refresh sweep — for every show still in its
+  // proofing/printing window (entries_closed/in_progress), re-render any
+  // auto-format catalogue whose data has drifted since it was last
+  // rendered. This is the safety net for the scattered non-hooked call
+  // sites (judges, class sponsorship, dog edits, manual entries,
+  // withdrawals) — refreshCatalogueJobs dedupes on snapshot hash, so a show
+  // with no real change enqueues nothing and costs one cheap lookup.
+  // Capped to shows starting within the next 60 days or the last 7 so old
+  // stragglers that never progressed past entries_closed don't get
+  // re-rendered forever.
+  let catalogueRefreshEnqueued = 0;
+  let catalogueRefreshUnchanged = 0;
+  const catalogueRefreshErrors: string[] = [];
+  const sweepShows = await db.query.shows.findMany({
+    where: and(
+      or(eq(shows.status, 'entries_closed'), eq(shows.status, 'in_progress')),
+      gte(shows.startDate, londonDateOffset(-7)),
+      lte(shows.startDate, londonDateOffset(60)),
+    ),
+    columns: { id: true },
+  });
+  for (const show of sweepShows) {
+    try {
+      const result = await refreshCatalogueJobs(db, show.id, { reason: 'hourly-sweep' });
+      // refreshCatalogueJobs never throws for a single format's failure — it
+      // collects per-format errors and keeps going — so a show with any
+      // failed format is recorded as an error here too, not just a hard
+      // throw from the call itself.
+      if (result.errors.length > 0) {
+        catalogueRefreshErrors.push(show.id);
+      }
+      if (result.enqueued.length > 0) {
+        catalogueRefreshEnqueued += 1;
+      } else if (!result.skipped && result.errors.length === 0) {
+        catalogueRefreshUnchanged += 1;
+      }
+    } catch (err) {
+      console.error(`[cron] catalogue refresh sweep failed for show ${show.id}:`, err);
+      catalogueRefreshErrors.push(show.id);
+    }
+  }
+  console.log(
+    `[cron] refreshed ${sweepShows.length} shows: ${catalogueRefreshEnqueued} enqueued, ${catalogueRefreshUnchanged} unchanged`,
+  );
 
   // Show-morning catalogue-ready emails (Amanda 2026-05-28). After 8:30 am
   // London on the show's start date, email every exhibitor who paid for a
@@ -210,6 +257,10 @@ export async function GET(request: Request) {
     startedShows: startedShows.map((s) => s.name),
     finishedShows: finishedShows.map((s) => s.name),
     numberedShows,
+    catalogueRefreshChecked: sweepShows.length,
+    catalogueRefreshEnqueued,
+    catalogueRefreshUnchanged,
+    catalogueRefreshErrors,
     catalogueEmailsSent,
     catalogueEmailErrors,
     parkingPassEmailsSent,

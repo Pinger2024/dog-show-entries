@@ -62,6 +62,7 @@ import { penceToPoundsString } from '@/lib/date-utils';
 import { Resend } from 'resend';
 import { searchKcJudges, fetchKcJudgeProfile } from '@/server/services/kc-judges';
 import { syncCatalogueNumbers, resortCatalogueNumbers } from '@/server/services/catalogue-numbering';
+import { scheduleCatalogueRefresh } from '@/server/services/catalogue-jobs';
 import { generateJudgeContractPdf } from '@/server/services/judge-contract-pdf';
 import { normaliseOfficers } from '@/components/schedule/shared/officers';
 import {
@@ -6314,6 +6315,7 @@ export const secretaryRouter = createTRPCRouter({
         }
       }
 
+      scheduleCatalogueRefresh(ctx.db, input.showId, 'schedule-data-update'); // schedule/timing/vet fields print on a closed show's catalogue cover
       return { success: true };
     }),
 
@@ -6461,6 +6463,7 @@ export const secretaryRouter = createTRPCRouter({
         .insert(showSponsors)
         .values(input)
         .returning();
+      scheduleCatalogueRefresh(ctx.db, input.showId, 'sponsor-assign'); // new/changed sponsor may show up on a closed show's catalogue
       return created!;
     }),
 
@@ -6492,6 +6495,7 @@ export const secretaryRouter = createTRPCRouter({
         .where(eq(showSponsors.id, id))
         .returning();
       if (!updated) throw new TRPCError({ code: 'NOT_FOUND', message: 'Show sponsor not found' });
+      scheduleCatalogueRefresh(ctx.db, existing.showId, 'sponsor-update'); // sponsor tier/artwork change may show up on a closed show's catalogue
       return updated;
     }),
 
@@ -6509,6 +6513,7 @@ export const secretaryRouter = createTRPCRouter({
         .where(eq(showSponsors.id, input.id))
         .returning();
       if (!removed) throw new TRPCError({ code: 'NOT_FOUND', message: 'Show sponsor not found' });
+      scheduleCatalogueRefresh(ctx.db, existing.showId, 'sponsor-remove'); // removed sponsor must drop off a closed show's catalogue too
       return removed;
     }),
 
@@ -7505,6 +7510,7 @@ export const secretaryRouter = createTRPCRouter({
           .set({ ...data, updatedAt: new Date() })
           .where(eq(catalogueAdverts.id, id))
           .returning();
+        scheduleCatalogueRefresh(ctx.db, input.showId, 'advert-upsert'); // re-render a closed show's catalogue with the changed advert
         return updated!;
       }
 
@@ -7512,6 +7518,7 @@ export const secretaryRouter = createTRPCRouter({
         .insert(catalogueAdverts)
         .values(data)
         .returning();
+      scheduleCatalogueRefresh(ctx.db, input.showId, 'advert-upsert'); // new advert on a closed show — re-render to pick it up
       return created!;
     }),
 
@@ -7524,6 +7531,7 @@ export const secretaryRouter = createTRPCRouter({
         .where(
           and(eq(catalogueAdverts.id, input.id), eq(catalogueAdverts.showId, input.showId))
         );
+      scheduleCatalogueRefresh(ctx.db, input.showId, 'advert-delete'); // removed advert must drop off a closed show's catalogue too
       return { deleted: true };
     }),
 

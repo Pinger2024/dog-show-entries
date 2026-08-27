@@ -36,6 +36,7 @@ import { isCloseDateWithinFloor, entryCloseFloorMessage } from '@/lib/entry-clos
 import { DEFAULT_REGIONAL_FEE_TIERS } from '@/lib/regional-fee-calc';
 import type { RegionalFeeConfig } from '@/server/db/schema/shows';
 import { PUBLIC_SHOW_STATUSES } from '@/lib/public-show-statuses';
+import { scheduleCatalogueRefresh } from '@/server/services/catalogue-jobs';
 import type { Database } from '@/server/db';
 
 /** Validation for the regional (SV/WUSV) tiered fee config jsonb — mirrors the
@@ -884,6 +885,7 @@ export const showsRouter = createTRPCRouter({
           startDate: true,
           entryCloseDate: true,
           postalCloseDate: true,
+          status: true,
         },
         with: {
           organisation: {
@@ -996,6 +998,24 @@ export const showsRouter = createTRPCRouter({
       ) {
         const { syncCatalogueNumbers } = await import('@/server/services/catalogue-numbering');
         await syncCatalogueNumbers(ctx.db, id);
+      }
+
+      // Materialise the catalogue in the background: on the transition into
+      // entries_closed, or on a catalogue-visible field change to a show
+      // that's already closed/in_progress — so the secretary's View button
+      // finds a finished render instead of waiting out a cold one. Fired
+      // last, after every DB write above has committed (see
+      // scheduleCatalogueRefresh's own comment for why it isn't awaited).
+      const CATALOGUE_VISIBLE_FIELDS = [
+        'name', 'startDate', 'endDate', 'venueId',
+        'secretaryName', 'secretaryEmail', 'secretaryAddress', 'secretaryPhone',
+        'showOpenTime', 'startTime', 'onCallVet',
+      ] as const;
+      const transitionedToClosed = input.status === 'entries_closed' && storedShow?.status !== 'entries_closed';
+      const alreadyRendering = storedShow?.status === 'entries_closed' || storedShow?.status === 'in_progress';
+      const touchedCatalogueField = CATALOGUE_VISIBLE_FIELDS.some((f) => input[f] !== undefined);
+      if (transitionedToClosed || (alreadyRendering && touchedCatalogueField)) {
+        scheduleCatalogueRefresh(ctx.db, id, 'show-update');
       }
 
       return updated!;
