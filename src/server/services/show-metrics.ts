@@ -68,9 +68,10 @@ export type ShowMetrics = {
   refundedPence: number;
 
   /**
-   * What Remi owes the club: paid entry fees + paid sundry, collected
-   * through STRIPE only, net of partial refunds. Refunded orders are
-   * excluded upstream.
+   * What Remi owes the club: paid entry fees + paid sundry + paid
+   * discretionary donations (`orders.donationPence` — club money, not
+   * Remi's, see OrderRow.donationPence doc), collected through STRIPE
+   * only, net of partial refunds. Refunded orders are excluded upstream.
    *
    * Excludes "offline" paid orders (secretary-recorded postal/cash/
    * direct-to-club entries, `orders.stripePaymentIntentId IS NULL`) —
@@ -80,11 +81,11 @@ export type ShowMetrics = {
    */
   clubReceivablePence: number;
   /**
-   * Paid revenue (entries + sundry) on orders the club collected itself,
-   * outside Remi — postal, cash, or otherwise settled directly with the
-   * exhibitor (`orders.createManualEntry`, `stripePaymentIntentId IS
-   * NULL`). The club already holds this money; it is NOT due from Remi
-   * and must never be added to a payout figure.
+   * Paid revenue (entries + sundry + donations) on orders the club
+   * collected itself, outside Remi — postal, cash, or otherwise settled
+   * directly with the exhibitor (`orders.createManualEntry`,
+   * `stripePaymentIntentId IS NULL`). The club already holds this money;
+   * it is NOT due from Remi and must never be added to a payout figure.
    */
   offlineCollectedPence: number;
   /**
@@ -95,7 +96,7 @@ export type ShowMetrics = {
    * club" (payouts, print-package deduction balance).
    */
   totalClubRevenuePence: number;
-  /** What Remi actually charged the exhibitor at Stripe on paid orders (entries + sundry + platform fee) — offline orders never touched Stripe, so they're excluded here too. */
+  /** What Remi actually charged the exhibitor at Stripe on paid orders (entries + sundry + donation + platform fee) — offline orders never touched Stripe, so they're excluded here too. */
   grossChargedPence: number;
 
   // ── Pending (exhibitors started checkout but Stripe hasn't confirmed) ──
@@ -198,6 +199,18 @@ export type OrderRow = {
   totalAmount: number;
   platformFeePence: number;
   /**
+   * Discretionary donation collected at checkout (`orders.donation_pence`),
+   * part of `totalAmount` — distinct from a sundry item literally named
+   * "Donation" (a purchasable add-on, tracked in `SundryLineRow` instead).
+   * It's club money, split online/offline by `stripePaymentIntentId`
+   * exactly like entry fees — see the accumulation below and
+   * `settlement-itemisation.ts`, which already treats it this way.
+   * Optional/defaults to 0 so older test fixtures that predate this field
+   * don't need updating; every real order row always has it (DB column is
+   * NOT NULL DEFAULT 0).
+   */
+  donationPence?: number;
+  /**
    * Null for orders never collected via Stripe — a secretary recorded a
    * postal/cash/direct-to-club entry (`orders.createManualEntry`). Every
    * real Stripe checkout has this set from the moment the PaymentIntent
@@ -265,14 +278,22 @@ export function aggregateShowMetrics(data: {
   let cancelledOrderCount = 0;
   let refundedOrderCount = 0;
   let paidPlatformFeePence = 0;
+  // Discretionary checkout donation (orders.donationPence) — club money,
+  // split online/offline the same way entry fees and sundries are below.
+  // See OrderRow.donationPence doc for why this lives on the order rather
+  // than the entries/sundries accumulators.
+  let paidDonationPence = 0;
+  let offlineDonationPence = 0;
 
   for (const o of data.orders) {
     if (o.status === 'paid') {
       paidOrderIds.add(o.id);
       paidOrderCount += 1;
       paidPlatformFeePence += o.platformFeePence;
+      paidDonationPence += o.donationPence ?? 0;
       if (!o.stripePaymentIntentId) {
         offlinePaidOrderIds.add(o.id);
+        offlineDonationPence += o.donationPence ?? 0;
       }
     } else if (o.status === 'pending_payment') {
       pendingOrderIds.add(o.id);
@@ -481,10 +502,14 @@ export function aggregateShowMetrics(data: {
   // fees are tracked channel-agnostically above (counts/fees stay the same
   // regardless of who collected the money); the offline sub-totals are
   // subtracted back out here purely to compute the settlement split.
+  // donationPence folds in the same way — it's club money like entries and
+  // sundries, just sourced from orders.donationPence instead of a joined
+  // table (see OrderRow.donationPence doc).
   const stripePaidRevenuePence =
     (paidEntryFeesPence - offlineEntryFeesPence) +
-    (paidSundryRevenuePence - offlineSundryRevenuePence);
-  const offlinePaidRevenuePence = offlineEntryFeesPence + offlineSundryRevenuePence;
+    (paidSundryRevenuePence - offlineSundryRevenuePence) +
+    (paidDonationPence - offlineDonationPence);
+  const offlinePaidRevenuePence = offlineEntryFeesPence + offlineSundryRevenuePence + offlineDonationPence;
 
   const clubReceivablePence = Math.max(
     0,
@@ -623,6 +648,7 @@ export async function computeShowsMetrics(
       status: orders.status,
       totalAmount: orders.totalAmount,
       platformFeePence: orders.platformFeePence,
+      donationPence: orders.donationPence,
       stripePaymentIntentId: orders.stripePaymentIntentId,
     })
     .from(orders)

@@ -536,3 +536,93 @@ describe('aggregateShowMetrics — offline (manual/postal/cash) paid orders', ()
     expect(metrics.clubReceivablePence).toBe(3000);
   });
 });
+
+// ──────────────────────────────────────────────────────────────
+// orders.donation_pence — the North East GSD Regional bug (Michael
+// 2026-08-27): the exhibitor's discretionary donation at checkout
+// (orders.donation_pence, distinct from a "Donation" SUNDRY item) was
+// never read by this aggregation at all. Real order 444e34e3… carried a
+// £4.51 donation; grossChargedPence ran £4.51 short of Σ payments.amount
+// and the club receivable was £4.51 short too. Donation is club money —
+// settlement-itemisation.ts already treats it that way (its "Donations"
+// settlement line sums donation-named sundries AND order.donationPence
+// together, split by channel exactly like entry fees). These pin the
+// same invariant into the canonical show-metrics engine.
+// ──────────────────────────────────────────────────────────────
+
+describe('aggregateShowMetrics — donation accounting (orders.donationPence)', () => {
+  it('includes a Stripe-paid order donation in grossChargedPence, clubReceivablePence and totalClubRevenuePence exactly once', () => {
+    // Entry £30.00 + donation £4.51 = £34.51 club money; +£1.00 platform
+    // fee = £35.51 actually charged at Stripe (what payments.amount holds).
+    const metrics = aggregateShowMetrics({
+      orders: [
+        { id: 'o1', status: 'paid', totalAmount: 3451, platformFeePence: 100, donationPence: 451, stripePaymentIntentId: 'pi_donation' },
+      ],
+      entries: [
+        { id: 'e1', orderId: 'o1', status: 'confirmed', totalFee: 3000, deletedAt: null, isNfc: false, entryType: 'standard', dogId: 'dog-1' },
+      ],
+      sundries: [],
+      payments: [],
+    });
+
+    // The £4.51 donation must show up in club money exactly once, not
+    // zero times (the bug) and not twice (double count against a
+    // "Donation" sundry line, which is a different pot — see below).
+    expect(metrics.clubReceivablePence).toBe(3451); // 3000 entry + 451 donation
+    expect(metrics.totalClubRevenuePence).toBe(3451);
+    expect(metrics.grossChargedPence).toBe(3551); // 3451 club money + 100 platform fee — matches what Stripe actually charged
+  });
+
+  it('routes an OFFLINE order (no Stripe PI) donation into offlineCollectedPence, never clubReceivablePence', () => {
+    const metrics = aggregateShowMetrics({
+      orders: [
+        { id: 'o1', status: 'paid', totalAmount: 1451, platformFeePence: 0, donationPence: 451, stripePaymentIntentId: null },
+      ],
+      entries: [
+        { id: 'e1', orderId: 'o1', status: 'confirmed', totalFee: 1000, deletedAt: null, isNfc: false, entryType: 'standard', dogId: 'dog-1' },
+      ],
+      sundries: [],
+      payments: [],
+    });
+
+    expect(metrics.offlineCollectedPence).toBe(1451); // 1000 entry + 451 donation, club already holds it
+    expect(metrics.clubReceivablePence).toBe(0); // Remi never touched this money
+    expect(metrics.totalClubRevenuePence).toBe(1451);
+    expect(metrics.grossChargedPence).toBe(0); // offline orders never touched Stripe
+  });
+
+  it('does not double count when a "Donation" SUNDRY item exists alongside orders.donationPence — both are club money, counted independently', () => {
+    // A sundry item literally named "Donation" (a purchasable add-on) is a
+    // completely different mechanism from the checkout donation column.
+    // Both must count, but from their own source — nothing here should
+    // multiply the sundry total by the order-column total or vice versa.
+    const metrics = aggregateShowMetrics({
+      orders: [
+        { id: 'o1', status: 'paid', totalAmount: 1451, platformFeePence: 0, donationPence: 451, stripePaymentIntentId: 'pi_both' },
+      ],
+      entries: [
+        { id: 'e1', orderId: 'o1', status: 'confirmed', totalFee: 1000, deletedAt: null, isNfc: false, entryType: 'standard', dogId: 'dog-1' },
+      ],
+      sundries: [{ orderId: 'o1', itemName: 'Donation', quantity: 1, unitPrice: 500 }],
+      payments: [],
+    });
+
+    expect(metrics.paidSundryRevenuePence).toBe(500); // the sundry "Donation" item, unrelated to donationPence
+    expect(metrics.clubReceivablePence).toBe(1951); // 1000 entry + 500 sundry-donation + 451 checkout-donation
+  });
+
+  it('nets a partial refund against the donation-inclusive Stripe bucket the same way it already nets entry fees', () => {
+    const metrics = aggregateShowMetrics({
+      orders: [
+        { id: 'o1', status: 'paid', totalAmount: 3451, platformFeePence: 100, donationPence: 451, stripePaymentIntentId: 'pi_refund' },
+      ],
+      entries: [
+        { id: 'e1', orderId: 'o1', status: 'confirmed', totalFee: 3000, deletedAt: null, isNfc: false, entryType: 'standard', dogId: 'dog-1' },
+      ],
+      sundries: [],
+      payments: [{ orderId: 'o1', refundAmount: 1000 }],
+    });
+
+    expect(metrics.clubReceivablePence).toBe(2451); // (3000 + 451) − 1000 refund
+  });
+});
