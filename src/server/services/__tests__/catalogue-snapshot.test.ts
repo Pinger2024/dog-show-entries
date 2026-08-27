@@ -86,6 +86,12 @@ describe('computeSnapshotHash', () => {
     expect(computeSnapshotHash(a)).toBe(computeSnapshotHash(b));
   });
 
+  it('is stable when only meta.rendererGitSha changes (a deploy must not invalidate every stored catalogue)', () => {
+    const a = baseSnapshot({ meta: { ...baseSnapshot().meta, rendererGitSha: 'deploy-aaaa' } });
+    const b = baseSnapshot({ meta: { ...baseSnapshot().meta, rendererGitSha: 'deploy-bbbb' } });
+    expect(computeSnapshotHash(a)).toBe(computeSnapshotHash(b));
+  });
+
   it('is stable across two calls on the identical snapshot (deterministic)', () => {
     const snap = baseSnapshot({
       showInfoBase: { ...baseSnapshot().showInfoBase, adverts: [advert('https://r2.test/uploads/a.png')] },

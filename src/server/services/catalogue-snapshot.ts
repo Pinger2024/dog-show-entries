@@ -208,10 +208,19 @@ function canonicalStringify(value: unknown): string {
  *  mints a fresh `randomUUID()` storage key (api/upload/presign/route.ts,
  *  judge-photo/route.ts), so a re-upload of "the same" artwork always
  *  produces a different URL. A URL changing IS the content changing; there
- *  is no case where the bytes change but the URL doesn't. */
+ *  is no case where the bytes change but the URL doesn't.
+ *
+ *  `meta.rendererGitSha` is ALSO excluded (2026-08-27): the hash is the
+ *  identity of the show's DATA, and a stored catalogue stays valid across
+ *  deploys. With the SHA in the hash, every push changed every hash, so the
+ *  hourly refresh sweep re-rendered every closed show after each deploy and
+ *  a secretary's first View after a deploy waited for a render instead of
+ *  downloading the file already on disk — the opposite of "store a finished
+ *  version, download it". The SHA is still recorded on the job (provenance,
+ *  and the preflight's stable-identity check); it just isn't identity. */
 export function computeSnapshotHash(snapshot: CatalogueSnapshot): string {
   const { meta, ...rest } = snapshot;
-  const stableMeta = { ...meta, capturedAt: undefined };
+  const stableMeta = { ...meta, capturedAt: undefined, rendererGitSha: undefined };
   return createHash('sha256').update(canonicalStringify({ ...rest, meta: stableMeta })).digest('hex');
 }
 
