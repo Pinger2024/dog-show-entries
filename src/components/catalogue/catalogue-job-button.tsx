@@ -11,18 +11,38 @@ type Phase = 'idle' | 'preparing' | 'ready' | 'failed';
 const POLL_INTERVAL_MS = 2000;
 
 /**
+ * Trigger a browser download of a cross-origin, presigned URL without
+ * navigating the current page. The download attribute on a cross-origin
+ * anchor is ignored by browsers, but that's fine here — the R2 presigned
+ * URL always carries `Content-Disposition: attachment` (see
+ * generatePresignedGetUrl), so the browser treats the click as a download
+ * rather than a navigation regardless. A synchronous programmatic click,
+ * not window.open(), so it isn't caught by popup blockers.
+ */
+function triggerDownload(url: string) {
+  try {
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = '';
+    anchor.rel = 'noopener';
+    anchor.style.display = 'none';
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+  } catch {
+    window.location.assign(url);
+  }
+}
+
+/**
  * Catalogue formats render as a background job, not a direct PDF stream
  * (2026-08-26 — a heavy catalogue render used to OOM-kill the single prod
  * web instance, so rendering moved to a separate worker process). Click →
- * enqueue → poll → a "Ready — Open" button that navigates to a short-lived
- * presigned R2 URL. Replaces PdfViewerButton's direct iframe embed for the
- * five catalogue formats served from /api/catalogue/[showId]/[format],
+ * enqueue → poll → the file downloads automatically the instant a poll (or
+ * the initial request, if the render was already cached) reports "done" —
+ * see triggerDownload above. Replaces PdfViewerButton's direct iframe embed
+ * for the five catalogue formats served from /api/catalogue/[showId]/[format],
  * which now answers 202 {jobId,status} instead of a PDF.
- *
- * Deliberately two taps, not an auto-opened popup: the render can take up
- * to a minute for a large show, and calling window.open() from a `setTimeout`
- * poll tick (rather than synchronously inside the click handler) gets
- * silently blocked by most browsers' popup blockers anyway.
  *
  * Reload while a job is queued/running: component state (`phase`,
  * `jobIdRef`) is local, so a reload always lands back on 'idle' — the
@@ -35,6 +55,18 @@ const POLL_INTERVAL_MS = 2000;
  * dedupes onto any existing queued/running/done job for the same
  * (show, format, snapshot), so re-tapping the button re-attaches to the
  * SAME job and resumes polling it rather than enqueuing a duplicate render.
+ *
+ * (2026-08-27 — a secretary's browser missed a poll tick because Safari
+ * throttles timers in a backgrounded tab, so "ready" sat undetected for
+ * ~30s and then still needed a manual click; measured 10:33:39 job created
+ * → 10:33:47 rendered → 10:34:16 next poll landed.) Two mitigations: the
+ * download now fires itself (no second tap needed), and a `visibilitychange`
+ * listener forces an immediate poll the moment the tab regains focus rather
+ * than waiting out the throttled interval. "Ready — Open" stays on screen
+ * as the manual fallback for the rare browser that suppresses the
+ * auto-download (e.g. a strict popup/download policy).
+ *
+ * The auto-download fires at most once per job, guarded by jobId.
  */
 export function CatalogueJobButton({
   showId,
@@ -61,6 +93,10 @@ export function CatalogueJobButton({
   const jobIdRef = useRef<string | null>(null);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const mountedRef = useRef(true);
+  /** jobId of the job whose file we've already auto-downloaded — guards
+   *  against re-firing the download if applyStatus is ever invoked twice
+   *  for the same "done" job. */
+  const autoDownloadedJobIdRef = useRef<string | null>(null);
 
   const utils = trpc.useUtils();
   const requestJob = trpc.documentJobs.request.useMutation();
@@ -78,6 +114,10 @@ export function CatalogueJobButton({
     if (status.status === 'done') {
       setPhase('ready');
       setDownloadUrl(status.downloadUrl ?? null);
+      if (status.downloadUrl && autoDownloadedJobIdRef.current !== jobId) {
+        autoDownloadedJobIdRef.current = jobId;
+        triggerDownload(status.downloadUrl);
+      }
       return;
     }
     if (status.status === 'failed') {
@@ -99,6 +139,30 @@ export function CatalogueJobButton({
       setError((err as Error).message);
     }
   }
+
+  // Safari (and others) throttle setTimeout in a backgrounded tab, so the
+  // 2s poll can lag well behind the actual render finishing. Re-check the
+  // moment the tab comes back into view instead of waiting it out.
+  useEffect(() => {
+    if (phase !== 'preparing') return;
+    function onVisibilityChange() {
+      if (document.visibilityState !== 'visible') return;
+      const jobId = jobIdRef.current;
+      if (!jobId) return;
+      if (timerRef.current) {
+        clearTimeout(timerRef.current);
+        timerRef.current = null;
+      }
+      void poll(jobId);
+    }
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', onVisibilityChange);
+    // `poll` is a plain function recreated every render but always reads
+    // current refs (jobIdRef/mountedRef) and calls the current
+    // `applyStatus`, so it's safe to omit here; adding it would just
+    // re-run this effect (and re-attach the listener) on every render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase]);
 
   async function start() {
     setPhase('preparing');
@@ -123,12 +187,17 @@ export function CatalogueJobButton({
 
   if (phase === 'ready' && downloadUrl) {
     return (
-      <Button variant="default" className={`min-h-[2.75rem] ${className ?? ''}`} asChild>
-        <a href={downloadUrl} target="_blank" rel="noopener noreferrer">
-          {icon}
-          {readyLabel}
-        </a>
-      </Button>
+      <div className="flex flex-col gap-1">
+        <Button variant="default" className={`min-h-[2.75rem] ${className ?? ''}`} asChild>
+          <a href={downloadUrl} target="_blank" rel="noopener noreferrer">
+            {icon}
+            {readyLabel}
+          </a>
+        </Button>
+        <p className="text-xs text-muted-foreground">
+          Your download has started — press Open if it didn&apos;t.
+        </p>
+      </div>
     );
   }
 
