@@ -67,7 +67,7 @@ import {
 } from '../helpers/factories';
 import * as schema from '@/server/db/schema';
 import { documentRenderJobs, entries as entriesTable, juniorHandlerDetails } from '@/server/db/schema';
-import { requestCatalogueJob } from '@/server/services/catalogue-jobs';
+import { requestCatalogueJob, getCatalogueJobStatus } from '@/server/services/catalogue-jobs';
 import {
   buildCatalogueSnapshot,
   renderCatalogueFromSnapshot,
@@ -160,6 +160,38 @@ describe('requestCatalogueJob — dedupe', () => {
     const again = await requestCatalogueJob(testDb, { showId: show.id, format: 'standard', requestedByUserId: user.id });
     expect(again.jobId).toBe(jobId);
     expect(again.status).toBe('done');
+  });
+
+  // Covers CatalogueJobButton's reload-resume story at the service level —
+  // there's no React DOM test infrastructure in this repo (no jsdom/
+  // @testing-library/react in package.json), so this is the closest thing
+  // to a component test for "reload while a job is queued/running". The
+  // button itself has no persisted state: a page reload always drops back
+  // to phase 'idle' and shows its plain label instead of "Preparing…", even
+  // though the job may still be rendering server-side (now that prod's
+  // worker only ticks every 5 minutes via a Render Cron Job, rather than
+  // polling every 2 seconds forever). Tapping the button again calls
+  // `start()`, which unconditionally re-requests — this test is what proves
+  // that re-request re-attaches to the SAME 'running' job instead of
+  // enqueuing a redundant duplicate render, so "come back later" holds.
+  it('dedupes onto a RUNNING job — proves a page-reload + re-tap resumes instead of double-rendering', async () => {
+    const { user, show } = await makeMinimalShowWithEntry();
+    const { jobId } = await requestCatalogueJob(testDb, { showId: show.id, format: 'standard', requestedByUserId: user.id });
+    await testDb
+      .update(documentRenderJobs)
+      .set({ status: 'running', attempts: 1, startedAt: new Date() })
+      .where(eq(documentRenderJobs.id, jobId));
+
+    // Simulates the reloaded page's button re-requesting on tap, with no
+    // memory of the job it started before the reload.
+    const resumed = await requestCatalogueJob(testDb, { showId: show.id, format: 'standard', requestedByUserId: user.id });
+    expect(resumed.jobId).toBe(jobId);
+    expect(resumed.status).toBe('running');
+
+    // And status polling picks the in-flight job straight back up.
+    const status = await getCatalogueJobStatus(testDb, resumed.jobId, { showName: show.name });
+    expect(status?.status).toBe('running');
+    expect(status?.downloadUrl).toBeUndefined(); // not done yet — no premature download link
   });
 });
 

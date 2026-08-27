@@ -14,6 +14,7 @@
     "db:seed": "tsx src/server/db/seed.ts",
     "reconcile:fees": "tsx scripts/reconcile-entry-fees.ts",
     "worker:render": "npx tsx scripts/run-render-worker.ts",
+    "worker:render:once": "npx tsx scripts/run-render-worker.ts --once",
     "test": "vitest run",
     "test:watch": "vitest",
     "pretest": "npm run db:push:test",

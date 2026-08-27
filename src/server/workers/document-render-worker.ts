@@ -7,6 +7,18 @@
  *
  * Claims one queued job at a time via `FOR UPDATE SKIP LOCKED` so multiple
  * worker instances (or a future scale-out) never double-render the same job.
+ *
+ * Two run modes, same loop (2026-08-27): `runWorkerLoop`'s default is
+ * forever-poll — start, then claim/sleep/claim/sleep until something aborts
+ * it — which is what the DEMO uses under launchd (a long-lived process is
+ * exactly what a laptop launchd service expects to manage). Prod instead
+ * runs `{ exitWhenIdle: true }` on a Render Cron Job that fires every 5
+ * minutes: claim and render whatever is queued, then exit the moment the
+ * queue is empty. Render bills cron compute per second actually running,
+ * not per second the process exists — a 24/7 Background Worker idling
+ * between catalogue requests cost ~$25/month; five-minute cron ticks that
+ * mostly find nothing queued and exit in under a second cost pennies. See
+ * scripts/_provision-render-cron.ts.
  */
 import { createHash } from 'node:crypto';
 import { eq, sql } from 'drizzle-orm';
@@ -237,10 +249,21 @@ export async function waitForJobsTable(
   }
 }
 
-/** Poll-claim-render loop. Runs until `signal` aborts. */
+/** Poll-claim-render loop.
+ *
+ *  Default (`exitWhenIdle` unset/false): runs until `signal` aborts —
+ *  claim, sleep if nothing's queued, repeat. This is the demo's mode under
+ *  launchd, which expects to manage a long-lived process.
+ *
+ *  `exitWhenIdle: true`: claims and processes jobs back-to-back with no
+ *  sleep between them, and returns the moment `claimNextJob` finds nothing
+ *  left — never sleeps, never waits for `signal`. This is prod's mode under
+ *  a Render Cron Job that reinvokes the whole process every 5 minutes, so
+ *  "idle" here means "hand control back to the process exit", not "poll
+ *  slower". */
 export async function runWorkerLoop(
   db: Database,
-  opts: { pollIntervalMs?: number; signal?: AbortSignal } = {},
+  opts: { pollIntervalMs?: number; signal?: AbortSignal; exitWhenIdle?: boolean } = {},
 ): Promise<void> {
   const pollIntervalMs = opts.pollIntervalMs ?? DEFAULT_POLL_INTERVAL_MS;
 
@@ -255,6 +278,10 @@ export async function runWorkerLoop(
   while (!opts.signal?.aborted) {
     const job = await claimNextJob(db);
     if (!job) {
+      if (opts.exitWhenIdle) {
+        console.log('[document-render-worker] queue drained — exiting');
+        return;
+      }
       await sleep(pollIntervalMs, opts.signal);
       continue;
     }

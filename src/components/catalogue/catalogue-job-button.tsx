@@ -23,6 +23,18 @@ const POLL_INTERVAL_MS = 2000;
  * to a minute for a large show, and calling window.open() from a `setTimeout`
  * poll tick (rather than synchronously inside the click handler) gets
  * silently blocked by most browsers' popup blockers anyway.
+ *
+ * Reload while a job is queued/running: component state (`phase`,
+ * `jobIdRef`) is local, so a reload always lands back on 'idle' — the
+ * button shows its normal label, NOT "Preparing…", even though the job may
+ * still be rendering server-side (2026-08-27 — prod's render worker only
+ * ticks every 5 minutes now, see document-render-worker.ts, so "come back
+ * later and tap it again" is the expected path, not an edge case). This is
+ * fine, not a bug: `start()` always calls `documentJobs.request` on click
+ * regardless of prior state, and `requestCatalogueJob` (catalogue-jobs.ts)
+ * dedupes onto any existing queued/running/done job for the same
+ * (show, format, snapshot), so re-tapping the button re-attaches to the
+ * SAME job and resumes polling it rather than enqueuing a duplicate render.
  */
 export function CatalogueJobButton({
   showId,
@@ -132,15 +144,28 @@ export function CatalogueJobButton({
     );
   }
 
+  if (phase === 'preparing') {
+    // A short label ON the button (so it never overflows or wraps mid-word
+    // on a phone) plus the full explanation as a small caption underneath —
+    // not crammed into the button itself. max-w keeps the sentence wrapping
+    // in a calm 2–3 line block rather than stretching edge-to-edge.
+    return (
+      <div className="flex flex-col items-start gap-1">
+        <Button variant={variant} className={`min-h-[2.75rem] ${className ?? ''}`} disabled>
+          <Loader2 className="size-4 animate-spin" />
+          Preparing…
+        </Button>
+        <p className="max-w-[16rem] text-xs text-muted-foreground">
+          Preparing your catalogue — usually ready within a few minutes. You can carry on and come back.
+        </p>
+      </div>
+    );
+  }
+
   return (
-    <Button
-      variant={variant}
-      className={`min-h-[2.75rem] ${className ?? ''}`}
-      disabled={phase === 'preparing'}
-      onClick={() => void start()}
-    >
-      {phase === 'preparing' ? <Loader2 className="size-4 animate-spin" /> : icon}
-      {phase === 'preparing' ? 'Preparing your catalogue… this can take a minute' : label}
+    <Button variant={variant} className={`min-h-[2.75rem] ${className ?? ''}`} onClick={() => void start()}>
+      {icon}
+      {label}
     </Button>
   );
 }
