@@ -37,6 +37,11 @@ import { createHash } from 'node:crypto';
 import { and, eq, isNull, asc, inArray } from 'drizzle-orm';
 import type { Database } from '@/server/db';
 import * as schema from '@/server/db/schema';
+// Type-only: src/lib/catalogue-preflight.ts is the single source of truth
+// for this contract (the preflight module built alongside this one imports
+// nothing back from here) — nothing from that module may run in the web
+// bundle, so this import must stay `import type`.
+import type { CatalogueSnapshotMeta } from '@/lib/catalogue-preflight';
 import { publicOrgColumns } from '@/server/trpc/public-org-columns';
 import { getPaidOrderIdsForShow } from '@/server/services/show-metrics';
 import { formatDogName, formatDogNameForCatalogue } from '@/lib/utils';
@@ -138,26 +143,12 @@ export interface CatalogueSnapshot {
   meta: CatalogueSnapshotMeta;
 }
 
-/** Handed to the preflight module (src/lib/catalogue-preflight.ts, built in
- *  parallel) as its `snapshotMeta` argument — this is a firm, shared
- *  contract, not just render bookkeeping. */
-export interface CatalogueSnapshotMeta {
-  showStatus: string;
-  catalogueNumbersLockedAt: string | null;
-  entryCloseDate: string | null;
-  capturedAt: string;
-  rendererGitSha: string;
-  /** Every catalogue number that SHOULD exist, deduped per dog exactly as
-   *  assignNumbers() in catalogue-numbering.ts dedupes (a dog holding
-   *  multiple entry rows counts once, at its first appearance; Junior
-   *  Handler entries have no dog and are never deduped against each other).
-   *  Feeds the preflight's gapless-1..N check. */
-  expectedNumbers: number[];
-  /** Catalogue number -> display name (dog registered name, or the Junior
-   *  Handler's handler name) for every confirmed entry that has a number.
-   *  Feeds the preflight's every-entry-printed check. */
-  entryNames: { number: number; name: string }[];
-}
+/** The preflight module (src/lib/catalogue-preflight.ts) is the single
+ *  source of truth for this contract — re-exported here so existing
+ *  importers of `CatalogueSnapshotMeta` from this file keep working. Every
+ *  field is read by at least one preflight check; see that module's doc
+ *  comments for what each one feeds. */
+export type { CatalogueSnapshotMeta };
 
 // ── Renderer identity ────────────────────────────────────────────────────
 
@@ -198,9 +189,14 @@ function canonicalStringify(value: unknown): string {
   return JSON.stringify(value);
 }
 
-/** sha256 of the snapshot's canonical JSON, EXCLUDING `meta.capturedAt` —
- *  two enqueues of an unchanged show a minute apart must hash identically
- *  so the second one dedupes onto the first's job.
+/** sha256 of the snapshot's canonical JSON, EXCLUDING `meta` ENTIRELY
+ *  (2026-08-28) — identity is the data the render is actually built from:
+ *  `showInfoBase`, `entries`, `showSponsors`, `achievements`, etc. `meta` is
+ *  bookkeeping (capture timestamps, renderer provenance) plus the preflight
+ *  contract (showStatus, showRuleset, expectedNumbers, entryNames — all of
+ *  it derived FROM `rest`, never independent data), so it can evolve —
+ *  gain a field, have a value change — without invalidating a stored
+ *  catalogue that would render byte-identically either way.
  *
  *  This now hashes advert/sponsor-logo URLS rather than image bytes (the
  *  snapshot no longer carries the bytes at all — see the file header). That
@@ -210,18 +206,25 @@ function canonicalStringify(value: unknown): string {
  *  produces a different URL. A URL changing IS the content changing; there
  *  is no case where the bytes change but the URL doesn't.
  *
- *  `meta.rendererGitSha` is ALSO excluded (2026-08-27): the hash is the
+ *  `meta.rendererGitSha` was excluded first (2026-08-27): the hash is the
  *  identity of the show's DATA, and a stored catalogue stays valid across
  *  deploys. With the SHA in the hash, every push changed every hash, so the
  *  hourly refresh sweep re-rendered every closed show after each deploy and
  *  a secretary's first View after a deploy waited for a render instead of
  *  downloading the file already on disk — the opposite of "store a finished
  *  version, download it". The SHA is still recorded on the job (provenance,
- *  and the preflight's stable-identity check); it just isn't identity. */
+ *  and the preflight's stable-identity check); it just isn't identity.
+ *
+ *  Excluding the REST of `meta` too (2026-08-28) is the same argument
+ *  generalised: adding `showRuleset`/richer `entryNames` flags to feed the
+ *  format-aware preflight contract is exactly this kind of bookkeeping-only
+ *  change, and previously would have changed every existing hash for a
+ *  reason that has nothing to do with what gets rendered. This DOES change
+ *  every existing hash once, on deploy (meta's shape itself changed) — one
+ *  re-render per stored closed-show catalogue, deliberately accepted. */
 export function computeSnapshotHash(snapshot: CatalogueSnapshot): string {
-  const { meta, ...rest } = snapshot;
-  const stableMeta = { ...meta, capturedAt: undefined, rendererGitSha: undefined };
-  return createHash('sha256').update(canonicalStringify({ ...rest, meta: stableMeta })).digest('hex');
+  const { meta: _meta, ...rest } = snapshot;
+  return createHash('sha256').update(canonicalStringify(rest)).digest('hex');
 }
 
 // ── Build ────────────────────────────────────────────────────────────────
@@ -568,6 +571,7 @@ export async function buildCatalogueSnapshot(db: Database, showId: string): Prom
       entryCloseDate: show.entryCloseDate ? new Date(show.entryCloseDate).toISOString() : null,
       capturedAt: new Date().toISOString(),
       rendererGitSha: getRendererGitSha(),
+      showRuleset: show.showRuleset ?? null,
       ...buildExpectedNumbersAndNames(entries),
     },
   };
@@ -575,20 +579,22 @@ export async function buildCatalogueSnapshot(db: Database, showId: string): Prom
 
 /** Every catalogue number that should exist, deduped per dog exactly as
  *  assignNumbers() in catalogue-numbering.ts dedupes, plus a number->name
- *  lookup for every confirmed entry that has one — the preflight module's
- *  gapless-1..N and every-entry-printed checks. */
+ *  lookup (with NFC/Junior-Handler flags) for every confirmed entry that
+ *  has one — the preflight module's gapless-1..N, every-entry-printed, and
+ *  format-aware completeness checks. */
 function buildExpectedNumbersAndNames(
   entries: Array<{
     dogId: string | null;
     catalogueNumber: string | null;
     entryType: string;
+    isNfc?: boolean | null;
     dog?: { registeredName?: string | null } | null;
     juniorHandlerDetails?: { handlerName?: string | null } | null;
   }>,
 ): Pick<CatalogueSnapshotMeta, 'expectedNumbers' | 'entryNames'> {
   const seenDogIds = new Set<string>();
   const expectedNumbersSet = new Set<number>();
-  const nameByNumber = new Map<number, string>();
+  const infoByNumber = new Map<number, { name: string; isNfc: boolean; isJuniorHandler: boolean }>();
 
   for (const entry of entries) {
     if (!entry.catalogueNumber) continue;
@@ -608,19 +614,20 @@ function buildExpectedNumbersAndNames(
       expectedNumbersSet.add(num);
     }
 
-    if (!nameByNumber.has(num)) {
-      const name =
-        entry.entryType === 'junior_handler'
-          ? entry.juniorHandlerDetails?.handlerName
-          : entry.dog?.registeredName;
-      nameByNumber.set(num, name ?? 'Unknown');
+    // First-seen row per number decides the name/flags — mirrors the
+    // pre-existing dedup-by-number behaviour (a dog's second entry row
+    // shares the first's number and must not overwrite its info).
+    if (!infoByNumber.has(num)) {
+      const isJuniorHandler = entry.entryType === 'junior_handler';
+      const name = isJuniorHandler ? entry.juniorHandlerDetails?.handlerName : entry.dog?.registeredName;
+      infoByNumber.set(num, { name: name ?? 'Unknown', isNfc: !!entry.isNfc, isJuniorHandler });
     }
   }
 
   return {
     expectedNumbers: [...expectedNumbersSet].sort((a, b) => a - b),
-    entryNames: [...nameByNumber.entries()]
-      .map(([number, name]) => ({ number, name }))
+    entryNames: [...infoByNumber.entries()]
+      .map(([number, info]) => ({ number, ...info }))
       .sort((a, b) => a.number - b.number),
   };
 }

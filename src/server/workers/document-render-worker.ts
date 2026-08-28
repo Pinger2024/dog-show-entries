@@ -31,6 +31,8 @@ import {
   type CatalogueSnapshot,
   type CatalogueFormat,
 } from '@/server/services/catalogue-snapshot';
+import { isCatalogueFormat } from '@/server/services/catalogue-jobs';
+import { runCataloguePreflight, type PreflightReport, type PreflightFormat } from '@/lib/catalogue-preflight';
 
 const STALE_RUNNING_MINUTES = 15;
 const DEFAULT_POLL_INTERVAL_MS = 2000;
@@ -98,40 +100,41 @@ export async function claimNextJob(db: Database): Promise<RawDocumentRenderJobRo
   return rows[0] ?? null;
 }
 
-// Built as a non-literal string on purpose: another agent is building
-// src/lib/catalogue-preflight.ts in a separate worktree, so the module
-// doesn't exist in this tree yet. A literal `import('@/lib/catalogue-
-// preflight')` fails `tsc --noEmit` with "Cannot find module" even inside a
-// try/catch (TS resolves literal specifiers statically); a non-literal
-// specifier is resolved only at runtime, so this compiles clean before AND
-// after that module lands. Runs as a plain Node script (tsx), never
-// webpack-bundled, so there's no bundler cost to this indirection.
-const PREFLIGHT_MODULE_SPECIFIER: string = '@/lib/catalogue-preflight';
-
-/** Dynamic-import seam for the preflight module another agent builds
- *  (src/lib/catalogue-preflight.ts) in parallel. No-ops — returns null,
- *  never throws — if the module doesn't exist yet or itself errors, so
- *  landing this worker never depends on that module's timing.
+/** Run the format-aware print preflight against a just-rendered artefact.
+ *  `job.format` — validated with `isCatalogueFormat` (the same guard
+ *  `documentJobs.request` uses) rather than trusted as `PreflightFormat` —
+ *  is what makes this format-aware: every PDF used to be judged as a
+ *  saddle-stitched customer catalogue that must name every entry
+ *  regardless of what it actually was, which is what produced false-red
+ *  `page-count-booklet`/`catalogue-number-completeness` failures on real,
+ *  correctly-printed steward (`judging`) books.
  *
- *  Firm contract: `runCataloguePreflight(pdf, snapshotMeta, opts)`, where
- *  `snapshotMeta` is exactly `snapshot.meta` (CatalogueSnapshotMeta —
- *  includes expectedNumbers/entryNames for the gapless-1..N and
- *  every-entry-printed checks). */
-async function runPreflightIfAvailable(
+ *  A preflight crash must never fail a finished render — this policy is
+ *  unchanged from before: catch ANY throw, log it, and return null so
+ *  `processJob` still records the job as done with no preflight report. */
+async function runPreflight(
   job: RawDocumentRenderJobRow,
   buffer: Buffer,
   snapshot: CatalogueSnapshot,
-): Promise<unknown> {
+): Promise<PreflightReport | null> {
   try {
-    const mod = (await import(PREFLIGHT_MODULE_SPECIFIER).catch(() => null)) as
-      | Record<string, unknown>
-      | null;
-    if (!mod) return null;
-    const fn = (mod.runCataloguePreflight ?? mod.runPreflight ?? mod.default) as
-      | ((pdf: Buffer, snapshotMeta: CatalogueSnapshot['meta'], opts: Record<string, unknown>) => unknown)
-      | undefined;
-    if (typeof fn !== 'function') return null;
-    return await fn(buffer, snapshot.meta, {});
+    if (!isCatalogueFormat(job.format)) {
+      console.error(`[document-render-worker] preflight skipped for job ${job.id}: unrecognised format "${job.format}"`);
+      return null;
+    }
+    const format = job.format as PreflightFormat;
+    const report = await runCataloguePreflight(buffer, snapshot.meta, { format });
+    const status = report.passed ? 'PASS' : 'FAIL';
+    const detail = report.passed
+      ? 'all checks passed'
+      : report.checks
+          .filter((c) => c.level === 'fail' && !c.passed)
+          .map((c) => c.id)
+          .join(', ');
+    console.log(
+      `[document-render-worker] job ${job.id} preflight ${status} ${format} (${report.contract.binding}/${report.contract.completeness}): ${detail}`,
+    );
+    return report;
   } catch (err) {
     console.error(`[document-render-worker] preflight failed for job ${job.id}:`, err);
     return null;
@@ -159,7 +162,7 @@ export async function processJob(db: Database, job: RawDocumentRenderJobRow): Pr
     const pdfDoc = await PDFDocument.load(buffer);
     const pageCount = pdfDoc.getPageCount();
 
-    const preflight = await runPreflightIfAvailable(job, buffer, job.snapshot);
+    const preflight = await runPreflight(job, buffer, job.snapshot);
 
     await db
       .update(schema.documentRenderJobs)

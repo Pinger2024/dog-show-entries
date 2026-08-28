@@ -31,6 +31,15 @@ import sharp from 'sharp';
  * contract another agent's job pipeline needs to produce — every field here
  * is read by at least one check below.
  */
+export interface CatalogueEntryNameRef {
+  number: number;
+  name: string;
+  /** Missing on snapshots persisted before 2026-08-28 — treat as `false`. */
+  isNfc?: boolean;
+  /** Missing on snapshots persisted before 2026-08-28 — treat as `false`. */
+  isJuniorHandler?: boolean;
+}
+
 export interface CatalogueSnapshotMeta {
   /** `shows.status` at capture time (e.g. 'entries_closed', 'in_progress'). */
   showStatus: string;
@@ -42,10 +51,146 @@ export interface CatalogueSnapshotMeta {
   capturedAt: string;
   /** Git SHA of the renderer build that produced the PDF, or null if unknown/uncaptured. */
   rendererGitSha: string | null;
+  /** `shows.showRuleset` at capture time — optional because rows persisted
+   *  before 2026-08-28 don't carry it; undefined is treated as non-WUSV. */
+  showRuleset?: string | null;
   /** Every confirmed entry's catalogue number, in any order — used to prove the 1..N sequence has no gaps. */
   expectedNumbers: number[];
   /** Catalogue number + display name for every confirmed entry, used to prove each one actually printed. */
-  entryNames: { number: number; name: string }[];
+  entryNames: CatalogueEntryNameRef[];
+}
+
+// ─── Preflight contract — what a format truthfully requires ───────────────
+
+/**
+ * Every shape a catalogue render job can be requested in. Mirrors
+ * `CatalogueFormat` in catalogue-snapshot.ts (kept as its own type here —
+ * not imported — so this module, which runs inside a worker/test process,
+ * never pulls in that file's web-facing dependency graph).
+ */
+export type PreflightFormat = 'standard' | 'by-class' | 'judging' | 'absentees' | 'marked';
+
+/** `booklet` ⇒ the artefact must be saddle-stitchable: pages % 4 === 0.
+ *  `loose` ⇒ single-sided/write-in sheets — no multiple-of-4 requirement. */
+export type PreflightBinding = 'booklet' | 'loose';
+
+/** How much of `meta.entryNames` the name-presence check holds the
+ *  artefact to: every entry, only non-NFC ("competing") entries, or none
+ *  (a document that is a subset of the entries by definition). */
+export type PreflightCompleteness = 'all' | 'competing' | 'none';
+
+export interface PreflightContract {
+  /** What the job asked for. */
+  format: PreflightFormat;
+  /** What the renderer actually drew — see resolvePreflightContract's
+   *  doc comment for the WUSV collapse this can differ by. */
+  effectiveFormat: PreflightFormat;
+  /** Short, human-readable description of the requested format, for a job row. */
+  label: string;
+  /** `booklet` ⇒ `page-count-booklet` runs; `loose` ⇒ `page-count-loose` runs. */
+  binding: PreflightBinding;
+  /** Which entries the name-presence half of catalogue-number-completeness checks. */
+  completeness: PreflightCompleteness;
+  /** One sentence a founder can read on the job row explaining the above. */
+  rationale: string;
+}
+
+const PREFLIGHT_LABELS: Record<PreflightFormat, string> = {
+  standard: 'Catalogue (standard, saddle-stitched booklet)',
+  'by-class': 'Catalogue by class (saddle-stitched booklet)',
+  judging: "Stewards' catalogue (write-in working sheets, not booklet-padded)",
+  marked: 'Marked catalogue (post-results, not booklet-padded)',
+  absentees: 'Absentee list (post-show subset, not booklet-padded)',
+};
+
+function buildPreflightRationale(
+  format: PreflightFormat,
+  effectiveFormat: PreflightFormat,
+  binding: PreflightBinding,
+): string {
+  if (format !== effectiveFormat) {
+    // Only reachable when showRuleset === 'wusv' and format is standard,
+    // judging or absentees — marked never collapses, and by-class already
+    // equals its own effective format. See resolvePreflightContract.
+    const bindingNote =
+      binding === 'booklet'
+        ? 'still checked as a saddle-stitched booklet because that is what was requested, even though the by-class content drawn underneath is not padded to a multiple of 4'
+        : 'not booklet-padded — the renderer only pads standard/by-class requests';
+    return `Requested as ${format}, but this is a WUSV/SV show so the renderer draws by-class content instead; ${bindingNote}.`;
+  }
+
+  switch (format) {
+    case 'standard':
+      return 'Standard catalogue: saddle-stitched booklet; prints every confirmed entry, including NFC.';
+    case 'by-class':
+      return effectiveFormat === 'by-class' && binding === 'booklet'
+        ? 'Catalogue by class: saddle-stitched booklet; prints every confirmed entry, including NFC.'
+        : 'Catalogue by class: saddle-stitched booklet; SV/WUSV shows print no NFC entries, so completeness is checked against competing entries only.';
+    case 'judging':
+      return "Stewards' catalogue: write-in working sheets, not booklet-padded; groups by class, so NFC entries (which hold no class) are correctly absent.";
+    case 'marked':
+      return 'Marked catalogue: post-results record, not booklet-padded; groups by class, so NFC entries are correctly absent.';
+    case 'absentees':
+    default:
+      return 'Absentee list: a subset of the confirmed entries by definition, not booklet-padded; entry names are not checked.';
+  }
+}
+
+/**
+ * The single source of truth for what a given catalogue format REQUIRES of
+ * its rendered artefact — mirrors `renderCatalogueFromSnapshot` in
+ * catalogue-snapshot.ts (≈lines 731-813) exactly:
+ *
+ *  - `effectiveFormat`: `marked` is drawn in its own branch, before the WUSV
+ *    collapse, so it never changes. Every other format collapses to
+ *    `by-class` when `showRuleset === 'wusv'` — the renderer's
+ *    `effectiveFormat = isWusv ? 'by-class' : format` applies regardless of
+ *    which of standard/by-class/judging/absentees was requested.
+ *  - `binding`: mirrors `needsBookletPadding = format === 'standard' ||
+ *    format === 'by-class'` — keyed on the REQUESTED format, not what was
+ *    actually drawn. A WUSV `judging` request renders by-class content
+ *    UNPADDED; this describes that truthfully rather than "fixing" the
+ *    renderer here.
+ *  - `completeness`: keyed on `effectiveFormat`, since it describes what's
+ *    actually on the page. Effective `standard` prints every entry
+ *    (NotForCompetitionPage, unconditional, in catalogue-ringside.tsx).
+ *    Effective `by-class` prints NFC only when non-WUSV
+ *    (`!isSvShow && <NotForCompetitionPage>` in catalogue-by-class.tsx).
+ *    `judging` groups by class (catalogue-judging.tsx) so NFC entries,
+ *    which hold no class, are never drawn. `marked` groups by class too
+ *    (groupEntriesKC iterates `entry.classes`). `absentees` is a subset of
+ *    the entries by definition — nothing to check.
+ */
+export function resolvePreflightContract(
+  format: PreflightFormat,
+  showRuleset: string | null | undefined,
+): PreflightContract {
+  const isWusv = showRuleset === 'wusv';
+  const effectiveFormat: PreflightFormat = format === 'marked' ? 'marked' : isWusv ? 'by-class' : format;
+
+  const binding: PreflightBinding = format === 'standard' || format === 'by-class' ? 'booklet' : 'loose';
+
+  const completeness: PreflightCompleteness =
+    effectiveFormat === 'standard'
+      ? 'all'
+      : effectiveFormat === 'by-class'
+        ? isWusv
+          ? 'competing'
+          : 'all'
+        : effectiveFormat === 'judging'
+          ? 'competing'
+          : effectiveFormat === 'marked'
+            ? 'competing'
+            : 'none'; // absentees
+
+  return {
+    format,
+    effectiveFormat,
+    label: PREFLIGHT_LABELS[format],
+    binding,
+    completeness,
+    rationale: buildPreflightRationale(format, effectiveFormat, binding),
+  };
 }
 
 export type CheckLevel = 'fail' | 'warn';
@@ -65,12 +210,24 @@ export interface PreflightReport {
     bytes: number;
     pages: number;
   };
+  /** What this artefact was truthfully held to — see resolvePreflightContract. */
+  contract: PreflightContract;
   checks: Check[];
   /** No FAILED 'fail'-level check. A failed 'warn'-level check does not affect this. */
   passed: boolean;
 }
 
 export interface PreflightOptions {
+  /**
+   * REQUIRED, not optional: which format this artefact was rendered as.
+   * Every check that cares about booklet padding or which entries must be
+   * named (page-count-booklet/-loose, catalogue-number-completeness) is
+   * meaningless without this — the 2026-08-28 bug this contract fixes was
+   * exactly a caller (document-render-worker.ts) omitting it and every PDF
+   * being judged as a saddle-stitched customer catalogue regardless of what
+   * it actually was. Omitting this is a compile error on purpose.
+   */
+  format: PreflightFormat;
   /**
    * Fraction of white pixels (0–1, after thresholding at 250/255) at or
    * above which a rasterised page counts as blank. Default 0.997, tuned
@@ -123,8 +280,25 @@ function runPoppler(bin: string, args: string[], maxBuffer = 20 * 1024 * 1024): 
   }
 }
 
-function normalizeForMatch(s: string): string {
-  return s.toLowerCase().replace(/\s+/g, ' ').trim();
+/**
+ * Fold text down to bare alphanumerics for name matching, robust to two
+ * real pdftotext extraction artefacts (both verified against a stored,
+ * prod-rendered PDF — see checkCatalogueNumberCompleteness's doc comment):
+ *
+ *  - NFKD-normalise then strip combining marks, so a curly apostrophe or an
+ *    accented letter folds the same whether pdftotext preserved it, dropped
+ *    it, or (as observed) emitted it as a bare space — "SADIRA'S" and
+ *    "SADIRA S" both fold to "sadiras".
+ *  - Keep only [a-z0-9] — whitespace/punctuation differences (a name
+ *    wrapped across lines, extra inter-word spacing) never cause a
+ *    false-miss.
+ */
+function fold(s: string): string {
+  return s
+    .normalize('NFKD')
+    .replace(/[̀-ͯ]/g, '') // strip combining marks left behind by NFKD
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, '');
 }
 
 // ─── Check 1: post-close-snapshot ──────────────────────────────────────────
@@ -199,30 +373,88 @@ function describeNumberSequence(numbers: number[]): { ok: boolean; detail: strin
   return { ok: true, detail: `catalogue numbers form a gapless 1..${n} sequence` };
 }
 
-function checkCatalogueNumberCompleteness(snapshot: CatalogueSnapshotMeta, pdfText: string): Check {
+/**
+ * Name-presence half of catalogue-number-completeness.
+ *
+ * KNOWN TRAP #1: letterspaced display text (section headers, etc.) defeats
+ * pdftotext's word extraction — entry BODY lines extract fine, headers
+ * don't. Only match against entry names, never header wording.
+ *
+ * KNOWN TRAP #2 (Scotland regional, job `99012c37`, verified against the
+ * exact stored PDF): `-layout` mode can mangle a real, correctly-printed
+ * name. Entry #52 rasterises as `52 CH SADIRA'S YOKKO FOR ELLROOST` on the
+ * page, but pdftotext -layout emits the U+2019 apostrophe in this Inter
+ * subset as a SPACE — "CH SADIRA S YOKKO" — so a plain substring match on
+ * the raw name reports a false MISSING. `-raw` mode (content-stream order)
+ * doesn't reliably fix this either, and can itself interleave two-column
+ * text differently to `-layout` — a name wrapped inside one column's cell
+ * can stay contiguous in `-raw` while `-layout`'s side-by-side columns
+ * interleave it with the other column's text, or vice versa. Trying BOTH
+ * extractions, and folding away everything but [a-z0-9] (which absorbs the
+ * apostrophe-as-space case too — "sadiras" either way) before comparing, is
+ * what makes this check robust to real extraction artefacts without ever
+ * false-greening on a genuinely absent name (folding never turns two
+ * different names into the same string).
+ */
+function checkCatalogueNumberCompleteness(
+  meta: CatalogueSnapshotMeta,
+  layoutText: string,
+  rawText: string,
+  contract: PreflightContract,
+): Check {
   const id = 'catalogue-number-completeness';
-  const seq = describeNumberSequence(snapshot.expectedNumbers);
+  const seq = describeNumberSequence(meta.expectedNumbers);
 
-  // KNOWN TRAP: letterspaced display text (section headers, etc.) defeats
-  // pdftotext's word extraction — entry BODY lines extract fine, headers
-  // don't. Only match against entry names, never header wording.
-  const normalizedText = normalizeForMatch(pdfText);
-  const missingNames = snapshot.entryNames
-    .filter((e) => !normalizedText.includes(normalizeForMatch(e.name)))
-    .map((e) => `#${e.number} ${e.name}`);
+  const foldedLayout = fold(layoutText);
+  const foldedRaw = fold(rawText);
+
+  function findName(name: string): { found: boolean; empty: boolean } {
+    const folded = fold(name);
+    if (folded === '') return { found: false, empty: true };
+    return { found: foldedLayout.includes(folded) || foldedRaw.includes(folded), empty: false };
+  }
+
+  const nfcEntries = meta.entryNames.filter((e) => !!e.isNfc);
+  const namesToCheck =
+    contract.completeness === 'none'
+      ? []
+      : contract.completeness === 'competing'
+        ? meta.entryNames.filter((e) => !e.isNfc)
+        : meta.entryNames; // 'all'
+
+  const missingNames = namesToCheck
+    .map((e) => ({ e, ...findName(e.name) }))
+    .filter((r) => !r.found)
+    .map((r) => `#${r.e.number} ${r.e.name}${r.empty ? ' (has no letters or digits)' : ''}`);
 
   const passed = seq.ok && missingNames.length === 0;
   const parts = [seq.detail];
-  if (missingNames.length > 0) {
-    const shown = missingNames.slice(0, 10).join(', ');
-    parts.push(
-      `${missingNames.length} entry name(s) not found in the rendered text: ${shown}${missingNames.length > 10 ? ', …' : ''}`,
-    );
+
+  if (contract.completeness === 'none') {
+    parts.push('entry names not checked — an absentee list is a subset of the entries by definition');
   } else {
-    parts.push(`all ${snapshot.entryNames.length} entry name(s) found in the rendered text`);
+    const label = contract.completeness === 'competing' ? 'competing entry name(s)' : 'entry name(s)';
+    if (missingNames.length > 0) {
+      const shown = missingNames.slice(0, 10).join(', ');
+      parts.push(
+        `${missingNames.length} ${label} not found in the rendered text: ${shown}${missingNames.length > 10 ? ', …' : ''}`,
+      );
+    } else {
+      parts.push(`all ${namesToCheck.length} ${label} found in the rendered text`);
+    }
+    if (contract.completeness === 'competing' && nfcEntries.length > 0) {
+      const nums = nfcEntries.map((e) => `#${e.number}`).join(', ');
+      parts.push(`${nfcEntries.length} NFC entries (${nums}) are not printed in this format by design`);
+    }
   }
 
-  return { id, level: 'fail', passed, detail: parts.join('; ') };
+  let detail = parts.join('; ');
+  if (meta.showRuleset === 'wusv' && nfcEntries.length > 0) {
+    detail +=
+      ` — note: ${nfcEntries.length} NFC entries on a WUSV show; regionals allow no NFC entries and the SV catalogue does not print them`;
+  }
+
+  return { id, level: 'fail', passed, detail };
 }
 
 // ─── Check 3: page-count-booklet ───────────────────────────────────────────
@@ -237,6 +469,26 @@ function checkPageCountBooklet(pages: number): Check {
     detail: passed
       ? `${pages} pages — a positive multiple of 4, saddle-stitch booklet ready.`
       : `${pages} pages is not a positive multiple of 4 — saddle-stitch booklets need page count % 4 === 0 (pad with padPdfToMultiple before print).`,
+  };
+}
+
+// ─── Check 3b: page-count-loose ────────────────────────────────────────────
+// Runs INSTEAD of page-count-booklet (never both — see runCataloguePreflight)
+// for any format whose contract.binding is 'loose': the renderer
+// deliberately does not pad these to a multiple of 4 (needsBookletPadding
+// in catalogue-snapshot.ts), so holding them to that rule is what produced
+// the Clyde/Scotland false-reds this module exists to fix.
+
+function checkPageCountLoose(pages: number, contract: PreflightContract): Check {
+  const id = 'page-count-loose';
+  const passed = pages >= 1;
+  return {
+    id,
+    level: 'fail',
+    passed,
+    detail: passed
+      ? `${pages} page(s) — ${contract.label}; not saddle-stitched, so no multiple-of-4 requirement (the renderer deliberately does not pad this format).`
+      : `${pages} page(s) — ${contract.label}; expected at least 1 rendered page.`,
   };
 }
 
@@ -437,24 +689,29 @@ function checkStableIdentity(sha256: string, snapshot: CatalogueSnapshotMeta): C
 export async function runCataloguePreflight(
   pdf: Buffer,
   snapshot: CatalogueSnapshotMeta,
-  opts: PreflightOptions = {},
+  opts: PreflightOptions,
 ): Promise<PreflightReport> {
   const bytes = pdf.length;
   const sha256 = sha256Hex(pdf);
   const pages = await loadPageCount(pdf);
+  const contract = resolvePreflightContract(opts.format, snapshot.showRuleset);
 
   const tmpRoot = opts.tmpDir ?? mkdtempSync(path.join(tmpdir(), 'catalogue-preflight-'));
   const ownsTmpDir = !opts.tmpDir;
 
-  let pdfText = '';
+  let layoutText = '';
+  let rawText = '';
   let fontsCheck: Check;
   let blankCheck: Check;
   try {
     const pdfPath = path.join(tmpRoot, 'artefact.pdf');
     writeFileSync(pdfPath, pdf);
 
-    // Shared across checks 2 and 6 — one pdftotext shell-out, not two.
-    pdfText = runPoppler('pdftotext', ['-layout', pdfPath, '-'], 50 * 1024 * 1024);
+    // Two extraction modes, not one — see checkCatalogueNumberCompleteness's
+    // doc comment for why a single mode isn't enough. -layout is also
+    // shared with check 6 (rkc-wording), which cares about line structure.
+    layoutText = runPoppler('pdftotext', ['-layout', pdfPath, '-'], 50 * 1024 * 1024);
+    rawText = runPoppler('pdftotext', ['-raw', pdfPath, '-'], 50 * 1024 * 1024);
     fontsCheck = checkFontsEmbedded(pdfPath);
     blankCheck = await checkNoBlankPages(pdfPath, pages, tmpRoot, opts);
   } finally {
@@ -463,17 +720,21 @@ export async function runCataloguePreflight(
     }
   }
 
+  // Exactly one of the two page-count checks — never both — per contract.binding.
+  const pageCountCheck =
+    contract.binding === 'booklet' ? checkPageCountBooklet(pages) : checkPageCountLoose(pages, contract);
+
   const checks: Check[] = [
     checkPostCloseSnapshot(snapshot),
-    checkCatalogueNumberCompleteness(snapshot, pdfText),
-    checkPageCountBooklet(pages),
+    checkCatalogueNumberCompleteness(snapshot, layoutText, rawText, contract),
+    pageCountCheck,
     fontsCheck,
     blankCheck,
-    checkRkcWording(pdfText),
+    checkRkcWording(layoutText),
     checkStableIdentity(sha256, snapshot),
   ];
 
   const passed = checks.every((c) => c.level !== 'fail' || c.passed);
 
-  return { artefact: { sha256, bytes, pages }, checks, passed };
+  return { artefact: { sha256, bytes, pages }, contract, checks, passed };
 }

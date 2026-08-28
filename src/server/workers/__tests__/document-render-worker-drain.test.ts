@@ -17,14 +17,28 @@ import type { Database } from '@/server/db';
 import type { RawDocumentRenderJobRow } from '../document-render-worker';
 import { runWorkerLoop } from '../document-render-worker';
 
-vi.mock('@/server/services/catalogue-snapshot', () => ({
-  renderCatalogueFromSnapshot: vi.fn(async () => {
-    const { PDFDocument } = await import('pdf-lib');
-    const doc = await PDFDocument.create();
-    doc.addPage();
-    return Buffer.from(await doc.save());
-  }),
-}));
+// Only renderCatalogueFromSnapshot is mocked (a real react-pdf render is
+// slow and unnecessary here) — `importOriginal` keeps every other export
+// real, including CATALOGUE_FORMATS, which document-render-worker.ts's
+// runPreflight() now needs (via isCatalogueFormat, from catalogue-jobs.ts)
+// to validate `job.format` before calling the real preflight module below.
+// A full-replacement mock (no importOriginal) would make isCatalogueFormat
+// throw on the missing export — caught by runPreflight's "a preflight
+// crash must never fail a finished render" policy, so the job would still
+// finish, but the preflight path this test exists to exercise would go
+// entirely untested.
+vi.mock('@/server/services/catalogue-snapshot', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/server/services/catalogue-snapshot')>();
+  return {
+    ...actual,
+    renderCatalogueFromSnapshot: vi.fn(async () => {
+      const { PDFDocument } = await import('pdf-lib');
+      const doc = await PDFDocument.create();
+      doc.addPage();
+      return Buffer.from(await doc.save());
+    }),
+  };
+});
 
 vi.mock('@/server/services/storage', () => ({
   uploadToR2: vi.fn(async () => undefined),
