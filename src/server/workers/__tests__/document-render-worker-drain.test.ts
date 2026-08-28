@@ -50,12 +50,13 @@ function makeRawJob(overrides: Partial<RawDocumentRenderJobRow> = {}): RawDocume
     max_attempts: 3,
     error: null,
     requested_by_user_id: null,
-    // The real catalogue-preflight module (src/lib/catalogue-preflight.ts,
-    // built in a parallel worktree) runs for real here — renderCatalogue-
-    // FromSnapshot is mocked, but runPreflightIfAvailable's dynamic import
-    // still finds the module in THIS worktree and calls it. Give it a
-    // minimal-but-shaped meta (empty, but present, arrays) so it exercises
-    // its no-entries path instead of throwing on undefined.length.
+    // The real catalogue-preflight module runs for real here —
+    // renderCatalogueFromSnapshot is mocked, but runPreflight() (a plain
+    // static import now, not a dynamic-import seam) still calls it for
+    // real against the mocked render's output. Give it a minimal-but-shaped
+    // meta (empty, but present, arrays) so it exercises its no-entries path
+    // instead of throwing on undefined.length — format comes from the job
+    // row (`format: 'standard'` above), not from anything in `snapshot`.
     snapshot: { meta: { expectedNumbers: [], entryNames: [] } } as unknown as RawDocumentRenderJobRow['snapshot'],
     snapshot_hash: 'hash-1',
     file_sha256: null,

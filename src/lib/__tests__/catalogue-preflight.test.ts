@@ -123,10 +123,54 @@ async function buildFixtureWithNotesPage(): Promise<Buffer> {
   return Buffer.from(await doc.save());
 }
 
+/** A 4-page steward/by-class-style fixture: competing dogs #1-4 are drawn
+ *  (one per page, grouped-by-class style — no NotForCompetitionPage), and
+ *  #5 is an NFC entry that consumes a catalogue number but is deliberately
+ *  NOT drawn anywhere — real behaviour for judging/by-class(wusv)/marked. */
+async function buildFixtureWithUndrawnNfc(): Promise<Buffer> {
+  return buildFixture(4);
+}
+
+function nfcSnapshot(overrides: Partial<CatalogueSnapshotMeta> = {}): CatalogueSnapshotMeta {
+  return baseSnapshot({
+    expectedNumbers: [1, 2, 3, 4, 5],
+    entryNames: [
+      { number: 1, name: 'DOG NUMBER 1' },
+      { number: 2, name: 'DOG NUMBER 2' },
+      { number: 3, name: 'DOG NUMBER 3' },
+      { number: 4, name: 'DOG NUMBER 4' },
+      { number: 5, name: 'GHOST NFC DOG', isNfc: true },
+    ],
+    ...overrides,
+  });
+}
+
+/** Two text objects drawn in the SAME content-stream order they logically
+ *  read in ("41 AMIRA VOM" then its wrapped continuation), but positioned
+ *  as if in a two-column layout — a second entry ("42 OTHER DOG") sits at
+ *  the SAME y as the first line, one column over. `-layout` mode reads
+ *  left-to-right by y-position and interleaves the columns; `-raw` mode
+ *  (content-stream order) keeps the wrapped name contiguous. */
+async function buildTwoColumnWrapFixture(): Promise<Buffer> {
+  const doc = await PDFDocument.create();
+  const font = await embeddedInterFont(doc);
+  const page = doc.addPage(A5 as unknown as [number, number]);
+  const y = 500;
+  page.drawText('41  AMIRA VOM', { x: 30, y, size: 10, font });
+  page.drawText('FICHTENSCHLAG (IMP DEU)', { x: 30, y: y - 14, size: 10, font });
+  page.drawText('42  OTHER DOG', { x: 220, y, size: 10, font });
+  let fy = y - 40;
+  for (const line of DENSITY_FILLER) {
+    page.drawText(line, { x: 30, y: fy, size: 10, font });
+    fy -= 16;
+  }
+  return Buffer.from(await doc.save());
+}
+
 describe('runCataloguePreflight', () => {
   it('passes every check on a well-formed 4-page embedded-font catalogue', async () => {
     const pdf = await buildWellFormedFixture();
-    const report = await runCataloguePreflight(pdf, baseSnapshot());
+    const report = await runCataloguePreflight(pdf, baseSnapshot(), { format: 'standard' });
 
     expect(report.artefact.pages).toBe(4);
     expect(report.artefact.bytes).toBe(pdf.length);
@@ -143,6 +187,7 @@ describe('runCataloguePreflight', () => {
       const report = await runCataloguePreflight(
         pdf,
         baseSnapshot({ capturedAt: '2026-07-31T00:00:00.000Z', entryCloseDate: '2026-08-01T00:00:00.000Z' }),
+        { format: 'standard' },
       );
       const check = report.checks.find((c) => c.id === 'post-close-snapshot')!;
       expect(check.level).toBe('fail');
@@ -152,14 +197,14 @@ describe('runCataloguePreflight', () => {
 
     it('fails when show status is not post-close', async () => {
       const pdf = await buildWellFormedFixture();
-      const report = await runCataloguePreflight(pdf, baseSnapshot({ showStatus: 'open' }));
+      const report = await runCataloguePreflight(pdf, baseSnapshot({ showStatus: 'open' }), { format: 'standard' });
       const check = report.checks.find((c) => c.id === 'post-close-snapshot')!;
       expect(check.passed).toBe(false);
     });
 
     it('warns (not fails) when there is no entry close date', async () => {
       const pdf = await buildWellFormedFixture();
-      const report = await runCataloguePreflight(pdf, baseSnapshot({ entryCloseDate: null }));
+      const report = await runCataloguePreflight(pdf, baseSnapshot({ entryCloseDate: null }), { format: 'standard' });
       const check = report.checks.find((c) => c.id === 'post-close-snapshot')!;
       expect(check.level).toBe('warn');
       expect(check.passed).toBe(true);
@@ -170,7 +215,7 @@ describe('runCataloguePreflight', () => {
   describe('catalogue-number-completeness', () => {
     it('fails when expectedNumbers has a gap', async () => {
       const pdf = await buildWellFormedFixture();
-      const report = await runCataloguePreflight(pdf, baseSnapshot({ expectedNumbers: [1, 2, 4] }));
+      const report = await runCataloguePreflight(pdf, baseSnapshot({ expectedNumbers: [1, 2, 4] }), { format: 'standard' });
       const check = report.checks.find((c) => c.id === 'catalogue-number-completeness')!;
       expect(check.passed).toBe(false);
       expect(check.detail).toMatch(/gap/i);
@@ -178,7 +223,7 @@ describe('runCataloguePreflight', () => {
 
     it('fails when expectedNumbers has a duplicate', async () => {
       const pdf = await buildWellFormedFixture();
-      const report = await runCataloguePreflight(pdf, baseSnapshot({ expectedNumbers: [1, 2, 2, 3] }));
+      const report = await runCataloguePreflight(pdf, baseSnapshot({ expectedNumbers: [1, 2, 2, 3] }), { format: 'standard' });
       const check = report.checks.find((c) => c.id === 'catalogue-number-completeness')!;
       expect(check.passed).toBe(false);
       expect(check.detail).toMatch(/duplicate/i);
@@ -189,6 +234,7 @@ describe('runCataloguePreflight', () => {
       const report = await runCataloguePreflight(
         pdf,
         baseSnapshot({ entryNames: [...baseSnapshot().entryNames, { number: 5, name: 'GHOST DOG NOT IN PDF' }], expectedNumbers: [1, 2, 3, 4, 5] }),
+        { format: 'standard' },
       );
       const check = report.checks.find((c) => c.id === 'catalogue-number-completeness')!;
       expect(check.passed).toBe(false);
@@ -197,18 +243,112 @@ describe('runCataloguePreflight', () => {
 
     it('passes when numbers are gapless and every name is present', async () => {
       const pdf = await buildWellFormedFixture();
-      const report = await runCataloguePreflight(pdf, baseSnapshot());
+      const report = await runCataloguePreflight(pdf, baseSnapshot(), { format: 'standard' });
       const check = report.checks.find((c) => c.id === 'catalogue-number-completeness')!;
       expect(check.passed).toBe(true);
     });
+
+    // ── Format-aware completeness (2026-08-28) ────────────────────────────
+    // The gapless-1..N sequence check runs for every format (NFC dogs
+    // consume numbers regardless), but which entryNames must be FOUND in
+    // the rendered text depends on the contract — see resolvePreflightContract.
+
+    it('judging: an NFC entry that is never drawn does not fail completeness — the detail names the exclusion', async () => {
+      const pdf = await buildFixtureWithUndrawnNfc();
+      const report = await runCataloguePreflight(pdf, nfcSnapshot(), { format: 'judging' });
+      const check = report.checks.find((c) => c.id === 'catalogue-number-completeness')!;
+      expect(check.passed, check.detail).toBe(true);
+      expect(check.detail).toContain('1 NFC entries (#5) are not printed in this format by design');
+    });
+
+    it('standard: the SAME undrawn NFC entry fails completeness — standard prints every entry, including NFC', async () => {
+      const pdf = await buildFixtureWithUndrawnNfc();
+      const report = await runCataloguePreflight(pdf, nfcSnapshot(), { format: 'standard' });
+      const check = report.checks.find((c) => c.id === 'catalogue-number-completeness')!;
+      expect(check.passed).toBe(false);
+      expect(check.detail).toContain('GHOST NFC DOG');
+      expect(report.passed).toBe(false);
+    });
+
+    it('absentees: names are not checked at all — passes even though none of the "entry names" were drawn', async () => {
+      const pdf = await buildFixtureWithUndrawnNfc(); // draws "DOG NUMBER 1".."DOG NUMBER 4"
+      const report = await runCataloguePreflight(
+        pdf,
+        baseSnapshot({
+          expectedNumbers: [1, 2, 3, 4],
+          entryNames: [1, 2, 3, 4].map((n) => ({ number: n, name: `NEVER PRINTED NAME ${n}` })),
+        }),
+        { format: 'absentees' },
+      );
+      const check = report.checks.find((c) => c.id === 'catalogue-number-completeness')!;
+      expect(check.passed, check.detail).toBe(true);
+      expect(check.detail).toContain('entry names not checked — an absentee list is a subset of the entries by definition');
+      expect(report.contract.binding).toBe('loose');
+    });
+
+    it('by-class + WUSV: an undrawn NFC entry passes, and the detail carries the "regionals allow no NFC" note', async () => {
+      const pdf = await buildFixtureWithUndrawnNfc();
+      const report = await runCataloguePreflight(pdf, nfcSnapshot({ showRuleset: 'wusv' }), { format: 'by-class' });
+      const check = report.checks.find((c) => c.id === 'catalogue-number-completeness')!;
+      expect(check.passed, check.detail).toBe(true);
+      expect(check.detail).toContain('regionals allow no NFC entries and the SV catalogue does not print them');
+    });
+
+    it('by-class + RKC: the SAME undrawn NFC entry fails — non-WUSV by-class prints every entry, including NFC', async () => {
+      const pdf = await buildFixtureWithUndrawnNfc();
+      const report = await runCataloguePreflight(pdf, nfcSnapshot({ showRuleset: 'rkc' }), { format: 'by-class' });
+      const check = report.checks.find((c) => c.id === 'catalogue-number-completeness')!;
+      expect(check.passed).toBe(false);
+      expect(check.detail).toContain('GHOST NFC DOG');
+    });
+
+    it('folds a curly apostrophe against pdftotext rendering it as a space (Scotland regional #52, job 99012c37)', async () => {
+      const doc = await PDFDocument.create();
+      const font = await embeddedInterFont(doc);
+      const page = doc.addPage(A5 as unknown as [number, number]);
+      // What pdftotext -layout actually emitted for this Inter subset:
+      // the U+2019 apostrophe extracts as a bare space.
+      drawEntryPage(page, font, ['1  CH SADIRA S YOKKO FOR ELLROOST']);
+
+      const pdf = Buffer.from(await doc.save());
+      const report = await runCataloguePreflight(
+        pdf,
+        baseSnapshot({
+          expectedNumbers: [1],
+          entryNames: [{ number: 1, name: 'CH SADIRA’S YOKKO FOR ELLROOST ' }],
+        }),
+        { format: 'standard' },
+      );
+      const check = report.checks.find((c) => c.id === 'catalogue-number-completeness')!;
+      expect(check.passed, check.detail).toBe(true);
+    });
+
+    it('finds a name wrapped inside one two-column cell via -raw, where -layout interleaves it with the other column', async () => {
+      const pdf = await buildTwoColumnWrapFixture();
+      const report = await runCataloguePreflight(
+        pdf,
+        baseSnapshot({
+          expectedNumbers: [1, 2],
+          entryNames: [
+            { number: 1, name: 'AMIRA VOM FICHTENSCHLAG (IMP DEU)' },
+            { number: 2, name: 'OTHER DOG' },
+          ],
+        }),
+        { format: 'standard' },
+      );
+      const check = report.checks.find((c) => c.id === 'catalogue-number-completeness')!;
+      expect(check.passed, check.detail).toBe(true);
+      expect(check.detail).not.toContain('AMIRA VOM FICHTENSCHLAG');
+    });
   });
 
-  describe('page-count-booklet', () => {
+  describe('page-count-booklet / page-count-loose (format-aware binding)', () => {
     it('fails on a 3-page document (not a multiple of 4)', async () => {
       const pdf = await buildFixture(3);
       const report = await runCataloguePreflight(
         pdf,
         baseSnapshot({ expectedNumbers: [1, 2, 3], entryNames: [1, 2, 3].map((n) => ({ number: n, name: `DOG NUMBER ${n}` })) }),
+        { format: 'standard' },
       );
       const check = report.checks.find((c) => c.id === 'page-count-booklet')!;
       expect(check.passed).toBe(false);
@@ -218,9 +358,43 @@ describe('runCataloguePreflight', () => {
 
     it('passes on a 4-page document', async () => {
       const pdf = await buildWellFormedFixture();
-      const report = await runCataloguePreflight(pdf, baseSnapshot());
+      const report = await runCataloguePreflight(pdf, baseSnapshot(), { format: 'standard' });
       const check = report.checks.find((c) => c.id === 'page-count-booklet')!;
       expect(check.passed).toBe(true);
+    });
+
+    // ── (a) judging, 5 pages: loose binding, not booklet ──────────────────
+    it('judging: a 5-page (non-multiple-of-4) steward book is NOT held to the booklet rule', async () => {
+      const pdf = await buildFixture(5);
+      const snapshot = baseSnapshot({
+        expectedNumbers: [1, 2, 3, 4, 5],
+        entryNames: [1, 2, 3, 4, 5].map((n) => ({ number: n, name: `DOG NUMBER ${n}` })),
+      });
+      const report = await runCataloguePreflight(pdf, snapshot, { format: 'judging' });
+
+      expect(report.contract.binding).toBe('loose');
+      const loose = report.checks.find((c) => c.id === 'page-count-loose');
+      expect(loose).toBeDefined();
+      expect(loose!.passed, loose!.detail).toBe(true);
+      expect(report.checks.find((c) => c.id === 'page-count-booklet')).toBeUndefined();
+      expect(report.passed, JSON.stringify(report.checks)).toBe(true);
+    });
+
+    // ── (b) same 5-page count, requested as standard: booklet fails ───────
+    it('standard: the SAME 5-page count fails page-count-booklet (unchanged truth for the actual booklet format)', async () => {
+      const pdf = await buildFixture(5);
+      const snapshot = baseSnapshot({
+        expectedNumbers: [1, 2, 3, 4, 5],
+        entryNames: [1, 2, 3, 4, 5].map((n) => ({ number: n, name: `DOG NUMBER ${n}` })),
+      });
+      const report = await runCataloguePreflight(pdf, snapshot, { format: 'standard' });
+
+      expect(report.contract.binding).toBe('booklet');
+      const booklet = report.checks.find((c) => c.id === 'page-count-booklet');
+      expect(booklet).toBeDefined();
+      expect(booklet!.passed).toBe(false);
+      expect(report.checks.find((c) => c.id === 'page-count-loose')).toBeUndefined();
+      expect(report.passed).toBe(false);
     });
   });
 
@@ -230,6 +404,7 @@ describe('runCataloguePreflight', () => {
       const report = await runCataloguePreflight(
         pdf,
         baseSnapshot({ expectedNumbers: [1, 2, 3, 4], entryNames: [1, 2, 3, 4].map((n) => ({ number: n, name: `DOG NUMBER ${n}` })) }),
+        { format: 'standard' },
       );
       const check = report.checks.find((c) => c.id === 'fonts-embedded')!;
       expect(check.passed).toBe(false);
@@ -239,7 +414,7 @@ describe('runCataloguePreflight', () => {
 
     it('passes on a document with an embedded (subsetted) font', async () => {
       const pdf = await buildWellFormedFixture();
-      const report = await runCataloguePreflight(pdf, baseSnapshot());
+      const report = await runCataloguePreflight(pdf, baseSnapshot(), { format: 'standard' });
       const check = report.checks.find((c) => c.id === 'fonts-embedded')!;
       expect(check.passed).toBe(true);
     });
@@ -251,6 +426,7 @@ describe('runCataloguePreflight', () => {
       const report = await runCataloguePreflight(
         pdf,
         baseSnapshot({ expectedNumbers: [1, 2, 3, 4], entryNames: [1, 2, 3, 4].map((n) => ({ number: n, name: `DOG NUMBER ${n}` })) }),
+        { format: 'standard' },
       );
       const check = report.checks.find((c) => c.id === 'no-blank-pages')!;
       expect(check.passed).toBe(false);
@@ -270,6 +446,7 @@ describe('runCataloguePreflight', () => {
             { number: 3, name: 'BELLA OF NOWHERE' },
           ],
         }),
+        { format: 'standard' },
       );
       const check = report.checks.find((c) => c.id === 'no-blank-pages')!;
       expect(check.passed, check.detail).toBe(true);
@@ -277,7 +454,7 @@ describe('runCataloguePreflight', () => {
 
     it('passes a fully populated 4-page document', async () => {
       const pdf = await buildWellFormedFixture();
-      const report = await runCataloguePreflight(pdf, baseSnapshot());
+      const report = await runCataloguePreflight(pdf, baseSnapshot(), { format: 'standard' });
       const check = report.checks.find((c) => c.id === 'no-blank-pages')!;
       expect(check.passed).toBe(true);
     });
@@ -297,6 +474,7 @@ describe('runCataloguePreflight', () => {
       const report = await runCataloguePreflight(
         pdf,
         baseSnapshot({ expectedNumbers: [1, 2, 3, 4], entryNames: [{ number: 1, name: 'FIDO OF SOMEWHERE' }, ...[2, 3, 4].map((n) => ({ number: n, name: `DOG NUMBER ${n}` }))] }),
+        { format: 'standard' },
       );
       const check = report.checks.find((c) => c.id === 'rkc-wording')!;
       expect(check.level).toBe('warn');
@@ -307,7 +485,7 @@ describe('runCataloguePreflight', () => {
 
     it('does not false-positive on "RKC" itself', async () => {
       const pdf = await buildWellFormedFixture();
-      const report = await runCataloguePreflight(pdf, baseSnapshot());
+      const report = await runCataloguePreflight(pdf, baseSnapshot(), { format: 'standard' });
       const check = report.checks.find((c) => c.id === 'rkc-wording')!;
       expect(check.passed).toBe(true);
     });
@@ -316,7 +494,7 @@ describe('runCataloguePreflight', () => {
   describe('stable-identity', () => {
     it('warns (not fails) when rendererGitSha is explicitly null', async () => {
       const pdf = await buildWellFormedFixture();
-      const report = await runCataloguePreflight(pdf, baseSnapshot({ rendererGitSha: null }));
+      const report = await runCataloguePreflight(pdf, baseSnapshot({ rendererGitSha: null }), { format: 'standard' });
       const check = report.checks.find((c) => c.id === 'stable-identity')!;
       expect(check.level).toBe('warn');
       expect(check.passed).toBe(true);
@@ -325,19 +503,28 @@ describe('runCataloguePreflight', () => {
 
     it('passes at fail-level when rendererGitSha is recorded', async () => {
       const pdf = await buildWellFormedFixture();
-      const report = await runCataloguePreflight(pdf, baseSnapshot({ rendererGitSha: 'deadbeef' }));
+      const report = await runCataloguePreflight(pdf, baseSnapshot({ rendererGitSha: 'deadbeef' }), { format: 'standard' });
       const check = report.checks.find((c) => c.id === 'stable-identity')!;
       expect(check.level).toBe('fail');
       expect(check.passed).toBe(true);
     });
   });
 
-  it('produces a JSON-serialisable report', async () => {
+  it('produces a JSON-serialisable report that carries the format contract', async () => {
     const pdf = await buildWellFormedFixture();
-    const report = await runCataloguePreflight(pdf, baseSnapshot());
+    const report = await runCataloguePreflight(pdf, baseSnapshot(), { format: 'standard' });
     expect(() => JSON.stringify(report)).not.toThrow();
     const roundTripped = JSON.parse(JSON.stringify(report));
     expect(roundTripped.passed).toBe(report.passed);
     expect(roundTripped.checks).toHaveLength(report.checks.length);
+    expect(roundTripped.contract).toEqual(report.contract);
+    expect(report.contract).toMatchObject({
+      format: 'standard',
+      effectiveFormat: 'standard',
+      binding: 'booklet',
+      completeness: 'all',
+    });
+    expect(typeof report.contract.label).toBe('string');
+    expect(typeof report.contract.rationale).toBe('string');
   });
 });

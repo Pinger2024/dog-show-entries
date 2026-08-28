@@ -92,6 +92,26 @@ describe('computeSnapshotHash', () => {
     expect(computeSnapshotHash(a)).toBe(computeSnapshotHash(b));
   });
 
+  it('is stable when only meta changes (entryNames flags, showRuleset, showStatus) — 2026-08-28: meta is excluded from identity entirely', () => {
+    const a = baseSnapshot({
+      meta: {
+        ...baseSnapshot().meta,
+        showStatus: 'entries_closed',
+        showRuleset: undefined,
+        entryNames: [{ number: 1, name: 'Fido' }],
+      },
+    });
+    const b = baseSnapshot({
+      meta: {
+        ...baseSnapshot().meta,
+        showStatus: 'completed',
+        showRuleset: 'wusv',
+        entryNames: [{ number: 1, name: 'Fido', isNfc: true, isJuniorHandler: false }],
+      },
+    });
+    expect(computeSnapshotHash(a)).toBe(computeSnapshotHash(b));
+  });
+
   it('is stable across two calls on the identical snapshot (deterministic)', () => {
     const snap = baseSnapshot({
       showInfoBase: { ...baseSnapshot().showInfoBase, adverts: [advert('https://r2.test/uploads/a.png')] },

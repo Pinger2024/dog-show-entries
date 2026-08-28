@@ -353,6 +353,40 @@ describe('worker: processJob — real render', () => {
     expect(padPdfToMultiple).not.toHaveBeenCalled();
     expect(stripUnembeddedBase14Fonts).toHaveBeenCalledTimes(1);
   }, 20_000);
+
+  // ── Format-aware preflight (2026-08-28) ──────────────────────────────────
+  // Before this, the worker called runCataloguePreflight with no `format`,
+  // so a steward book was judged as a saddle-stitched customer catalogue —
+  // exactly what produced the Clyde/Scotland false-red `page-count-booklet`
+  // failures on real, correctly-printed print packs.
+
+  it('judging job: preflight PASSES and the contract records loose binding (steward books are not booklet-padded)', async () => {
+    const { user, show } = await makeMinimalShowWithEntry();
+    const { jobId } = await requestCatalogueJob(testDb, { showId: show.id, format: 'judging', requestedByUserId: user.id });
+
+    const job = await claimNextJob(testDb);
+    await processJob(testDb, job!);
+
+    const row = await testDb.query.documentRenderJobs.findFirst({ where: eq(documentRenderJobs.id, jobId) });
+    const preflight = row?.preflight as { passed?: boolean; contract?: { binding?: string; format?: string } } | null;
+    expect(preflight?.contract?.format).toBe('judging');
+    expect(preflight?.contract?.binding).toBe('loose');
+    expect(preflight?.passed, JSON.stringify(preflight)).toBe(true);
+  }, 20_000);
+
+  it('standard job: preflight PASSES and the contract records booklet binding', async () => {
+    const { user, show } = await makeMinimalShowWithEntry();
+    const { jobId } = await requestCatalogueJob(testDb, { showId: show.id, format: 'standard', requestedByUserId: user.id });
+
+    const job = await claimNextJob(testDb);
+    await processJob(testDb, job!);
+
+    const row = await testDb.query.documentRenderJobs.findFirst({ where: eq(documentRenderJobs.id, jobId) });
+    const preflight = row?.preflight as { passed?: boolean; contract?: { binding?: string; format?: string } } | null;
+    expect(preflight?.contract?.format).toBe('standard');
+    expect(preflight?.contract?.binding).toBe('booklet');
+    expect(preflight?.passed, JSON.stringify(preflight)).toBe(true);
+  }, 20_000);
 });
 
 describe('worker: processJob — failure and retry', () => {
@@ -476,6 +510,51 @@ describe('buildCatalogueSnapshot — meta.expectedNumbers / meta.entryNames', ()
     expect(new Set(dogNumbers).size).toBe(1);
     expect(namesByNumber.get(dogNumbers[0])).toBe('Meadowvale Rewa');
     expect([...namesByNumber.values()]).toEqual(expect.arrayContaining(['Meadowvale Rewa', 'Priya Shah', 'Tom Reid']));
+  });
+
+  // Feeds resolvePreflightContract's format-aware completeness check
+  // (src/lib/catalogue-preflight.ts) — it needs to know, per entry, whether
+  // it's NFC (never printed in a competing-only format) or a Junior
+  // Handler, and whether the show is WUSV/SV (regionals allow no NFC).
+  it('entryNames carry boolean isNfc/isJuniorHandler flags, and meta.showRuleset is present', async () => {
+    const { user, org } = await makeSecretaryWithOrg();
+    const show = await makeShow({ organisationId: org.id, status: 'entries_closed' });
+
+    const breedDef = await makeClassDef({ name: 'Open', type: 'age' });
+    const breedClass = await makeShowClass({ showId: show.id, classDefinitionId: breedDef.id });
+    const jhDef = await makeClassDef({ type: 'junior_handler', name: 'JHA Handling (12-16)' });
+    const jhClass = await makeShowClass({ showId: show.id, classDefinitionId: jhDef.id });
+
+    const exhibitor = await makeUser({ role: 'exhibitor' });
+
+    const competingDog = await makeDog({ ownerId: exhibitor.id, registeredName: 'Competing Dog' });
+    const competingEntry = await makeEntry({ showId: show.id, dogId: competingDog.id, exhibitorId: exhibitor.id });
+    await makeEntryClass({ entryId: competingEntry.id, showClassId: breedClass.id });
+
+    // NFC entries hold no class — the real Scotland-regional evidence
+    // (#74/#75) this contract fixes is exactly a 0-class NFC entry.
+    const nfcDog = await makeDog({ ownerId: exhibitor.id, registeredName: 'NFC Dog' });
+    await makeEntry({ showId: show.id, dogId: nfcDog.id, exhibitorId: exhibitor.id, isNfc: true });
+
+    const [jhEntry] = await testDb
+      .insert(entriesTable)
+      .values({ showId: show.id, dogId: null, exhibitorId: exhibitor.id, status: 'confirmed', totalFee: 300, entryType: 'junior_handler' })
+      .returning();
+    await makeEntryClass({ entryId: jhEntry.id, showClassId: jhClass.id });
+    await testDb.insert(juniorHandlerDetails).values({ entryId: jhEntry.id, handlerName: 'Casey Lee', dateOfBirth: '2012-01-01' });
+
+    const snapshot = await buildCatalogueSnapshot(testDb, show.id);
+
+    expect(snapshot.meta.showRuleset).toBe('rkc'); // makeShow's default ruleset
+
+    const byName = new Map(snapshot.meta.entryNames.map((n) => [n.name, n]));
+    expect(byName.get('Competing Dog')).toMatchObject({ isNfc: false, isJuniorHandler: false });
+    expect(byName.get('NFC Dog')).toMatchObject({ isNfc: true, isJuniorHandler: false });
+    expect(byName.get('Casey Lee')).toMatchObject({ isNfc: false, isJuniorHandler: true });
+    for (const en of snapshot.meta.entryNames) {
+      expect(typeof en.isNfc).toBe('boolean');
+      expect(typeof en.isJuniorHandler).toBe('boolean');
+    }
   });
 });
 
