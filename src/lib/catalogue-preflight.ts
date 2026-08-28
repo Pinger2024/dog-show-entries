@@ -296,7 +296,7 @@ function runPoppler(bin: string, args: string[], maxBuffer = 20 * 1024 * 1024): 
 function fold(s: string): string {
   return s
     .normalize('NFKD')
-    .replace(/[̀-ͯ]/g, '') // strip combining marks left behind by NFKD
+    .replace(/[\u0300-\u036f]/g, '') // strip combining marks left behind by NFKD
     .toLowerCase()
     .replace(/[^a-z0-9]/g, '');
 }
@@ -392,9 +392,11 @@ function describeNumberSequence(numbers: number[]): { ok: boolean; detail: strin
  * interleave it with the other column's text, or vice versa. Trying BOTH
  * extractions, and folding away everything but [a-z0-9] (which absorbs the
  * apostrophe-as-space case too — "sadiras" either way) before comparing, is
- * what makes this check robust to real extraction artefacts without ever
- * false-greening on a genuinely absent name (folding never turns two
- * different names into the same string).
+ * what makes this check robust to real extraction artefacts. The cost is a
+ * theoretical false-green: a very short name whose letters happen to occur
+ * contiguously inside other text — negligible for real registered names
+ * (two or more words), and far cheaper than the false-red it replaces, which
+ * teaches founders to ignore red.
  */
 function checkCatalogueNumberCompleteness(
   meta: CatalogueSnapshotMeta,
