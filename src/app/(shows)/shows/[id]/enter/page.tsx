@@ -77,6 +77,7 @@ import {
   getPaymentKey,
   restoreActionForStatus,
   computeClassSelectionTotal,
+  validateDiscountGroupId,
   type WizardStep,
 } from './use-entry-cart';
 import { SecLabel, Chip, Eyebrow, SEButton, SECard, SEDarkPanel } from '@/components/show-experience/kit';
@@ -210,11 +211,18 @@ export default function EnterShowPage() {
   const [subtotalAmount, setSubtotalAmount] = useState(initialPayment?.subtotalAmount ?? 0);
   const [platformFeePence, setPlatformFeePence] = useState(initialPayment?.platformFeePence ?? 0);
   const [shareCopied, setShareCopied] = useState(false);
-  // Discount group declaration (e.g. "I am a Member") at checkout.
-  // Stored as the group id or null. Sent to the server with the order
-  // so the fee-calc service can apply the group's first-class rate
+  // Discount group declaration (e.g. "I am a Member") at checkout — the
+  // group id, or null for the standard rate. Sent to the server with the
+  // order so the fee-calc service can apply the group's first-class rate
   // and (if set) member-specific multi-dog package price.
-  const [discountGroupId, setDiscountGroupId] = useState<string | null>(null);
+  //
+  // Lives on the CART (cart.discountGroupId / cart.setDiscountGroup), NOT
+  // page useState — it used to be page state and reset to null on every
+  // remount, so a reload, a Safari tab eviction, or the Add/Edit-dog detour
+  // (`/dogs/new?returnTo=…` unmounts this page) silently un-ticked a
+  // declared member while the rest of the cart survived in localStorage.
+  // Paula Ingham paid £18 instead of £16 at the North Eastern GSD Club champ
+  // show (28 Aug) this way.
   // Regional (SV/WUSV) checkout declarations — self-declared, on trust. Kept as
   // transient page state (not persisted with the cart) so a reload just resets
   // them to the standard rate rather than risking a stale membership sticking to
@@ -428,6 +436,21 @@ export default function EnterShowPage() {
     { enabled: !!showId && cart.step === 'cart_review' }
   );
 
+  // Restore-validation: a discount group id restored from localStorage (a
+  // reload, a Safari tab eviction, the Add/Edit-dog detour) might no longer
+  // be one of the show's CURRENT groups if a secretary deleted it after the
+  // exhibitor ticked it — orders.checkout 400s on a stale id, so once the
+  // groups have actually loaded, drop anything that isn't among them back to
+  // the standard rate rather than resubmit it blind.
+  useEffect(() => {
+    if (!discountGroups) return;
+    const validated = validateDiscountGroupId(cart.discountGroupId, discountGroups);
+    if (validated !== cart.discountGroupId) {
+      cart.setDiscountGroup(validated);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [discountGroups, cart.discountGroupId]);
+
   // Regional (SV/WUSV) shows price on a tiered per-dog scale + member column
   // (project_regional_fee_structure). Null on RKC shows / regionals with no fee
   // config yet, which fall back to the standard fee model.
@@ -491,7 +514,7 @@ export default function EnterShowPage() {
     }
 
     if (!show || show.firstEntryFee == null) return null;
-    const selectedGroup = discountGroups?.find((g) => g.id === discountGroupId) ?? null;
+    const selectedGroup = discountGroups?.find((g) => g.id === cart.discountGroupId) ?? null;
     const feeCtx: FeeContext = {
       firstEntryFeePence: show.firstEntryFee,
       subsequentEntryFeePence: show.subsequentEntryFee,
@@ -530,7 +553,7 @@ export default function EnterShowPage() {
     if (dogEntries.length === 0) return null;
     return computeOrderFees(dogEntries, feeCtx);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [show, regionalCfg, regionalMembership, regionalFirstTime, discountGroups, discountGroupId, cart.entries, allShowClasses]);
+  }, [show, regionalCfg, regionalMembership, regionalFirstTime, discountGroups, cart.discountGroupId, cart.entries, allShowClasses]);
 
   // Checkout preview totals. The club-collected subtotal is entries + add-ons +
   // donation — the exact base the server charges the platform fee on (orders
@@ -880,7 +903,7 @@ export default function EnterShowPage() {
           quantity: s.quantity,
         })),
         referralSource,
-        discountGroupId: discountGroupId ?? undefined,
+        discountGroupId: cart.discountGroupId ?? undefined,
         regionalMembership: regionalMembership ?? undefined,
         regionalMembershipNumber: regionalMembership
           ? regionalMembershipNumber.trim() || undefined
@@ -2163,8 +2186,8 @@ export default function EnterShowPage() {
                     <input
                       type="radio"
                       name="discount-group"
-                      checked={discountGroupId === g.id}
-                      onChange={() => setDiscountGroupId(g.id)}
+                      checked={cart.discountGroupId === g.id}
+                      onChange={() => cart.setDiscountGroup(g.id)}
                       className="mt-0.5 size-4 cursor-pointer accent-se-green"
                     />
                     <span className="text-sm">
@@ -2179,8 +2202,8 @@ export default function EnterShowPage() {
                   <input
                     type="radio"
                     name="discount-group"
-                    checked={discountGroupId === null}
-                    onChange={() => setDiscountGroupId(null)}
+                    checked={cart.discountGroupId === null}
+                    onChange={() => cart.setDiscountGroup(null)}
                     className="mt-0.5 size-4 cursor-pointer accent-se-green"
                   />
                   <span className="text-sm font-medium text-se-ink">None of the above (standard rate)</span>
@@ -2331,6 +2354,24 @@ export default function EnterShowPage() {
                 </span>
                 <span>{formatCurrency(feePreview?.total ?? cart.entriesTotal)}</span>
               </div>
+              {/* Visible rate — Paula Ingham ticked "I am a Member" but her
+                  order still charged the standard rate (28 Aug) and nothing
+                  on screen would have told her. Only shown when the show
+                  actually offers discount groups, matching the tick-box
+                  above. Calm, no nagging — a plain statement either way. */}
+              {!regionalCfg && discountGroups && discountGroups.length > 0 && (
+                <div className="flex justify-between text-sm">
+                  {cart.discountGroupId ? (
+                    <span className="font-medium text-se-green">
+                      Member rate applied — {discountGroups.find((g) => g.id === cart.discountGroupId)?.label ?? ''}
+                    </span>
+                  ) : (
+                    <span className="text-se-ink3">
+                      Standard rate — tick &quot;I am a member&quot; above if that&apos;s you
+                    </span>
+                  )}
+                </div>
+              )}
               {cart.sundryTotal > 0 && (
                 <div className="flex justify-between text-sm text-se-ink3">
                   <span>Add-ons</span>
