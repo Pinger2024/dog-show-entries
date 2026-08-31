@@ -60,3 +60,9 @@ against unchanged code (the pure function this fix introduces).
 ⎯⎯⎯⎯⎯⎯ Failed Tests 10 ⎯⎯⎯⎯⎯⎯⎯
  Test Files  1 failed (1)
       Tests  10 failed (10)
+
+## Item 4 — prize cards single-sided (pdf-lib ViewerPreferences /Duplex)
+Command: npx vitest run src/lib/__tests__/pdf-pad.test.ts
+Result: 2 failed | 1 passed (3) — setSimplexViewerPreference doesn't exist
+yet against unchanged pdf-pad.ts. The "booklet stays untouched" guard
+already passes (padPdfToMultiple never calls the not-yet-written function).
