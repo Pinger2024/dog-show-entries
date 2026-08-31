@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
-import { buildChallengeRegister } from '../catalogue-judging';
+import { buildChallengeRegister, fitsOneRegisterPage } from '../catalogue-judging';
 import type { ClassGroup } from '../catalogue-utils';
+import type { ChallengeRegisterSection } from '../catalogue-judging';
 
 // Mandy: the stewards' catalogue should end with a Challenge Register —
 // every breed class in judging order with its abbreviation, and a write-in
@@ -122,5 +123,46 @@ describe('buildChallengeRegister', () => {
       cls({ className: 'JHA Handling (6-11)', sex: null, classDefinitionType: 'junior_handler', entries: [] }),
     ]);
     expect(register).toEqual([]);
+  });
+});
+
+// The register page (catalogue-judging.tsx render) lays out Dogs | Bitches
+// as two side-by-side columns on one A5 page when it all fits; a show with
+// a long section (13+ classes of one sex, Mandy's render-review revision
+// 2026-08-31) falls back to the sequential one-sheet-per-sex layout instead
+// of cramming a half-width column. fitsOneRegisterPage is the pure decision
+// behind that branch.
+function registerSection(key: 'dog' | 'bitch', rowCount: number): ChallengeRegisterSection {
+  return {
+    key,
+    label: key === 'dog' ? 'Dogs' : 'Bitches',
+    rows: Array.from({ length: rowCount }, (_, i) => ({
+      classNumber: i + 1,
+      classLabel: null,
+      abbreviation: 'XD',
+      className: 'Class',
+    })),
+  };
+}
+
+describe('fitsOneRegisterPage', () => {
+  it('fits when every section has 13 rows or fewer', () => {
+    expect(fitsOneRegisterPage([registerSection('dog', 13), registerSection('bitch', 13)])).toBe(true);
+  });
+
+  it('does not fit once any section exceeds 13 rows', () => {
+    expect(fitsOneRegisterPage([registerSection('dog', 14), registerSection('bitch', 5)])).toBe(false);
+  });
+
+  it('is driven by the longer section — a short Bitches section does not rescue an oversized Dogs section', () => {
+    expect(fitsOneRegisterPage([registerSection('dog', 20), registerSection('bitch', 1)])).toBe(false);
+  });
+
+  it('fits trivially with a single short section (single-sex show)', () => {
+    expect(fitsOneRegisterPage([registerSection('dog', 5)])).toBe(true);
+  });
+
+  it('fits an empty register (nothing to lay out)', () => {
+    expect(fitsOneRegisterPage([])).toBe(true);
   });
 });
