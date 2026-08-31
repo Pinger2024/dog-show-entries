@@ -310,12 +310,15 @@ const s = StyleSheet.create({
     color: C.textLight,
     width: 16,
   },
+  // Wide enough for five-letter abbreviations (SLCJD — Special Long Coat
+  // Junior) plus a gap before the class name.
   registerRowAbbrev: {
     fontFamily: 'Inter',
     fontSize: 10,
     fontWeight: 'bold',
     color: C.primary,
-    width: 32,
+    width: 48,
+    paddingRight: 6,
   },
   registerRowName: {
     fontFamily: 'Inter',
@@ -327,7 +330,7 @@ const s = StyleSheet.create({
   // deferred, Mandy 2026-08-31). Generous size for handwriting at ringside.
   registerBox: {
     width: 90,
-    height: 24,
+    height: 28,
     borderWidth: 1,
     borderColor: C.primary,
     borderRadius: 2,
@@ -693,21 +696,30 @@ export function CatalogueJudging({ show, entries }: Props) {
             For the challenge, line the winners up in this order.
           </Text>
 
-          {challengeRegister.map((section) => (
-            // minPresenceAhead keeps the band + caption with the first row
-            // below it — same anchoring the Standard Catalogue uses for its
-            // sex bands (catalogue-ringside.tsx) — so the heading can never
-            // strand alone at the foot of a page.
-            <View key={`register-${section.key}`} minPresenceAhead={80}>
+          {challengeRegister.map((section, sectionIdx) => (
+            // Each section after the first starts on a fresh page (`break`):
+            // one sheet per challenge, so the steward never flips mid
+            // line-up. minPresenceAhead still anchors the band + caption to
+            // the first row for the (oversized-section) case where rows have
+            // to flow onto a further page.
+            <View
+              key={`register-${section.key}`}
+              minPresenceAhead={80}
+              break={sectionIdx > 0}
+            >
               <Text style={s.sexBand}>{section.label}</Text>
               <View style={s.registerCaptionRow}>
                 <Text style={s.registerCaption}>1st place — catalogue no.</Text>
               </View>
 
               {section.rows.map((row, rowIdx) => (
+                // wrap={false}: a write-in box must never be sliced across a
+                // page boundary — an unfittable row moves whole to the next
+                // page instead.
                 <View
                   key={`register-row-${section.key}-${row.classLabel ?? row.classNumber ?? rowIdx}`}
                   style={s.registerRow}
+                  wrap={false}
                 >
                   <View style={s.registerRowLeft}>
                     <Text style={s.registerRowNumber}>
