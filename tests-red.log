@@ -52,3 +52,11 @@ guard test already passes unchanged.
  FAIL  src/__tests__/award-select-recorded-holder.test.tsx > AwardRow (secretary results page) — recorded holder outside candidates > renders a visible, selected option for a recorded dog that fell out of the candidate list
  Test Files  1 failed (1)
       Tests  2 failed | 1 passed (3)
+
+## Item 3 — deriveTopAwardJudge returns null for every Scotland award
+Command: npx vitest run src/server/services/__tests__/derive-award-judge.test.ts
+Result: 10 failed (10) — deriveTopAwardJudgeFromAssignments doesn't exist yet
+against unchanged code (the pure function this fix introduces).
+⎯⎯⎯⎯⎯⎯ Failed Tests 10 ⎯⎯⎯⎯⎯⎯⎯
+ Test Files  1 failed (1)
+      Tests  10 failed (10)
