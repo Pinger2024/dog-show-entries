@@ -903,7 +903,7 @@ function JudgeApprovalSection({
 }
 
 // Reusable award select dropdown
-function AwardSelect({
+export function AwardSelect({
   label,
   type,
   existingDogId,

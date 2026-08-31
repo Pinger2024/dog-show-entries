@@ -519,7 +519,7 @@ function BestAwardsSection({
 }
 
 /** Single award row with label + select dropdown */
-function AwardRow({
+export function AwardRow({
   label,
   type,
   existing,

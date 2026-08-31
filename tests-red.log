@@ -38,3 +38,17 @@ existing behaviour is preserved).
  FAIL  src/lib/__tests__/top-awards.test.ts > buildPlacementIndex — puppy band by AGE when DOB is known (Scotland 2026-08-30) > a beaten-by-a-puppy-in-a-shared-class age-eligible dog still excludes from Best Puppy
  Test Files  1 failed (1)
       Tests  7 failed | 35 passed (42)
+
+## Item 2 — award box must always show the recorded holder
+Command: npx vitest run src/__tests__/award-select-recorded-holder.test.tsx
+Result: 2 failed | 1 passed (3) — against unchanged AwardSelect/AwardRow,
+a recorded holder outside `candidates` has no matching SelectItem (Radix
+Select can't render text for a value with no matching item — this is
+exactly the "empty box" Mandy hit). The "already among candidates, no dupe"
+guard test already passes unchanged.
+   ✓ AwardSelect (steward page) — recorded holder outside candidates > does not duplicate the holder when they are already among the candidates 50ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  src/__tests__/award-select-recorded-holder.test.tsx > AwardSelect (steward page) — recorded holder outside candidates > renders a visible, selected option for a recorded dog that fell out of the candidate list
+ FAIL  src/__tests__/award-select-recorded-holder.test.tsx > AwardRow (secretary results page) — recorded holder outside candidates > renders a visible, selected option for a recorded dog that fell out of the candidate list
+ Test Files  1 failed (1)
+      Tests  2 failed | 1 passed (3)
