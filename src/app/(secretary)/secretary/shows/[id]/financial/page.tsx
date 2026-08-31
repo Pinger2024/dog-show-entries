@@ -6,6 +6,7 @@ import type { LucideIcon } from 'lucide-react';
 import { FolderOpen, Loader2, RotateCcw, BookOpen, ShoppingBag } from 'lucide-react';
 import { toast } from 'sonner';
 import { trpc } from '@/lib/trpc';
+import { chargePayment, orderPaymentSummary } from '@/lib/order-payment-summary';
 import { formatCurrency } from '@/lib/date-utils';
 import { cn, formatDogName } from '@/lib/utils';
 import { formatSvClassName } from '@/lib/class-labels';
@@ -750,11 +751,8 @@ export default function FinancialPage() {
             <DialogTitle>Refund entire order?</DialogTitle>
             <DialogDescription>
               {orderToRefund && (() => {
-                const succeeded = orderToRefund.payments.find(
-                  (p) => p.status === 'succeeded' || p.status === 'partially_refunded'
-                );
-                const remaining =
-                  (succeeded?.amount ?? 0) - (succeeded?.refundAmount ?? 0);
+                const charge = chargePayment(orderToRefund.payments);
+                const remaining = (charge?.amount ?? 0) - (charge?.refundAmount ?? 0);
                 return (
                   <>
                     This will return <strong>{formatCurrency(remaining)}</strong> to{' '}
@@ -877,20 +875,15 @@ function OrderRefundCard({
   onRefundOrder: () => void;
   onRefundEntry: (entry: RefundableEntry) => void;
 }) {
-  const succeeded = order.payments.find(
-    (p) => p.status === 'succeeded' || p.status === 'partially_refunded' || p.status === 'refunded'
-  );
-  const paid = succeeded?.amount ?? order.totalAmount + order.platformFeePence;
-  const refunded = succeeded?.refundAmount ?? 0;
-  const remaining = paid - refunded;
-  // A £0 order (e.g. a free Junior Handler entry) has paid === 0, which would
-  // make remaining <= 0 trivially true and wrongly show "Fully refunded".
-  // Only treat it as refunded if there was actually something paid to refund.
-  const fullyRefunded = paid > 0 && remaining <= 0;
-  // Only orders with a real Stripe payment can be refunded. Free entries and
-  // secretary-recorded (manually entered) orders have no payment row, so the
-  // refund actions would only error with "No completed payment found" — hide them.
-  const hasRefundablePayment = !!succeeded?.stripePaymentId;
+  // One shared rule for reading money off the payments rows — the relation
+  // loads UNORDERED, and an inline find() here once matched a £2 REFUND row
+  // before the £23.73 charge row, so the header and the "Refund entire
+  // order" button both said £2.00 while the server would have refunded the
+  // true remaining £21.73 (photographed live, 31 Aug 2026). See
+  // src/lib/order-payment-summary.ts for the full story and the £0-order /
+  // no-Stripe-payment guards that used to live inline here.
+  const { paid, refunded, remaining, fullyRefunded, hasRefundablePayment } =
+    orderPaymentSummary(order.payments, order.totalAmount + order.platformFeePence);
 
   const entryFeesTotal = order.entries.reduce((s, e) => s + e.totalFee, 0);
   const sundryTotal = order.orderSundryItems.reduce(
