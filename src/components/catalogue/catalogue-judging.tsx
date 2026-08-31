@@ -8,7 +8,7 @@ import {
   displayEntryName,
 } from './catalogue-utils';
 import type { ClassGroup } from './catalogue-utils';
-import { sectionClasses } from '@/lib/class-labels';
+import { sectionClasses, classNameAbbreviation } from '@/lib/class-labels';
 
 interface Props {
   show: CatalogueShowInfo;
@@ -260,6 +260,95 @@ const s = StyleSheet.create({
     borderTopColor: C.ruleLight,
     paddingTop: 3,
   },
+  // ── Challenge Register (final page) — bigger type throughout than the
+  // dense body page above: this is filled in by hand at ringside, not read.
+  // Render-review revision, Mandy 2026-08-31: 1st AND 2nd place boxes (no
+  // class name — the abbreviation is enough once you know the format), two
+  // columns (Dogs | Bitches) side by side when it all fits one page.
+  registerTitle: {
+    fontFamily: 'LibreBaskerville',
+    fontSize: 15,
+    fontWeight: 'bold',
+    color: C.primary,
+    marginBottom: 3,
+  },
+  registerInstruction: {
+    fontFamily: 'Inter',
+    fontSize: 8,
+    color: C.textMedium,
+    marginBottom: 8,
+  },
+  // Dogs | Bitches side by side — only used by the fits-one-page layout.
+  registerColumns: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  // flex:1 so a single-sex show's lone column still fills the page width
+  // rather than sitting narrow on one side.
+  registerColumn: {
+    flex: 1,
+  },
+  // "1st" / "2nd" captions, right-aligned so they sit directly above their
+  // write-in box column — printed once per section rather than repeated on
+  // every row. gap matches registerBoxRow's so the two line up exactly.
+  registerCaptionRow: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: 4,
+    marginTop: 2,
+  },
+  registerCaption: {
+    fontFamily: 'Inter',
+    fontSize: 6.5,
+    fontStyle: 'italic',
+    color: C.textLight,
+    width: 56,
+    textAlign: 'center',
+  },
+  registerRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 3,
+    borderBottomWidth: 0.5,
+    borderBottomColor: C.ruleLight,
+  },
+  registerRowLeft: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    flex: 1,
+    paddingRight: 8,
+  },
+  registerRowNumber: {
+    fontFamily: 'Inter',
+    fontSize: 7,
+    color: C.textLight,
+    width: 16,
+  },
+  // flex:1 — no class name alongside any more, so the abbreviation takes
+  // whatever room the row has left (narrower in the two-column layout,
+  // wide open in the single-column fallback).
+  registerRowAbbrev: {
+    fontFamily: 'Inter',
+    fontSize: 10,
+    fontWeight: 'bold',
+    color: C.primary,
+    flex: 1,
+  },
+  registerBoxRow: {
+    flexDirection: 'row',
+    gap: 4,
+  },
+  // Write-in boxes — 1st AND 2nd place, side by side (Mandy, render review
+  // 2026-08-31: the single 1st-only box was the earlier cut). Sized to fit
+  // two per row even in the two-column layout's narrower half-page column.
+  registerBox: {
+    width: 56,
+    height: 26,
+    borderWidth: 1,
+    borderColor: C.primary,
+    borderRadius: 2,
+  },
 });
 
 type Section = {
@@ -329,6 +418,108 @@ export function buildJudgingSections(allClasses: ClassGroup[]): Section[] {
   }));
 }
 
+export interface ChallengeRegisterRow {
+  classNumber: number | null;
+  classLabel: string | null;
+  abbreviation: string;
+  className: string;
+}
+
+export interface ChallengeRegisterSection {
+  key: 'dog' | 'bitch';
+  label: string;
+  rows: ChallengeRegisterRow[];
+}
+
+/**
+ * Build the Challenge Register — the steward book's final page. After all
+ * classes of one sex are judged, the unbeaten winners line up IN CLASS
+ * ORDER for the challenge (Best Dog, then Best Bitch); the steward needs
+ * that order on paper with a box to write in each winner's catalogue
+ * number as the class is judged.
+ *
+ * Reuses `buildJudgingSections` and keeps ONLY the dog/bitch sections —
+ * Special Award Classes and Junior Handling don't compete in the breed
+ * challenge, and `sectionClasses` has already bucketed them out (never
+ * re-derive with a name regex or sex null-ness, see the trap documented on
+ * `sectionClasses` itself). Classes with zero entries are kept — the
+ * steward simply leaves the box blank — same reasoning as the body page
+ * (`buildJudgingSections`'s own doc comment). A section with no classes is
+ * omitted so a dogs-only show prints only "Dogs".
+ *
+ * Exported for testing — pure data, no PDF tree involved.
+ */
+export function buildChallengeRegister(allClasses: ClassGroup[]): ChallengeRegisterSection[] {
+  return buildJudgingSections(allClasses)
+    .filter((section): section is Section & { key: 'dog' | 'bitch' } =>
+      section.key === 'dog' || section.key === 'bitch',
+    )
+    .map((section) => ({
+      key: section.key,
+      label: section.label,
+      rows: section.classes.map((c) => ({
+        classNumber: c.classNumber ?? null,
+        classLabel: c.classLabel ?? null,
+        abbreviation: classNameAbbreviation(c.className, section.key),
+        className: c.className,
+      })),
+    }));
+}
+
+/** Row-count budget for the two-column (Dogs | Bitches side by side)
+ *  Challenge Register layout — 13 rows at the ~32pt row rhythm, plus the
+ *  band/caption/title/instruction overhead, comfortably clears one A5 page
+ *  column. A show with a longer section (13+ classes of one sex) falls back
+ *  to the sequential one-sheet-per-sex layout instead of cramming a
+ *  half-width column. */
+const REGISTER_TWO_COLUMN_ROW_LIMIT = 13;
+
+/**
+ * Decide whether the Challenge Register fits the two-column Dogs | Bitches
+ * layout on a single A5 page, or needs the sequential (one sheet per sex)
+ * fallback. Pure — exported for testing, no PDF tree involved.
+ */
+export function fitsOneRegisterPage(register: ChallengeRegisterSection[]): boolean {
+  return register.every((section) => section.rows.length <= REGISTER_TWO_COLUMN_ROW_LIMIT);
+}
+
+/**
+ * One "class → 1st + 2nd" write-in line — shared by both Challenge Register
+ * layouts (two-column and the sequential fallback) so they can't drift on
+ * row shape. wrap={false}: a write-in box must never be sliced across a
+ * page boundary — an unfittable row moves whole to the next page instead.
+ */
+function RegisterRow({ row }: { row: ChallengeRegisterRow }) {
+  return (
+    <View style={s.registerRow} wrap={false}>
+      <View style={s.registerRowLeft}>
+        <Text style={s.registerRowNumber}>
+          {row.classLabel ?? (row.classNumber != null ? String(row.classNumber) : '')}
+        </Text>
+        <Text style={s.registerRowAbbrev}>{row.abbreviation}</Text>
+      </View>
+      <View style={s.registerBoxRow}>
+        <View style={s.registerBox} />
+        <View style={s.registerBox} />
+      </View>
+    </View>
+  );
+}
+
+/**
+ * "1st" / "2nd" captions, right-aligned to sit directly above their
+ * write-in box column — printed once per section rather than repeated on
+ * every row. Shared by both Challenge Register layouts.
+ */
+function RegisterCaptions() {
+  return (
+    <View style={s.registerCaptionRow}>
+      <Text style={s.registerCaption}>1st</Text>
+      <Text style={s.registerCaption}>2nd</Text>
+    </View>
+  );
+}
+
 export function CatalogueJudging({ show, entries }: Props) {
   const allClasses = groupByClassShared(entries, show);
   const isChampionship = show.showType === 'championship';
@@ -355,6 +546,8 @@ export function CatalogueJudging({ show, entries }: Props) {
           ? judgeForRole(/junior handl/i)
           : undefined,
   }));
+
+  const challengeRegister = buildChallengeRegister(allClasses);
 
   // Build judge list for cover
   const judgeList: { name: string; label: string }[] = [];
@@ -557,6 +750,72 @@ export function CatalogueJudging({ show, entries }: Props) {
           fixed
         />
       </Page>
+
+      {/* ── CHALLENGE REGISTER — final page, only when there's a dog or
+          bitch section to print (a JH/SAC-only "show" can't happen in
+          practice, but this keeps the page from ever rendering blank).
+          Two layouts share the same title/instruction/footer and the same
+          RegisterRow/RegisterCaptions row shape, and only differ in how the
+          Dogs/Bitches sections are arranged: side-by-side columns when it
+          all fits one page (fitsOneRegisterPage), else the sequential
+          one-sheet-per-sex fallback for a show with a long section.
+          NOTE: leave wrap at default (true) — see the cover-page comment
+          above; Mixam rejects a shrunk-to-fit page. ── */}
+      {challengeRegister.length > 0 && (
+        <Page size="A5" style={s.page} wrap>
+          <Text style={s.registerTitle}>Challenge Register</Text>
+          <Text style={s.registerInstruction}>
+            Write in the 1st and 2nd place catalogue numbers as each class is judged.
+            For the challenge, line the winners up in reverse class order &mdash; the
+            winner of the last class stands at the front.
+          </Text>
+
+          {fitsOneRegisterPage(challengeRegister) ? (
+            <View style={s.registerColumns}>
+              {challengeRegister.map((section) => (
+                <View key={`register-col-${section.key}`} style={s.registerColumn}>
+                  <Text style={s.sexBand}>{section.label}</Text>
+                  <RegisterCaptions />
+                  {section.rows.map((row, rowIdx) => (
+                    <RegisterRow
+                      key={`register-row-${section.key}-${row.classLabel ?? row.classNumber ?? rowIdx}`}
+                      row={row}
+                    />
+                  ))}
+                </View>
+              ))}
+            </View>
+          ) : (
+            challengeRegister.map((section, sectionIdx) => (
+              // Each section after the first starts on a fresh page
+              // (`break`): one sheet per challenge, so the steward never
+              // flips mid line-up. minPresenceAhead still anchors the band +
+              // captions to the first row for the case where a section's own
+              // rows have to flow onto a further page.
+              <View
+                key={`register-${section.key}`}
+                minPresenceAhead={80}
+                break={sectionIdx > 0}
+              >
+                <Text style={s.sexBand}>{section.label}</Text>
+                <RegisterCaptions />
+                {section.rows.map((row, rowIdx) => (
+                  <RegisterRow
+                    key={`register-row-${section.key}-${row.classLabel ?? row.classNumber ?? rowIdx}`}
+                    row={row}
+                  />
+                ))}
+              </View>
+            ))
+          )}
+
+          <Text
+            style={s.footer}
+            render={footerRender}
+            fixed
+          />
+        </Page>
+      )}
     </Document>
   );
 }
