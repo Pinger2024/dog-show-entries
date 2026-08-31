@@ -1,0 +1,194 @@
+
+ RUN  v3.2.4 /Users/michaeljames/Projects/dog-show-entries/.claude/worktrees/agent-a0547bac31eaee3e9
+
+ ❯ src/app/(shows)/shows/[id]/enter/use-entry-cart.test.ts (36 tests | 9 failed) 2010ms
+   ✓ loadSavedState — Stripe 3-D Secure redirect return > 3DS SUCCESS redirect → confirmation with entries kept (never bounced to add-a-dog) 169ms
+   ✓ loadSavedState — Stripe 3-D Secure redirect return > 3DS FAILED redirect → back to cart_review to retry, NOT the dog/entry step 50ms
+   ✓ loadSavedState — Stripe 3-D Secure redirect return > redirect return but no saved cart → safe initial state, no crash 47ms
+   ✓ loadSavedState — payment-step reload WITHOUT Stripe params (mobile Safari) > with the payment snapshot → restores the PAYMENT screen (back where she was) 46ms
+   ✓ loadSavedState — payment-step reload WITHOUT Stripe params (mobile Safari) > snapshot lost (e.g. private mode) → falls back to cart_review, never add-a-dog 45ms
+   ✓ loadSavedState — payment-step reload WITHOUT Stripe params (mobile Safari) > a half-built entry (no classes) on a bare reload still resets cleanly 47ms
+   ✓ restoreActionForStatus — canceled-PI crash loop (April/BAGSD) > CANCELED PaymentIntent → review (NOT stay on the dead payment screen) 52ms
+   ✓ restoreActionForStatus — canceled-PI crash loop (April/BAGSD) > no PaymentIntent retrievable (null/undefined) → review, never a broken payment screen 49ms
+   ✓ restoreActionForStatus — canceled-PI crash loop (April/BAGSD) > already paid in the lost moment → confirmation (succeeded / processing) 51ms
+   ✓ restoreActionForStatus — canceled-PI crash loop (April/BAGSD) > still-payable PI → stay on the restored payment screen (same PI, no double charge) 46ms
+   ✓ cartReducer — never strand a per-entry step without an active entry > SET_ENTRY_TYPE with no active entry creates one (instead of silently no-opping) 42ms
+   ✓ cartReducer — never strand a per-entry step without an active entry > SET_ENTRY_TYPE with a stale activeEntryId creates a fresh active entry of the chosen type 43ms
+   ✓ cartReducer — never strand a per-entry step without an active entry > SET_ENTRY_TYPE retypes the existing active entry when present 42ms
+   ✓ cartReducer — never strand a per-entry step without an active entry > SET_DOG with no active entry is ignored (does not advance to class selection) 46ms
+   ✓ computeClassSelectionTotal — Special Award Classes priced at their own fee, not the tier > a dog entered ONLY in a special class is charged just the special fee, not the £20 tier 43ms
+   ✓ computeClassSelectionTotal — Special Award Classes priced at their own fee, not the tier > multiple special classes on one dog sum their own fees, never the tier 45ms
+   ✓ computeClassSelectionTotal — Special Award Classes priced at their own fee, not the tier > one normal class + one special: normal priced at the first-class tier, special adds its own fee 110ms
+   ✓ computeClassSelectionTotal — Special Award Classes priced at their own fee, not the tier > order does not matter: special first then normal still charges the normal class the first-class rate 56ms
+   ✓ computeClassSelectionTotal — Special Award Classes priced at their own fee, not the tier > two normal classes + one special: first + subsequent tier plus the special fee 56ms
+   ✓ computeClassSelectionTotal — Special Award Classes priced at their own fee, not the tier > no special classes selected: unaffected, still first + subsequent * (count - 1) 76ms
+   ✓ computeClassSelectionTotal — Special Award Classes priced at their own fee, not the tier > no subsequentEntryFeePence configured falls back to the first-class rate for extra classes 43ms
+   ✓ computeClassSelectionTotal — Special Award Classes priced at their own fee, not the tier > no classes selected → 0 89ms
+   × cartReducer — SET_DISCOUNT_GROUP lives IN the cart, not page state > SET_DISCOUNT_GROUP stores the chosen group id on cart state 52ms
+     → expected undefined to be 'grp-members' // Object.is equality
+   × cartReducer — SET_DISCOUNT_GROUP lives IN the cart, not page state > SET_DISCOUNT_GROUP(null) clears it back to standard rate 45ms
+     → expected 'grp-members' to be null
+   ✓ cartReducer — SET_DISCOUNT_GROUP lives IN the cart, not page state > does not disturb any other cart field 42ms
+   × cartReducer — SET_DISCOUNT_GROUP lives IN the cart, not page state > CHECKOUT_SUCCESS clears the discount group along with completing the order 71ms
+     → expected 'grp-members' to be null
+   × cartReducer — SET_DISCOUNT_GROUP lives IN the cart, not page state > RESET clears the discount group (initialState carries none) 46ms
+     → expected undefined to be null
+   ✓ loadSavedState — the discount group survives a fresh hook mount from localStorage > a plain reload on cart_review restores the persisted discount group (a fresh hook mount) 47ms
+   ✓ loadSavedState — the discount group survives a fresh hook mount from localStorage > returning from the Stripe redirect with a failed 3DS attempt also keeps the discount group 43ms
+   ✓ loadSavedState — the discount group survives a fresh hook mount from localStorage > an older cart saved before this field existed loads with no group, not a crash 79ms
+   ✓ loadSavedState — the discount group survives a fresh hook mount from localStorage > the value the checkout payload would carry survives a remount unchanged 42ms
+   × validateDiscountGroupId — a stored group the secretary deleted is dropped to null > a stored id that is still a live group passes through unchanged 59ms
+     → (0 , validateDiscountGroupId) is not a function
+   × validateDiscountGroupId — a stored group the secretary deleted is dropped to null > a stored id no longer among the show's groups (secretary deleted it) → null 50ms
+     → (0 , validateDiscountGroupId) is not a function
+   × validateDiscountGroupId — a stored group the secretary deleted is dropped to null > no group was ever selected → null, trivially 47ms
+     → (0 , validateDiscountGroupId) is not a function
+   × validateDiscountGroupId — a stored group the secretary deleted is dropped to null > the groups list has not loaded yet (undefined) → passes the id through, does not clear on a hunch 44ms
+     → (0 , validateDiscountGroupId) is not a function
+   × validateDiscountGroupId — a stored group the secretary deleted is dropped to null > the show has zero discount groups configured → any stored id is dropped 46ms
+     → (0 , validateDiscountGroupId) is not a function
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 9 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/app/(shows)/shows/[id]/enter/use-entry-cart.test.ts > cartReducer — SET_DISCOUNT_GROUP lives IN the cart, not page state > SET_DISCOUNT_GROUP stores the chosen group id on cart state
+AssertionError: expected undefined to be 'grp-members' // Object.is equality
+
+[32m- Expected:[39m 
+"grp-members"
+
+[31m+ Received:[39m 
+undefined
+
+ ❯ src/app/(shows)/shows/[id]/enter/use-entry-cart.test.ts:313:31
+    311|   it('SET_DISCOUNT_GROUP stores the chosen group id on cart state', ()…
+    312|     const s = cartReducer(base, { type: 'SET_DISCOUNT_GROUP', discount…
+    313|     expect(s.discountGroupId).toBe('grp-members');
+       |                               ^
+    314|   });
+    315| 
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/9]⎯
+
+ FAIL  src/app/(shows)/shows/[id]/enter/use-entry-cart.test.ts > cartReducer — SET_DISCOUNT_GROUP lives IN the cart, not page state > SET_DISCOUNT_GROUP(null) clears it back to standard rate
+AssertionError: expected 'grp-members' to be null
+
+[32m- Expected:[39m 
+null
+
+[31m+ Received:[39m 
+"grp-members"
+
+ ❯ src/app/(shows)/shows/[id]/enter/use-entry-cart.test.ts:319:31
+    317|     const withGroup: CartState = { ...base, discountGroupId: 'grp-memb…
+    318|     const s = cartReducer(withGroup, { type: 'SET_DISCOUNT_GROUP', dis…
+    319|     expect(s.discountGroupId).toBeNull();
+       |                               ^
+    320|   });
+    321| 
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/9]⎯
+
+ FAIL  src/app/(shows)/shows/[id]/enter/use-entry-cart.test.ts > cartReducer — SET_DISCOUNT_GROUP lives IN the cart, not page state > CHECKOUT_SUCCESS clears the discount group along with completing the order
+AssertionError: expected 'grp-members' to be null
+
+[32m- Expected:[39m 
+null
+
+[31m+ Received:[39m 
+"grp-members"
+
+ ❯ src/app/(shows)/shows/[id]/enter/use-entry-cart.test.ts:345:31
+    343|     const s = cartReducer(paidCart, { type: 'CHECKOUT_SUCCESS' });
+    344|     expect(s.step).toBe('confirmation');
+    345|     expect(s.discountGroupId).toBeNull();
+       |                               ^
+    346|   });
+    347| 
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/9]⎯
+
+ FAIL  src/app/(shows)/shows/[id]/enter/use-entry-cart.test.ts > cartReducer — SET_DISCOUNT_GROUP lives IN the cart, not page state > RESET clears the discount group (initialState carries none)
+AssertionError: expected undefined to be null
+
+[32m- Expected:[39m 
+null
+
+[31m+ Received:[39m 
+undefined
+
+ ❯ src/app/(shows)/shows/[id]/enter/use-entry-cart.test.ts:351:31
+    349|     const withGroup: CartState = { ...base, discountGroupId: 'grp-memb…
+    350|     const s = cartReducer(withGroup, { type: 'RESET' });
+    351|     expect(s.discountGroupId).toBeNull();
+       |                               ^
+    352|   });
+    353| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/9]⎯
+
+ FAIL  src/app/(shows)/shows/[id]/enter/use-entry-cart.test.ts > validateDiscountGroupId — a stored group the secretary deleted is dropped to null > a stored id that is still a live group passes through unchanged
+TypeError: (0 , validateDiscountGroupId) is not a function
+ ❯ src/app/(shows)/shows/[id]/enter/use-entry-cart.test.ts:416:12
+    414| 
+    415|   it('a stored id that is still a live group passes through unchanged'…
+    416|     expect(validateDiscountGroupId('grp-members', currentGroups)).toBe…
+       |            ^
+    417|   });
+    418| 
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/9]⎯
+
+ FAIL  src/app/(shows)/shows/[id]/enter/use-entry-cart.test.ts > validateDiscountGroupId — a stored group the secretary deleted is dropped to null > a stored id no longer among the show's groups (secretary deleted it) → null
+TypeError: (0 , validateDiscountGroupId) is not a function
+ ❯ src/app/(shows)/shows/[id]/enter/use-entry-cart.test.ts:420:12
+    418| 
+    419|   it('a stored id no longer among the show\'s groups (secretary delete…
+    420|     expect(validateDiscountGroupId('grp-deleted', currentGroups)).toBe…
+       |            ^
+    421|   });
+    422| 
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/9]⎯
+
+ FAIL  src/app/(shows)/shows/[id]/enter/use-entry-cart.test.ts > validateDiscountGroupId — a stored group the secretary deleted is dropped to null > no group was ever selected → null, trivially
+TypeError: (0 , validateDiscountGroupId) is not a function
+ ❯ src/app/(shows)/shows/[id]/enter/use-entry-cart.test.ts:424:12
+    422| 
+    423|   it('no group was ever selected → null, trivially', () => {
+    424|     expect(validateDiscountGroupId(null, currentGroups)).toBeNull();
+       |            ^
+    425|   });
+    426| 
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/9]⎯
+
+ FAIL  src/app/(shows)/shows/[id]/enter/use-entry-cart.test.ts > validateDiscountGroupId — a stored group the secretary deleted is dropped to null > the groups list has not loaded yet (undefined) → passes the id through, does not clear on a hunch
+TypeError: (0 , validateDiscountGroupId) is not a function
+ ❯ src/app/(shows)/shows/[id]/enter/use-entry-cart.test.ts:428:12
+    426| 
+    427|   it('the groups list has not loaded yet (undefined) → passes the id t…
+    428|     expect(validateDiscountGroupId('grp-members', undefined)).toBe('gr…
+       |            ^
+    429|   });
+    430| 
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/9]⎯
+
+ FAIL  src/app/(shows)/shows/[id]/enter/use-entry-cart.test.ts > validateDiscountGroupId — a stored group the secretary deleted is dropped to null > the show has zero discount groups configured → any stored id is dropped
+TypeError: (0 , validateDiscountGroupId) is not a function
+ ❯ src/app/(shows)/shows/[id]/enter/use-entry-cart.test.ts:432:12
+    430| 
+    431|   it('the show has zero discount groups configured → any stored id is …
+    432|     expect(validateDiscountGroupId('grp-members', [])).toBeNull();
+       |            ^
+    433|   });
+    434| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/9]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  9 failed | 27 passed (36)
+   Start at  08:44:05
+   Duration  2.50s (transform 122ms, setup 335ms, collect 20ms, tests 2.01s, environment 0ms, prepare 27ms)
+

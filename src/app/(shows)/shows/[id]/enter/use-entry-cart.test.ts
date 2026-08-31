@@ -5,6 +5,7 @@ import {
   restoreActionForStatus,
   cartReducer,
   computeClassSelectionTotal,
+  validateDiscountGroupId,
   type CartState,
 } from './use-entry-cart';
 
@@ -289,5 +290,145 @@ describe('computeClassSelectionTotal — Special Award Classes priced at their o
 
   it('no classes selected → 0', () => {
     expect(computeClassSelectionTotal([], FIRST, SUBSEQUENT)).toBe(0);
+  });
+});
+
+// Prod case, North Eastern GSD Club champ show (28 Aug, memory
+// project_member_discount_lost_2026-08-28): Paula Ingham ticked "I am a
+// Member" but paid £18 not £16 — her order has discount_group_id NULL while
+// 5 other members' orders carry the group. Root cause: discountGroupId lived
+// in PAGE state (useState), not the cart, so a reload, a Safari tab
+// eviction, or the Add/Edit-dog detour (`/dogs/new?returnTo=…` unmounts the
+// page) silently reset it to null while the cart itself survived (the cart
+// persists to localStorage, page state does not). Moving it into the cart's
+// own reducer state — persisted and restored exactly like every other cart
+// field — closes that gap.
+describe('cartReducer — SET_DISCOUNT_GROUP lives IN the cart, not page state', () => {
+  const base: CartState = {
+    entries: [], sundryItems: [], activeEntryId: null, step: 'cart_review', editingExisting: false,
+  };
+
+  it('SET_DISCOUNT_GROUP stores the chosen group id on cart state', () => {
+    const s = cartReducer(base, { type: 'SET_DISCOUNT_GROUP', discountGroupId: 'grp-members' });
+    expect(s.discountGroupId).toBe('grp-members');
+  });
+
+  it('SET_DISCOUNT_GROUP(null) clears it back to standard rate', () => {
+    const withGroup: CartState = { ...base, discountGroupId: 'grp-members' };
+    const s = cartReducer(withGroup, { type: 'SET_DISCOUNT_GROUP', discountGroupId: null });
+    expect(s.discountGroupId).toBeNull();
+  });
+
+  it('does not disturb any other cart field', () => {
+    const withEntry: CartState = {
+      ...base,
+      entries: [{ id: 'cart-1', entryType: 'standard', classIds: ['c1'], classNames: ['Puppy'], isNfc: false, totalFee: 1600 }],
+      activeEntryId: 'cart-1',
+    };
+    const s = cartReducer(withEntry, { type: 'SET_DISCOUNT_GROUP', discountGroupId: 'grp-members' });
+    expect(s.entries).toEqual(withEntry.entries);
+    expect(s.activeEntryId).toBe('cart-1');
+    expect(s.step).toBe('cart_review');
+  });
+
+  // "cleared wherever the cart resets on order success" (spec) — a leftover
+  // discount group must never leak from one paid order into whatever the
+  // exhibitor does next in the same browser session.
+  it('CHECKOUT_SUCCESS clears the discount group along with completing the order', () => {
+    const paidCart: CartState = {
+      ...base,
+      entries: [{ id: 'cart-1', entryType: 'standard', classIds: ['c1'], classNames: ['Puppy'], isNfc: false, totalFee: 1600 }],
+      discountGroupId: 'grp-members',
+    };
+    const s = cartReducer(paidCart, { type: 'CHECKOUT_SUCCESS' });
+    expect(s.step).toBe('confirmation');
+    expect(s.discountGroupId).toBeNull();
+  });
+
+  it('RESET clears the discount group (initialState carries none)', () => {
+    const withGroup: CartState = { ...base, discountGroupId: 'grp-members' };
+    const s = cartReducer(withGroup, { type: 'RESET' });
+    expect(s.discountGroupId).toBeNull();
+  });
+});
+
+// The discount group must round-trip through localStorage exactly like the
+// rest of the cart (use-entry-cart's persist effect saves the whole
+// CartState). This is what makes it survive a reload, a Safari tab eviction,
+// or a return from the Add/Edit-dog detour — the exact failure Paula hit.
+describe('loadSavedState — the discount group survives a fresh hook mount from localStorage', () => {
+  const memberCart: CartState = {
+    entries: [{
+      id: 'cart-1', entryType: 'standard', dogId: 'd1', dogName: 'Rex', breedName: 'GSD',
+      classIds: ['c1'], classNames: ['Puppy'], isNfc: false, totalFee: 1600,
+    }],
+    sundryItems: [], activeEntryId: 'cart-1', step: 'cart_review', editingExisting: false,
+    discountGroupId: 'grp-members',
+  };
+
+  it('a plain reload on cart_review restores the persisted discount group (a fresh hook mount)', () => {
+    stub('', memberCart);
+    const s = loadSavedState('SHOW');
+    expect(s.step).toBe('cart_review');
+    expect(s.discountGroupId).toBe('grp-members');
+  });
+
+  it('returning from the Stripe redirect with a failed 3DS attempt also keeps the discount group', () => {
+    stub('?payment_intent=pi_x&payment_intent_client_secret=pi_x_secret&redirect_status=failed', {
+      ...memberCart, step: 'payment',
+    });
+    const s = loadSavedState('SHOW');
+    expect(s.step).toBe('cart_review');
+    expect(s.discountGroupId).toBe('grp-members');
+  });
+
+  it('an older cart saved before this field existed loads with no group, not a crash', () => {
+    // Simulates a cart persisted by a pre-fix build of the app: no
+    // discountGroupId key in the stored JSON at all.
+    const legacy = { ...memberCart } as Partial<CartState>;
+    delete legacy.discountGroupId;
+    stub('', legacy as CartState);
+    const s = loadSavedState('SHOW');
+    expect(s.entries).toHaveLength(1);
+    expect(s.discountGroupId ?? null).toBeNull();
+  });
+
+  // The checkout submit payload is built from the cart's discountGroupId
+  // (`cart.discountGroupId ?? undefined`) rather than separate page state —
+  // this proves that seam survives the exact remount Paula's browser did.
+  it('the value the checkout payload would carry survives a remount unchanged', () => {
+    stub('', memberCart);
+    const s = loadSavedState('SHOW');
+    const payloadDiscountGroupId = s.discountGroupId ?? undefined;
+    expect(payloadDiscountGroupId).toBe('grp-members');
+  });
+});
+
+// Restore-validation (spec step 2): a secretary can delete a discount group
+// after an exhibitor has already ticked it and stashed the cart. Sending a
+// stale id to orders.checkout 400s the whole order, so once the show's
+// CURRENT groups have loaded, an id that isn't among them must fall back to
+// null (standard rate) rather than be resubmitted blind.
+describe('validateDiscountGroupId — a stored group the secretary deleted is dropped to null', () => {
+  const currentGroups = [{ id: 'grp-members' }, { id: 'grp-pensioners' }];
+
+  it('a stored id that is still a live group passes through unchanged', () => {
+    expect(validateDiscountGroupId('grp-members', currentGroups)).toBe('grp-members');
+  });
+
+  it('a stored id no longer among the show\'s groups (secretary deleted it) → null', () => {
+    expect(validateDiscountGroupId('grp-deleted', currentGroups)).toBeNull();
+  });
+
+  it('no group was ever selected → null, trivially', () => {
+    expect(validateDiscountGroupId(null, currentGroups)).toBeNull();
+  });
+
+  it('the groups list has not loaded yet (undefined) → passes the id through, does not clear on a hunch', () => {
+    expect(validateDiscountGroupId('grp-members', undefined)).toBe('grp-members');
+  });
+
+  it('the show has zero discount groups configured → any stored id is dropped', () => {
+    expect(validateDiscountGroupId('grp-members', [])).toBeNull();
   });
 });
