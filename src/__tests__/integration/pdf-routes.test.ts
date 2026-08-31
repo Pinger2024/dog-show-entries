@@ -34,6 +34,10 @@ vi.mock('@/lib/pdf-pad', async (importOriginal) => {
   return {
     ...actual,
     stripUnembeddedBase14Fonts: vi.fn(async (buf: Buffer) => buf),
+    // Same reasoning: the prize-card routes set a single-sided viewer
+    // preference via pdf-lib, which can't parse the react-pdf stub above.
+    // The real helper is unit-tested against real PDFs in pdf-pad.test.ts.
+    setSimplexViewerPreference: vi.fn(async (buf: Buffer) => buf),
   };
 });
 

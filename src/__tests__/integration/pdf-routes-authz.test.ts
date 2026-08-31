@@ -17,6 +17,18 @@ vi.mock('@react-pdf/renderer', () => ({
   },
 }));
 
+// The prize-card routes post-process their rendered buffer through pdf-lib
+// (setSimplexViewerPreference), which can't parse the react-pdf stub above —
+// pass it through unchanged; the real helper is unit-tested against real
+// PDFs in pdf-pad.test.ts (same pattern as pdf-routes.test.ts's pdf-pad mock).
+vi.mock('@/lib/pdf-pad', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/lib/pdf-pad')>();
+  return {
+    ...actual,
+    stripUnembeddedBase14Fonts: vi.fn(async (buf: Buffer) => buf),
+    setSimplexViewerPreference: vi.fn(async (buf: Buffer) => buf),
+  };
+});
 vi.mock('@/lib/impersonation', () => ({
   getImpersonatedUserId: vi.fn(async () => null),
 }));
