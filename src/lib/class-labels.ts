@@ -397,6 +397,32 @@ export function svCoatDisplayName(
 }
 
 /**
+ * Abbreviate a breed class name for the Challenge Register (steward
+ * catalogue's final page) — e.g. "Minor Puppy" (dog) → "MPD", "Post
+ * Graduate" (bitch) → "PGB". Strips a trailing " Dog"/" Bitch" word first so
+ * a class already named for its sex (e.g. "Veteran Dog") doesn't double the
+ * letter ("VD", not "VDD"). Takes the first letter of each remaining
+ * word — words that don't start with a letter (numbers, punctuation) are
+ * skipped rather than crashing — then appends 'D' for dog / 'B' for bitch.
+ * Total function: a missing name or sex never throws, just returns as much
+ * of the abbreviation as it can build (possibly '').
+ */
+export function classNameAbbreviation(
+  className: string | null | undefined,
+  sex: 'dog' | 'bitch' | null,
+): string {
+  if (!className) return '';
+  const stripped = className.replace(/\s+(dog|bitch)$/i, '');
+  const initials = stripped
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((word) => (/^[a-zA-Z]/.test(word) ? word[0]!.toUpperCase() : ''))
+    .join('');
+  const sexLetter = sex === 'dog' ? 'D' : sex === 'bitch' ? 'B' : '';
+  return `${initials}${sexLetter}`;
+}
+
+/**
  * Format a class name for SV/WUSV-aware display.
  *
  *   "SV Junior" + svCoatType='long_stock' → "Junior — Long Coat"
