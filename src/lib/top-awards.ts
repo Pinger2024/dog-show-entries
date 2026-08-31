@@ -209,6 +209,47 @@ export function resolveTopAwards(
 // behind ADULTS is still eligible; adults aren't puppies). Reserve awards keep
 // the runners-up — a reserve IS, by definition, a beaten dog.
 
+/** Add whole calendar months to a date — used by `isPuppyOnShowDate` to find
+ *  the exact-day age boundaries rather than a days/30 approximation. Local
+ *  time throughout (matches how the rest of the show's age arithmetic in
+ *  this codebase already works). */
+function addCalendarMonths(date: Date, months: number): Date {
+  const d = new Date(date);
+  d.setMonth(d.getMonth() + months);
+  return d;
+}
+
+/**
+ * True if the dog is within the RKC puppy age band on the show's start date
+ * — "six and not exceeding twelve calendar months" — so a dog exactly 12
+ * months old on show day still counts as a puppy (Scotland 30 Aug 2026:
+ * FAIRYCROSS ATLANTA VON NISYROS, DOB 2025-08-30, won Junior Bitch on
+ * 2026-08-30 — exactly 12 calendar months — and was wrongly hidden from
+ * every Best Puppy dropdown). Boundaries are found by adding whole calendar
+ * months to the DOB and comparing dates — not a days/30 approximation, so a
+ * short month (e.g. February) doesn't shift the cutoff early.
+ *
+ * THE SINGLE SOURCE for this check — originally lived only on the steward
+ * page's multi-breed Best-of-Breed path (and, there, only checked the upper
+ * bound), so `buildPlacementIndex`'s class-name-only puppy inference missed
+ * a genuine puppy-age winner running in a non-"puppy"-named class (Junior).
+ * Every caller that knows a candidate's DOB must reuse THIS function, never
+ * re-derive its own age test.
+ *
+ * Unknown DOB (or unparseable date) returns false — callers fall back to
+ * their own class-name inference rather than silently widening who counts
+ * as a puppy.
+ */
+export function isPuppyOnShowDate(dob: string | null | undefined, showDate: string): boolean {
+  if (!dob) return false;
+  const dobDate = new Date(dob);
+  const show = new Date(showDate);
+  if (Number.isNaN(dobDate.getTime()) || Number.isNaN(show.getTime())) return false;
+  const sixMonthsOld = addCalendarMonths(dobDate, 6);
+  const twelveMonthsOld = addCalendarMonths(dobDate, 12);
+  return show.getTime() >= sixMonthsOld.getTime() && show.getTime() <= twelveMonthsOld.getTime();
+}
+
 /** A dog's class placements: {classKey, placement} with 1 = best. */
 export type DogPlacements = { key: string; placement: number }[];
 
@@ -228,20 +269,34 @@ export type PlacementIndex = {
 /**
  * Minimal class shape the index needs: a unique `key`, the human `className`
  * (used to infer the puppy / veteran age band), and the placed results.
+ * `dogDateOfBirth` is optional per result — when the caller has it, puppy-band
+ * membership is decided by AGE (see `buildPlacementIndex`), not class name.
  */
 export type IndexClass = {
   key: string;
   className: string;
-  results: { dogId: string | null; placement: number | null }[];
+  results: { dogId: string | null; placement: number | null; dogDateOfBirth?: string | null }[];
 };
 
 /**
- * Build the placement index the beaten-rule engine runs on. Age-band membership
- * is inferred from the class name — "puppy" (but not "baby" puppy) → puppy band,
- * "veteran" → veteran band — so both surfaces classify ages identically from the
- * one place.
+ * Build the placement index the beaten-rule engine runs on.
+ *
+ * Puppy-band membership: when a result's `dogDateOfBirth` is known AND
+ * `showDate` is given, age on the show's start date is AUTHORITATIVE (RKC
+ * "six and not exceeding twelve calendar months" — see `isPuppyOnShowDate`)
+ * — regardless of which class the dog actually ran in. This is deliberate: a
+ * show's schedule may enter a genuine puppy-age dog under a differently-named
+ * class (Scotland 30 Aug 2026 — a 12-month-old ran, and won, "Junior Bitch",
+ * not anything named "Puppy"), and the RKC age band decides puppy status, not
+ * the class label. DOB missing (or no showDate given) falls back to the
+ * previous class-name inference — "puppy" (but not "baby" puppy) → puppy band
+ * — never silently widening who counts as a puppy.
+ *
+ * Veteran-band membership stays class-name based ("veteran" in the class
+ * name) — awaiting Mandy on an age threshold, out of scope here. Baby-puppy
+ * stays class-name based and deliberately disjoint from the puppy band.
  */
-export function buildPlacementIndex(classes: IndexClass[]): PlacementIndex {
+export function buildPlacementIndex(classes: IndexClass[], showDate?: string): PlacementIndex {
   const placements = new Map<string, DogPlacements>();
   const inPuppyClass = new Set<string>();
   const inVeteranClass = new Set<string>();
@@ -249,10 +304,14 @@ export function buildPlacementIndex(classes: IndexClass[]): PlacementIndex {
   for (const cls of classes) {
     const n = cls.className.toLowerCase();
     const isBabyPuppy = n.includes('puppy') && n.includes('baby');
-    const isPuppy = n.includes('puppy') && !isBabyPuppy;
+    const isPuppyClassName = n.includes('puppy') && !isBabyPuppy;
     const isVeteran = n.includes('veteran');
     for (const r of cls.results) {
       if (!r.dogId) continue;
+      const dob = r.dogDateOfBirth ?? null;
+      const isPuppy = dob != null && showDate != null
+        ? isPuppyOnShowDate(dob, showDate)
+        : isPuppyClassName;
       if (isPuppy) inPuppyClass.add(r.dogId);
       if (isVeteran) inVeteranClass.add(r.dogId);
       if (isBabyPuppy) inBabyPuppyClass.add(r.dogId);

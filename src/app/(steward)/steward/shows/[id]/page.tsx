@@ -20,7 +20,7 @@ import {
 import { toast } from 'sonner';
 import { trpc } from '@/lib/trpc';
 import type { AchievementType } from '@/lib/placements';
-import { resolveTopAwards, buildPlacementIndex, eligibleCandidates } from '@/lib/top-awards';
+import { resolveTopAwards, buildPlacementIndex, eligibleCandidates, isPuppyOnShowDate } from '@/lib/top-awards';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
@@ -304,19 +304,6 @@ const PUPPY_AWARDS: ReadonlySet<AchievementType> = new Set([
   'best_puppy_in_show',
 ]);
 
-/** Returns true if the dog is under 12 months on the show date.
- *  Unknown DOB → false (better to hide than offer a non-puppy as a puppy). */
-function isPuppyOnShowDate(dob: string | null, showDate: string): boolean {
-  if (!dob) return false;
-  const dobDate = new Date(dob);
-  const show = new Date(showDate);
-  const months =
-    (show.getFullYear() - dobDate.getFullYear()) * 12 +
-    (show.getMonth() - dobDate.getMonth()) -
-    (show.getDate() < dobDate.getDate() ? 1 : 0);
-  return months < 12;
-}
-
 interface BestOfBreedSectionProps {
   showId: string;
   showDate: string;
@@ -596,7 +583,7 @@ function BestOfBreedSection({
       }
     }
     const placedDogs = Array.from(dogInfo.values());
-    const index = buildPlacementIndex(allClasses);
+    const index = buildPlacementIndex(allClasses, showDate);
     return (
       <div className="mt-6 sm:mt-8 space-y-4">
         <div className="flex items-center gap-2">
