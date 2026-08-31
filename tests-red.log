@@ -1,0 +1,40 @@
+SPEC B — RED test logs (proved failing against unchanged code before each fix)
+================================================================================
+
+## Item 1 — Best Puppy by age (lib/top-awards.ts)
+Command: npx vitest run src/lib/__tests__/top-awards.test.ts
+Result: 7 failed | 35 passed (42) — new age-band tests fail against unchanged
+buildPlacementIndex/isPuppyOnShowDate; all 32 pre-existing tests + the two
+new "fallback" guard tests already passed unchanged (expected — they assert
+existing behaviour is preserved).
+
+   ✓ eligibleCandidates — the RKC beaten rule > keeps a puppy beaten only by ADULTS in a mixed class (Paula’s rule) 44ms
+   ✓ eligibleCandidates — the RKC beaten rule > excludes a puppy beaten by ANOTHER puppy 43ms
+   ✓ eligibleCandidates — the RKC beaten rule > split-class edge: two puppies each beat the other → BOTH out (empty) 43ms
+   ✓ eligibleCandidates — the RKC beaten rule > reserve awards keep the runners-up (the reserve IS a beaten dog) 44ms
+   ✓ eligibleCandidates — the RKC beaten rule > filters by sex and ignores unplaced dogs 44ms
+   ✓ eligibleCandidates — the RKC beaten rule > Best in Show spans both sexes (no sex filter) 92ms
+   ✓ eligibleCandidates — real-show scenarios (Mandy 2026-07-02) > Best Dog: a class winner beaten in a SECOND class is dropped ("why only 3?") 43ms
+   ✓ eligibleCandidates — real-show scenarios (Mandy 2026-07-02) > an unbeaten dog stays eligible however many classes it entered (positive control) 45ms
+   ✓ eligibleCandidates — real-show scenarios (Mandy 2026-07-02) > Best Puppy Dog INCLUDES the Long Coat Puppy class when scheduled (Mandy: GSD coat varieties) 46ms
+   ✓ eligibleCandidates — real-show scenarios (Mandy 2026-07-02) > Best Puppy Dog: a Long Coat Puppy winner beaten in another puppy class drops off 52ms
+   ✓ eligibleCandidates — real-show scenarios (Mandy 2026-07-02) > Best Veteran draws only from the Veteran class, minus the beaten runner-up (C1) 50ms
+   ✓ eligibleCandidates — real-show scenarios (Mandy 2026-07-02) > Best Veteran fills from a breed-qualified Veteran class across groups (C1 all-groups scan) 76ms
+   ✓ eligibleCandidates — real-show scenarios (Mandy 2026-07-02) > Best Puppy in Show spans both sexes but only puppies, minus beaten 50ms
+   ✓ resolveTopAwards — South Western's real 13-award list > resolves all 13 configured names to recordable types, in her exact order, none dropped 56ms
+   ✓ resolveTopAwards — South Western's real 13-award list > aliases the SV short-form "most promising dog/bitch" to the existing WUSV types 49ms
+   ✓ buildPlacementIndex — puppy band by AGE when DOB is known (Scotland 2026-08-30) > 12 months + 1 day old in that same Junior class is NOT a puppy candidate 54ms
+   ✓ buildPlacementIndex — puppy band by AGE when DOB is known (Scotland 2026-08-30) > DOB missing falls back to the class-name inference (never widens silently) 72ms
+   ✓ buildPlacementIndex — puppy band by AGE when DOB is known (Scotland 2026-08-30) > no showDate given falls back to the class-name inference (existing callers unaffected) 46ms
+   ✓ eligibleCandidates — baby puppy is its own disjoint band > a Baby Puppy class winner is eligible for Best Baby Puppy but NOT Best Puppy in Show 50ms
+   ✓ eligibleCandidates — baby puppy is its own disjoint band > a Minor Puppy winner is eligible for Best Puppy in Show but NOT Best Baby Puppy 51ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 7 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  src/lib/__tests__/top-awards.test.ts > isPuppyOnShowDate — the RKC age band, moved from the steward page > 12 months on the day still counts (RKC "not exceeding twelve calendar months")
+ FAIL  src/lib/__tests__/top-awards.test.ts > isPuppyOnShowDate — the RKC age band, moved from the steward page > 12 months + 1 day is NOT a puppy any more
+ FAIL  src/lib/__tests__/top-awards.test.ts > isPuppyOnShowDate — the RKC age band, moved from the steward page > 6 months on the day counts (lower bound is inclusive too)
+ FAIL  src/lib/__tests__/top-awards.test.ts > isPuppyOnShowDate — the RKC age band, moved from the steward page > 5 months old is too young — not yet a puppy (that is baby-puppy territory)
+ FAIL  src/lib/__tests__/top-awards.test.ts > isPuppyOnShowDate — the RKC age band, moved from the steward page > unknown DOB is never a puppy by age
+ FAIL  src/lib/__tests__/top-awards.test.ts > buildPlacementIndex — puppy band by AGE when DOB is known (Scotland 2026-08-30) > a 12-months-on-the-day winner of a non-"puppy"-named class (Junior) IS a puppy candidate
+ FAIL  src/lib/__tests__/top-awards.test.ts > buildPlacementIndex — puppy band by AGE when DOB is known (Scotland 2026-08-30) > a beaten-by-a-puppy-in-a-shared-class age-eligible dog still excludes from Best Puppy
+ Test Files  1 failed (1)
+      Tests  7 failed | 35 passed (42)
