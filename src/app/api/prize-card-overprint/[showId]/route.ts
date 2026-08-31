@@ -15,6 +15,7 @@ import {
   validateRasterLogoUrl,
   makePdfResponse,
 } from '@/lib/pdf-utils';
+import { setSimplexViewerPreference } from '@/lib/pdf-pad';
 
 /**
  * Prize Card Overprint PDF endpoint.
@@ -107,7 +108,11 @@ export async function GET(
 
   try {
     const pdfDocument = React.createElement(PrizeCardOverprint, { show: showInfo });
-    const buffer = await renderToBuffer(pdfDocument);
+    const rawBuffer = await renderToBuffer(pdfDocument);
+    // Same single-sided viewer preference as the composite prize cards route
+    // (see its doc comment) — one card variant per page, never meant to be
+    // printed duplex.
+    const buffer = Buffer.from(await setSimplexViewerPreference(rawBuffer));
     const filename = `${sanitizeFilename(show.name)}-Prize-Card-Overprint.pdf`;
     const isPreview = request.nextUrl.searchParams.has('preview');
     return makePdfResponse(buffer, filename, isPreview);

@@ -14,6 +14,7 @@ import { resolveJudgeForClass } from '@/lib/judge-resolution';
 import { buildPrizeCardPages, type PrizeCardClassInput } from '@/lib/prize-card-pages';
 import { sectionClasses, buildClassLabelMap } from '@/lib/class-labels';
 import { fetchClubImage } from '@/lib/safe-image-fetch';
+import { setSimplexViewerPreference } from '@/lib/pdf-pad';
 
 // Above this, log loudly — a runaway page count (e.g. a bug that stops the
 // image-embed cache from matching, or a genuinely enormous show) should be
@@ -185,7 +186,13 @@ export async function GET(
 
   try {
     const pdfDocument = React.createElement(PrizeCardComposite, { show: showInfo, pages });
-    const buffer = await renderToBuffer(pdfDocument);
+    const rawBuffer = await renderToBuffer(pdfDocument);
+    // Prize cards are ONE PAGE PER CARD by design (see the doc comment above)
+    // — duplex printing them at home puts adjacent cards back-to-back on one
+    // sheet (Scotland 30 Aug 2026: 36 sheets ruined that way). Set the PDF's
+    // own single-sided viewer preference so a compliant print dialog defaults
+    // to it, deliberately NOT applied to booklet documents.
+    const buffer = Buffer.from(await setSimplexViewerPreference(rawBuffer));
     // pages.length is the true card count; the composite substitutes a
     // single explanatory page when it's 0 (no confirmed entries yet), so
     // the log says so rather than claiming a 0-page PDF was produced.
