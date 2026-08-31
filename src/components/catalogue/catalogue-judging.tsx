@@ -766,7 +766,8 @@ export function CatalogueJudging({ show, entries }: Props) {
           <Text style={s.registerTitle}>Challenge Register</Text>
           <Text style={s.registerInstruction}>
             Write in the 1st and 2nd place catalogue numbers as each class is judged.
-            For the challenge, line the winners up in this order.
+            For the challenge, line the winners up in reverse class order &mdash; the
+            winner of the last class stands at the front.
           </Text>
 
           {fitsOneRegisterPage(challengeRegister) ? (
