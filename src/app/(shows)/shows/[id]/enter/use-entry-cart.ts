@@ -106,6 +106,21 @@ export interface CartState {
   activeEntryId: string | null;
   step: WizardStep;
   editingExisting: boolean;
+  /**
+   * The discount group ("I am a Member" etc.) the exhibitor has declared for
+   * this order — id from show_discount_groups, or null for the standard
+   * rate. Lives on the CART, persisted to localStorage with everything else,
+   * NOT page useState. It used to be page state (~L217 of page.tsx) and
+   * defaulted to null every remount, so a reload, a Safari tab eviction, or
+   * the Add/Edit-dog detour (`/dogs/new?returnTo=…` unmounts the page)
+   * silently reset a ticked member back to the standard rate while the rest
+   * of the cart survived — Paula Ingham paid £18 instead of £16 at the North
+   * Eastern GSD Club champ show (28 Aug) this way. Optional (not every
+   * persisted cart pre-dating this field carries it) — always read it via
+   * the hook's normalised `discountGroupId` (never `state.discountGroupId`
+   * directly), which defaults a missing/undefined value to null.
+   */
+  discountGroupId?: string | null;
 }
 
 export type CartAction =
@@ -115,6 +130,7 @@ export type CartAction =
   | { type: 'SET_JH_DETAILS'; handlerName: string; handlerDob: string; handlerKcNumber?: string }
   | { type: 'SET_CLASSES'; classIds: string[]; classNames: string[]; totalFee: number; isNfc: boolean }
   | { type: 'SET_REGISTRATION_FLAGS'; entryId: string; naf: boolean; taf: boolean; cnaf: boolean; atcNumber: string }
+  | { type: 'SET_DISCOUNT_GROUP'; discountGroupId: string | null }
   | { type: 'EDIT_ENTRY'; entryId: string }
   | { type: 'REMOVE_ENTRY'; entryId: string }
   | { type: 'SET_SUNDRY_ITEM'; item: CartSundryItem }
@@ -270,6 +286,10 @@ export function cartReducer(state: CartState, action: CartAction): CartState {
       };
     }
 
+    case 'SET_DISCOUNT_GROUP': {
+      return { ...state, discountGroupId: action.discountGroupId };
+    }
+
     case 'EDIT_ENTRY': {
       const entry = state.entries.find((e) => e.id === action.entryId);
       if (!entry) return state;
@@ -324,7 +344,10 @@ export function cartReducer(state: CartState, action: CartAction): CartState {
     }
 
     case 'CHECKOUT_SUCCESS': {
-      return { ...state, step: 'confirmation' };
+      // A completed order's discount group must never leak into whatever the
+      // exhibitor does next in the same browser session (e.g. "Enter Another
+      // Dog" straight after paying).
+      return { ...state, step: 'confirmation', discountGroupId: null };
     }
 
     case 'RESET': {
@@ -342,7 +365,29 @@ export const initialState: CartState = {
   activeEntryId: null,
   step: 'entry_type',
   editingExisting: false,
+  discountGroupId: null,
 };
+
+/**
+ * A discount-group id restored from localStorage (or carried across a
+ * remount) may no longer be one of the show's CURRENT groups — a secretary
+ * can delete a group after an exhibitor already ticked it and stashed their
+ * cart. Sending a stale id to orders.checkout 400s the whole order, so once
+ * the show's groups have actually loaded, drop anything that isn't among
+ * them back to null (standard rate) rather than resubmit it blind.
+ *
+ * Returns the id unchanged while `discountGroups` hasn't loaded yet
+ * (undefined) — there's nothing to validate against yet, so don't clear a
+ * perfectly good selection on a hunch.
+ */
+export function validateDiscountGroupId(
+  discountGroupId: string | null | undefined,
+  discountGroups: { id: string }[] | undefined,
+): string | null {
+  if (!discountGroupId) return null;
+  if (!discountGroups) return discountGroupId;
+  return discountGroups.some((g) => g.id === discountGroupId) ? discountGroupId : null;
+}
 
 function getStorageKey(showId: string) {
   return `remi-entry-cart-${showId}`;
@@ -522,6 +567,10 @@ export function useEntryCart(showId?: string) {
       dispatch({ type: 'SET_REGISTRATION_FLAGS', entryId, ...flags }),
     []
   );
+  const setDiscountGroup = useCallback(
+    (discountGroupId: string | null) => dispatch({ type: 'SET_DISCOUNT_GROUP', discountGroupId }),
+    []
+  );
   const editEntry = useCallback(
     (entryId: string) => dispatch({ type: 'EDIT_ENTRY', entryId }),
     []
@@ -553,6 +602,10 @@ export function useEntryCart(showId?: string) {
 
   return {
     ...state,
+    // Normalised to string | null — never undefined, even for a cart
+    // persisted before this field existed (loadSavedState just spreads
+    // whatever was saved). Overrides the `...state` spread above.
+    discountGroupId: state.discountGroupId ?? null,
     activeEntry,
     entriesTotal,
     grandTotal,
@@ -565,6 +618,7 @@ export function useEntryCart(showId?: string) {
     setJHDetails,
     setClasses,
     setRegistrationFlags,
+    setDiscountGroup,
     editEntry,
     removeEntry,
     setSundryItem,
