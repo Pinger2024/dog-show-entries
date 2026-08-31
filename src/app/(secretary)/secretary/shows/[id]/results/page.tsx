@@ -542,6 +542,22 @@ export function AwardRow({
   isPending: boolean;
   onSelect: (dogId: string) => void;
 }) {
+  // A recorded holder can fall out of `candidates` (a class re-judge, class
+  // order edit, …). Without this the Select's `value` has no matching item
+  // and Radix renders an empty box — Mandy could neither see nor publish the
+  // recorded award, and once deleted one believing it was unset. Show them
+  // as a visible, labelled option instead of silently dropping them.
+  const holderMissing = !!existing && !candidates.some((c) => c.dogId === existing.dogId);
+  const options = holderMissing
+    ? [
+        ...candidates,
+        {
+          dogId: existing!.dogId,
+          registeredName: `${existing!.dog?.registeredName ?? 'Recorded dog'} (recorded)`,
+          catalogueNumber: null,
+        },
+      ]
+    : candidates;
   return (
     <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:gap-3">
       <span className="text-xs sm:text-sm font-medium w-full sm:w-44 shrink-0 truncate" title={label}>
@@ -557,7 +573,7 @@ export function AwardRow({
         </SelectTrigger>
         <SelectContent>
           <SelectItem value="none">-- None --</SelectItem>
-          {candidates.map((d) => (
+          {options.map((d) => (
             <SelectItem key={d.dogId} value={d.dogId}>
               {d.catalogueNumber ? `#${d.catalogueNumber} ` : ''}{d.registeredName}
             </SelectItem>

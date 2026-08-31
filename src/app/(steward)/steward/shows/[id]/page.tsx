@@ -523,6 +523,7 @@ function BestOfBreedSection({
                 label={award.label}
                 type={award.type}
                 existingDogId={existing?.dogId}
+                existingDogName={existing?.dog?.registeredName}
                 isPublished={!!existing?.publishedAt}
                 candidates={candidates}
                 onRecord={(dogId, type) => recordAchievement.mutate({ showId, dogId, type, date: showDate })}
@@ -617,6 +618,7 @@ function BestOfBreedSection({
                 label={award.name}
                 type={award.type}
                 existingDogId={existing?.dogId}
+                existingDogName={existing?.dog?.registeredName}
                 isPublished={!!existing?.publishedAt}
                 candidates={candidates}
                 onRecord={(dogId, type) => recordAchievement.mutate({ showId, dogId, type, date: showDate })}
@@ -657,6 +659,7 @@ function BestOfBreedSection({
                 label={award.label}
                 type={award.type}
                 existingDogId={existing?.dogId}
+                existingDogName={existing?.dog?.registeredName}
                 isPublished={!!existing?.publishedAt}
                 candidates={filtered}
                 onRecord={(dogId, type) => recordAchievement.mutate({ showId, dogId, type, date: showDate })}
@@ -691,6 +694,7 @@ function BestOfBreedSection({
                     label={award.label}
                     type={award.type}
                     existingDogId={existing?.dogId}
+                    existingDogName={existing?.dog?.registeredName}
                     isPublished={!!existing?.publishedAt}
                     candidates={filtered}
                     onRecord={(dogId, type) => recordAchievement.mutate({ showId, dogId, type, date: showDate })}
@@ -727,6 +731,7 @@ function BestOfBreedSection({
                 label={award.label}
                 type={award.type}
                 existingDogId={existing?.dogId}
+                existingDogName={existing?.dog?.registeredName}
                 isPublished={!!existing?.publishedAt}
                 candidates={pool.map((w) => ({
                   dogId: w.dogId,
@@ -907,6 +912,7 @@ export function AwardSelect({
   label,
   type,
   existingDogId,
+  existingDogName,
   isPublished,
   candidates,
   onRecord,
@@ -917,6 +923,13 @@ export function AwardSelect({
   label: string;
   type: AchievementType;
   existingDogId?: string;
+  /** Display name of the recorded holder — needed so they still render as a
+   *  visible, selected option when they've fallen out of `candidates` (a
+   *  class re-judge, class-order edit, …). Without this the Select's `value`
+   *  has no matching item and Radix shows an empty box: Mandy could neither
+   *  see nor publish the recorded award, and once deleted one believing it
+   *  was unset. */
+  existingDogName?: string | null;
   isPublished: boolean;
   candidates: { dogId: string; dogName: string; catalogueNumber: string | null; exhibitorName: string }[];
   onRecord: (dogId: string, type: AchievementType) => void;
@@ -924,6 +937,19 @@ export function AwardSelect({
   onPublish: (dogId: string, type: AchievementType) => void;
   onUnpublish: (dogId: string, type: AchievementType) => void;
 }) {
+  const holderMissing =
+    !!existingDogId && !candidates.some((c) => c.dogId === existingDogId);
+  const options = holderMissing
+    ? [
+        ...candidates,
+        {
+          dogId: existingDogId!,
+          dogName: `${existingDogName ?? 'Recorded dog'} (recorded)`,
+          catalogueNumber: null,
+          exhibitorName: '',
+        },
+      ]
+    : candidates;
   return (
     <div className="flex flex-col gap-1.5 sm:flex-row sm:items-center sm:gap-3">
       <span
@@ -951,7 +977,7 @@ export function AwardSelect({
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="none">— None —</SelectItem>
-            {candidates.map((w) => (
+            {options.map((w) => (
               <SelectItem key={w.dogId} value={w.dogId}>
                 {w.catalogueNumber ? `#${w.catalogueNumber} ` : ''}{w.dogName}
               </SelectItem>
