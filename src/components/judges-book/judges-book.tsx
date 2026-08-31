@@ -819,26 +819,31 @@ export function ClassPage({
 }
 
 // Column heading + footer wording per awards-page section — lets a judge or
-// steward flipping through tell the dog-side sign-off page from the back
-// (full Best Awards) page at a glance (Mandy 2026-08-10, revised 08-18).
+// steward flipping through tell the dog-side sign-off page from the
+// bitch-side page, and both from the back (overall) page, at a glance
+// (Mandy 2026-08-10, revised 08-18, revised again 08-31 — steward-driven
+// three-way split, see buildJudgesBookPages' doc comment).
 const AWARDS_PAGE_TITLE: Record<JudgesBookAwardsSection, string> = {
   dog: 'Dog Awards',
+  bitch: 'Bitch Awards',
   overall: 'Best Awards',
 };
 const AWARDS_PAGE_FOOTER_LABEL: Record<JudgesBookAwardsSection, string> = {
   dog: 'Dog Awards sign-off',
+  bitch: 'Bitch Awards sign-off',
   overall: 'Best Awards sign-off',
 };
 
 /** Best Awards sign-off page — triplicate tear-off columns, no notes
- *  needed. Two of these print now (Mandy 2026-08-10, REVISED 2026-08-18 —
- *  "just leave [the back page] with all the awards on it as it is today,
- *  just need that extra page for the Male awards"): the dog-side awards
- *  page lands right after the last dog class, and the full, unfiltered
- *  Best Awards list stays on the back page — see buildJudgesBookPages
- *  (lib/judges-book-pages.ts) for the placement logic. No judge
- *  attribution here, same as before the split — the breed judge signs
- *  whichever copy reaches them. */
+ *  needed. Three of these print now (Mandy 2026-08-10, REVISED 2026-08-18,
+ *  REVISED AGAIN 2026-08-31 per her head steward at that weekend's shows):
+ *  the dog-side awards page lands right after the last dog class, a
+ *  mirrored bitch-side awards page lands right after the last bitch class,
+ *  and the back page is OVERALL-ONLY (Best of Breed, Best Puppy in Show,
+ *  etc. — no more full-list duplication of the dog/bitch pages) — see
+ *  buildJudgesBookPages (lib/judges-book-pages.ts) for the placement and
+ *  filtering logic. No judge attribution here, same as before the split —
+ *  the breed judge signs whichever copy reaches them. */
 export function AwardsPage({
   show,
   showDate,
@@ -894,9 +899,10 @@ export function JudgesBook({
   });
 
   // Dog → Bitch → Special Awards → Junior Handling running order, with a
-  // dog-side awards sign-off page after the last dog class and the full
-  // Best Awards sign-off on the back page — see buildJudgesBookPages' own
-  // doc comment for the full ordering rules and edge cases.
+  // dog-side awards sign-off page after the last dog class, a mirrored
+  // bitch-side page after the last bitch class, and the OVERALL-ONLY Best
+  // Awards sign-off on the back page — see buildJudgesBookPages' own doc
+  // comment for the full ordering rules and edge cases.
   const pages = buildJudgesBookPages(classes, show.bestAwards);
 
   return (

@@ -11,20 +11,30 @@
  * REVISED 2026-08-18, having now seen the rendered pages: "I wouldnt edit
  * the back awards page, just leave that with all the awards on it as it is
  * today, just need that extra page for the Male awards which from the first
- * image you sent and the last image looks fine." So this is now a TWO-way
- * split, not three:
- *   - the DOG-side awards (Best Dog / Dog CC / Reserve Dog CC / Best Puppy
- *     Dog, …) still get their own page immediately after the last dog class
- *     page — that's the "extra page for the Male awards" she confirmed
- *     looks fine, kept unchanged from the 08-10 build.
- *   - NO separate bitch awards page — removed. The bitch classes run
- *     straight through to whatever comes next (special/JH/back of book).
- *   - the BACK page reverts to the pre-split content: the FULL configured
- *     awards list (every award `buildBestAwards` returns), unfiltered, in
- *     the secretary's own configured order — same as the single combined
- *     sign-off page did before the 08-10 split. The dog-side awards
- *     deliberately appear on BOTH the mid-book page and the back page —
- *     that duplication is Mandy's explicit choice, not an oversight.
+ * image you sent and the last image looks fine." So that became a TWO-way
+ * split, not three: a Dog Awards page mid-book, no separate Bitch Awards
+ * page, and the back page reverted to the FULL unfiltered list (dog-side
+ * awards deliberately duplicated onto the back page as a result).
+ *
+ * REVISED AGAIN 2026-08-31, per Mandy's head steward at that weekend's shows
+ * (Clyde + Scotland): now a THREE-way split, restoring the bitch page the
+ * 08-18 feedback had dropped, and — new this round — making the back page
+ * OVERALL-ONLY instead of the full list:
+ *   - the DOG-side awards page is unchanged: still lands immediately after
+ *     the last dog class.
+ *   - a mirrored BITCH-side awards page (Bitch CC / Reserve Bitch CC / Best
+ *     Puppy Bitch, …) now lands immediately after the last bitch class,
+ *     built and anchored exactly like the dog page.
+ *   - the BACK page is no longer the full list. It now carries ONLY the
+ *     awards `bestAwardSection` puts in 'overall' — Best of Breed, Best
+ *     Puppy in Show, Best Veteran, etc. — plus anything it can't classify
+ *     (a club's bespoke trophy), which still rides the back page rather
+ *     than being dropped. Dog- and bitch-side awards no longer appear
+ *     there at all: the steward's point was that the back page had become
+ *     a second, redundant copy of pages the judge had already signed off
+ *     mid-book, once there's a bitch page to match the dog page. The back
+ *     page renders only when this filtered list is non-empty — a show
+ *     with nothing but sexed awards now has NO back page.
  *
  * `classes` does NOT need to already be in Dog → Bitch → Special → Junior
  * Handling running order — this buckets it itself via the shared
@@ -40,14 +50,13 @@ import { sectionClasses, type ClassSectionKey } from './class-labels';
 import { bestAwardSection } from './top-awards';
 import type { JudgesBookClass } from '@/app/api/judges-book/[showId]/route';
 
-// Only two kinds of awards page render now (see doc comment above) — but
-// `bestAwardSection` in top-awards.ts still classifies into three buckets
-// ('dog' | 'bitch' | 'overall'): it's the shared vocabulary that also
-// decides which awards are sex-restricted for results recording elsewhere,
-// and the 'bitch' bucket is still needed below to EXCLUDE bitch-side
-// awards from the dog page (they fall through to the full back-page list
-// same as any other award).
-export type JudgesBookAwardsSection = 'dog' | 'overall';
+// Three kinds of awards page render now (see doc comment above), matching
+// `bestAwardSection` in top-awards.ts one-for-one: it's the shared
+// vocabulary that also decides which awards are sex-restricted for results
+// recording elsewhere. An award `bestAwardSection` can't classify (a club's
+// bespoke trophy) resolves to 'overall' there, so it always rides the back
+// page here too — never dropped, never miscategorised onto a sexed page.
+export type JudgesBookAwardsSection = 'dog' | 'bitch' | 'overall';
 
 export type JudgesBookPage =
   | { kind: 'class'; class: JudgesBookClass }
@@ -66,14 +75,14 @@ export function buildJudgesBookPages(
   classes: JudgesBookClass[],
   bestAwards: string[],
 ): JudgesBookPage[] {
-  // Only the dog-side subset gets pulled out for its own mid-book page —
-  // preserving each award's position relative to the others (the
-  // secretary's configured order, Mandy 2026-07-27, buildBestAwards, is
-  // never reshuffled). Everything else — bitch-side, overall, and anything
-  // `bestAwardSection` can't classify (a club's bespoke trophy) — is left
-  // to ride along on the FULL, unfiltered `bestAwards` list on the back
-  // page below; it is never a second, separately-filtered bucket.
+  // Dog- and bitch-side subsets each get pulled out for their own mid-book
+  // page — preserving each award's position relative to the others within
+  // its bucket (the secretary's configured order, Mandy 2026-07-27,
+  // buildBestAwards, is never reshuffled). Everything else — overall, and
+  // anything `bestAwardSection` can't classify (a club's bespoke trophy) —
+  // rides the back page below; see that block's own comment.
   const dogAwards = bestAwards.filter((a) => bestAwardSection(a) === 'dog');
+  const bitchAwards = bestAwards.filter((a) => bestAwardSection(a) === 'bitch');
 
   const sections = sectionClasses(classes, (c) => ({
     sex: c.sex,
@@ -90,13 +99,26 @@ export function buildJudgesBookPages(
     if (key === 'dog' && dogAwards.length > 0) {
       pages.push({ kind: 'awards', section: 'dog', awards: dogAwards });
     }
+    if (key === 'bitch' && bitchAwards.length > 0) {
+      pages.push({ kind: 'awards', section: 'bitch', awards: bitchAwards });
+    }
   }
 
-  // Back page — the FULL configured awards list, unfiltered, always last.
-  // This is the pre-08-10-split behaviour restored per Mandy 2026-08-18:
-  // "just leave that with all the awards on it as it is today."
-  if (bestAwards.length > 0) {
-    pages.push({ kind: 'awards', section: 'overall', awards: bestAwards });
+  // Back page — OVERALL-ONLY as of 2026-08-31 (see file doc comment): every
+  // award that isn't dog- or bitch-restricted, in the secretary's own
+  // configured order. This deliberately includes anything `bestAwardSection`
+  // can't classify (a club's bespoke trophy) — those must never be dropped,
+  // and 'overall' is exactly where unclassifiable awards land in that
+  // function, so this single filter both selects the true overall awards
+  // AND rescues the unclassifiable ones in one pass. Dog- and bitch-side
+  // awards are excluded here now that each has its own mid-book page — no
+  // more back-page duplication. Renders only when something is left.
+  const overallAwards = bestAwards.filter((a) => {
+    const section = bestAwardSection(a);
+    return section !== 'dog' && section !== 'bitch';
+  });
+  if (overallAwards.length > 0) {
+    pages.push({ kind: 'awards', section: 'overall', awards: overallAwards });
   }
 
   return pages;
