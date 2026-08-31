@@ -1,4 +1,4 @@
-import { PDFDocument, StandardFonts, rgb, type PDFPage, PDFName, PDFDict } from 'pdf-lib';
+import { PDFDocument, StandardFonts, rgb, type PDFPage, PDFName, PDFDict, Duplex } from 'pdf-lib';
 import fontkit from '@pdf-lib/fontkit';
 import { readFileSync } from 'fs';
 import path from 'path';
@@ -42,6 +42,28 @@ export async function stripUnembeddedBase14Fonts(input: Uint8Array | Buffer): Pr
   const doc = await PDFDocument.load(input);
   doc.registerFontkit(fontkit);
   stripBase14Fonts(doc, 0, doc.getPageCount());
+  return doc.save();
+}
+
+/**
+ * Set the PDF's own viewer preference to single-sided printing
+ * (ViewerPreferences /Duplex /Simplex) — a compliant print dialog (Acrobat,
+ * most browser PDF viewers, most driver dialogs) defaults its duplex option
+ * to this rather than whatever the print box last remembered.
+ *
+ * Prize cards (Scotland 30 Aug 2026, memory
+ * project_prize_cards_duplex_incident_2026-08-30): a 71-card PDF was printed
+ * duplex at home — adjacent cards landed back-to-back on one sheet — and 36
+ * sheets came out unusable. Prize cards are ONE PAGE PER CARD by design (see
+ * the prize-cards route's doc comment), so duplex printing them is always
+ * wrong; this is a post-processing step applied ONLY to the two prize-card
+ * PDF endpoints, deliberately NOT inside padPdfToMultiple / booklet output —
+ * catalogues/schedules/judges' books are genuinely meant to print duplex
+ * (they're saddle-stitched booklets).
+ */
+export async function setSimplexViewerPreference(input: Uint8Array | Buffer): Promise<Uint8Array> {
+  const doc = await PDFDocument.load(input);
+  doc.catalog.getOrCreateViewerPreferences().setDuplex(Duplex.Simplex);
   return doc.save();
 }
 

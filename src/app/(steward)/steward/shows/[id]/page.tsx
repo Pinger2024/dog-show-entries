@@ -20,7 +20,7 @@ import {
 import { toast } from 'sonner';
 import { trpc } from '@/lib/trpc';
 import type { AchievementType } from '@/lib/placements';
-import { resolveTopAwards, buildPlacementIndex, eligibleCandidates } from '@/lib/top-awards';
+import { resolveTopAwards, buildPlacementIndex, eligibleCandidates, isPuppyOnShowDate } from '@/lib/top-awards';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
@@ -304,19 +304,6 @@ const PUPPY_AWARDS: ReadonlySet<AchievementType> = new Set([
   'best_puppy_in_show',
 ]);
 
-/** Returns true if the dog is under 12 months on the show date.
- *  Unknown DOB → false (better to hide than offer a non-puppy as a puppy). */
-function isPuppyOnShowDate(dob: string | null, showDate: string): boolean {
-  if (!dob) return false;
-  const dobDate = new Date(dob);
-  const show = new Date(showDate);
-  const months =
-    (show.getFullYear() - dobDate.getFullYear()) * 12 +
-    (show.getMonth() - dobDate.getMonth()) -
-    (show.getDate() < dobDate.getDate() ? 1 : 0);
-  return months < 12;
-}
-
 interface BestOfBreedSectionProps {
   showId: string;
   showDate: string;
@@ -536,6 +523,7 @@ function BestOfBreedSection({
                 label={award.label}
                 type={award.type}
                 existingDogId={existing?.dogId}
+                existingDogName={existing?.dog?.registeredName}
                 isPublished={!!existing?.publishedAt}
                 candidates={candidates}
                 onRecord={(dogId, type) => recordAchievement.mutate({ showId, dogId, type, date: showDate })}
@@ -596,7 +584,7 @@ function BestOfBreedSection({
       }
     }
     const placedDogs = Array.from(dogInfo.values());
-    const index = buildPlacementIndex(allClasses);
+    const index = buildPlacementIndex(allClasses, showDate);
     return (
       <div className="mt-6 sm:mt-8 space-y-4">
         <div className="flex items-center gap-2">
@@ -630,6 +618,7 @@ function BestOfBreedSection({
                 label={award.name}
                 type={award.type}
                 existingDogId={existing?.dogId}
+                existingDogName={existing?.dog?.registeredName}
                 isPublished={!!existing?.publishedAt}
                 candidates={candidates}
                 onRecord={(dogId, type) => recordAchievement.mutate({ showId, dogId, type, date: showDate })}
@@ -670,6 +659,7 @@ function BestOfBreedSection({
                 label={award.label}
                 type={award.type}
                 existingDogId={existing?.dogId}
+                existingDogName={existing?.dog?.registeredName}
                 isPublished={!!existing?.publishedAt}
                 candidates={filtered}
                 onRecord={(dogId, type) => recordAchievement.mutate({ showId, dogId, type, date: showDate })}
@@ -704,6 +694,7 @@ function BestOfBreedSection({
                     label={award.label}
                     type={award.type}
                     existingDogId={existing?.dogId}
+                    existingDogName={existing?.dog?.registeredName}
                     isPublished={!!existing?.publishedAt}
                     candidates={filtered}
                     onRecord={(dogId, type) => recordAchievement.mutate({ showId, dogId, type, date: showDate })}
@@ -740,6 +731,7 @@ function BestOfBreedSection({
                 label={award.label}
                 type={award.type}
                 existingDogId={existing?.dogId}
+                existingDogName={existing?.dog?.registeredName}
                 isPublished={!!existing?.publishedAt}
                 candidates={pool.map((w) => ({
                   dogId: w.dogId,
@@ -916,10 +908,11 @@ function JudgeApprovalSection({
 }
 
 // Reusable award select dropdown
-function AwardSelect({
+export function AwardSelect({
   label,
   type,
   existingDogId,
+  existingDogName,
   isPublished,
   candidates,
   onRecord,
@@ -930,6 +923,13 @@ function AwardSelect({
   label: string;
   type: AchievementType;
   existingDogId?: string;
+  /** Display name of the recorded holder — needed so they still render as a
+   *  visible, selected option when they've fallen out of `candidates` (a
+   *  class re-judge, class-order edit, …). Without this the Select's `value`
+   *  has no matching item and Radix shows an empty box: Mandy could neither
+   *  see nor publish the recorded award, and once deleted one believing it
+   *  was unset. */
+  existingDogName?: string | null;
   isPublished: boolean;
   candidates: { dogId: string; dogName: string; catalogueNumber: string | null; exhibitorName: string }[];
   onRecord: (dogId: string, type: AchievementType) => void;
@@ -937,6 +937,19 @@ function AwardSelect({
   onPublish: (dogId: string, type: AchievementType) => void;
   onUnpublish: (dogId: string, type: AchievementType) => void;
 }) {
+  const holderMissing =
+    !!existingDogId && !candidates.some((c) => c.dogId === existingDogId);
+  const options = holderMissing
+    ? [
+        ...candidates,
+        {
+          dogId: existingDogId!,
+          dogName: `${existingDogName ?? 'Recorded dog'} (recorded)`,
+          catalogueNumber: null,
+          exhibitorName: '',
+        },
+      ]
+    : candidates;
   return (
     <div className="flex flex-col gap-1.5 sm:flex-row sm:items-center sm:gap-3">
       <span
@@ -964,7 +977,7 @@ function AwardSelect({
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="none">— None —</SelectItem>
-            {candidates.map((w) => (
+            {options.map((w) => (
               <SelectItem key={w.dogId} value={w.dogId}>
                 {w.catalogueNumber ? `#${w.catalogueNumber} ` : ''}{w.dogName}
               </SelectItem>

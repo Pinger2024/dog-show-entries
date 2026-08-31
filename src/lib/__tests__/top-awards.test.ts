@@ -8,6 +8,7 @@ import {
   beatenByRival,
   eligibleCandidates,
   isReserveAward,
+  isPuppyOnShowDate,
   RESERVE_TYPES,
   type IndexClass,
   type TopAward,
@@ -378,6 +379,119 @@ describe("resolveTopAwards — South Western's real 13-award list", () => {
   it('aliases the SV short-form "most promising dog/bitch" to the existing WUSV types', () => {
     expect(awardNameToType('most promising dog')).toBe('most_promising_young_dog');
     expect(awardNameToType('Most Promising Bitch')).toBe('most_promising_young_bitch');
+  });
+});
+
+// Scotland 30 Aug 2026: FAIRYCROSS ATLANTA VON NISYROS, DOB 2025-08-30, won
+// Junior Bitch (NOT a "puppy"-named class) — exactly 12 calendar months old
+// on the show date — but the Best Puppy dropdowns hid her because
+// buildPlacementIndex only ever inferred the puppy band from the class name.
+describe('isPuppyOnShowDate — the RKC age band, moved from the steward page', () => {
+  it('12 months on the day still counts (RKC "not exceeding twelve calendar months")', () => {
+    expect(isPuppyOnShowDate('2025-08-30', '2026-08-30')).toBe(true);
+  });
+
+  it('12 months + 1 day is NOT a puppy any more', () => {
+    expect(isPuppyOnShowDate('2025-08-30', '2026-08-31')).toBe(false);
+  });
+
+  it('6 months on the day counts (lower bound is inclusive too)', () => {
+    expect(isPuppyOnShowDate('2026-02-28', '2026-08-28')).toBe(true);
+  });
+
+  it('5 months old is too young — not yet a puppy (that is baby-puppy territory)', () => {
+    expect(isPuppyOnShowDate('2026-03-30', '2026-08-28')).toBe(false);
+  });
+
+  it('unknown DOB is never a puppy by age', () => {
+    expect(isPuppyOnShowDate(null, '2026-08-30')).toBe(false);
+  });
+});
+
+describe('buildPlacementIndex — puppy band by AGE when DOB is known (Scotland 2026-08-30)', () => {
+  it('a 12-months-on-the-day winner of a non-"puppy"-named class (Junior) IS a puppy candidate', () => {
+    const index = buildPlacementIndex(
+      [
+        {
+          key: 'Junior Bitch',
+          className: 'Junior Bitch',
+          results: [{ dogId: 'atlanta', placement: 1, dogDateOfBirth: '2025-08-30' }],
+        },
+      ],
+      '2026-08-30',
+    );
+    expect(index.inPuppyClass.has('atlanta')).toBe(true);
+  });
+
+  it('12 months + 1 day old in that same Junior class is NOT a puppy candidate', () => {
+    const index = buildPlacementIndex(
+      [
+        {
+          key: 'Junior Bitch',
+          className: 'Junior Bitch',
+          results: [{ dogId: 'tooOld', placement: 1, dogDateOfBirth: '2025-08-30' }],
+        },
+      ],
+      '2026-08-31',
+    );
+    expect(index.inPuppyClass.has('tooOld')).toBe(false);
+  });
+
+  it('DOB missing falls back to the class-name inference (never widens silently)', () => {
+    const index = buildPlacementIndex(
+      [
+        {
+          key: 'Junior Bitch',
+          className: 'Junior Bitch', // not a "puppy"-named class
+          results: [{ dogId: 'unknownAge', placement: 1, dogDateOfBirth: null }],
+        },
+        {
+          key: 'Minor Puppy Dog',
+          className: 'Minor Puppy Dog', // "puppy"-named class
+          results: [{ dogId: 'unknownAgeButPuppyClass', placement: 1, dogDateOfBirth: null }],
+        },
+      ],
+      '2026-08-30',
+    );
+    expect(index.inPuppyClass.has('unknownAge')).toBe(false);
+    expect(index.inPuppyClass.has('unknownAgeButPuppyClass')).toBe(true);
+  });
+
+  it('no showDate given falls back to the class-name inference (existing callers unaffected)', () => {
+    const index = buildPlacementIndex([
+      {
+        key: 'Junior Bitch',
+        className: 'Junior Bitch',
+        results: [{ dogId: 'atlanta', placement: 1, dogDateOfBirth: '2025-08-30' }],
+      },
+    ]);
+    expect(index.inPuppyClass.has('atlanta')).toBe(false);
+  });
+
+  it('a beaten-by-a-puppy-in-a-shared-class age-eligible dog still excludes from Best Puppy', () => {
+    // Two age-eligible puppies (Junior Bitch, both DOB known, both in band)
+    // run together; the beaten rule still applies to the age-derived pool.
+    const index = buildPlacementIndex(
+      [
+        {
+          key: 'Junior Bitch',
+          className: 'Junior Bitch',
+          results: [
+            { dogId: 'winner', placement: 1, dogDateOfBirth: '2025-08-30' },
+            { dogId: 'runnerUp', placement: 2, dogDateOfBirth: '2025-09-15' },
+          ],
+        },
+      ],
+      '2026-08-30',
+    );
+    expect(index.inPuppyClass.has('winner')).toBe(true);
+    expect(index.inPuppyClass.has('runnerUp')).toBe(true);
+    const dogs = [
+      { dogId: 'winner', sex: 'bitch' as const },
+      { dogId: 'runnerUp', sex: 'bitch' as const },
+    ];
+    const out = eligibleCandidates(award('best_puppy_bitch'), dogs, index).map((d) => d.dogId);
+    expect(out).toEqual(['winner']); // runnerUp was beaten by winner in their shared class
   });
 });
 

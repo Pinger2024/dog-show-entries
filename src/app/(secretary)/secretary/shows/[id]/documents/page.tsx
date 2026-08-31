@@ -489,7 +489,7 @@ export default function DocumentsPage() {
               <DocRow
                 icon={<Award className="size-4" />}
                 label="Prize Cards"
-                description="Official A5 template for 1st, 2nd, 3rd and Reserve, with your club, show and judge details printed on"
+                description="Official A5 template for 1st, 2nd, 3rd and Reserve, with your club, show and judge details printed on. Print single-sided — turn off two-sided in your print box."
                 extra={prizeCardCountsLine}
               >
                 {/* Download is the primary action — this is the real PDF

@@ -30,7 +30,7 @@ import {
   type AchievementType,
 } from '@/lib/placements';
 import { SE_H } from '@/components/show-experience/tokens';
-import { resolveTopAwards, buildPlacementIndex, eligibleCandidates } from '@/lib/top-awards';
+import { resolveTopAwards, buildPlacementIndex, eligibleCandidates, isPuppyOnShowDate } from '@/lib/top-awards';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
@@ -258,7 +258,7 @@ function BestAwardsSection({
   showDate: string;
   showType: string;
   customAwards?: string[];
-  classResults?: { breedName: string; classes: { className: string; sex: string | null; results: { dogId: string | null; placement: number | null }[] }[] }[];
+  classResults?: { breedName: string; classes: { className: string; sex: string | null; results: { dogId: string | null; placement: number | null; dogDateOfBirth?: string | null }[] }[] }[];
   confirmedDogs: {
     dogId: string;
     registeredName: string;
@@ -282,23 +282,31 @@ function BestAwardsSection({
   const utils = trpc.useUtils();
   const isChampionship = showType === 'championship';
 
-  // Derive puppy/veteran class winner dogIds from live results for filtering
+  // Derive puppy/veteran class winner dogIds from live results for filtering.
+  // Prefers AGE on the show's start date when a result's DOB is known — the
+  // RKC puppy band ("six and not exceeding twelve calendar months", see
+  // isPuppyOnShowDate) is authoritative regardless of which class the dog
+  // actually ran in (Scotland 30 Aug 2026: a 12-month-old winner ran "Junior
+  // Bitch", not anything named "Puppy"). DOB missing falls back to the
+  // previous class-name inference — never silently widening who counts.
   const puppyClassWinnerIds = useMemo(() => {
     if (!classResults) return new Set<string>();
     const ids = new Set<string>();
     for (const group of classResults) {
       for (const cls of group.classes) {
         const name = cls.className.toLowerCase();
-        const isPuppy = (name.includes('puppy') || name.includes('minor')) && !name.includes('post');
-        if (isPuppy) {
-          for (const r of cls.results) {
-            if (r.dogId) ids.add(r.dogId);
-          }
+        const isPuppyClassName = (name.includes('puppy') || name.includes('minor')) && !name.includes('post');
+        for (const r of cls.results) {
+          if (!r.dogId) continue;
+          const isPuppy = r.dogDateOfBirth != null
+            ? isPuppyOnShowDate(r.dogDateOfBirth, showDate)
+            : isPuppyClassName;
+          if (isPuppy) ids.add(r.dogId);
         }
       }
     }
     return ids;
-  }, [classResults]);
+  }, [classResults, showDate]);
 
   const recordMut = trpc.secretary.recordAchievement.useMutation({
     onSuccess: () => {
@@ -390,6 +398,7 @@ function BestAwardsSection({
                   results: c.results,
                 })),
               ),
+              showDate,
             );
 
             return (
@@ -510,7 +519,7 @@ function BestAwardsSection({
 }
 
 /** Single award row with label + select dropdown */
-function AwardRow({
+export function AwardRow({
   label,
   type,
   existing,
@@ -533,6 +542,22 @@ function AwardRow({
   isPending: boolean;
   onSelect: (dogId: string) => void;
 }) {
+  // A recorded holder can fall out of `candidates` (a class re-judge, class
+  // order edit, …). Without this the Select's `value` has no matching item
+  // and Radix renders an empty box — Mandy could neither see nor publish the
+  // recorded award, and once deleted one believing it was unset. Show them
+  // as a visible, labelled option instead of silently dropping them.
+  const holderMissing = !!existing && !candidates.some((c) => c.dogId === existing.dogId);
+  const options = holderMissing
+    ? [
+        ...candidates,
+        {
+          dogId: existing!.dogId,
+          registeredName: `${existing!.dog?.registeredName ?? 'Recorded dog'} (recorded)`,
+          catalogueNumber: null,
+        },
+      ]
+    : candidates;
   return (
     <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:gap-3">
       <span className="text-xs sm:text-sm font-medium w-full sm:w-44 shrink-0 truncate" title={label}>
@@ -548,7 +573,7 @@ function AwardRow({
         </SelectTrigger>
         <SelectContent>
           <SelectItem value="none">-- None --</SelectItem>
-          {candidates.map((d) => (
+          {options.map((d) => (
             <SelectItem key={d.dogId} value={d.dogId}>
               {d.catalogueNumber ? `#${d.catalogueNumber} ` : ''}{d.registeredName}
             </SelectItem>
