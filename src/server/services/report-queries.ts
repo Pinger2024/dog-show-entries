@@ -27,6 +27,7 @@ import { and, asc, eq, ilike, inArray, isNull, ne, sql } from 'drizzle-orm';
 import { entries, dogOwners, orders, orderSundryItems, sundryItems, users } from '@/server/db/schema';
 import type { Database } from '@/server/db';
 import { CATALOGUE_NAME_PATTERN } from '@/lib/catalogue-utils';
+import { sortEntryClassesByShowClassOrder } from '@/lib/class-labels';
 import type { PrebookedCatalogueRow } from '@/components/reports/show-report-pdf';
 
 // ── Absentee-shaped where clauses ────────────────────────────────────────
@@ -86,7 +87,7 @@ export async function loadAbsenteeLikeEntries(
   db: Database,
   where: ReturnType<typeof and>,
 ) {
-  return db.query.entries.findMany({
+  const rows = await db.query.entries.findMany({
     where,
     with: {
       dog: {
@@ -102,13 +103,18 @@ export async function loadAbsenteeLikeEntries(
     },
     orderBy: [asc(entries.catalogueNumber)],
   });
+  // See sortEntryClassesByShowClassOrder's doc comment (class-labels.ts):
+  // Drizzle/Postgres give no ordering guarantee for the entryClasses
+  // relation without this — buildAbsenteeRow (report-rows.ts) joins a
+  // withdrawn dog's classes into one string in whatever order they arrive.
+  return rows.map((r) => ({ ...r, entryClasses: sortEntryClassesByShowClassOrder(r.entryClasses) }));
 }
 
 // ── Entry Report (paid orders, all statuses) — Financial Statement ──────
 
 export async function loadEntryReportEntries(db: Database, showId: string, paidOrderIds: string[]) {
   if (paidOrderIds.length === 0) return [];
-  return db.query.entries.findMany({
+  const rows = await db.query.entries.findMany({
     where: and(eq(entries.showId, showId), inArray(entries.orderId, paidOrderIds), isNull(entries.deletedAt)),
     with: {
       dog: {
@@ -135,6 +141,12 @@ export async function loadEntryReportEntries(db: Database, showId: string, paidO
     },
     orderBy: [asc(entries.entryDate)],
   });
+  // See sortEntryClassesByShowClassOrder's doc comment (class-labels.ts):
+  // Drizzle/Postgres give no ordering guarantee for the entryClasses
+  // relation without this — buildFinancialStatementRow (report-rows.ts)
+  // joins a multi-class dog's classes into one string in whatever order
+  // they arrive.
+  return rows.map((r) => ({ ...r, entryClasses: sortEntryClassesByShowClassOrder(r.entryClasses) }));
 }
 
 // ── Catalogue orders (printed/online split with email) ───────────────────
