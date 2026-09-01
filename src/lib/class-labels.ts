@@ -444,3 +444,59 @@ export function formatSvClassName(
   const coat = svCoatDisplayName(svCoatType);
   return coat ? `${base} — ${coat}` : base;
 }
+
+// ── Deterministic ordering for a single entry's OWN classes ────────────────
+
+/** The minimum shape sortEntryClassesByShowClassOrder needs from a fetched
+ *  entry_classes row: the joined show_class's own running-order columns. */
+export interface EntryClassWithShowClassOrder {
+  showClass: { sortOrder?: number | null; classNumber?: number | null; id: string } | null;
+}
+
+/**
+ * Sort a dog's OWN entry_classes rows (a dog entered in a breed class AND a
+ * Special Award Class, say) into the show's running order — by
+ * show_classes.sortOrder, then classNumber, then id as a final stable
+ * tiebreak.
+ *
+ * Why this exists: Drizzle's relational query API (`db.query.entries.findMany({
+ * with: { entryClasses: { with: { showClass: true } } } })`) has no way to
+ * order the `entryClasses` relation by a column on the JOINED `showClass`
+ * table — only by entryClasses' own columns, none of which reflect show
+ * running order. Postgres itself gives no ordering guarantee for a relation
+ * fetched without ORDER BY. Confirmed empirically (2026-09-01): the exact
+ * same fixture, queried twice, returned a multi-class dog's entryClasses in
+ * different orders across runs — src/__tests__/integration/
+ * report-entry-classes-order.test.ts reproduces this deterministically by
+ * inserting the later-running class first.
+ *
+ * Every report loader that joins a dog's classes into one string MUST sort
+ * with this immediately after the query resolves, before any row-builder
+ * (report-rows.ts's buildCatalogueOrderRows / buildAbsenteeRow /
+ * buildFinancialStatementRow) touches the data — see
+ * src/app/api/reports/[showId]/[type]/route.ts and
+ * src/server/services/report-queries.ts's loadAbsenteeLikeEntries /
+ * loadEntryReportEntries, the three call sites this was fixed at.
+ *
+ * catalogue-snapshot.ts does NOT need this: it never sorts entryClasses at
+ * the query level either, but nothing there joins them into a single
+ * string from DB order — catalogue-ringside.tsx's per-dog "Class X, Y" line
+ * already re-sorts locally (by classNumber, then classLabel) before
+ * joining. This helper gives the report loaders that same guarantee,
+ * keyed on the show's own class order rather than duplicating that
+ * component's classLabel-based comparator (which needs label-formatting
+ * context the report loaders don't have).
+ */
+export function sortEntryClassesByShowClassOrder<T extends EntryClassWithShowClassOrder>(
+  entryClasses: T[],
+): T[] {
+  return entryClasses.slice().sort((a, b) => {
+    const aSort = a.showClass?.sortOrder ?? Number.MAX_SAFE_INTEGER;
+    const bSort = b.showClass?.sortOrder ?? Number.MAX_SAFE_INTEGER;
+    if (aSort !== bSort) return aSort - bSort;
+    const aNum = a.showClass?.classNumber ?? Number.MAX_SAFE_INTEGER;
+    const bNum = b.showClass?.classNumber ?? Number.MAX_SAFE_INTEGER;
+    if (aNum !== bNum) return aNum - bNum;
+    return (a.showClass?.id ?? '').localeCompare(b.showClass?.id ?? '');
+  });
+}

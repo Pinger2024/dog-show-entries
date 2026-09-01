@@ -10,7 +10,7 @@ import { sanitizeFilename } from '@/lib/slugify';
 import { authenticatePdfRequest, makePdfResponse } from '@/lib/pdf-utils';
 import { stripUnembeddedBase14Fonts } from '@/lib/pdf-pad';
 import { syncCatalogueNumbers } from '@/server/services/catalogue-numbering';
-import { buildClassLabelMap } from '@/lib/class-labels';
+import { buildClassLabelMap, sortEntryClassesByShowClassOrder } from '@/lib/class-labels';
 import {
   CatalogueOrderReport,
   ClassBreakdownReport,
@@ -219,7 +219,7 @@ export async function GET(
     }
   }
 
-  const [showClasses, entries] = await Promise.all([
+  const [showClasses, rawEntries] = await Promise.all([
     db.query.showClasses.findMany({
       where: eq(schema.showClasses.showId, showId),
       with: { classDefinition: true, breed: true },
@@ -234,6 +234,18 @@ export async function GET(
       },
     }),
   ]);
+
+  // Drizzle can't ORDER BY a joined table's column on a `with:` relation
+  // (entryClasses has no column of its own that reflects show running
+  // order), and Postgres gives no ordering guarantee for a relation fetched
+  // without ORDER BY — a dog entered in 2+ classes could otherwise print
+  // its "Classes" column in either order between identical renders. See
+  // sortEntryClassesByShowClassOrder's doc comment (class-labels.ts) for
+  // the confirmed repro.
+  const entries = rawEntries.map((e) => ({
+    ...e,
+    entryClasses: sortEntryClassesByShowClassOrder(e.entryClasses),
+  }));
 
   const classLabelMap = buildClassLabelMap(showClasses, show.showRuleset);
   const confirmed = entries.filter((e) => e.status === 'confirmed' && !e.deletedAt);
