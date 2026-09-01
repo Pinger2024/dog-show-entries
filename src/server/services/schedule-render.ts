@@ -1,6 +1,10 @@
 import React from 'react';
-import { renderToBuffer } from '@react-pdf/renderer';
-import { PDFDocument } from 'pdf-lib';
+import { pdfPageCount, renderWithPageBudget } from '@/components/pdf-kit/render-with-page-budget';
+
+// Re-exported for existing callers/tests (src/__tests__/integration/
+// sv-schedule-pagination.test.tsx imports `pdfPageCount` from this module) —
+// now backed by the general pdf-kit implementation instead of a local copy.
+export { pdfPageCount };
 
 /**
  * Fit-aware schedule rendering.
@@ -28,11 +32,6 @@ import { PDFDocument } from 'pdf-lib';
  * the ruleset → page-budget mapping.
  */
 
-/** Page count of a rendered PDF (same pdf-lib route as `padPdfToMultiple`). */
-export async function pdfPageCount(buf: Uint8Array | Buffer): Promise<number> {
-  return (await PDFDocument.load(buf)).getPageCount();
-}
-
 export async function renderScheduleWithFit(
   // Loosely typed: callers hand us one of the three schedule renderers
   // (picked at runtime by pickScheduleComponent); only the SV one reads
@@ -43,17 +42,14 @@ export async function renderScheduleWithFit(
    *  or null for schedules that are meant to paginate freely. */
   designedPages: number | null,
 ): Promise<Buffer> {
-  const normal = await renderToBuffer(React.createElement(Component, props));
-  if (designedPages == null) return normal;
-
-  const normalPages = await pdfPageCount(normal);
-  if (normalPages <= designedPages) return normal;
-
-  console.warn(
-    `[schedule-render] normal-density render produced ${normalPages} pages ` +
-      `(designed ${designedPages}) — retrying at compact density`,
-  );
-  return renderToBuffer(
-    React.createElement(Component, { ...props, density: 'compact' }),
-  );
+  return renderWithPageBudget(Component, props, designedPages, {
+    compactProp: 'density',
+    compactValue: 'compact',
+    onOverflow: (pagesRendered, budgetPages) => {
+      console.warn(
+        `[schedule-render] normal-density render produced ${pagesRendered} pages ` +
+          `(designed ${budgetPages}) — retrying at compact density`,
+      );
+    },
+  });
 }
