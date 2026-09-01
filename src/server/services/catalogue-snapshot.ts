@@ -49,7 +49,7 @@ import { appendRegistrationFlags } from '@/lib/registration-flags';
 import { fetchPdfSafeImage } from '@/lib/safe-image-fetch';
 import { syncCatalogueNumbers } from '@/server/services/catalogue-numbering';
 import { getDockingStatementFromScheduleData } from '@/lib/rkc-compliance';
-import { buildClassLabelMap, buildCatalogueClassDefinitions } from '@/lib/class-labels';
+import { buildClassLabelMap, buildCatalogueClassDefinitions, sortEntryClassesByShowClassOrder } from '@/lib/class-labels';
 import { buildScheduleJudges, aggregateJudgeAssignments } from '@/lib/schedule-judges';
 import { prepareAdvertsForRender } from '@/lib/advert-orientation';
 import { padPdfToMultiple, stripUnembeddedBase14Fonts } from '@/lib/pdf-pad';
@@ -420,7 +420,16 @@ export async function buildCatalogueSnapshot(db: Database, showId: string): Prom
       isNfc: entry.isNfc,
       jhHandlerName: entry.juniorHandlerDetails?.handlerName ?? undefined,
       withholdFromPublication: entry.withholdFromPublication,
-      classes: entry.entryClasses.map((ec) => ({
+      // sortEntryClassesByShowClassOrder — see class-labels.ts's doc comment
+      // — because Drizzle can't ORDER BY the joined showClass's sortOrder on
+      // this relation and Postgres gives no ordering guarantee without one.
+      // Every catalogue format reads this SAME array, so fixing it once
+      // here (rather than per-renderer) is what makes catalogue-absentees'
+      // unsorted `entry.classes.map(...).join(', ')` — and any other format
+      // that doesn't already do its own local re-sort — safe. Confirmed
+      // real-world impact: gsd-scotland-champ-2026's absentees pages
+      // swapped "9, C" / "C, 9" between two identical renders.
+      classes: sortEntryClassesByShowClassOrder(entry.entryClasses).map((ec) => ({
         name: ec.showClass?.classDefinition?.name,
         sex: ec.showClass?.sex,
         classNumber: ec.showClass?.classNumber,

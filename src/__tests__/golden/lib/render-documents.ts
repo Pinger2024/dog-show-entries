@@ -31,6 +31,7 @@ import {
   renderCatalogueFromSnapshot,
   CATALOGUE_FORMATS,
 } from '@/server/services/catalogue-snapshot';
+import type { ShowFixture } from '../../../../scripts/lib/export-show-fixture-core';
 
 export interface RenderedDocument {
   /** Stable, human-readable name — becomes the baseline file's basename and
@@ -38,6 +39,31 @@ export interface RenderedDocument {
   name: string;
   buffer: Buffer;
 }
+
+/** True when the fixture has at least one confirmed, non-deleted entry —
+ *  computed straight from the fixture JSON (not a DB query) so
+ *  documents.golden.test.ts's expectedDocumentNames() (collection-time,
+ *  no DB access) and renderAllDocuments() (render-time) can never disagree
+ *  about which show this is. */
+export function hasConfirmedEntries(fixture: ShowFixture): boolean {
+  return fixture.tables.entries.some((e) => {
+    const row = e as { status?: string; deletedAt?: unknown };
+    return row.status === 'confirmed' && row.deletedAt == null;
+  });
+}
+
+/**
+ * Report types that are either genuinely broken (ring-numbers: pdf-
+ * generation.ts's generateRingNumbersPdf throws "No catalogue numbers
+ * found" with zero confirmed entries — a real 500 that took down the whole
+ * winter-spectacular fixture run, 2026-09-02) or simply meaningless with no
+ * entries to report on (an Exhibitor List, a Pre-booked Catalogues list, an
+ * RKC SH01 compliance count, or a per-dog grading card, all with nothing to
+ * list). `class-breakdown` is deliberately NOT in this set — it lists the
+ * show's CLASSES, which exist independent of entries, so "0 entries per
+ * class" is still real, useful, comparable content.
+ */
+const ENTRY_DEPENDENT_REPORT_TYPES = new Set(['sh01', 'catalogue-order', 'catalogue-orders', 'grading-cards']);
 
 /**
  * RKC-style report types (Exhibitor List, Class Breakdown, Pre-booked
@@ -153,9 +179,33 @@ async function ensureOperators(
   };
 }
 
-export async function renderAllDocuments(showId: string): Promise<RenderedDocument[]> {
+/**
+ * The complete, ordered list of document names renderAllDocuments() will
+ * attempt for this fixture — the single source of truth
+ * documents.golden.test.ts's expectedDocumentNames() calls directly, so the
+ * two can never drift on which documents a given fixture gets (including
+ * the zero-confirmed-entries skips below).
+ */
+export function documentNamesForFixture(fixture: ShowFixture): string[] {
+  const entriesConfirmed = hasConfirmedEntries(fixture);
+  const showRow = fixture.tables.shows[0] as { showRuleset?: string | null } | undefined;
+  const reportNames = reportTypesForRuleset(showRow?.showRuleset ?? null)
+    .filter((t) => entriesConfirmed || !ENTRY_DEPENDENT_REPORT_TYPES.has(t))
+    .map((t) => `report-${t}`);
+
+  const names = [...CATALOGUE_FORMATS.map((f) => `catalogue-${f}`), 'schedule', 'judges-book'];
+  if (entriesConfirmed) {
+    names.push('prize-cards', 'ring-numbers-multi-up', 'ring-numbers-single', 'ring-board');
+  }
+  names.push(...reportNames);
+  if (fixture.tables.invoices.length > 0) names.push('invoice');
+  return names;
+}
+
+export async function renderAllDocuments(showId: string, fixture: ShowFixture): Promise<RenderedDocument[]> {
   const { secretary, admin, showRuleset } = await ensureOperators(showId);
   const out: RenderedDocument[] = [];
+  const entriesConfirmed = hasConfirmedEntries(fixture);
 
   // ── Catalogue — the DB-free seam, every format the ruleset supports ──────
   const snapshot = await buildCatalogueSnapshot(db, showId);
@@ -184,36 +234,58 @@ export async function renderAllDocuments(showId: string): Promise<RenderedDocume
     ),
   });
 
-  authAs(secretary);
-  out.push({
-    name: 'prize-cards',
-    buffer: await bufferFromPdfResponse(
-      await prizeCardsGET(req(`http://localhost/api/prize-cards/${showId}`), params({ showId })),
-      'prize-cards',
-    ),
-  });
-
-  for (const format of ['multi-up', 'single'] as const) {
+  // ── Entry-dependent documents — skipped entirely on a zero-confirmed-
+  //    entries show (a draft show that's published a schedule but hasn't
+  //    opened entries yet, say). See ENTRY_DEPENDENT_REPORT_TYPES's doc
+  //    comment for ring-numbers' real 500 and why prize-cards/ring-board
+  //    are skipped alongside it rather than trusted to degrade gracefully
+  //    on every real show shaped like this. ──────────────────────────────
+  if (entriesConfirmed) {
     authAs(secretary);
     out.push({
-      name: `ring-numbers-${format}`,
+      name: 'prize-cards',
       buffer: await bufferFromPdfResponse(
-        await ringNumbersGET(req(`http://localhost/api/ring-numbers/${showId}?format=${format}`), params({ showId })),
-        `ring-numbers-${format}`,
+        await prizeCardsGET(req(`http://localhost/api/prize-cards/${showId}`), params({ showId })),
+        'prize-cards',
       ),
     });
+
+    for (const format of ['multi-up', 'single'] as const) {
+      authAs(secretary);
+      out.push({
+        name: `ring-numbers-${format}`,
+        buffer: await bufferFromPdfResponse(
+          await ringNumbersGET(req(`http://localhost/api/ring-numbers/${showId}?format=${format}`), params({ showId })),
+          `ring-numbers-${format}`,
+        ),
+      });
+    }
+
+    authAs(secretary);
+    out.push({
+      name: 'ring-board',
+      buffer: await bufferFromPdfResponse(
+        await ringBoardGET(req(`http://localhost/api/ring-board/${showId}`), params({ showId })),
+        'ring-board',
+      ),
+    });
+  } else {
+    console.log(
+      `[golden] skipping prize-cards/ring-numbers/ring-board for show ${showId} — no confirmed entries ` +
+        `(explicit skip, not a failure — see ENTRY_DEPENDENT_REPORT_TYPES's doc comment in render-documents.ts)`,
+    );
   }
 
-  authAs(secretary);
-  out.push({
-    name: 'ring-board',
-    buffer: await bufferFromPdfResponse(
-      await ringBoardGET(req(`http://localhost/api/ring-board/${showId}`), params({ showId })),
-      'ring-board',
-    ),
-  });
-
-  const reportTypes = reportTypesForRuleset(showRuleset);
+  const reportTypes = reportTypesForRuleset(showRuleset).filter(
+    (t) => entriesConfirmed || !ENTRY_DEPENDENT_REPORT_TYPES.has(t),
+  );
+  const skippedReportTypes = reportTypesForRuleset(showRuleset).filter((t) => !reportTypes.includes(t));
+  if (skippedReportTypes.length > 0) {
+    console.log(
+      `[golden] skipping report(s) ${skippedReportTypes.map((t) => `"${t}"`).join(', ')} for show ${showId} — ` +
+        `no confirmed entries (explicit skip, not a failure)`,
+    );
+  }
   for (const type of reportTypes) {
     authAs(secretary);
     out.push({

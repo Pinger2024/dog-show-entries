@@ -35,9 +35,8 @@ vi.mock('@/lib/auth', () => ({
 
 import { auth } from '@/lib/auth';
 import { db } from '@/server/db';
-import { CATALOGUE_FORMATS } from '@/server/services/catalogue-snapshot';
 import { loadShowFixture } from '../helpers/show-fixture';
-import { renderAllDocuments, reportTypesForRuleset, type RenderedDocument } from './lib/render-documents';
+import { renderAllDocuments, documentNamesForFixture, type RenderedDocument } from './lib/render-documents';
 import {
   extractDocumentGeometry,
   diffGeometry,
@@ -62,29 +61,6 @@ function loadFixtureFiles(): { slug: string; fixture: ShowFixture }[] {
       const fixture = JSON.parse(readFileSync(path.join(FIXTURES_DIR, f), 'utf8')) as ShowFixture;
       return { slug: fixture.slug, fixture };
     });
-}
-
-/** Must match exactly what lib/render-documents.ts's renderAllDocuments()
- *  emits — computed statically (from the fixture JSON alone) so it.each can
- *  declare test cases at collection time, before any async rendering runs.
- *  The report list is ruleset-aware via the SAME reportTypesForRuleset()
- *  renderAllDocuments() itself calls, so a WUSV fixture's extra sv-results/
- *  grading-cards reports can never drift between "expected" and "rendered". */
-function expectedDocumentNames(fixture: ShowFixture): string[] {
-  const showRow = fixture.tables.shows[0] as { showRuleset?: string | null } | undefined;
-  const reportNames = reportTypesForRuleset(showRow?.showRuleset ?? null).map((t) => `report-${t}`);
-  const names = [
-    ...CATALOGUE_FORMATS.map((f) => `catalogue-${f}`),
-    'schedule',
-    'judges-book',
-    'prize-cards',
-    'ring-numbers-multi-up',
-    'ring-numbers-single',
-    'ring-board',
-    ...reportNames,
-  ];
-  if (fixture.tables.invoices.length > 0) names.push('invoice');
-  return names;
 }
 
 async function compareDocument(slug: string, docName: string, buffer: Buffer): Promise<void> {
@@ -155,13 +131,17 @@ describe.each(fixtures)('golden documents: $slug', ({ slug, fixture }) => {
     await cleanDb();
     const loaded = await loadShowFixture(db, fixture);
     try {
-      rendered = await renderAllDocuments(loaded.showId);
+      rendered = await renderAllDocuments(loaded.showId, fixture);
     } catch (err) {
       renderError = err instanceof Error ? err : new Error(String(err));
     }
   }, RENDER_TIMEOUT_MS);
 
-  const names = expectedDocumentNames(fixture);
+  // documentNamesForFixture is the SAME function renderAllDocuments() uses
+  // internally to decide what to skip (e.g. ring-numbers/prize-cards/
+  // ring-board/sh01 on a zero-confirmed-entries show) — so "expected" and
+  // "rendered" can never drift on which documents this fixture gets.
+  const names = documentNamesForFixture(fixture);
 
   it.each(names)('%s matches its baseline', async (docName) => {
     if (renderError) throw renderError;

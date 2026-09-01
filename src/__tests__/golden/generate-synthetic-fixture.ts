@@ -79,6 +79,7 @@ async function main() {
     makeSponsor,
     makeResult,
     makeStewardAssignment,
+    makeOrder,
   } = await import('../helpers/factories');
 
   await cleanDb();
@@ -240,9 +241,10 @@ async function main() {
 
   // ── Show donation + discount group + sundry item ────────────────────────
   await testDb.insert(schema.showDonations).values({ showId: show.id, donorName: 'Test Kind Donor', affix: 'Testkennel' });
-  await testDb
+  const [discountGroup] = await testDb
     .insert(schema.showDiscountGroups)
-    .values({ showId: show.id, label: 'Members', firstEntryFeePence: 400, displayOrder: 0 });
+    .values({ showId: show.id, label: 'Members', firstEntryFeePence: 400, displayOrder: 0 })
+    .returning();
   await testDb.insert(schema.sundryItems).values({ showId: show.id, name: 'Catalogue', priceInPence: 300, sortOrder: 0 });
 
   // ── Entries: 2 dogs per breed class (36), one exhibitor per dog ─────────
@@ -274,6 +276,19 @@ async function main() {
         .update(schema.entries)
         .set({ catalogueNumber: String(catalogueNumber) })
         .where(eq(schema.entries.id, entry.id));
+
+      // First entry gets a real order referencing the discount group above —
+      // regression coverage for the loader FK-ordering bug (orders must load
+      // AFTER showDiscountGroups; see show-fixture.ts's file header).
+      if (i === 0 && dogIndex === 0) {
+        const order = await makeOrder({
+          showId: show.id,
+          exhibitorId: exhibitor.id,
+          status: 'paid',
+          discountGroupId: discountGroup!.id,
+        });
+        await testDb.update(schema.entries).set({ orderId: order.id }).where(eq(schema.entries.id, entry.id));
+      }
 
       const isAbsent = i === allBreedClasses.length - 1 && dogIndex === 1; // last class, 2nd dog: absent
       const entryClass = await makeEntryClass({ entryId: entry.id, showClassId: cls.id, absent: isAbsent });
