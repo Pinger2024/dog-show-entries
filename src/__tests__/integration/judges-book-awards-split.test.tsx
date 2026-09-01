@@ -3,19 +3,18 @@ import { JudgesBook, ClassPage, AwardsPage, JudgesBookCover } from '@/components
 import type { JudgesBookClass, JudgesBookShowInfo } from '@/app/api/judges-book/[showId]/route';
 
 /**
- * Regression guard for the Judge's Book "Best Awards" split (Mandy
- * 2026-08-10, REVISED 2026-08-18 having now seen the rendered pages): "I
- * wouldnt edit the back awards page, just leave that with all the awards on
- * it as it is today, just need that extra page for the Male awards which
- * from the first image you sent and the last image looks fine." So this is
- * now a TWO-way split, not three:
+ * Regression guard for the Judge's Book Best Awards split (Mandy
+ * 2026-08-10, REVISED 2026-08-18, REVISED AGAIN 2026-08-31 per her head
+ * steward reviewing the book at that weekend's shows — Clyde + Scotland).
+ * It's now a THREE-way split:
  *   - a Dog Awards page, dog-side awards only, right after the last dog
- *     class page (kept, confirmed as-is).
- *   - NO separate Bitch Awards page.
- *   - the back page carries the FULL configured awards list, unfiltered,
- *     same as the single sign-off page did before the 08-10 split — the
- *     dog-side awards deliberately appear on BOTH the mid-book page and the
- *     back page.
+ *     class page (unchanged throughout).
+ *   - a Bitch Awards page, bitch-side awards only, right after the last
+ *     bitch class page — mirrors the dog page exactly, restored after
+ *     being dropped in the 08-18 revision.
+ *   - the back page carries ONLY the overall awards (Best of Breed, Best
+ *     Puppy in Show, etc., plus any unclassifiable bespoke trophy) — no
+ *     longer the full list, no more dog/bitch duplication.
  *
  * `buildJudgesBookPages` (lib/judges-book-pages.ts) owns the actual
  * ordering/classification logic and has its own exhaustive unit tests
@@ -112,8 +111,8 @@ const classes: JudgesBookClass[] = [
   cls({ classLabel: '4', className: 'Open', sex: 'bitch' }),
 ];
 
-describe('JudgesBook — Dog Awards mid-book, full Best Awards on the back page', () => {
-  it('renders cover, then dog classes, dog awards, bitch classes, special, JH, then the full back page — NO separate bitch awards page', () => {
+describe('JudgesBook — Dog Awards and Bitch Awards mid-book, overall-only back page', () => {
+  it('renders cover, then dog classes, dog awards, bitch classes, bitch awards, special, JH, then the overall-only back page', () => {
     const tree = JudgesBook({ show, classes });
     const pages = collectPageElements(tree);
 
@@ -133,6 +132,7 @@ describe('JudgesBook — Dog Awards mid-book, full Best Awards on the back page'
       'awards:dog',
       'class:3',
       'class:4',
+      'awards:bitch',
       'class:A',
       'class:JHA',
       'awards:overall',
@@ -150,17 +150,22 @@ describe('JudgesBook — Dog Awards mid-book, full Best Awards on the back page'
     ]);
   });
 
-  it('does not render a bitch awards page at all', () => {
+  it('the bitch awards page carries only the bitch-restricted awards', () => {
     const tree = JudgesBook({ show, classes });
     const pages = collectPageElements(tree);
-    expect(pages.some((p) => p.type === AwardsPage && p.props.section === 'bitch')).toBe(false);
+    const bitchAwardsPage = pages.find((p) => p.type === AwardsPage && p.props.section === 'bitch')!;
+    expect(bitchAwardsPage.props.awards).toEqual([
+      'Bitch Challenge Certificate',
+      'Reserve Bitch Challenge Certificate',
+      'Best Puppy Bitch',
+    ]);
   });
 
-  it('the back page carries the FULL configured awards list, unfiltered — including the dog-side awards already shown mid-book', () => {
+  it('the back page carries ONLY the overall awards — dog- and bitch-side awards no longer duplicated there', () => {
     const tree = JudgesBook({ show, classes });
     const pages = collectPageElements(tree);
     const backPage = pages.find((p) => p.type === AwardsPage && p.props.section === 'overall')!;
-    expect(backPage.props.awards).toEqual(CHAMPIONSHIP_AWARDS);
+    expect(backPage.props.awards).toEqual(['Best of Breed', 'Best Puppy in Show']);
   });
 
   it('a show with no configured Best Awards renders class pages only — no awards pages at all', () => {
@@ -169,5 +174,17 @@ describe('JudgesBook — Dog Awards mid-book, full Best Awards on the back page'
     const pages = collectPageElements(tree);
     expect(pages.some((p) => p.type === AwardsPage)).toBe(false);
     expect(pages.filter((p) => p.type === ClassPage)).toHaveLength(classes.length);
+  });
+
+  it('a show whose configured awards are entirely sexed renders no back page at all', () => {
+    const sexedOnlyShow: JudgesBookShowInfo = {
+      ...show,
+      bestAwards: ['Dog Challenge Certificate', 'Bitch Challenge Certificate'],
+    };
+    const tree = JudgesBook({ show: sexedOnlyShow, classes });
+    const pages = collectPageElements(tree);
+    expect(pages.some((p) => p.type === AwardsPage && p.props.section === 'overall')).toBe(false);
+    expect(pages.some((p) => p.type === AwardsPage && p.props.section === 'dog')).toBe(true);
+    expect(pages.some((p) => p.type === AwardsPage && p.props.section === 'bitch')).toBe(true);
   });
 });
