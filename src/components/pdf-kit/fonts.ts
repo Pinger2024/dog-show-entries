@@ -45,7 +45,20 @@
  */
 import path from 'path';
 import { Font } from '@react-pdf/renderer';
-import { HANKEN_GROTESK_FACES } from '@/lib/hanken-faces';
+// Side-effect: registers HankenGrotesk exactly once, exactly as every
+// existing consumer already does it (see catalogue-styles.ts,
+// schedule/shared/styles.ts, grading-cards-pdf.tsx) — `import
+// '@/lib/pdf-fonts'`. Runs the moment this module loads, which is safe even
+// for callers that only want `registerPdfKitFonts()`'s three families:
+// the react-pdf/pdfkit 4-family bug (see rule 2 below) is triggered by a
+// document actually USING a 4th family's glyphs ("even a single one-off
+// usage triggers it" — src/lib/pdf-fonts.ts), not by it merely being
+// registered and never referenced. `registerHankenGrotesk()` below is a
+// documented no-op call so pdf-kit component code can self-document intent
+// without needing to know registration already happened here — deliberately
+// NOT a dynamic `require()`/`import()`, which esbuild/tsx treat as making
+// the whole module CommonJS and mangles its named exports.
+import '@/lib/pdf-fonts';
 
 const fontsDir = path.join(process.cwd(), 'public', 'fonts');
 
@@ -113,22 +126,20 @@ export function registerPdfKitFonts(): void {
   Font.registerHyphenationCallback((word) => [word]);
 }
 
-let hankenRegistered = false;
-
 /**
- * Re-exports the existing HankenGrotesk registration (src/lib/pdf-fonts.ts)
- * UNCHANGED — same face manifest (src/lib/hanken-faces.ts), same file. Kept
- * as a separate opt-in call (not bundled into `registerPdfKitFonts`) because
- * it must never share a document with Times/Inter/LibreBaskerville — see
- * rule 2 above.
+ * Marks the intent to use HankenGrotesk — same face manifest
+ * (src/lib/hanken-faces.ts), same registration, UNCHANGED from
+ * src/lib/pdf-fonts.ts. The actual `Font.register` call already ran via
+ * this module's top-level `import '@/lib/pdf-fonts'` (see that import's
+ * comment for why it's a static side-effect import rather than a lazy
+ * `require`/`import()` inside this function) — this is a documented no-op
+ * so pdf-kit component code has an explicit call to make, self-documenting
+ * that the document uses Hanken Grotesk and therefore must NOT also use
+ * Times/Inter/LibreBaskerville content in the same document (rule 2 above).
  */
 export function registerHankenGrotesk(): void {
-  if (hankenRegistered) return;
-  hankenRegistered = true;
-  // Side-effect import: registers the family exactly as src/lib/pdf-fonts.ts
-  // always has. Importing it (rather than re-implementing the Font.register
-  // call here) guarantees this can never drift from the original.
-  require('@/lib/pdf-fonts');
+  // Intentionally empty — see the module-level `import '@/lib/pdf-fonts'`
+  // above and this function's doc comment.
 }
 
 /**
