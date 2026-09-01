@@ -37,7 +37,7 @@ import { auth } from '@/lib/auth';
 import { db } from '@/server/db';
 import { CATALOGUE_FORMATS } from '@/server/services/catalogue-snapshot';
 import { loadShowFixture } from '../helpers/show-fixture';
-import { renderAllDocuments, type RenderedDocument } from './lib/render-documents';
+import { renderAllDocuments, reportTypesForRuleset, type RenderedDocument } from './lib/render-documents';
 import {
   extractDocumentGeometry,
   diffGeometry,
@@ -66,8 +66,13 @@ function loadFixtureFiles(): { slug: string; fixture: ShowFixture }[] {
 
 /** Must match exactly what lib/render-documents.ts's renderAllDocuments()
  *  emits — computed statically (from the fixture JSON alone) so it.each can
- *  declare test cases at collection time, before any async rendering runs. */
+ *  declare test cases at collection time, before any async rendering runs.
+ *  The report list is ruleset-aware via the SAME reportTypesForRuleset()
+ *  renderAllDocuments() itself calls, so a WUSV fixture's extra sv-results/
+ *  grading-cards reports can never drift between "expected" and "rendered". */
 function expectedDocumentNames(fixture: ShowFixture): string[] {
+  const showRow = fixture.tables.shows[0] as { showRuleset?: string | null } | undefined;
+  const reportNames = reportTypesForRuleset(showRow?.showRuleset ?? null).map((t) => `report-${t}`);
   const names = [
     ...CATALOGUE_FORMATS.map((f) => `catalogue-${f}`),
     'schedule',
@@ -76,10 +81,7 @@ function expectedDocumentNames(fixture: ShowFixture): string[] {
     'ring-numbers-multi-up',
     'ring-numbers-single',
     'ring-board',
-    'report-catalogue-order',
-    'report-class-breakdown',
-    'report-catalogue-orders',
-    'report-sh01',
+    ...reportNames,
   ];
   if (fixture.tables.invoices.length > 0) names.push('invoice');
   return names;

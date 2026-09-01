@@ -39,6 +39,40 @@ export interface RenderedDocument {
   buffer: Buffer;
 }
 
+/**
+ * RKC-style report types (Exhibitor List, Class Breakdown, Pre-booked
+ * Catalogues, RKC SH01). Verified — not assumed — to return 200 regardless
+ * of showRuleset: probed every report type against a synthetic WUSV fixture
+ * (2026-09-01) and none of these four were rejected; grepping
+ * src/app/api/reports/[showId]/[type]/route.ts confirms it only checks
+ * `showRuleset !== 'wusv'` for the two SV-only types below. So this list
+ * applies to every show, RKC or WUSV.
+ */
+const GENERAL_REPORT_TYPES = ['catalogue-order', 'class-breakdown', 'catalogue-orders', 'sh01'] as const;
+
+/**
+ * SV/WUSV-only PDF reports. The reports route explicitly 400s both of
+ * these for a non-'wusv' show (two `show.showRuleset !== 'wusv'` checks in
+ * src/app/api/reports/[showId]/[type]/route.ts) — additive for WUSV shows
+ * only, never a substitute for GENERAL_REPORT_TYPES above.
+ *
+ * `sv-results-xlsx` is deliberately excluded: it's an .xlsx, not a PDF, and
+ * this golden test's page-geometry comparison (pdf-inspect.ts) only
+ * understands PDFs — widening it to compare spreadsheet content is a
+ * separate effort, out of scope here.
+ */
+const WUSV_REPORT_TYPES = ['sv-results', 'grading-cards'] as const;
+
+/**
+ * The full set of report `type` values to render for a show of the given
+ * ruleset — the single source of truth documents.golden.test.ts's
+ * expectedDocumentNames() and renderAllDocuments() below both call, so the
+ * two can never drift apart on which reports a ruleset gets.
+ */
+export function reportTypesForRuleset(showRuleset: string | null | undefined): readonly string[] {
+  return showRuleset === 'wusv' ? [...GENERAL_REPORT_TYPES, ...WUSV_REPORT_TYPES] : GENERAL_REPORT_TYPES;
+}
+
 interface SessionUser {
   id: string;
   email: string;
@@ -51,7 +85,13 @@ function authAs(user: SessionUser) {
   vi.mocked(auth).mockResolvedValue({ user: user as any } as any);
 }
 
-const params = (record: Record<string, string>) => ({ params: Promise.resolve(record) });
+// Generic (not `Record<string, string>`) so each call site's literal shape
+// — `{ showId }`, `{ showId, type }`, `{ invoiceId }` — flows through to
+// match the specific `params: Promise<{...}>` type each route handler
+// declares, rather than widening to a shape none of them accept.
+const params = <T extends Record<string, string>>(record: T): { params: Promise<T> } => ({
+  params: Promise.resolve(record),
+});
 const req = (url: string) => new NextRequest(url);
 
 /** A route that fails returns a JSON error body, not a PDF — treat that as
@@ -76,7 +116,9 @@ async function bufferFromPdfResponse(res: Response, docName: string): Promise<Bu
  * show needs a fresh, harness-only secretary membership and admin user
  * instead, created directly in the already-loaded test DB.
  */
-async function ensureOperators(showId: string): Promise<{ secretary: SessionUser; admin: SessionUser }> {
+async function ensureOperators(
+  showId: string,
+): Promise<{ secretary: SessionUser; admin: SessionUser; showRuleset: string | null }> {
   const show = await db.query.shows.findFirst({ where: eq(schema.shows.id, showId) });
   if (!show) throw new Error(`ensureOperators: show ${showId} not found`);
   if (!show.secretaryUserId) {
@@ -107,11 +149,12 @@ async function ensureOperators(showId: string): Promise<{ secretary: SessionUser
   return {
     secretary: { id: secretaryRow.id, email: secretaryRow.email, name: secretaryRow.name, role: 'secretary' },
     admin: { id: adminRow!.id, email: adminRow!.email, name: adminRow!.name, role: 'admin' },
+    showRuleset: show.showRuleset ?? null,
   };
 }
 
 export async function renderAllDocuments(showId: string): Promise<RenderedDocument[]> {
-  const { secretary, admin } = await ensureOperators(showId);
+  const { secretary, admin, showRuleset } = await ensureOperators(showId);
   const out: RenderedDocument[] = [];
 
   // ── Catalogue — the DB-free seam, every format the ruleset supports ──────
@@ -170,7 +213,7 @@ export async function renderAllDocuments(showId: string): Promise<RenderedDocume
     ),
   });
 
-  const reportTypes = ['catalogue-order', 'class-breakdown', 'catalogue-orders', 'sh01'] as const;
+  const reportTypes = reportTypesForRuleset(showRuleset);
   for (const type of reportTypes) {
     authAs(secretary);
     out.push({
