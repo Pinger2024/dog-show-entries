@@ -137,6 +137,34 @@ export async function extractDocumentGeometry(pdf: Buffer): Promise<DocumentGeom
   }
 }
 
+// ─── Compact on-disk baseline format ───────────────────────────────────────
+//
+// A baseline is committed to git, and a real show's rendered documents run
+// to hundreds of pages across dozens of words each — pretty-printed JSON
+// objects (`{"text":"...","x":1,"y":2,"w":3,"h":4}` per word, repeating
+// every key name) cost roughly 10x their information content. The on-disk
+// shape is JSON Lines instead: a header line (`{pageCount, fonts}`) followed
+// by one line per page, each page a plain array of `[text, x, y, w, h]`
+// tuples — no repeated key names, no pretty-print whitespace. The in-memory
+// DocumentGeometry shape (and everything that compares/diffs it) is
+// unchanged; only serialiseGeometry/parseGeometry touch the file format.
+
+export function serialiseGeometry(geo: DocumentGeometry): string {
+  const header = JSON.stringify({ pageCount: geo.pageCount, fonts: geo.fonts });
+  const pageLines = geo.pages.map((page) => JSON.stringify(page.map((w) => [w.text, w.x, w.y, w.w, w.h])));
+  return [header, ...pageLines].join('\n') + '\n';
+}
+
+export function parseGeometry(content: string): DocumentGeometry {
+  const lines = content.split('\n').filter((l) => l.length > 0);
+  const header = JSON.parse(lines[0] ?? '{}') as { pageCount: number; fonts: FontInfo[] };
+  const pages: WordBox[][] = lines.slice(1).map((line) => {
+    const tuples = JSON.parse(line) as [string, number, number, number, number][];
+    return tuples.map(([text, x, y, w, h]) => ({ text, x, y, w, h }));
+  });
+  return { pageCount: header.pageCount ?? pages.length, fonts: header.fonts ?? [], pages };
+}
+
 /** Render N pages of a PDF as low-res PNGs into `outDir`, named
  *  `page-01.png`, `page-02.png`, ... (1-indexed, matching the page numbers
  *  used elsewhere in this test's failure messages). */

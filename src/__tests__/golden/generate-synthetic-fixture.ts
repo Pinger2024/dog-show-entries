@@ -278,25 +278,17 @@ async function main() {
       const isAbsent = i === allBreedClasses.length - 1 && dogIndex === 1; // last class, 2nd dog: absent
       const entryClass = await makeEntryClass({ entryId: entry.id, showClassId: cls.id, absent: isAbsent });
 
-      // The Open Dog class's first dog gets a recorded result — exercises
-      // the marked catalogue with real placement data.
-      //
-      // Deliberately NOT also entering this dog into the Special Award
-      // Class here (a second entryClasses row on the same entry): the
-      // reports route's catalogue-order query
-      // (src/app/api/reports/[showId]/[type]/route.ts) fetches
-      // entries.entryClasses with no ORDER BY, and report-rows.ts's
-      // buildCatalogueOrderRows() joins that array into a plain
-      // "classLabel, classLabel" string — so a dog entered in >1 class
-      // makes that one report's per-page word order nondeterministic
-      // across otherwise-identical renders (Postgres doesn't guarantee row
-      // order without ORDER BY). Confirmed empirically: two consecutive
-      // golden runs produced "10, A" vs "A, 10" for the same dog. That's a
-      // real, pre-existing app bug (worth its own fix + test some day), but
-      // this fixture's job is a STABLE baseline — it must not itself flake,
-      // so it avoids the one shape that trips it rather than papering over
-      // it here.
+      // The Open Dog class's first dog also enters the Special Award Class
+      // (a second entryClasses row on the same entry) and gets a recorded
+      // result — exercises the marked catalogue + SAC judge carve-out, AND
+      // the multi-class-entry ordering fix (class-labels.ts's
+      // sortEntryClassesByShowClassOrder, applied in the reports route and
+      // report-queries.ts) with real data. This combination used to make
+      // the reports' per-dog "Classes" column nondeterministic across
+      // identical renders — see src/__tests__/integration/
+      // report-entry-classes-order.test.ts for the isolated repro/fix.
       if (cls.label === 'Open' && cls.sex === 'dog' && dogIndex === 0) {
+        await makeEntryClass({ entryId: entry.id, showClassId: sacShowClass.id });
         await makeResult({ entryClassId: entryClass.id, placement: 1, recordedBy: secretary.id });
       }
 

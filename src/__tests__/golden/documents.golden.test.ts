@@ -44,7 +44,8 @@ import {
   isGeometryDiffEmpty,
   summariseDiff,
   rasterisePages,
-  type DocumentGeometry,
+  serialiseGeometry,
+  parseGeometry,
 } from './lib/pdf-inspect';
 import type { ShowFixture } from '../../../scripts/lib/export-show-fixture-core';
 
@@ -86,18 +87,24 @@ function expectedDocumentNames(fixture: ShowFixture): string[] {
 
 async function compareDocument(slug: string, docName: string, buffer: Buffer): Promise<void> {
   const current = await extractDocumentGeometry(buffer);
-  const baselinePath = path.join(BASELINE_DIR, slug, `${docName}.json`);
+  // .jsonl (not .json): one JSON value per line — a header line
+  // ({pageCount, fonts}) then one [text,x,y,w,h] tuple array per page. See
+  // pdf-inspect.ts's serialiseGeometry/parseGeometry doc comment — this
+  // keeps a real show's baseline to a fraction of pretty-printed JSON's
+  // size (measured ~5x smaller on the synthetic fixture), which matters
+  // once several real-show fixtures are committed alongside it.
+  const baselinePath = path.join(BASELINE_DIR, slug, `${docName}.jsonl`);
 
   if (process.env.GOLDEN_UPDATE === '1') {
     mkdirSync(path.dirname(baselinePath), { recursive: true });
-    writeFileSync(baselinePath, JSON.stringify(current, null, 2) + '\n');
+    writeFileSync(baselinePath, serialiseGeometry(current));
     console.log(`[golden] updated baseline: ${slug}/${docName} (${current.pageCount} page(s))`);
     return;
   }
 
   if (!existsSync(baselinePath)) {
     mkdirSync(path.dirname(baselinePath), { recursive: true });
-    writeFileSync(baselinePath, JSON.stringify(current, null, 2) + '\n');
+    writeFileSync(baselinePath, serialiseGeometry(current));
     console.log(
       `[golden] NOTICE: no baseline existed for ${slug}/${docName} — wrote one now ` +
         `(${current.pageCount} page(s)). Review the new file into git.`,
@@ -105,7 +112,7 @@ async function compareDocument(slug: string, docName: string, buffer: Buffer): P
     return;
   }
 
-  const baseline = JSON.parse(readFileSync(baselinePath, 'utf8')) as DocumentGeometry;
+  const baseline = parseGeometry(readFileSync(baselinePath, 'utf8'));
   const diff = diffGeometry(baseline, current);
   if (isGeometryDiffEmpty(diff)) return;
 
