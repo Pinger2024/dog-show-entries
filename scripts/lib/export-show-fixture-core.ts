@@ -38,6 +38,101 @@
  *    landscape affects which page slot advert-orientation.ts uses) are
  *    captured; see placeholder-image.ts for how the loader turns that back
  *    into a real, renderable image with no network fetch.
+ *  - Live third-party identifiers (Stripe payment intent / subscription
+ *    ids): always dropped (null) — never needed for rendering, and a
+ *    committed fixture must never carry a live pointer into Stripe.
+ *  - `scheduleData` (jsonb, free-form — secretaries can add fields we've
+ *    never seen): swept by `pseudonymiseByKeyPattern`, a GENERIC walker
+ *    that pseudonymises every string under a key matching
+ *    /name|phone|email|address|postcode|affix/i anywhere in the structure,
+ *    THEN `showManager`/`firstAiders`/`welcomeNote` are handled explicitly
+ *    (their keys don't match that pattern). See `anonymiseScheduleData`'s
+ *    doc comment — this is a real-incident fix (2026-09-01):
+ *    `awardSponsors[].sponsorName` carried a real surname in 4 of the
+ *    first 8 real-show exports.
+ *
+ * Per-table audit (every table in ShowFixtureTables; "—" = no PII-bearing
+ * column, exported verbatim on purpose, not by omission):
+ *  - organisations: `publicOrgColumns` only (never bank details/Stripe
+ *    ids/plan — see `@/server/trpc/public-org-columns`); contactEmail/
+ *    contactPhone anonymised, logoUrl dropped.
+ *  - venues: address/postcode anonymised, imageUrl dropped. name kept
+ *    (public venue name).
+ *  - breedGroups, breeds, classDefinitions, showClasses, showBreeds,
+ *    judgeRoles, entryClasses, stewardAssignments, showDiscountGroups: —
+ *    (taxonomy/structure only, no free text or person fields).
+ *  - users: name/email/phone/address/postcode/kcAccountNo anonymised;
+ *    image, passwordHash, preferences, stripeCustomerId,
+ *    proStripeSubscriptionId all dropped. role/id/timestamps kept.
+ *  - shows: secretaryName/Email/Phone/Address anonymised, bannerImageUrl
+ *    dropped, scheduleData swept (see above). name/dates/fees/kcLicenceNo
+ *    kept (public show facts).
+ *  - dogs: registeredName, kcRegNumber, microchipNumber, sireName,
+ *    sireRegistrationNumber, damName, damRegistrationNumber, breederName,
+ *    breederCity, breederPostcode anonymised; bio dropped (a social-feed
+ *    field, never rendered in any exported document). colour, titles,
+ *    dates, breed kept.
+ *  - dogOwners: ownerName/ownerAddress/ownerEmail/ownerPhone anonymised.
+ *    ownerTitle (Mr/Mrs/etc) kept — a salutation, not identity.
+ *  - dogTitles: — (title enum + date + awardingBody, an institution name
+ *    like "The Kennel Club", not a person).
+ *  - dogSvProfile: breedSurveyor (a person's name) anonymised. Health/
+ *    qualification free-text escape hatches (hipScoreOther,
+ *    elbowScoreOther, otherQualifications, breedSurveyClass) kept —
+ *    medical/qualification descriptors, not identity fields, and not
+ *    something an exhibitor would type a stranger's name into.
+ *  - judges: name, kcNumber, contactEmail, contactPhone, kennelClubAffix,
+ *    kcJudgeId anonymised; bio pseudonymised whole-string (drives
+ *    catalogue judge-bio layout — see the policy note above); photoUrl
+ *    dropped. jepLevel kept.
+ *  - rings: — (show id + ring number + day/time).
+ *  - judgeAssignments: approvalToken dropped (a security token, not
+ *    identity, but no reason to keep it either); approvalNote
+ *    pseudonymised whole-string (free text a secretary/RKC typed, could
+ *    embed a name). sex/breed/role flags kept.
+ *  - orders: stripePaymentIntentId dropped; donationAffix (kennel/affix
+ *    name) and regionalMembershipNumber (same-format-fake, like every
+ *    other registration/membership number) anonymised. regionalMembership
+ *    (a scheme LABEL like "GSDL-BRG", not a person) and referralSource (a
+ *    channel name) kept, along with every fee/status/timestamp field.
+ *  - entries: atcNumber, svMembershipNumber anonymised (registration-number
+ *    treatment); paymentIntentId dropped. catalogueNumber, class flags,
+ *    fees kept.
+ *  - juniorHandlerDetails: handlerName, kcNumber anonymised.
+ *  - results: critiqueText pseudonymised whole-string (a judge's free-text
+ *    critique — same "preserve layout, don't leak content" treatment as a
+ *    judge bio or welcome note); winnerPhotoUrl/winnerPhotoStorageKey
+ *    dropped. placement/svGrade/specialAward kept.
+ *  - achievements: `details` (jsonb, only ever populated by the
+ *    self-reported "external result" flow, which always sets
+ *    `showId: null` — so no row THIS per-show export pulls in today
+ *    should ever carry one) is still swept defensively for `judgeName`/
+ *    `showName`, since it's untyped jsonb and a future write path could
+ *    add one to a same-show row. type/date/dogId kept.
+ *  - sundryItems, invoices: — (product names/prices; invoices' `lineItems`
+ *    is a computed settlement snapshot using fixed system labels like
+ *    "Entry fees"/"Card processing fee", never free text a person typed —
+ *    reviewed, no person-identifying field found).
+ *  - sponsors: contactName, contactEmail anonymised; `notes` (free-text
+ *    internal admin notes, never rendered in any document) dropped
+ *    entirely; logoUrl/logoStorageKey dropped. `name` (the sponsor's
+ *    business/organisation name) kept — treated as "club/organisation
+ *    information", the same category as an org or club name, not a
+ *    private individual (a sole-trader sponsor's business name is
+ *    functionally public marketing material, same as their logo would be).
+ *  - showSponsors: image fields dropped. customTitle, specialPrizes kept —
+ *    both echo the sponsor's own (kept-verbatim) business identity/prize
+ *    offer, not a private individual's.
+ *  - classSponsorships: sponsorName, sponsorAffix, trophyName, trophyDonor
+ *    anonymised (all commonly carry a person's or family's name — "the
+ *    Smith Memorial Trophy", "donated by Mrs Jones"); bannerImage* dropped.
+ *    prizeDescription kept (a prize's contents, e.g. "Rosette + £10", not
+ *    a person).
+ *  - catalogueAdverts: advertiserName anonymised; textContent
+ *    pseudonymised whole-string (ad copy can include a contact name/
+ *    number); imageUrl replaced with {width, height} — see the image
+ *    policy note above.
+ *  - showDonations: donorName, affix anonymised.
  */
 import { eq, inArray } from 'drizzle-orm';
 import type { Database } from '@/server/db';
@@ -117,28 +212,69 @@ function uniq<T>(values: Array<T | null | undefined>): T[] {
   return [...new Set(values.filter((v): v is T => v != null))];
 }
 
-/** Deep-clone-and-scrub the officials named inside `scheduleData` — the
- *  jsonb blob's own free-text fields (awardsDescription, additionalNotes,
- *  catering, etc.) are left alone; only the structured people fields and
- *  the welcome note (which usually ends in a real signature) are touched. */
+/**
+ * Generic PII safety net: recursively walk any JSON-shaped value and
+ * pseudonymise (length-preserving) every STRING whose OWN key matches
+ * /name|phone|email|address|postcode|affix/i, wherever it sits in the
+ * structure. Written for `scheduleData` specifically (a free-form jsonb
+ * blob where secretaries can and do add new fields we've never seen), but
+ * deliberately generic — not hand-listing `guarantors[].name`,
+ * `officers[].name`, `awardSponsors[].sponsorName`,
+ * `awardSponsors[].sponsorAffix`, `awardSponsors[].trophyName`,
+ * `sponsorships[].sponsorName`, etc. one at a time means a FUTURE
+ * schedule-data field shaped like one of these can never leak just because
+ * nobody remembered to add a case for it here.
+ *
+ * Real incident this exists for (2026-09-01): `awardSponsors[].sponsorName`
+ * carried a real surname in 4 of the first 8 real-show exports — the old
+ * version of this function only touched `sponsorAffix` on that array, not
+ * `sponsorName`, and had no fallback for the sibling `sponsorships` array
+ * at all.
+ *
+ * Does NOT catch `showManager` or `firstAiders` (neither key contains any
+ * of the pattern's words) or free-text fields whose key doesn't look like
+ * an identity field at all (`welcomeNote`) — those are handled explicitly
+ * in `anonymiseScheduleData` below.
+ */
+const SCHEDULE_DATA_PII_KEY = /name|phone|email|address|postcode|affix/i;
+
+function pseudonymiseByKeyPattern(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map((v) => pseudonymiseByKeyPattern(v));
+  }
+  if (value !== null && typeof value === 'object') {
+    const out: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
+      if (typeof v === 'string' && SCHEDULE_DATA_PII_KEY.test(k)) {
+        out[k] = pseudonymiseText(v, `schedule-data:${k}`);
+      } else {
+        out[k] = pseudonymiseByKeyPattern(v);
+      }
+    }
+    return out;
+  }
+  return value;
+}
+
+/** Scrub `scheduleData` before it's ever serialised. Order: the generic
+ *  key-pattern sweep runs first (catches guarantors/officers names+
+ *  addresses, award/class sponsor names+affixes+trophy names, sponsorship
+ *  sponsor names — see pseudonymiseByKeyPattern's doc comment), then the
+ *  fields the pattern can't reach (their key doesn't contain name/phone/
+ *  email/address/postcode/affix) get explicit handling: `firstAiders`
+ *  (person names), `showManager` (a person name), and `welcomeNote` (free
+ *  text that usually ends in a real signature — pseudonymised whole-string
+ *  rather than blanked so its LENGTH, and therefore catalogue line-wrap,
+ *  stays representative). Everything else — awardsDescription,
+ *  additionalNotes, catering, customStatements, futureShowDates, etc. — is
+ *  club-authored operational/policy prose with no key matching the pattern
+ *  and no person identity in it; left verbatim, per the file-level policy
+ *  comment's "club information" carve-out. */
 function anonymiseScheduleData(raw: unknown): unknown {
   if (!raw || typeof raw !== 'object') return raw;
+  const swept = pseudonymiseByKeyPattern(raw) as Record<string, unknown>;
   const data = raw as Record<string, unknown>;
-  const out: Record<string, unknown> = { ...data };
-  if (Array.isArray(data.guarantors)) {
-    out.guarantors = data.guarantors.map((g) =>
-      g && typeof g === 'object'
-        ? { ...g, name: anonPersonName((g as Row).name as string | undefined) }
-        : g,
-    );
-  }
-  if (Array.isArray(data.officers)) {
-    out.officers = data.officers.map((o) =>
-      o && typeof o === 'object'
-        ? { ...o, name: anonPersonName((o as Row).name as string | undefined) }
-        : o,
-    );
-  }
+  const out: Record<string, unknown> = { ...swept };
   if (Array.isArray(data.firstAiders)) {
     out.firstAiders = (data.firstAiders as unknown[]).map((n) =>
       typeof n === 'string' ? anonPersonName(n) : n,
@@ -150,13 +286,23 @@ function anonymiseScheduleData(raw: unknown): unknown {
   if (typeof data.welcomeNote === 'string') {
     out.welcomeNote = pseudonymiseText(data.welcomeNote, 'welcome-note');
   }
-  if (Array.isArray(data.awardSponsors)) {
-    out.awardSponsors = data.awardSponsors.map((s) =>
-      s && typeof s === 'object'
-        ? { ...s, sponsorAffix: anonAffix((s as Row).sponsorAffix as string | undefined) }
-        : s,
-    );
-  }
+  return out;
+}
+
+/** Self-reported "external result" achievements (dogs.ts's addExternalResult
+ *  tRPC procedure) store a free-text `judgeName`/`showName` inside this
+ *  jsonb blob rather than a proper FK — a real person's name an exhibitor
+ *  typed by hand. Every achievement THIS export pulls in is scoped to
+ *  `achievements.showId = <the show being exported>`, and external results
+ *  always have `showId: null` (so today's export can never actually reach
+ *  one) — but `details` is untyped jsonb, so a future same-show write path
+ *  could add a `judgeName` here too. Scrubbed defensively regardless. */
+function anonymiseAchievementDetails(raw: unknown): unknown {
+  if (!raw || typeof raw !== 'object') return raw;
+  const data = raw as Record<string, unknown>;
+  const out: Record<string, unknown> = { ...data };
+  if (typeof data.judgeName === 'string') out.judgeName = anonPersonName(data.judgeName);
+  if (typeof data.showName === 'string') out.showName = pseudonymiseText(data.showName, 'achievement-show-name');
   return out;
 }
 
@@ -296,6 +442,7 @@ export async function exportShowFixture(db: Database, showId: string, slug: stri
     passwordHash: null,
     preferences: null,
     stripeCustomerId: null,
+    proStripeSubscriptionId: null,
   }));
 
   const dogs: Row[] = dogsRaw.map((d) => ({
@@ -378,6 +525,10 @@ export async function exportShowFixture(db: Database, showId: string, slug: stri
     ...s,
     contactName: anonPersonName(s.contactName),
     contactEmail: anonEmail(s.contactEmail),
+    // Free-text internal admin notes about a sponsor contact — never
+    // rendered in any document, so nulling costs nothing and there's no
+    // reason to risk a real person's name/comment surviving in it.
+    notes: null,
     logoUrl: null,
     logoStorageKey: null,
   }));
@@ -430,6 +581,25 @@ export async function exportShowFixture(db: Database, showId: string, slug: stri
     textContent: typeof ad.textContent === 'string' ? pseudonymiseText(ad.textContent, 'advert-text') : ad.textContent,
   }));
 
+  const ordersAnon: Row[] = orders.map((o) => ({
+    ...o,
+    // Stripe payment intent id — never needed for rendering, and a live
+    // Stripe identifier has no place in a committed fixture.
+    stripePaymentIntentId: null,
+    // Kennel affix the donor wants thanked for in the catalogue — same
+    // "kennel/affix names" category as showDonations.affix/judges'
+    // kennelClubAffix.
+    donationAffix: anonAffix(o.donationAffix as string | undefined),
+    // A self-declared regional membership NUMBER — same-format-fake
+    // treatment as every other registration/membership number.
+    regionalMembershipNumber: anonRegNumber(o.regionalMembershipNumber as string | undefined),
+  }));
+
+  const achievementsAnon: Row[] = achievements.map((a) => ({
+    ...a,
+    details: anonymiseAchievementDetails(a.details),
+  }));
+
   return {
     version: 1,
     slug,
@@ -453,12 +623,12 @@ export async function exportShowFixture(db: Database, showId: string, slug: stri
       rings,
       judgeRoles,
       judgeAssignments: judgeAssignmentsAnon,
-      orders,
+      orders: ordersAnon,
       entries: entriesAnon,
       juniorHandlerDetails: juniorHandlerDetailsAnon,
       entryClasses,
       results: resultsAnon,
-      achievements,
+      achievements: achievementsAnon,
       stewardAssignments,
       sundryItems,
       sponsors: sponsorsAnon,
