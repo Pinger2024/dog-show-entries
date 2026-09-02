@@ -70,6 +70,23 @@ export function FitText({
     step,
   });
 
+  // Only constrain the rendered Text to maxWidth when shrinking actually
+  // happened (size < max). Text that already fits comfortably at `max`
+  // renders exactly as an unconstrained <Text> would — no `width` at all —
+  // rather than forcing every caller's box to literally maxWidth. Found to
+  // matter for a maxLines > 1 caller migrating a real document onto this
+  // kit: measure.ts's line-count estimate ran a couple of percent hot for
+  // one font/text combination, and setting an explicit `width` (even at
+  // the same nominal value the text was already measured against) wrapped
+  // a title that already fit on one line at `max` onto two — an
+  // unconstrained Text with the same font size did not. Skipping the width
+  // whenever no shrinking occurred sidesteps that class of discrepancy
+  // entirely for the (most common) case, rather than depending on
+  // measure.ts's accuracy being perfect for every family. See
+  // fit-text.test.tsx's "matches an unconstrained Text when it already
+  // fits at max" case.
+  const widthStyle = size < max ? { width: maxWidth } : {};
+
   return (
     <Text
       style={[
@@ -78,7 +95,7 @@ export function FitText({
           fontWeight: weight,
           fontStyle,
           fontSize: size,
-          width: maxWidth,
+          ...widthStyle,
         },
         style ?? {},
       ]}

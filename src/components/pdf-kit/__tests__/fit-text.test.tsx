@@ -7,7 +7,7 @@
  */
 import { describe, it, expect } from 'vitest';
 import React from 'react';
-import { Document, Page, renderToBuffer } from '@react-pdf/renderer';
+import { Document, Page, Text, renderToBuffer } from '@react-pdf/renderer';
 import { registerPdfKitFonts } from '../fonts';
 import { FitText } from '../fit-text';
 import { extractBBoxLayout } from './poppler';
@@ -70,6 +70,64 @@ describe('FitText — never exceeds its width', () => {
       20,
     );
     expect(pages).toHaveLength(1);
+  });
+
+  /**
+   * REGRESSION — found migrating the RKC catalogue cover onto this kit.
+   * `FitText` used to set `width: maxWidth` on the rendered Text
+   * unconditionally, even when the text already fit at `max` and needed
+   * no shrinking. For a `maxLines > 1` caller (a title allowed to wrap
+   * onto a couple of lines) that explicit width can wrap DIFFERENTLY than
+   * an unconstrained `<Text>` at the exact same font size — confirmed
+   * against a real render with a real club name ("Clyde Valley GSD Club
+   * Single Breed Open Show", HankenGrotesk 800): the unconstrained
+   * version fits on one line, the same text at the same size with an
+   * explicit `width: maxWidth` wrapped onto two. measure.ts's line-count
+   * estimate isn't perfectly exact for every family (its own accuracy
+   * test only covers Times/Inter/LibreBaskerville, not HankenGrotesk —
+   * see the pdf-kit README), so relying on the nominal maxWidth being
+   * exactly right at the wrap boundary is fragile; not constraining width
+   * at all when no shrinking happened sidesteps the whole class of
+   * discrepancy for the common case.
+   *
+   * PROVING THIS TEST FAILS (brief requirement — noted here, not left in
+   * the tree): reverted the fix (set `width: maxWidth` unconditionally
+   * again) — this test failed with `fitTextLines=2, plainLines=1`.
+   * Restored the fix before committing.
+   */
+  it('matches an unconstrained Text exactly when the text already fits at max (no width leak from a maxLines > 1 caller)', async () => {
+    const text = 'Clyde Valley GSD Club Single Breed Open Show';
+    const shared = { fontFamily: 'HankenGrotesk' as const, fontWeight: 800 as const, fontSize: 17 };
+    const maxWidth = 358;
+
+    const plainBuf = await renderToBuffer(
+      <Document>
+        <Page size="A5" style={{ padding: 30, fontFamily: 'Inter' }}>
+          <Text style={{ ...shared, textAlign: 'center' }}>{text}</Text>
+        </Page>
+      </Document>,
+    );
+    const fitTextBuf = await renderToBuffer(
+      <Document>
+        <Page size="A5" style={{ padding: 30, fontFamily: 'Inter' }}>
+          <FitText
+            family="HankenGrotesk"
+            weight={800}
+            maxWidth={maxWidth}
+            maxLines={3}
+            min={11}
+            max={17}
+            style={{ textAlign: 'center' }}
+          >
+            {text}
+          </FitText>
+        </Page>
+      </Document>,
+    );
+
+    const plainLines = (await extractBBoxLayout(plainBuf))[0].lines.length;
+    const fitTextLines = (await extractBBoxLayout(fitTextBuf))[0].lines.length;
+    expect(fitTextLines).toBe(plainLines);
   });
 
   it('respects a caller style override merged after the computed defaults', async () => {
