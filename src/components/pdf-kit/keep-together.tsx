@@ -51,8 +51,25 @@ export function KeepTogether({
     forceWrap === true ||
     (estimatedHeight != null && maxHeight != null && estimatedHeight > maxHeight);
 
+  // @react-pdf/layout reads this prop with `'minPresenceAhead' in props`
+  // (not `!= null`) to decide between the element's own value and its
+  // internal default of 0 — so `minPresenceAhead={undefined}` is NOT the
+  // same as omitting the prop entirely. The key's mere presence makes the
+  // engine read back `undefined`, which poisons its own arithmetic
+  // (`child.box.top + child.box.height + child.box.marginBottom +
+  // undefined` = NaN) and silently disables the page-break-before-a-
+  // trailing-margin protection every ordinary View gets for free. Spread
+  // the prop only when the caller actually supplied a value, so a plain
+  // `<KeepTogether>` with no `minPresenceAhead` behaves exactly like the
+  // `<View wrap={false}>` it replaces — confirmed by a real golden-render
+  // regression during the front-matter-on-kit migration (a `KeepTogether`
+  // swap silently reflowed page breaks on two real shows' catalogues
+  // before this fix; see keep-together.test.tsx's
+  // "identical to a plain wrap={false} View" case).
+  const minPresenceAheadProp = minPresenceAhead !== undefined ? { minPresenceAhead } : {};
+
   return (
-    <View style={style} wrap={tooTallForOnePage} minPresenceAhead={minPresenceAhead}>
+    <View style={style} wrap={tooTallForOnePage} {...minPresenceAheadProp}>
       {children}
     </View>
   );
