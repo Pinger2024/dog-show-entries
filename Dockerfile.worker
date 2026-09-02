@@ -20,8 +20,15 @@ RUN apt-get update \
 WORKDIR /app
 
 # Copy only the manifest first so `npm ci` is cached across rebuilds that
-# don't touch dependencies.
+# don't touch dependencies. `patches/` MUST come along with it: `npm ci`
+# below runs the root "postinstall": "patch-package" script, and
+# patch-package silently no-ops if patches/ isn't present yet — it does NOT
+# fail the build, so a missing patches/ here would leave this image's
+# fontkit unpatched with no error (see
+# research/evidence-fontkit-codepoints-2026-09-02/README.md for why fontkit
+# needs the patch at all).
 COPY package.json package-lock.json ./
+COPY patches ./patches
 
 # IMPORTANT: NODE_ENV must NOT be "production" yet. npm derives its default
 # --omit list from NODE_ENV, and "production" makes `npm ci` skip
