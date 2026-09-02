@@ -20,7 +20,7 @@
  * thing standing in for a real browser session; everything downstream is
  * real.
  */
-import { describe, it, expect, vi, beforeEach, beforeAll } from 'vitest';
+import { describe, it, expect, vi, beforeEach, beforeAll, afterAll } from 'vitest';
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 
@@ -53,18 +53,39 @@ const BASELINE_DIR = path.join(__dirname, 'baseline');
 const OUTPUT_DIR = path.join(process.cwd(), 'golden-output');
 const RENDER_TIMEOUT_MS = 180_000;
 
+/** Comma-separated fixture slugs (e.g.
+ *  `GOLDEN_FIXTURES=south-western-champ-2026,synthetic-rkc-champ`) to
+ *  render only a subset instead of all ~11 real+synthetic shows (121
+ *  documents) — every render spins up a full DB fixture load plus
+ *  react-pdf/poppler, so the full guard is heavy to run on every save
+ *  while iterating page-by-page. Unset (the default) renders everything,
+ *  which is what CI and any "does this commit still pass end to end"
+ *  check must use. */
+function fixtureFilter(): Set<string> | null {
+  const raw = process.env.GOLDEN_FIXTURES?.trim();
+  if (!raw) return null;
+  return new Set(raw.split(',').map((s) => s.trim()).filter(Boolean));
+}
+
 function loadFixtureFiles(): { slug: string; fixture: ShowFixture }[] {
   if (!existsSync(FIXTURES_DIR)) return [];
+  const filter = fixtureFilter();
   return readdirSync(FIXTURES_DIR)
     .filter((f) => f.endsWith('.json'))
     .map((f) => {
       const fixture = JSON.parse(readFileSync(path.join(FIXTURES_DIR, f), 'utf8')) as ShowFixture;
       return { slug: fixture.slug, fixture };
-    });
+    })
+    .filter(({ slug }) => !filter || filter.has(slug));
 }
 
 async function compareDocument(slug: string, docName: string, buffer: Buffer): Promise<void> {
   const current = await extractDocumentGeometry(buffer);
+  if (process.env.GOLDEN_KEEP_PDF === '1') {
+    const keepDir = path.join(OUTPUT_DIR, '_pdfs', slug);
+    mkdirSync(keepDir, { recursive: true });
+    writeFileSync(path.join(keepDir, `${docName}.pdf`), buffer);
+  }
   // .jsonl (not .json): one JSON value per line — a header line
   // ({pageCount, fonts}) then one [text,x,y,w,h] tuple array per page. See
   // pdf-inspect.ts's serialiseGeometry/parseGeometry doc comment — this
@@ -92,12 +113,30 @@ async function compareDocument(slug: string, docName: string, buffer: Buffer): P
 
   const baseline = parseGeometry(readFileSync(baselinePath, 'utf8'));
   const diff = diffGeometry(baseline, current);
-  if (isGeometryDiffEmpty(diff)) return;
+  if (isGeometryDiffEmpty(diff)) {
+    // Text-layer drift (see pdf-inspect.ts's isDroppedLetterMatch) never
+    // fails this test on its own, but is worth a discoverable record so
+    // occurrences can be counted across the whole guard even when nothing
+    // else about the document changed — write the same diff.md a real
+    // mismatch would, just without expect.fail().
+    if (diff.textDrift.length > 0) {
+      const outDir = path.join(OUTPUT_DIR, slug, docName);
+      mkdirSync(outDir, { recursive: true });
+      const summary = summariseDiff(`${slug} — ${docName}`, diff);
+      writeFileSync(path.join(outDir, 'diff.md'), summary + '\n');
+      console.log(
+        `[golden] text-layer drift only (test still passes): ${slug}/${docName} — ` +
+          `${diff.textDrift.length} occurrence(s), see ${path.relative(process.cwd(), outDir)}/diff.md`,
+      );
+    }
+    return;
+  }
 
   const outDir = path.join(OUTPUT_DIR, slug, docName);
   mkdirSync(outDir, { recursive: true });
   const changedPageNumbers = diff.changedPages.map((p) => p.page);
   rasterisePages(buffer, changedPageNumbers, outDir);
+  writeFileSync(path.join(outDir, 'current.pdf'), buffer);
   const summary = summariseDiff(`${slug} — ${docName}`, diff);
   writeFileSync(path.join(outDir, 'diff.md'), summary + '\n');
 
@@ -120,6 +159,23 @@ it('has at least one golden fixture to render', () => {
 
 beforeEach(() => {
   vi.mocked(auth).mockReset();
+});
+
+/**
+ * Frozen clock. Several documents print "generated <today>" (the reports)
+ * and would otherwise drift out of their baselines every midnight — the
+ * guard failed 29/164 on 2026-09-02 for exactly that reason. Only `Date`
+ * is faked so async DB work and child processes (poppler) are unaffected.
+ * Baselines were generated on 2026-09-01; keep this date unless you also
+ * regenerate every baseline.
+ */
+const GOLDEN_CLOCK = new Date('2026-09-01T12:00:00Z');
+beforeAll(() => {
+  vi.useFakeTimers({ toFake: ['Date'] });
+  vi.setSystemTime(GOLDEN_CLOCK);
+});
+afterAll(() => {
+  vi.useRealTimers();
 });
 
 describe.each(fixtures)('golden documents: $slug', ({ slug, fixture }) => {

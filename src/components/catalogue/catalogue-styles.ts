@@ -96,6 +96,21 @@ export const styles = StyleSheet.create({
     borderBottomColor: C.primary,
     paddingBottom: 6,
   },
+  // Every headerXxx style below sets lineHeight EXPLICITLY (matching
+  // styles.page's own 1.3) rather than relying on inheriting it from the
+  // page — confirmed root cause of a real overlap bug (coordinator's
+  // review, 2026-09-02): react-pdf can compute a Text's own reserved
+  // height using a tighter default than the intended inherited
+  // lineHeight when nothing is set directly on the Text itself, so the
+  // NEXT sibling can start before the previous one's glyphs are fully
+  // drawn — confirmed via an isolated repro (a bare sequence of Texts, no
+  // catalogue-specific logic involved) and already present, unnoticed, in
+  // real committed catalogue-absentees output (e.g. bagsd-champ-2026's
+  // baseline literally interleaves "Championship Show" characters into
+  // the show-name title's own line). headerTitle is the one most exposed
+  // to this (HankenGrotesk ExtraBold, the family/weight the bug was
+  // confirmed on) — see catalogue-header.tsx's FitText reserveHeight for
+  // the defensive backstop on top of this direct fix.
   headerOrganisation: {
     fontFamily: 'Inter',
     fontSize: 8,
@@ -103,6 +118,7 @@ export const styles = StyleSheet.create({
     letterSpacing: 0.8,
     textTransform: 'uppercase',
     marginBottom: 1,
+    lineHeight: 1.3,
     color: C.primary,
   },
   headerTitle: {
@@ -112,6 +128,7 @@ export const styles = StyleSheet.create({
     textTransform: 'uppercase',
     letterSpacing: 1.5,
     marginBottom: 2,
+    lineHeight: 1.3,
     color: C.textDark,
   },
   headerSubtitle: {
@@ -119,6 +136,7 @@ export const styles = StyleSheet.create({
     fontSize: 9,
     fontWeight: 'bold',
     marginBottom: 1,
+    lineHeight: 1.3,
     color: C.primary,
   },
   headerShowType: {
@@ -126,6 +144,7 @@ export const styles = StyleSheet.create({
     fontSize: 7,
     fontStyle: 'italic',
     marginBottom: 3,
+    lineHeight: 1.3,
     color: C.textMedium,
   },
   headerDetail: {
@@ -133,6 +152,7 @@ export const styles = StyleSheet.create({
     fontSize: 6.5,
     color: C.textLight,
     marginTop: 1,
+    lineHeight: 1.3,
   },
 
   // ── Section band (full-width green band like schedule) ────
@@ -420,6 +440,7 @@ export const styles = StyleSheet.create({
     textAlign: 'center',
     color: C.textDark,
     marginBottom: 5,
+    lineHeight: 1.3,
   },
   coverGoldRule: {
     width: '45%',

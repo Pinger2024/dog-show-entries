@@ -114,6 +114,34 @@ itself isolating its children) — not nested inside a styling wrapper you
 added "just to group things." This is exactly the kind of thing to check
 first if a migrated heading stops respecting its keep-with-next protection.
 
+## `undefined !== omitted` for `minPresenceAhead` (and `wrap`, `break`)
+
+`@react-pdf/layout` reads several of its pagination-affecting props with the
+`in` operator, not a nullish check — e.g. `getMinPresenceAhead = (node) =>
+'minPresenceAhead' in node.props ? node.props.minPresenceAhead : 0`. A prop
+key that is *present* with value `undefined` (which is exactly what
+`<View minPresenceAhead={someOptionalVar}>` produces when the caller didn't
+supply one) reads back as `undefined`, **not** the documented default of
+`0` — and `top + height + marginBottom + undefined` is `NaN`, which
+silently disables react-pdf's own protection against a trailing margin
+being cut off at a page boundary (`Math.min(NaN, x)` is always `NaN`, and
+every comparison against `NaN` is `false`). `KeepTogether` had exactly this
+bug until the front-matter-on-kit migration found it live: a bare
+`<KeepTogether>` (no `minPresenceAhead` passed) was meant to be identical
+to the `<View wrap={false}>` it replaces, but reflowed page breaks on two
+real shows' catalogues with no other code change. Fixed by only spreading
+the prop when the caller actually supplies a value — see
+`keep-together.tsx` and its "never leaks an undefined minPresenceAhead
+prop key" test. **Any new prop you forward optionally onto a `<View>`,
+`<Text>`, or `<Page>` — not just `minPresenceAhead` — needs the same
+treatment if react-pdf's layout engine reads it with `in` rather than
+`!= null`** (`break` is read the same way; `wrap`'s generic child-splitting
+reader `getWrap` is too, though `PageFrame`'s own `wrap` pass-through
+happens to be safe because top-level page pagination checks
+`page.props?.wrap === false` directly instead of going through that
+generic reader — verified by reading `node_modules/@react-pdf/layout`,
+not assumed).
+
 ## Testing pattern
 
 Every component here is tested against a REAL `renderToBuffer()` output,
