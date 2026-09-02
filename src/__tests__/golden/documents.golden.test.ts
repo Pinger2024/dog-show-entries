@@ -20,7 +20,7 @@
  * thing standing in for a real browser session; everything downstream is
  * real.
  */
-import { describe, it, expect, vi, beforeEach, beforeAll } from 'vitest';
+import { describe, it, expect, vi, beforeEach, beforeAll, afterAll } from 'vitest';
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 
@@ -81,6 +81,11 @@ function loadFixtureFiles(): { slug: string; fixture: ShowFixture }[] {
 
 async function compareDocument(slug: string, docName: string, buffer: Buffer): Promise<void> {
   const current = await extractDocumentGeometry(buffer);
+  if (process.env.GOLDEN_KEEP_PDF === '1') {
+    const keepDir = path.join(OUTPUT_DIR, '_pdfs', slug);
+    mkdirSync(keepDir, { recursive: true });
+    writeFileSync(path.join(keepDir, `${docName}.pdf`), buffer);
+  }
   // .jsonl (not .json): one JSON value per line — a header line
   // ({pageCount, fonts}) then one [text,x,y,w,h] tuple array per page. See
   // pdf-inspect.ts's serialiseGeometry/parseGeometry doc comment — this
@@ -114,6 +119,7 @@ async function compareDocument(slug: string, docName: string, buffer: Buffer): P
   mkdirSync(outDir, { recursive: true });
   const changedPageNumbers = diff.changedPages.map((p) => p.page);
   rasterisePages(buffer, changedPageNumbers, outDir);
+  writeFileSync(path.join(outDir, 'current.pdf'), buffer);
   const summary = summariseDiff(`${slug} — ${docName}`, diff);
   writeFileSync(path.join(outDir, 'diff.md'), summary + '\n');
 
@@ -136,6 +142,23 @@ it('has at least one golden fixture to render', () => {
 
 beforeEach(() => {
   vi.mocked(auth).mockReset();
+});
+
+/**
+ * Frozen clock. Several documents print "generated <today>" (the reports)
+ * and would otherwise drift out of their baselines every midnight — the
+ * guard failed 29/164 on 2026-09-02 for exactly that reason. Only `Date`
+ * is faked so async DB work and child processes (poppler) are unaffected.
+ * Baselines were generated on 2026-09-01; keep this date unless you also
+ * regenerate every baseline.
+ */
+const GOLDEN_CLOCK = new Date('2026-09-01T12:00:00Z');
+beforeAll(() => {
+  vi.useFakeTimers({ toFake: ['Date'] });
+  vi.setSystemTime(GOLDEN_CLOCK);
+});
+afterAll(() => {
+  vi.useRealTimers();
 });
 
 describe.each(fixtures)('golden documents: $slug', ({ slug, fixture }) => {
