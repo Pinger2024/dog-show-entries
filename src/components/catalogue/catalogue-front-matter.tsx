@@ -1006,11 +1006,14 @@ export function CoverPage({ show }: FrontMatterProps) {
             min={6}
             max={9}
             maxLines={2}
+            lineHeight={1.3}
+            reserveHeight
             style={{
               color: C.textOnPrimary,
               textTransform: 'uppercase',
               letterSpacing: COVER_ORG_NAME_LETTER_SPACING,
               textAlign: 'center',
+              lineHeight: 1.3,
             }}
           >
             {show.organisation}
@@ -1057,7 +1060,9 @@ export function CoverPage({ show }: FrontMatterProps) {
           maxLines={3}
           min={11}
           max={COVER_SHOW_NAME_MAX_SIZE}
-          style={{ textAlign: 'center', color: C.textDark, marginBottom: 5 }}
+          lineHeight={1.3}
+          reserveHeight
+          style={{ textAlign: 'center', color: C.textDark, marginBottom: 5, lineHeight: 1.3 }}
         >
           {show.name}
         </FitText>
@@ -1551,11 +1556,24 @@ export function JudgesListContent({ show }: FrontMatterProps) {
                   <Image src={photoUrl} style={{ width: 36, height: 36, borderRadius: 18 }} />
                 )}
                 <View style={{ flex: 1 }}>
-                  <Text style={{ fontFamily: 'Inter', fontSize: 10, fontWeight: 'bold', color: C.textDark }}>
+                  {/* Explicit lineHeight (matching styles.page's own 1.3)
+                      rather than relying on inheritance — same root cause
+                      as the CatalogueHeader title overlap (coordinator's
+                      review, 2026-09-02): a Text with no lineHeight of its
+                      own can get a react-pdf-computed box shorter than its
+                      actual rendered glyphs, so the KeepTogether wrapping
+                      this "Other Judges" list reserves less height than it
+                      needs and whatever renders immediately after it (the
+                      next page's own content, sharing the same document)
+                      starts before this name has finished drawing. Found
+                      via the "no two lines overlap" invariant on
+                      synthetic-stress-rkc-champ's catalogue-by-class,
+                      which shares this JudgesListContent component. */}
+                  <Text style={{ fontFamily: 'Inter', fontSize: 10, fontWeight: 'bold', lineHeight: 1.3, color: C.textDark }}>
                     {name}
                   </Text>
                   {roleLabel && (
-                    <Text style={{ fontFamily: 'Inter', fontSize: 8, fontStyle: 'italic', color: C.textMedium }}>
+                    <Text style={{ fontFamily: 'Inter', fontSize: 8, fontStyle: 'italic', lineHeight: 1.3, color: C.textMedium }}>
                       {roleLabel}
                     </Text>
                   )}

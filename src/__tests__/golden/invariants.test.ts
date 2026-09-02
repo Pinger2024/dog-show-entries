@@ -77,6 +77,8 @@ const RENDER_TIMEOUT_MS = 180_000;
 // this large. Same extraction shape, just with a generous maxBuffer.
 interface Line {
   text: string;
+  xMin: number;
+  xMax: number;
   yMin: number;
   yMax: number;
 }
@@ -110,12 +112,18 @@ function extractPages(buf: Buffer): Page[] {
     let lineMatch: RegExpExecArray | null;
     LINE_RE.lastIndex = 0;
     while ((lineMatch = LINE_RE.exec(pageBody))) {
-      const [, , yMinStr, , yMaxStr, lineBody] = lineMatch;
+      const [xMinStr, yMinStr, xMaxStr, yMaxStr, lineBody] = lineMatch.slice(1);
       const words: string[] = [];
       let wordMatch: RegExpExecArray | null;
       WORD_RE.lastIndex = 0;
-      while ((wordMatch = WORD_RE.exec(lineBody))) words.push(wordMatch[1]!);
-      lines.push({ text: words.join(' ').trim(), yMin: parseFloat(yMinStr), yMax: parseFloat(yMaxStr) });
+      while ((wordMatch = WORD_RE.exec(lineBody!))) words.push(wordMatch[1]!);
+      lines.push({
+        text: words.join(' ').trim(),
+        xMin: parseFloat(xMinStr!),
+        xMax: parseFloat(xMaxStr!),
+        yMin: parseFloat(yMinStr!),
+        yMax: parseFloat(yMaxStr!),
+      });
     }
     pages.push({ height: parseFloat(heightStr), lines });
   }
@@ -265,6 +273,48 @@ describe('Phase B proof — front-matter-on-kit invariants', () => {
             const lastLine = squash(page.lines[page.lines.length - 1]!.text);
             if (KNOWN_HEADINGS.some((h) => lastLine === h || lastLine.startsWith(h))) {
               offenders.push(`page ${i + 1}: last line is a heading ("${page.lines[page.lines.length - 1]!.text.trim()}")`);
+            }
+          }
+          expect(offenders).toEqual([]);
+        });
+
+        it("no two lines' bboxes on a page overlap vertically by more than 1pt", () => {
+          // A real, previously-shipping bug (coordinator's review,
+          // 2026-09-02): a Text with no explicit lineHeight of its own
+          // (relying on inheriting styles.page's 1.3) can get a
+          // react-pdf-computed box shorter than its actual rendered
+          // glyphs, so the very next sibling starts drawing before the
+          // previous one's text has finished. Confirmed in TWO places
+          // migrated by this branch: CatalogueHeader's title
+          // (catalogue-header.tsx/catalogue-styles.ts) and the "Other
+          // Judges" name inside JudgesListContent's KeepTogether block
+          // (catalogue-front-matter.tsx) — the latter found BY this very
+          // invariant on synthetic-stress-rkc-champ's catalogue-by-class
+          // page 3 (JudgesListContent is shared front matter, rendered
+          // into catalogue-by-class same as catalogue-standard): the
+          // judge name's under-reserved height let the KeepTogether
+          // block's neighbour (the class listing's first ClassSectionBand)
+          // start 2.3pt into the name's own glyphs. Both fixed by setting
+          // lineHeight explicitly. Checked as true 2D bbox overlap (X
+          // range AND Y range both intersecting), not Y-range alone: this
+          // suite's documents legitimately have side-by-side columns (the
+          // challenge register, the 2-column donations grid) sharing the
+          // same Y range at different X positions, which is normal
+          // layout, not a collision.
+          const pages = getPages();
+          const offenders: string[] = [];
+          for (const [i, page] of pages.entries()) {
+            const sorted = [...page.lines].sort((a, b) => a.yMin - b.yMin);
+            for (let j = 1; j < sorted.length; j++) {
+              const a = sorted[j - 1]!;
+              const b = sorted[j]!;
+              const verticalOverlap = a.yMax - b.yMin;
+              if (verticalOverlap <= 1) continue; // touching/adjacent is fine
+              const horizontalOverlap = Math.min(a.xMax, b.xMax) - Math.max(a.xMin, b.xMin);
+              if (horizontalOverlap <= 0) continue; // different columns, not a collision
+              offenders.push(
+                `page ${i + 1}: "${a.text}" (y ${a.yMin}-${a.yMax}) overlaps "${b.text}" (y ${b.yMin}-${b.yMax}) by ${verticalOverlap.toFixed(1)}pt`,
+              );
             }
           }
           expect(offenders).toEqual([]);

@@ -7,7 +7,7 @@
  */
 import { describe, it, expect } from 'vitest';
 import React from 'react';
-import { Document, Page, Text, renderToBuffer } from '@react-pdf/renderer';
+import { Document, Page, View, Text, renderToBuffer } from '@react-pdf/renderer';
 import { registerPdfKitFonts } from '../fonts';
 import { FitText } from '../fit-text';
 import { extractBBoxLayout } from './poppler';
@@ -141,5 +141,77 @@ describe('FitText — never exceeds its width', () => {
       </Document>,
     );
     expect(buf.length).toBeGreaterThan(0); // smoke check: style merge doesn't throw
+  });
+});
+
+/**
+ * REGRESSION — a real, previously-shipping visual bug found by the
+ * coordinator's review (2026-09-02): CatalogueHeader's title Text (no
+ * EXPLICIT `lineHeight` of its own, relying on inheriting it from the
+ * page) got a react-pdf-computed box shorter than its actual rendered
+ * glyphs for the HankenGrotesk ExtraBold family — the very next sibling
+ * (the show-type subtitle) then started drawing before the title's
+ * glyphs finished. Already present, unnoticed, in real committed
+ * catalogue-absentees output before this fix (bagsd-champ-2026's
+ * baseline literally interleaves "Championship Show" characters into the
+ * show-name title's own line — see catalogue-header.test.tsx for the
+ * full end-to-end reproduction against the real component).
+ *
+ * The DIRECT fix for THAT bug is setting `lineHeight` explicitly on the
+ * caller's own style (catalogue-styles.ts's headerTitle/coverShowName) —
+ * this kit can't force that from outside. `reserveHeight` is the
+ * defensive backstop this test covers: it makes FitText's reserved space
+ * authoritative by measuring independently via estimateTextHeight,
+ * rather than trusting whatever height react-pdf's own layout would
+ * otherwise assign the rendered Text — proven here with an exaggerated
+ * `lineHeight` deliberately larger than react-pdf's own default, which is
+ * a reliable, deterministic way to make "did the reservation actually
+ * apply" observable without depending on the specific font-metric
+ * quirk that triggered the real bug (attempts to reproduce THAT exact
+ * quirk in a minimal isolated case here were inconsistent — the
+ * catalogue-header.test.tsx above is the faithful reproduction).
+ *
+ * PROVING THIS TEST FAILS (brief requirement — noted here, not left in
+ * the tree): with `reserveHeight` omitted, the sibling started right
+ * after react-pdf's own (un-reserved) box — well before the exaggerated
+ * lineHeight's worth of space. Restored (reserveHeight added back)
+ * before committing.
+ */
+describe('FitText — reserveHeight', () => {
+  it('reserves the full estimateTextHeight-computed space (an exaggerated lineHeight), not whatever react-pdf would otherwise assign', async () => {
+    const commonProps = {
+      family: 'HankenGrotesk' as const,
+      weight: 800 as const,
+      maxWidth: 300,
+      min: 13,
+      max: 13, // fixed size — isolates the lineHeight effect from any shrink decision
+      lineHeight: 4, // deliberately exaggerated vs. any sane default
+    };
+
+    async function render(reserveHeight: boolean) {
+      const buf = await renderToBuffer(
+        <Document>
+          <Page size="A5" style={{ fontFamily: 'Inter', padding: 20 }}>
+            <View>
+              <FitText {...commonProps} reserveHeight={reserveHeight}>
+                Title
+              </FitText>
+              <Text style={{ fontFamily: 'Inter', fontSize: 9 }}>Subtitle</Text>
+            </View>
+          </Page>
+        </Document>,
+      );
+      const pages = await extractBBoxLayout(buf);
+      const [title, subtitle] = pages[0].lines;
+      return subtitle!.yMin - title!.yMax; // gap between the two lines
+    }
+
+    const gapWithout = await render(false);
+    const gapWithReserve = await render(true);
+
+    // reserveHeight must open up a materially bigger gap — at least most
+    // of a 13pt-at-lineHeight-4 box (52pt) beyond whatever react-pdf's
+    // own (un-reserved) layout already produced.
+    expect(gapWithReserve).toBeGreaterThan(gapWithout + 30);
   });
 });

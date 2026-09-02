@@ -10,9 +10,9 @@
  * always renders once, already at its final size.
  */
 import React from 'react';
-import { Text } from '@react-pdf/renderer';
+import { Text, View } from '@react-pdf/renderer';
 import type { Style } from '@react-pdf/types';
-import { fitFontSize, type FontWeight, type FontStyle } from './measure';
+import { fitFontSize, estimateTextHeight, type FontWeight, type FontStyle } from './measure';
 import type { PdfKitAnyFamily } from './fonts';
 
 export interface FitTextProps {
@@ -38,6 +38,30 @@ export interface FitTextProps {
    *  `fontSize` set by this component can be overridden by including them
    *  here (applied after the computed defaults). */
   style?: Style;
+  /** When true, wraps the rendered Text in a View given an explicit
+   *  `minHeight` computed via measure.ts's `estimateTextHeight` (the same
+   *  fontkit measurement this component's own sizing decision already
+   *  relies on) rather than trusting react-pdf's own layout to reserve
+   *  enough space for whatever this text renders at.
+   *
+   *  Found necessary for a real bug (coordinator's review, 2026-09-02): a
+   *  Text with no EXPLICIT `lineHeight` of its own (relying on
+   *  inheritance from an ancestor) can get a react-pdf-computed box
+   *  shorter than its actual rendered glyphs for some family/weight
+   *  combinations (confirmed for HankenGrotesk ExtraBold via an isolated
+   *  repro with no FitText involved at all) — the very next sibling then
+   *  starts before this one's text has finished drawing, a real visual
+   *  overlap. Setting `lineHeight` explicitly on the CALLER's own style
+   *  (not something FitText can force from here) is the direct fix; this
+   *  flag is the defensive backstop for whatever combination hasn't been
+   *  found yet — it makes the reserved space authoritative regardless of
+   *  what react-pdf's own Text-height computation does for this family/
+   *  weight/lineHeight, at the cost of a wrapping View (see
+   *  render-with-page-budget usage elsewhere in this kit for why an
+   *  extra wrapper is fine here: FitText is never used with
+   *  minPresenceAhead — see the file-level limitation in flow.tsx/
+   *  section-title.tsx for the one case where a wrapper IS a problem). */
+  reserveHeight?: boolean;
 }
 
 /**
@@ -57,6 +81,7 @@ export function FitText({
   max,
   step,
   style,
+  reserveHeight,
 }: FitTextProps) {
   const size = fitFontSize(children, {
     maxWidth,
@@ -87,7 +112,7 @@ export function FitText({
   // fits at max" case.
   const widthStyle = size < max ? { width: maxWidth } : {};
 
-  return (
+  const textElement = (
     <Text
       style={[
         {
@@ -103,4 +128,22 @@ export function FitText({
       {children}
     </Text>
   );
+
+  if (!reserveHeight) return textElement;
+
+  // Measured against the SAME width the text actually renders at (the
+  // full maxWidth when shrinking happened; otherwise its natural
+  // intrinsic width, which estimateTextHeight can't know — maxWidth is
+  // still a safe over-estimate there, since a shorter intrinsic line
+  // wraps to at most as many lines as the full-width estimate).
+  const reservedHeight = estimateTextHeight(children, {
+    width: maxWidth,
+    family,
+    weight,
+    style: fontStyle,
+    size,
+    lineHeight,
+  });
+
+  return <View style={{ minHeight: reservedHeight }}>{textElement}</View>;
 }
