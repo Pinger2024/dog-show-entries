@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import { View, Text, Image } from '@react-pdf/renderer';
-import { PageFrame, Folio, KeepTogether } from '@/components/pdf-kit';
+import { PageFrame, Folio, KeepTogether, FitText, BalancedColumns, Flow } from '@/components/pdf-kit';
+import { estimateTextHeight } from '@/components/pdf-kit/measure';
 import { styles, C } from './catalogue-styles';
 import type { CatalogueEntry, CatalogueShowInfo, ClassSponsorshipInfo } from './catalogue-types';
 import { ownerHeading, uppercaseName, formatOwnerKC } from './catalogue-utils';
@@ -10,6 +11,28 @@ import { ss, SV, SV_FONTS } from '@/components/schedule/shared/sv-styles';
 import { Numero } from '@/components/schedule/shared/numero';
 import { getRkcScheduleProfile } from '@/lib/rkc-schedule-profile';
 import { RKC_JUDGES_WELFARE_STATEMENT, isRkcJudgesWelfareStatement } from '@/lib/rkc-statements';
+
+// A5 portrait is 148mm x 210mm = ~419.53pt x ~595.28pt. These widths are the
+// usable content width inside CoverPage's coverTopBand (paddingHorizontal:
+// 20 each side) and coverContent (paddingHorizontal: 30 each side) — see
+// catalogue-styles.ts. Rounded down a couple of points for safety margin
+// rather than the exact float, since FitText's floor (`min`) means a value
+// that's a hair too generous only costs a slightly larger font, never an
+// overflow.
+const COVER_TOP_BAND_MAX_WIDTH = 378;
+const COVER_CONTENT_MAX_WIDTH = 358;
+// coverOrgName's letterSpacing (points added after each character) —
+// matches styles.coverOrgName's original value. measure.ts's fitFontSize
+// doesn't model letter-spacing tracking, so a name right at the width
+// boundary may fit its measured (untracked) width but overflow once
+// tracking is added — an accepted, minor imprecision here since FitText
+// only widens the rendered box when it actually shrinks the text (see
+// fit-text.tsx), so the worst case is the same graceful natural wrap the
+// original unconstrained Text already had, never new clipping.
+const COVER_ORG_NAME_LETTER_SPACING = 3;
+// styles.coverShowName's original fixed size — the ceiling FitText starts
+// from for the cover title.
+const COVER_SHOW_NAME_MAX_SIZE = 17;
 
 const SHOW_TYPE_LABELS: Record<string, string> = {
   championship: 'Championship Show',
@@ -843,10 +866,32 @@ export function CoverPage({ show }: FrontMatterProps) {
 
   return (
     <PageFrame size="A5" style={styles.coverPage}>
-      {/* Green top band with organisation name */}
+      {/* Green top band with organisation name. A very long club name
+          shrinks (down to a readable floor) rather than wrapping at full
+          size, which used to be one of the contributors to a long-name +
+          long-officials-list cover overflowing onto an unplanned page 2
+          (South Western's cover-overflow report). FitText only
+          constrains the rendered width when it actually shrinks the text
+          (see fit-text.tsx) — a short/normal org name renders exactly as
+          the plain, unconstrained `<Text>` this replaces always did. */}
       {show.organisation && (
         <View style={styles.coverTopBand}>
-          <Text style={styles.coverOrgName}>{show.organisation}</Text>
+          <FitText
+            maxWidth={COVER_TOP_BAND_MAX_WIDTH}
+            family="Inter"
+            weight="bold"
+            min={6}
+            max={9}
+            maxLines={2}
+            style={{
+              color: C.textOnPrimary,
+              textTransform: 'uppercase',
+              letterSpacing: COVER_ORG_NAME_LETTER_SPACING,
+              textAlign: 'center',
+            }}
+          >
+            {show.organisation}
+          </FitText>
         </View>
       )}
       {!show.organisation && <View style={{ height: 12 }} />}
@@ -872,8 +917,27 @@ export function CoverPage({ show }: FrontMatterProps) {
           );
         })()}
 
-        {/* Show name — LibreBaskerville */}
-        <Text style={styles.coverShowName}>{show.name}</Text>
+        {/* Show name — shrinks (down to a readable floor) rather than
+            wrapping a long name across several lines at full size, which
+            used to be one of the contributors to a long-name + long-
+            officials-list cover overflowing onto an unplanned page 2.
+            maxLines is 3, not 2: the marked catalogue passes
+            `${show.name}\nMARKED CATALOGUE` (catalogue-marked.tsx) — an
+            explicit forced line break most callers don't use — so the
+            budget has to cover a 2-line name PLUS that forced third line,
+            or a long name alone would get needlessly shrunk trying to
+            satisfy an unreachable 2-line cap. */}
+        <FitText
+          maxWidth={COVER_CONTENT_MAX_WIDTH}
+          family="HankenGrotesk"
+          weight={800}
+          maxLines={3}
+          min={11}
+          max={COVER_SHOW_NAME_MAX_SIZE}
+          style={{ textAlign: 'center', color: C.textDark, marginBottom: 5 }}
+        >
+          {show.name}
+        </FitText>
 
         {/* Show type badge */}
         {showTypeLabel && (
