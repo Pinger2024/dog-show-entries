@@ -53,14 +53,30 @@ const BASELINE_DIR = path.join(__dirname, 'baseline');
 const OUTPUT_DIR = path.join(process.cwd(), 'golden-output');
 const RENDER_TIMEOUT_MS = 180_000;
 
+/** Comma-separated fixture slugs (e.g.
+ *  `GOLDEN_FIXTURES=south-western-champ-2026,synthetic-rkc-champ`) to
+ *  render only a subset instead of all ~11 real+synthetic shows (121
+ *  documents) — every render spins up a full DB fixture load plus
+ *  react-pdf/poppler, so the full guard is heavy to run on every save
+ *  while iterating page-by-page. Unset (the default) renders everything,
+ *  which is what CI and any "does this commit still pass end to end"
+ *  check must use. */
+function fixtureFilter(): Set<string> | null {
+  const raw = process.env.GOLDEN_FIXTURES?.trim();
+  if (!raw) return null;
+  return new Set(raw.split(',').map((s) => s.trim()).filter(Boolean));
+}
+
 function loadFixtureFiles(): { slug: string; fixture: ShowFixture }[] {
   if (!existsSync(FIXTURES_DIR)) return [];
+  const filter = fixtureFilter();
   return readdirSync(FIXTURES_DIR)
     .filter((f) => f.endsWith('.json'))
     .map((f) => {
       const fixture = JSON.parse(readFileSync(path.join(FIXTURES_DIR, f), 'utf8')) as ShowFixture;
       return { slug: fixture.slug, fixture };
-    });
+    })
+    .filter(({ slug }) => !filter || filter.has(slug));
 }
 
 async function compareDocument(slug: string, docName: string, buffer: Buffer): Promise<void> {
