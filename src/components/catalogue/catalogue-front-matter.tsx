@@ -33,6 +33,13 @@ const COVER_ORG_NAME_LETTER_SPACING = 3;
 // styles.coverShowName's original fixed size — the ceiling FitText starts
 // from for the cover title.
 const COVER_SHOW_NAME_MAX_SIZE = 17;
+// TrophiesPage's donations grid: styles.frontMatterPage is A5 with
+// paddingHorizontal 22 each side (419.53pt page - 44 = 375.53pt content
+// width), split into BalancedColumns' 2 columns with its default 12pt
+// columnGap — (375.53 - 12) / 2. Used only to estimate each donation's
+// height for balancing; the column View itself sizes from flex:1, not
+// this constant.
+const DONATIONS_COLUMN_WIDTH = 181.75;
 
 const SHOW_TYPE_LABELS: Record<string, string> = {
   championship: 'Championship Show',
@@ -95,21 +102,36 @@ function SectionBand({ title }: { title: string }) {
 }
 
 export function JurisdictionBlock() {
-  // NOT wrap={false}: on shows with a long Best Awards list, forcing
-  // this block atomic orphaned the whole thing onto its own near-empty
-  // page. Letting it wrap means the band + paragraph flow below the
-  // Best Awards content and split at the natural page boundary rather
-  // than wholesale. The band uses minPresenceAhead via its own View
-  // so it doesn't end up alone at the bottom.
+  // NOT wrap={false} on the whole thing: on shows with a long Best Awards
+  // list, forcing this block atomic orphaned the whole thing onto its own
+  // near-empty page. Letting it wrap means the band + paragraph flow below
+  // the Best Awards content and split at the natural page boundary rather
+  // than wholesale.
+  //
+  // Built on Flow rather than the old minPresenceAhead-bearing View, which
+  // was ALSO wrapped in an outer `<View style={{width:'100%',marginTop:14}}>`
+  // — exactly the "nested inside even one extra wrapping View" case
+  // pdf-kit's README documents as silently defeating minPresenceAhead at
+  // any magnitude, so the band's orphan protection was very likely already
+  // a no-op. Flow renders no wrapper of its own, so as long as this stays a
+  // direct child of the page's flow (true today — see ShowParticularsContent,
+  // its only caller) the protection actually holds.
   return (
-    <View style={{ width: '100%', marginTop: 14 }}>
-      <View minPresenceAhead={60}>
-        <SectionBand title="Jurisdiction and Responsibilities" />
-      </View>
-      <Text style={{ fontFamily: 'Times', fontStyle: 'italic', fontSize: 8, lineHeight: 1.35, color: C.textMedium, paddingHorizontal: 8 }}>
-        The Officers and Committee members of the society holding the licence are deemed responsible for organising and conducting the show safely and in accordance with the Rules and Regulations of the Royal Kennel Club and agree to abide by and adopt any decision of the Board or any authority to whom the Board may delegate its powers, subject to the conditions of Regulation F16. In so doing those appointed as Officers and Committee members accept that they are jointly and severally responsible for the organisation of the show and that this is a binding undertaking (vide Royal Kennel Club General Show Regulations F4 and F5).
-      </Text>
-    </View>
+    <Flow
+      blocks={[
+        {
+          key: 'jurisdiction',
+          heading: <SectionBand title="Jurisdiction and Responsibilities" />,
+          headingStyle: { width: '100%', marginTop: 14 },
+          keepWithHeadingHeight: 60,
+          body: (
+            <Text style={{ fontFamily: 'Times', fontStyle: 'italic', fontSize: 8, lineHeight: 1.35, color: C.textMedium, paddingHorizontal: 8 }}>
+              The Officers and Committee members of the society holding the licence are deemed responsible for organising and conducting the show safely and in accordance with the Rules and Regulations of the Royal Kennel Club and agree to abide by and adopt any decision of the Board or any authority to whom the Board may delegate its powers, subject to the conditions of Regulation F16. In so doing those appointed as Officers and Committee members accept that they are jointly and severally responsible for the organisation of the show and that this is a binding undertaking (vide Royal Kennel Club General Show Regulations F4 and F5).
+            </Text>
+          ),
+        },
+      ]}
+    />
   );
 }
 
@@ -1831,30 +1853,58 @@ export function TrophiesPage({ show, sponsorships }: TrophiesPageProps) {
         </>
       )}
 
-      {/* With Thanks — plain donors (name + optional affix, no amount). */}
+      {/* With Thanks — plain donors (name + optional affix, no amount).
+          Built on Flow rather than the old minPresenceAhead-bearing View,
+          which was ALSO wrapped in an outer `<View style={{marginTop}}>` —
+          the same "nested inside an extra wrapping View" issue as
+          JurisdictionBlock, so the band's orphan protection was very
+          likely already a no-op (pdf-kit README). The donor list itself
+          is still NOT wrap={false} — it's elastic and must flow across a
+          page break — but now via BalancedColumns (by measured height)
+          rather than a flexWrap 50%-width layout, so an unevenly-sized
+          donor list (a few very long affixes) doesn't visibly stack one
+          column much taller than the other. */}
       {donations.length > 0 && (
-        <View style={{ marginTop: sponsorships.length > 0 ? 14 : 0 }}>
-          {/* NOT wrap={false} on the whole block: the donor list is elastic
-              and must flow across a page break (same reasoning as
-              JurisdictionBlock). The band + intro use minPresenceAhead so
-              they never strand alone at a page foot. */}
-          <View minPresenceAhead={60}>
-            <SectionBand title="With Thanks" />
-            <Text style={{ fontFamily: 'Inter', fontSize: 8, color: C.textMedium, marginBottom: 5 }}>
-              With thanks to the following for their kind donations:
-            </Text>
-          </View>
-          <View style={{ flexDirection: 'row', flexWrap: 'wrap' }}>
-            {donations.map((d, i) => (
-              <Text
-                key={`donation-${i}`}
-                style={{ width: '50%', fontFamily: 'Inter', fontSize: 8, color: C.textDark, marginBottom: 2.5, paddingRight: 6 }}
-              >
-                {d.name}{d.affix ? ` (${d.affix})` : ''}
-              </Text>
-            ))}
-          </View>
-        </View>
+        <Flow
+          blocks={[
+            {
+              key: 'with-thanks',
+              heading: (
+                <>
+                  <SectionBand title="With Thanks" />
+                  <Text style={{ fontFamily: 'Inter', fontSize: 8, color: C.textMedium, marginBottom: 5 }}>
+                    With thanks to the following for their kind donations:
+                  </Text>
+                </>
+              ),
+              headingStyle: { marginTop: sponsorships.length > 0 ? 14 : 0 },
+              keepWithHeadingHeight: 60,
+              body: (
+                <BalancedColumns
+                  columns={2}
+                  items={donations.map((d, i) => {
+                    const label = `${d.name}${d.affix ? ` (${d.affix})` : ''}`;
+                    return {
+                      key: `donation-${i}`,
+                      height:
+                        estimateTextHeight(label, {
+                          width: DONATIONS_COLUMN_WIDTH,
+                          family: 'Inter',
+                          size: 8,
+                          lineHeight: 1.3,
+                        }) + 2.5, // + marginBottom, matching the row below
+                      node: (
+                        <Text style={{ fontFamily: 'Inter', fontSize: 8, color: C.textDark, marginBottom: 2.5, paddingRight: 6 }}>
+                          {label}
+                        </Text>
+                      ),
+                    };
+                  })}
+                />
+              ),
+            },
+          ]}
+        />
       )}
 
       <CatalogueFolio />
