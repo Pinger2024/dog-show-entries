@@ -33,6 +33,39 @@ const COVER_ORG_NAME_LETTER_SPACING = 3;
 // styles.coverShowName's original fixed size — the ceiling FitText starts
 // from for the cover title.
 const COVER_SHOW_NAME_MAX_SIZE = 17;
+// A5 height (595.28pt) minus styles.frontMatterPage's top+bottom padding
+// ('20 22 30 22' — 20 top, 30 bottom): the usable height of a completely
+// FRESH front-matter page. Used only as the ceiling for KeepTogether's
+// escape hatch on atomic banner blocks — if an estimated block is taller
+// than this, it could never fit even starting a page of its own, so it
+// must fall back to wrapping rather than risk silently overflowing.
+const FRONT_MATTER_PAGE_USABLE_HEIGHT = 545.28;
+
+/**
+ * Conservative estimate of one Best-Awards row's rendered height, for the
+ * banner+header+first-row atomic block's KeepTogether escape hatch below.
+ * Deliberately overestimates rather than under- (every text measured
+ * against a generous single-column width rather than the row's true
+ * multi-column layout) — the safe direction for a "should this stay
+ * atomic" decision; it only needs to catch a genuinely pathological award
+ * name or sponsor stack, not reproduce the row's exact pixel height.
+ */
+function estimateBestAwardRowHeight(
+  award: string,
+  sponsors: Array<{ trophyName?: string | null; sponsorName?: string | null; sponsorAffix?: string | null }>,
+): number {
+  const awardNameHeight = estimateTextHeight(award, { width: 150, family: 'Inter', size: 9, lineHeight: 1.2 });
+  const winnerLineHeight = 12; // winner rule + label — fixed decorative height
+  const sponsorLinesHeight =
+    sponsors.length === 0
+      ? 10 // the em-dash placeholder row
+      : sponsors.reduce((sum, s) => {
+          const text = [s.trophyName, s.sponsorName, s.sponsorAffix].filter(Boolean).join(' — ');
+          return sum + estimateTextHeight(text, { width: 200, family: 'Inter', size: 8, lineHeight: 1.2 }) + 6;
+        }, 0);
+  return awardNameHeight + winnerLineHeight + sponsorLinesHeight + 10; // + row padding
+}
+
 // TrophiesPage's donations grid: styles.frontMatterPage is A5 with
 // paddingHorizontal 22 each side (419.53pt page - 44 = 375.53pt content
 // width), split into BalancedColumns' 2 columns with its default 12pt
@@ -686,12 +719,26 @@ export function BestAwardsContent({ show, compact }: FrontMatterProps & { compac
     );
   };
 
+  // Measured escape hatch: this block is atomic (see below) so the
+  // banner never sits alone at a page foot, but a pathologically long
+  // award name or a long stack of sponsors on the very FIRST award could
+  // in principle make the block taller than a whole page — KeepTogether
+  // falls back to normal wrapping rather than silently overflowing in
+  // that case (matches "awards defaults spilling blank pages" being made
+  // impossible in general, not just for the specific award lists seen so
+  // far). Bare band + intro banner (~45pt) + optional header row (~20pt)
+  // + the first award row's own estimate.
+  const firstAward = allAwards[0];
+  const firstAwardSponsors = firstAward ? sponsorsByAward.get(normaliseAward(firstAward)) ?? [] : [];
+  const bannerEstimatedHeight =
+    45 + (hasAnySponsor ? 20 : 0) + (firstAward ? estimateBestAwardRowHeight(firstAward, firstAwardSponsors) : 0);
+
   return (
     <>
       {/* Keep banner + italic intro + header + first award row atomic so
           the banner never sits alone at the foot of a page. Remaining
           rows flow normally after that block. */}
-      <KeepTogether>
+      <KeepTogether estimatedHeight={bannerEstimatedHeight} maxHeight={FRONT_MATTER_PAGE_USABLE_HEIGHT}>
         <SectionBand title="Sponsors" />
         {headerRow}
         {allAwards.length > 0 && renderRow(allAwards[0], 0)}
@@ -1790,66 +1837,75 @@ export function TrophiesPage({ show, sponsorships }: TrophiesPageProps) {
     return a.className.localeCompare(b.className);
   });
 
+  const renderTrophyRow = (sp: (typeof sorted)[number], idx: number) => {
+    const label = sp.classLabel ?? (sp.classNumber != null ? String(sp.classNumber) : '');
+    const classHeading = label ? `${label}. ${sp.className}` : sp.className;
+
+    // Build trophy + sponsor combined text
+    const trophySponsorParts: string[] = [];
+    if (sp.trophyName) {
+      let part = sp.trophyName;
+      if (sp.trophyDonor) part += ` (${sp.trophyDonor})`;
+      trophySponsorParts.push(part);
+    }
+    if (sp.sponsorName) {
+      let part = `Sponsored by ${sp.sponsorName}`;
+      if (sp.sponsorAffix) part += ` (${sp.sponsorAffix})`;
+      trophySponsorParts.push(part);
+    }
+
+    return (
+      <KeepTogether
+        key={`${label}-${sp.className}-${idx}`}
+        style={{
+          flexDirection: 'row',
+          paddingVertical: 2.5,
+          borderBottomWidth: 0.5,
+          borderBottomColor: C.ruleLight,
+        }}
+      >
+        <Text style={{ fontFamily: 'Inter', fontSize: 7, fontWeight: 'bold', width: '30%', color: C.textDark }}>
+          {classHeading}
+        </Text>
+        <Text style={{ fontFamily: 'Times', fontSize: 6.5, fontStyle: 'italic', width: '35%', color: C.textMedium }}>
+          {trophySponsorParts.join('\n') || '—'}
+        </Text>
+        <Text style={{ fontFamily: 'Inter', fontSize: 6.5, width: '35%', color: C.textMedium }}>
+          {sp.prizeDescription || '—'}
+        </Text>
+      </KeepTogether>
+    );
+  };
+
+  const tableHeaderRow = (
+    <View style={{
+      flexDirection: 'row',
+      borderBottomWidth: 1.5,
+      borderBottomColor: C.primary,
+      paddingBottom: 3,
+      marginBottom: 4,
+    }}>
+      <Text style={{ fontFamily: 'Inter', fontSize: 6.5, fontWeight: 'bold', width: '30%', color: C.textDark }}>Class</Text>
+      <Text style={{ fontFamily: 'Inter', fontSize: 6.5, fontWeight: 'bold', width: '35%', color: C.textDark }}>Trophy / Sponsor</Text>
+      <Text style={{ fontFamily: 'Inter', fontSize: 6.5, fontWeight: 'bold', width: '35%', color: C.textDark }}>Prize</Text>
+    </View>
+  );
+
   return (
     <PageFrame size="A5" style={styles.frontMatterPage} wrap>
       {showTrophyTable && (
         <>
-          <SectionBand title="Trophies & Sponsorships" />
-
-          {/* Table header */}
-          <View style={{
-            flexDirection: 'row',
-            borderBottomWidth: 1.5,
-            borderBottomColor: C.primary,
-            paddingBottom: 3,
-            marginBottom: 4,
-          }}>
-            <Text style={{ fontFamily: 'Inter', fontSize: 6.5, fontWeight: 'bold', width: '30%', color: C.textDark }}>Class</Text>
-            <Text style={{ fontFamily: 'Inter', fontSize: 6.5, fontWeight: 'bold', width: '35%', color: C.textDark }}>Trophy / Sponsor</Text>
-            <Text style={{ fontFamily: 'Inter', fontSize: 6.5, fontWeight: 'bold', width: '35%', color: C.textDark }}>Prize</Text>
-          </View>
-
-          {sorted.map((sp, idx) => {
-            const label = sp.classLabel ?? (sp.classNumber != null ? String(sp.classNumber) : '');
-            const classHeading = label
-              ? `${label}. ${sp.className}`
-              : sp.className;
-
-            // Build trophy + sponsor combined text
-            const trophySponsorParts: string[] = [];
-            if (sp.trophyName) {
-              let part = sp.trophyName;
-              if (sp.trophyDonor) part += ` (${sp.trophyDonor})`;
-              trophySponsorParts.push(part);
-            }
-            if (sp.sponsorName) {
-              let part = `Sponsored by ${sp.sponsorName}`;
-              if (sp.sponsorAffix) part += ` (${sp.sponsorAffix})`;
-              trophySponsorParts.push(part);
-            }
-
-            return (
-              <KeepTogether
-                key={`${label}-${sp.className}-${idx}`}
-                style={{
-                  flexDirection: 'row',
-                  paddingVertical: 2.5,
-                  borderBottomWidth: 0.5,
-                  borderBottomColor: C.ruleLight,
-                }}
-              >
-                <Text style={{ fontFamily: 'Inter', fontSize: 7, fontWeight: 'bold', width: '30%', color: C.textDark }}>
-                  {classHeading}
-                </Text>
-                <Text style={{ fontFamily: 'Times', fontSize: 6.5, fontStyle: 'italic', width: '35%', color: C.textMedium }}>
-                  {trophySponsorParts.join('\n') || '—'}
-                </Text>
-                <Text style={{ fontFamily: 'Inter', fontSize: 6.5, width: '35%', color: C.textMedium }}>
-                  {sp.prizeDescription || '—'}
-                </Text>
-              </KeepTogether>
-            );
-          })}
+          {/* Keep banner + table header + first row atomic, matching the
+              same idiom BestAwardsContent and JudgesListContent already
+              use elsewhere in this file — previously MISSING here, so the
+              "Trophies & Sponsorships" banner could be stranded alone at
+              a page foot with every row on the next page. */}
+          <KeepTogether>
+            <SectionBand title="Trophies & Sponsorships" />
+            {tableHeaderRow}
+            {sorted.length > 0 && renderTrophyRow(sorted[0], 0)}
+          </KeepTogether>
+          {sorted.slice(1).map((sp, idx) => renderTrophyRow(sp, idx + 1))}
         </>
       )}
 
