@@ -294,7 +294,41 @@ function showHasShowInformation(show: CatalogueShowInfo): boolean {
   return false;
 }
 
-export function ShowInformationContent({ show }: FrontMatterProps) {
+/** `sectionGap` becomes the heading's own `marginTop` rather than an
+ *  outer wrapping View — see ClassDefinitionsContent's identical
+ *  convention and comment for why (Flow needs no wrapping View between
+ *  it and the page for minPresenceAhead to hold). */
+export function ShowInformationContent({ show, sectionGap = 0 }: FrontMatterProps & { sectionGap?: number }) {
+  if (!showHasShowInformation(show)) return null;
+
+  // The "Show Information" band used to be a bare sibling ahead of these
+  // subsections, relying entirely on an OUTER wrapping View's
+  // minPresenceAhead (in FrontMatterContent/ShowInformationPage) to avoid
+  // being orphaned. That protection only covers the space immediately
+  // after the band — if the very next subsection (e.g. a long Welcome
+  // note) is itself an atomic KeepTogether block too tall to fit
+  // alongside it, react-pdf moves that whole block on its own, stranding
+  // the band as the last line of the previous page regardless. Found live
+  // via the stress fixture's 2,000-character welcome note. Flow fixes
+  // this the same way it fixed ClassDefinitionsContent: the heading only
+  // needs to be a direct child of the page's own flow, not of an
+  // artificial "first subsection" pairing.
+  return (
+    <Flow
+      blocks={[
+        {
+          key: 'show-information',
+          heading: <SectionBand title="Show Information" />,
+          headingStyle: sectionGap ? { marginTop: sectionGap } : undefined,
+          keepWithHeadingHeight: 60,
+          body: <ShowInformationSubsections show={show} />,
+        },
+      ]}
+    />
+  );
+}
+
+function ShowInformationSubsections({ show }: FrontMatterProps) {
   const hasWelcome = !!show.welcomeNote;
   const hasAwardsDescription = !!show.awardsDescription;
   const hasAdditionalNotes = !!show.additionalNotes;
@@ -314,14 +348,36 @@ export function ShowInformationContent({ show }: FrontMatterProps) {
   if (show.prizeMoney) practicalInfo.push({ label: 'Prize Money', value: show.prizeMoney });
   const hasPracticalInfo = practicalInfo.length > 0;
 
-  if (!showHasShowInformation(show)) return null;
+  // Measured escape hatch: a short welcome note (the common case) stays
+  // atomic as before, but a very long one (the stress fixture's
+  // 2,000-character note is the proof case) falls back to wrapping
+  // rather than staying an all-or-nothing block. This matters even
+  // though the note itself fits on ONE page: KeepTogether's wrap={false}
+  // means the WHOLE block moves together, so if it doesn't fit in
+  // whatever space is left on the CURRENT page (varies — Jurisdiction/
+  // Sponsors content above it is elastic too), it bumps to a fresh page
+  // as a unit, stranding the "Show Information" heading above it as the
+  // last line of the page it left behind. Half a fresh page's usable
+  // height is the threshold: short enough that it still reliably fits
+  // alongside whatever's above it, generous enough that no real show's
+  // welcome note (measured against real fixtures) crosses it.
+  const welcomeHeight = hasWelcome
+    ? estimateTextHeight(show.welcomeNote!, {
+        width: 375, // frontMatterPage content width, A5 minus 22pt each side
+        family: 'Times',
+        size: 9,
+        lineHeight: 1.4,
+      })
+    : 0;
 
   return (
     <>
-      <SectionBand title="Show Information" />
-
       {hasWelcome && (
-        <KeepTogether style={{ marginBottom: 6 }}>
+        <KeepTogether
+          style={{ marginBottom: 6 }}
+          estimatedHeight={welcomeHeight}
+          maxHeight={FRONT_MATTER_PAGE_USABLE_HEIGHT / 2}
+        >
           <Text style={showInfoStyles.sectionTitle}>Welcome</Text>
           <Text style={{ ...showInfoStyles.bodyText, fontStyle: 'italic' }}>
             {show.welcomeNote}
@@ -398,11 +454,7 @@ export function ShowInformationPage({ show }: FrontMatterProps) {
   return (
     <PageFrame size="A5" style={styles.frontMatterPage} wrap>
       <ShowParticularsContent show={show} />
-      {showHasShowInformation(show) && (
-        <View style={{ marginTop: 8 }}>
-          <ShowInformationContent show={show} />
-        </View>
-      )}
+      <ShowInformationContent show={show} sectionGap={8} />
       <CatalogueFolio />
     </PageFrame>
   );
@@ -441,11 +493,12 @@ export function FrontMatterContent({ show, compact }: FrontMatterProps & { compa
     <>
       <ShowParticularsContent show={show} />
 
-      {showHasShowInformation(show) && (
-        <View style={{ marginTop: SECTION_GAP }} minPresenceAhead={compact ? 60 : 100}>
-          <ShowInformationContent show={show} />
-        </View>
-      )}
+      {/* No wrapping View here — ShowInformationContent renders a
+          pdf-kit Flow, which needs to be a direct child of the page's
+          own flow for its heading-glue protection to work (see that
+          component's own comment). The section gap is applied as the
+          heading's own marginTop instead. */}
+      <ShowInformationContent show={show} sectionGap={SECTION_GAP} />
 
       {showJudgesSection && (
         <View style={{ marginTop: SECTION_GAP }} minPresenceAhead={140}>
