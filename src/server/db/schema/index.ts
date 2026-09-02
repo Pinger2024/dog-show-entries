@@ -67,7 +67,7 @@ export { showBreeds, showBreedsRelations } from './show-breeds';
 export { users, usersRelations } from './users';
 export { accounts, sessions, verificationTokens } from './auth';
 export { dogs, dogsRelations } from './dogs';
-export { entries, entriesRelations } from './entries';
+export { entries, entriesRelations, catalogueNumberAsc } from './entries';
 export { entryClasses, entryClassesRelations } from './entry-classes';
 export { results, resultsRelations } from './results';
 export { judges, judgesRelations } from './judges';

@@ -282,7 +282,7 @@ export async function buildCatalogueSnapshot(db: Database, showId: string): Prom
             with: { showClass: { with: { classDefinition: true } }, result: true },
           },
         },
-        orderBy: [asc(schema.entries.catalogueNumber)],
+        orderBy: [schema.catalogueNumberAsc()],
       }),
       (async () => {
         const { validateRasterLogoUrl } = await import('@/lib/pdf-utils');

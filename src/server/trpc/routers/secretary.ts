@@ -50,6 +50,7 @@ import {
   catalogueAdverts,
   showDiscountGroups,
   showDonations,
+  catalogueNumberAsc,
 } from '@/server/db/schema';
 import {
   DEFAULT_CHECKLIST_ITEMS,
@@ -846,7 +847,7 @@ export const secretaryRouter = createTRPCRouter({
             },
           },
         },
-        orderBy: [asc(entries.catalogueNumber)],
+        orderBy: [catalogueNumberAsc()],
       });
 
       return { show, entries: catalogueEntries };
@@ -883,7 +884,7 @@ export const secretaryRouter = createTRPCRouter({
             },
           },
         },
-        orderBy: [asc(entries.catalogueNumber)],
+        orderBy: [catalogueNumberAsc()],
       });
 
       interface FlaggedOwnerRow {
