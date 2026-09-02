@@ -293,8 +293,46 @@ interface ExhibitorInfo {
   dogs: ExhibitorDogInfo[];
 }
 
-function buildExhibitorIndex(entries: CatalogueEntry[]): ExhibitorInfo[] {
+type ExhibitorIndexClassRow = CatalogueEntry['classes'][number];
+
+/** Sort + format a dog's class rows into the "1. Minor Puppy, A. Special
+ *  Award Class - Puppy" label the exhibitor index prints. Extracted so it
+ *  can be re-run every time another of a dog's multi-class rows merges in
+ *  — see buildExhibitorIndex's dedup comment below. */
+function formatClassLabels(rows: ExhibitorIndexClassRow[]): string {
+  return [...rows]
+    .sort((a, b) => {
+      if (a.classNumber != null && b.classNumber != null)
+        return a.classNumber - b.classNumber;
+      if (a.classNumber != null) return -1;
+      if (b.classNumber != null) return 1;
+      return (a.classLabel ?? '').localeCompare(b.classLabel ?? '');
+    })
+    .map((c) => {
+      const lbl = c.classLabel ?? (c.classNumber != null ? String(c.classNumber) : null);
+      return lbl ? `${lbl}. ${c.name ?? ''}` : c.name ?? '';
+    })
+    .filter(Boolean)
+    .join(', ');
+}
+
+export function buildExhibitorIndex(entries: CatalogueEntry[]): ExhibitorInfo[] {
   const byExhibitor = new Map<string, ExhibitorInfo>();
+  // "One catalogue number per dog" (catalogue-numbering.ts) means a dog
+  // bought into a second class later (e.g. an age class, then a Special
+  // Award Class) gets a SECOND `entries` row sharing the same catalogue
+  // number — each row carries only its own purchase's classes. Track
+  // every row's classes per catalogue number here so a later row can be
+  // MERGED into the dog already pushed to `ex.dogs`, instead of being
+  // silently dropped: rather than discarding rows past the first, the
+  // previous code kept only whichever row's classes happened to come
+  // first in `entries` order — which meant a dog's Special Award Class
+  // could vanish from this index entirely depending on unrelated sort
+  // order upstream (coordinator's review, 2026-09-02, surfaced by fixing
+  // catalogueNumberAsc: a dog's displayed class flipped between "1. Minor
+  // Puppy" and "A. Special Award Class - Puppy" depending on which order
+  // its two rows happened to arrive in — both classes should show).
+  const classRowsByCatNo = new Map<string, ExhibitorIndexClassRow[]>();
 
   for (const entry of entries) {
     const { heading, sortKey } = ownerHeading(entry.owners, entry.exhibitor);
@@ -315,24 +353,18 @@ function buildExhibitorIndex(entries: CatalogueEntry[]): ExhibitorInfo[] {
     // (the flag is per-entry but the address is shown once per owner).
     if (entry.withholdFromPublication) ex.address = null;
 
-    // Avoid duplicate dogs (multi-class entries)
     const catNo = entry.catalogueNumber ?? '';
-    if (catNo && ex.dogs.some((d) => d.catalogueNumber === catNo)) continue;
+    const existingDog = catNo ? ex.dogs.find((d) => d.catalogueNumber === catNo) : undefined;
+    if (existingDog) {
+      const rows = classRowsByCatNo.get(catNo) ?? [];
+      rows.push(...entry.classes);
+      classRowsByCatNo.set(catNo, rows);
+      existingDog.classes = formatClassLabels(rows);
+      continue;
+    }
 
-    const classLabels = entry.classes
-      .sort((a, b) => {
-        if (a.classNumber != null && b.classNumber != null)
-          return a.classNumber - b.classNumber;
-        if (a.classNumber != null) return -1;
-        if (b.classNumber != null) return 1;
-        return (a.classLabel ?? '').localeCompare(b.classLabel ?? '');
-      })
-      .map((c) => {
-        const lbl = c.classLabel ?? (c.classNumber != null ? String(c.classNumber) : null);
-        return lbl ? `${lbl}. ${c.name ?? ''}` : c.name ?? '';
-      })
-      .filter(Boolean)
-      .join(', ');
+    const classRows = [...entry.classes];
+    if (catNo) classRowsByCatNo.set(catNo, classRows);
 
     const isJH = entry.entryType === 'junior_handler';
     const displayName = isJH
@@ -349,7 +381,7 @@ function buildExhibitorIndex(entries: CatalogueEntry[]): ExhibitorInfo[] {
       breeder: entry.breeder,
       kcRegNumber: entry.kcRegNumber,
       colour: entry.colour,
-      classes: classLabels,
+      classes: formatClassLabels(classRows),
       entryType: entry.entryType,
     });
   }
