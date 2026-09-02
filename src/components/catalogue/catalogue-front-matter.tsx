@@ -71,15 +71,6 @@ function SectionBand({ title }: { title: string }) {
   );
 }
 
-function InfoCard({ title, children }: { title?: string; children: React.ReactNode }) {
-  return (
-    <View style={styles.infoCard} wrap={false}>
-      {title && <Text style={styles.infoCardTitle}>{title}</Text>}
-      {children}
-    </View>
-  );
-}
-
 export function JurisdictionBlock() {
   // NOT wrap={false}: on shows with a long Best Awards list, forcing
   // this block atomic orphaned the whole thing onto its own near-empty
@@ -206,11 +197,11 @@ function filterDuplicateRegulations(
  */
 function JudgesWelfareCommitmentBlock() {
   return (
-    <View style={styles.welfareBlock} wrap={false}>
+    <KeepTogether style={styles.welfareBlock}>
       <Text style={styles.welfareBlockEyebrow}>Royal Kennel Club Welfare Undertaking</Text>
       <Text style={styles.welfareBlockTitle}>Judges&apos; Welfare Commitment</Text>
       <Text style={styles.welfareBlockText}>{RKC_JUDGES_WELFARE_STATEMENT}</Text>
-    </View>
+    </KeepTogether>
   );
 }
 
@@ -252,12 +243,12 @@ export function ShowInformationContent({ show }: FrontMatterProps) {
       <SectionBand title="Show Information" />
 
       {hasWelcome && (
-        <View wrap={false} style={{ marginBottom: 6 }}>
+        <KeepTogether style={{ marginBottom: 6 }}>
           <Text style={showInfoStyles.sectionTitle}>Welcome</Text>
           <Text style={{ ...showInfoStyles.bodyText, fontStyle: 'italic' }}>
             {show.welcomeNote}
           </Text>
-        </View>
+        </KeepTogether>
       )}
 
       {/* Officers and Guarantors are deliberately not listed by name
@@ -265,14 +256,14 @@ export function ShowInformationContent({ show }: FrontMatterProps) {
           the particulars page covers them collectively. */}
 
       {hasAwardsDescription && (
-        <View wrap={false} style={{ marginBottom: 6 }}>
+        <KeepTogether style={{ marginBottom: 6 }}>
           <Text style={showInfoStyles.sectionTitle}>Awards</Text>
           <Text style={showInfoStyles.bodyText}>{show.awardsDescription}</Text>
-        </View>
+        </KeepTogether>
       )}
 
       {hasPracticalInfo && (
-        <View wrap={false} style={{ marginBottom: 6 }}>
+        <KeepTogether style={{ marginBottom: 6 }}>
           <Text style={showInfoStyles.sectionTitle}>Practical Information</Text>
           {practicalInfo.map((item, i) => (
             <View key={i} style={showInfoStyles.officerRow}>
@@ -282,25 +273,25 @@ export function ShowInformationContent({ show }: FrontMatterProps) {
               </Text>
             </View>
           ))}
-        </View>
+        </KeepTogether>
       )}
 
       {hasAdditionalNotes && (
-        <View wrap={false} style={{ marginBottom: 6 }}>
+        <KeepTogether style={{ marginBottom: 6 }}>
           <Text style={showInfoStyles.sectionTitle}>Additional Notes</Text>
           <Text style={showInfoStyles.bodyText}>{show.additionalNotes}</Text>
-        </View>
+        </KeepTogether>
       )}
 
       {hasFutureShows && (
-        <View wrap={false} style={{ marginBottom: 6 }}>
+        <KeepTogether style={{ marginBottom: 6 }}>
           <Text style={showInfoStyles.sectionTitle}>Future Show Dates</Text>
           <Text style={showInfoStyles.bodyText}>{show.futureShowDates}</Text>
-        </View>
+        </KeepTogether>
       )}
 
       {hasRegulations && (
-        <View wrap={false} style={{ marginBottom: 6 }}>
+        <KeepTogether style={{ marginBottom: 6 }}>
           <Text style={showInfoStyles.sectionTitle}>Regulations</Text>
           {hasGroupSystem && (
             <Text style={{ ...showInfoStyles.bodyText, fontWeight: 'bold', marginBottom: 2 }}>
@@ -315,7 +306,7 @@ export function ShowInformationContent({ show }: FrontMatterProps) {
               {statement}
             </Text>
           ))}
-        </View>
+        </KeepTogether>
       )}
     </>
   );
