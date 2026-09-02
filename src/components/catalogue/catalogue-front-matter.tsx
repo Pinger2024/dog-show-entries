@@ -580,29 +580,29 @@ export function BestAwardsContent({ show, compact }: FrontMatterProps & { compac
             .map((s) => [s.trophyName, s.sponsorName].filter(Boolean).join(' — '))
             .join(' / ');
       return (
-        <View key={`${award}-${i}`} style={compactRowStyle} wrap={false}>
+        <KeepTogether key={`${award}-${i}`} style={compactRowStyle}>
           <Text style={{ fontFamily: 'Inter', fontSize: 7.5, fontWeight: 'bold', color: C.textDark, width: '40%', paddingRight: 4 }}>
             {award}
           </Text>
           <Text style={{ fontFamily: 'Inter', fontSize: 7, color: C.textMedium, flex: 1 }}>
             {sponsorText ?? '—'}
           </Text>
-        </View>
+        </KeepTogether>
       );
     }
     if (!hasAnySponsor) {
       return (
-        <View key={`${award}-${i}`} style={bestAwardsStyles.tableRow} wrap={false}>
+        <KeepTogether key={`${award}-${i}`} style={bestAwardsStyles.tableRow}>
           <View style={{ width: '100%' }}>
             <Text style={bestAwardsStyles.awardName}>{award}</Text>
             <View style={bestAwardsStyles.winnerLine} />
             <Text style={bestAwardsStyles.winnerLabel}>Winner</Text>
           </View>
-        </View>
+        </KeepTogether>
       );
     }
     return (
-      <View key={`${award}-${i}`} style={bestAwardsStyles.tableRow} wrap={false}>
+      <KeepTogether key={`${award}-${i}`} style={bestAwardsStyles.tableRow}>
         <View style={bestAwardsStyles.awardCol}>
           <Text style={bestAwardsStyles.awardName}>{award}</Text>
           <View style={bestAwardsStyles.winnerLine} />
@@ -636,7 +636,7 @@ export function BestAwardsContent({ show, compact }: FrontMatterProps & { compac
             ))
           )}
         </View>
-      </View>
+      </KeepTogether>
     );
   };
 
@@ -645,11 +645,11 @@ export function BestAwardsContent({ show, compact }: FrontMatterProps & { compac
       {/* Keep banner + italic intro + header + first award row atomic so
           the banner never sits alone at the foot of a page. Remaining
           rows flow normally after that block. */}
-      <View wrap={false}>
+      <KeepTogether>
         <SectionBand title="Sponsors" />
         {headerRow}
         {allAwards.length > 0 && renderRow(allAwards[0], 0)}
-      </View>
+      </KeepTogether>
       {allAwards.slice(1).map((award, i) => renderRow(award, i + 1))}
     </>
   );
@@ -1061,26 +1061,26 @@ export function CoverPage({ show }: FrontMatterProps) {
             front-matter page) so the cover stays consistent across shows
             regardless of which optional fields are set. */}
         {show.onCallVet && (
-          <View style={{ width: '100%', marginTop: 2, marginBottom: 2 }} wrap={false}>
+          <KeepTogether style={{ width: '100%', marginTop: 2, marginBottom: 2 }}>
             <Text style={styles.coverSectionLabel}>On-Call Veterinary Surgeon</Text>
             <Text style={styles.coverSectionText}>{show.onCallVet}</Text>
-          </View>
+          </KeepTogether>
         )}
 
         {show.firstAiders && show.firstAiders.length > 0 && (
-          <View style={{ width: '100%', marginTop: 2, marginBottom: 2 }} wrap={false}>
+          <KeepTogether style={{ width: '100%', marginTop: 2, marginBottom: 2 }}>
             <Text style={styles.coverSectionLabel}>
               {show.firstAiders.length === 1 ? 'First Aider' : 'First Aiders'}
             </Text>
             <Text style={styles.coverSectionText}>{show.firstAiders.join(', ')}</Text>
-          </View>
+          </KeepTogether>
         )}
 
         {show.showManager && (
-          <View style={{ width: '100%', marginTop: 2, marginBottom: 2 }} wrap={false}>
+          <KeepTogether style={{ width: '100%', marginTop: 2, marginBottom: 2 }}>
             <Text style={styles.coverSectionLabel}>Show Manager</Text>
             <Text style={styles.coverSectionText}>{show.showManager}</Text>
-          </View>
+          </KeepTogether>
         )}
 
         <Text style={styles.coverFooterText}>
@@ -1124,7 +1124,7 @@ export function ShowParticularsContent({ show }: FrontMatterProps) {
       {hasSponsors && (
         <View style={{ marginBottom: 10 }}>
           {tierSponsors.length > 0 && (
-            <View style={{ alignItems: 'center', marginBottom: 6 }} wrap={false}>
+            <KeepTogether style={{ alignItems: 'center', marginBottom: 6 }}>
               <Text style={{ fontFamily: 'Inter', fontSize: 7, color: C.textLight, letterSpacing: 1.5, textTransform: 'uppercase', marginBottom: 4 }}>
                 {tierSponsors.length === 1 ? 'Sponsored by' : 'Sponsors'}
               </Text>
@@ -1138,7 +1138,7 @@ export function ShowParticularsContent({ show }: FrontMatterProps) {
                   </Text>
                 </View>
               ))}
-            </View>
+            </KeepTogether>
           )}
           {supporterSponsors.length > 0 && (
             <View style={{ ...styles.coverDetailCard, borderLeftColor: C.accent }}>
@@ -1227,7 +1227,7 @@ export function JudgesListContent({ show }: FrontMatterProps) {
         ? null
         : roles.join(' & ');
       return (
-        <View key={key} wrap={false} style={{ marginBottom: 6 }}>
+        <KeepTogether key={key} style={{ marginBottom: 6 }}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
             {photoUrl && (
               <Image src={photoUrl} style={{ width: 44, height: 44, borderRadius: 22 }} />
@@ -1248,7 +1248,7 @@ export function JudgesListContent({ show }: FrontMatterProps) {
               {bio}
             </Text>
           )}
-        </View>
+        </KeepTogether>
       );
     };
 
@@ -1257,11 +1257,11 @@ export function JudgesListContent({ show }: FrontMatterProps) {
         {/* Band + first judge atomic. A long bio on the first judge
             still forces a page break, but the banner will never sit
             alone at the bottom of a page again. */}
-        <View wrap={false}>
+        <KeepTogether>
           <SectionBand title="List of Judges" />
           {judgeEntries.length > 0 &&
             renderJudgeCard(judgeEntries[0][0], judgeEntries[0][1], 0)}
-        </View>
+        </KeepTogether>
         {judgeEntries.slice(1).map(([name, roles], i) =>
           renderJudgeCard(name, roles, i + 1)
         )}
@@ -1308,7 +1308,7 @@ export function JudgesListContent({ show }: FrontMatterProps) {
       {/* Keep banner + table header atomic so the banner never sits
           alone at the bottom of a page with the table flowing to the
           next. */}
-      <View wrap={false}>
+      <KeepTogether>
         <SectionBand title="List of Judges" />
         <View style={{ ...styles.judgesListRow, borderBottomWidth: 1.5, borderBottomColor: C.primary, marginBottom: 4 }}>
           <Text style={{ ...styles.judgesListBreed, fontWeight: 'bold' }}>Breed</Text>
@@ -1317,7 +1317,7 @@ export function JudgesListContent({ show }: FrontMatterProps) {
             <Text style={{ fontFamily: 'Inter', fontSize: 7.5, fontWeight: 'bold', width: 30, textAlign: 'right' }}>Ring</Text>
           )}
         </View>
-      </View>
+      </KeepTogether>
 
       {sortedBreeds.map((breed) => {
         const judgeName = judges[breed];
@@ -1325,7 +1325,7 @@ export function JudgesListContent({ show }: FrontMatterProps) {
         const bio = judgeBios[judgeName ?? ''];
         const photoUrl = show.judgePhotos?.[judgeName ?? ''];
         return (
-          <View key={breed} wrap={false}>
+          <KeepTogether key={breed}>
             <View style={styles.judgesListRow}>
               <Text style={styles.judgesListBreed}>{breed}</Text>
               <Text style={styles.judgesListJudge}>{judgeName}</Text>
@@ -1345,7 +1345,7 @@ export function JudgesListContent({ show }: FrontMatterProps) {
                 )}
               </View>
             )}
-          </View>
+          </KeepTogether>
         );
       })}
 
@@ -1358,7 +1358,7 @@ export function JudgesListContent({ show }: FrontMatterProps) {
           const photoUrl = show.judgePhotos?.[name];
           const roleLabel = roles.length > 0 ? roles.join(' & ') : null;
           return (
-            <View key={i} wrap={false} style={{ marginBottom: 8 }}>
+            <KeepTogether key={i} style={{ marginBottom: 8 }}>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                 {photoUrl && (
                   <Image src={photoUrl} style={{ width: 36, height: 36, borderRadius: 18 }} />
@@ -1379,7 +1379,7 @@ export function JudgesListContent({ show }: FrontMatterProps) {
                   {bio}
                 </Text>
               )}
-            </View>
+            </KeepTogether>
           );
         };
         const OtherJudgesHeading = (
@@ -1388,7 +1388,7 @@ export function JudgesListContent({ show }: FrontMatterProps) {
           </Text>
         );
         return (
-          <View style={{ marginTop: 10 }} wrap={false}>
+          <KeepTogether style={{ marginTop: 10 }}>
             {/* Heading + ALL cards kept together (wrap=false) so the "Other
                 Judges" list never splits across a page break — the heading +
                 first name on one page and the rest on the next looked wrong
@@ -1396,7 +1396,7 @@ export function JudgesListContent({ show }: FrontMatterProps) {
                 JH and a special-awards judge), so keeping them atomic is safe. */}
             {OtherJudgesHeading}
             {otherJudges.map((j, i) => renderOtherJudge(j, i))}
-          </View>
+          </KeepTogether>
         );
       })()}
 
@@ -1428,12 +1428,12 @@ export function ClassDefinitionsContent({ show }: FrontMatterProps) {
     <>
       <SectionBand title="Definitions of Classes" />
       {defs.map((def) => (
-        <View key={def.name} wrap={false}>
+        <KeepTogether key={def.name}>
           <Text style={styles.classDefName}>{def.name}</Text>
           {def.description && (
             <Text style={styles.classDefDescription}>{def.description}</Text>
           )}
-        </View>
+        </KeepTogether>
       ))}
     </>
   );
@@ -1545,9 +1545,8 @@ export function ExhibitorIndexPage({ show, entries, breedName, compact }: Exhibi
           const cats = ex.catNos.sort((a, b) => a.localeCompare(b, undefined, { numeric: true })).join(', ');
           const cls = ex.classes.sort((a, b) => a.localeCompare(b, undefined, { numeric: true })).join(', ');
           return (
-            <View
+            <KeepTogether
               key={idx}
-              wrap={false}
               style={{ flexDirection: 'row', paddingVertical: 1.4, borderBottomWidth: 0.4, borderBottomColor: C.ruleLight, alignItems: 'baseline' }}
             >
               <Text style={{ fontFamily: 'Inter', fontSize: 6.7, fontWeight: 'bold', color: C.textDark, width: '38%', paddingRight: 4 }}>
@@ -1559,7 +1558,7 @@ export function ExhibitorIndexPage({ show, entries, breedName, compact }: Exhibi
               <Text style={{ fontFamily: 'Inter', fontSize: 6.5, color: C.textMedium, flex: 1 }}>
                 {cls ? `cl ${cls}` : ''}
               </Text>
-            </View>
+            </KeepTogether>
           );
         })}
 
@@ -1577,7 +1576,7 @@ export function ExhibitorIndexPage({ show, entries, breedName, compact }: Exhibi
         <Text style={{ fontFamily: 'Inter', fontSize: 6.5, fontWeight: 'bold', width: '40%', color: C.textDark }}>Classes</Text>
       </View>
       {sorted.map((ex, idx) => (
-        <View key={idx} wrap={false} style={{ flexDirection: 'row', paddingVertical: 1.5, borderBottomWidth: 0.5, borderBottomColor: C.ruleLight }}>
+        <KeepTogether key={idx} style={{ flexDirection: 'row', paddingVertical: 1.5, borderBottomWidth: 0.5, borderBottomColor: C.ruleLight }}>
           <View style={{ width: '40%', paddingRight: 4 }}>
             <Text style={{ fontFamily: 'Inter', fontSize: 7, fontWeight: 'bold', color: C.textDark }}>{ex.name}</Text>
             {ex.address && <Text style={{ fontFamily: 'Inter', fontSize: 6, color: C.textLight }}>{ex.address}</Text>}
@@ -1588,7 +1587,7 @@ export function ExhibitorIndexPage({ show, entries, breedName, compact }: Exhibi
           <Text style={{ fontFamily: 'Inter', fontSize: 6.5, width: '40%', color: C.textMedium }}>
             {ex.classes.sort((a, b) => a.localeCompare(b, undefined, { numeric: true })).join(', ')}
           </Text>
-        </View>
+        </KeepTogether>
       ))}
 
       <CatalogueFolio />
@@ -1713,9 +1712,8 @@ export function TrophiesPage({ show, sponsorships }: TrophiesPageProps) {
             }
 
             return (
-              <View
+              <KeepTogether
                 key={`${label}-${sp.className}-${idx}`}
-                wrap={false}
                 style={{
                   flexDirection: 'row',
                   paddingVertical: 2.5,
@@ -1732,7 +1730,7 @@ export function TrophiesPage({ show, sponsorships }: TrophiesPageProps) {
                 <Text style={{ fontFamily: 'Inter', fontSize: 6.5, width: '35%', color: C.textMedium }}>
                   {sp.prizeDescription || '—'}
                 </Text>
-              </View>
+              </KeepTogether>
             );
           })}
         </>
