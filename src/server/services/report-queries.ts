@@ -24,7 +24,7 @@
  * then lists only the classes she was actually absent from.
  */
 import { and, asc, eq, ilike, inArray, isNull, ne, sql } from 'drizzle-orm';
-import { entries, dogOwners, orders, orderSundryItems, sundryItems, users } from '@/server/db/schema';
+import { entries, dogOwners, orders, orderSundryItems, sundryItems, users, catalogueNumberAsc } from '@/server/db/schema';
 import type { Database } from '@/server/db';
 import { CATALOGUE_NAME_PATTERN } from '@/lib/catalogue-utils';
 import { sortEntryClassesByShowClassOrder } from '@/lib/class-labels';
@@ -101,7 +101,7 @@ export async function loadAbsenteeLikeEntries(
         with: { showClass: { with: { classDefinition: true } } },
       },
     },
-    orderBy: [asc(entries.catalogueNumber)],
+    orderBy: [catalogueNumberAsc()],
   });
   // See sortEntryClassesByShowClassOrder's doc comment (class-labels.ts):
   // Drizzle/Postgres give no ordering guarantee for the entryClasses

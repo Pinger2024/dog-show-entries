@@ -7,7 +7,7 @@ import {
   timestamp,
   uuid,
 } from 'drizzle-orm/pg-core';
-import { relations } from 'drizzle-orm';
+import { asc, relations, sql, type SQL } from 'drizzle-orm';
 import { entryStatusEnum, entryTypeEnum } from './enums';
 import { shows } from './shows';
 import { dogs } from './dogs';
@@ -113,3 +113,21 @@ export const entriesRelations = relations(entries, ({ one, many }) => ({
     references: [juniorHandlerDetails.entryId],
   }),
 }));
+
+/** Numeric-safe `ORDER BY catalogue_number ASC`.
+ *
+ * `catalogueNumber` is `text`, not `integer` (see the column above) — so a
+ * bare `asc(entries.catalogueNumber)` sorts lexicographically: 1, 12, 15,
+ * 18, 2, 20, 3 … instead of 1, 2, 3 … 12, 15, 18, 20. Real bug, spotted by
+ * Mandy on BAGSD's absentee list (coordinator's review, 2026-09-02):
+ * the Cat. column ran 12, 15, 18 … 48, 5, 51.
+ *
+ * Every catalogue number is always a plain positive-integer string
+ * (`assignNumbers` in catalogue-numbering.ts does `String(next++)`, never
+ * anything with letters or padding), so casting to `int` for the ORDER BY
+ * comparison is always safe. Use this everywhere the query orders
+ * `entries` by catalogue number — it was reimplemented as a bare `asc()`
+ * independently at half a dozen call sites, each carrying the same bug. */
+export function catalogueNumberAsc(): SQL {
+  return asc(sql`(${entries.catalogueNumber})::int`);
+}

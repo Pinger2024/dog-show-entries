@@ -104,7 +104,7 @@ export async function generateCataloguePdf(
           with: { showClass: { with: { classDefinition: true } } },
         },
       },
-      orderBy: [asc(schema.entries.catalogueNumber)],
+      orderBy: [schema.catalogueNumberAsc()],
     }),
     db.query.showSponsors.findMany({
       where: eq(schema.showSponsors.showId, showId),
@@ -953,7 +953,7 @@ export async function generateRingNumbersPdf(
       isNull(schema.entries.deletedAt),
     ),
     columns: { catalogueNumber: true },
-    orderBy: [asc(schema.entries.catalogueNumber)],
+    orderBy: [schema.catalogueNumberAsc()],
   });
 
   const numbers = entries
