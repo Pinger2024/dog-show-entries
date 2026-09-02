@@ -16,31 +16,34 @@
  * PROVING EACH INVARIANT FAILS (brief requirement — recorded here, not
  * left in the tree; full transcript in
  * research/evidence-front-matter-on-kit-2026-09-02/invariant-proof-red.md):
- *   - "no near-blank front-matter page": reverting ClassDefinitionsContent
- *     to its pre-Flow one-big-wrap={false}-block shape (commit 150f3e12's
- *     parent) made this fail on the stress fixture's catalogue-standard —
- *     the 40-definition block doesn't fit even a fresh page, so it's
- *     pushed onto one anyway and leaves the PRECEDING page's remaining
- *     space (after Judges) unfilled by ~60%.
- *   - "no line's bbox outside its page": the SAME revert also failed
- *     this one — the 40-definition atomic block is taller than a full
- *     page's usable height, so react-pdf renders it anyway with lines
- *     past the bottom margin (console: "Node of type VIEW can't wrap
- *     between pages and it's bigger than available page height").
- *   - "no heading as the last line of a page": reverting the
- *     JurisdictionBlock/TrophiesPage-With-Thanks Flow rewrite (commit
- *     fd9129ff) made this fail on the stress fixture — with 40 class
- *     sponsorships pushing content further down the page, "JURISDICTION
- *     AND RESPONSIBILITIES" landed as the last line of a page with its
- *     paragraph starting on the next.
- *   - "page count within a sane bound": no realistic single Phase B
- *     revert blows this bound on its own for either fixture (each
- *     individual fix changes geometry by single-digit pages at most) —
- *     covered instead by a direct, deliberately pathological unit case
- *     (see the last test below) that reverts KeepTogether's escape hatch
- *     entirely (hardcodes wrap={false} unconditionally) against
- *     content engineered to overflow, which is the general mechanism
- *     every "sane bound" in this file relies on.
+ *   - "no page after the first ... is more than 90% empty" and "no known
+ *     section heading is the last line of a page" — checked out
+ *     catalogue-front-matter.tsx from commit 7917b116 (the last commit
+ *     BEFORE any of the Flow-based restructuring: ClassDefinitionsContent,
+ *     JurisdictionBlock/TrophiesPage-With-Thanks, ShowInformationContent)
+ *     over the current file, ran this suite, restored the current file.
+ *     Both failed on the stress fixture's catalogue-by-class: page 5 sat
+ *     at 0% content (the 40-definition block, still one big
+ *     wrap={false} unit at that commit, moved wholesale off the
+ *     preceding page) and "SHOW INFORMATION" landed as the last line of
+ *     page 2 (its Welcome subsection, itself atomic, bumped to page 3 on
+ *     its own). "no line's bbox falls outside its own page" and "page
+ *     count stays within a sane bound" did NOT reproduce via this same
+ *     revert for either fixture — for this specific content the
+ *     oversized blocks still happened to fit within their own fresh
+ *     page (a real console warning DOES fire during this render — "Node
+ *     of type VIEW can't wrap between pages and it's bigger than
+ *     available page height" — but from a document outside this file's
+ *     scope, not from these two).
+ *   - "no line's bbox falls outside its own page" and "page count stays
+ *     within a sane bound" instead rely on the general mechanism proven
+ *     directly at the kit level: pdf-kit/__tests__/keep-together.test.tsx's
+ *     escape-hatch tests assert a block genuinely taller than a page
+ *     paginates instead of overflowing when estimatedHeight/maxHeight are
+ *     supplied, and that removing the `tooTallForOnePage` check entirely
+ *     (hardcoding wrap={false}) breaks that — same underlying mechanism
+ *     BestAwardsContent's and ShowInformationContent's escape hatches in
+ *     this migration both use.
  */
 import { describe, it, expect, vi, beforeAll } from 'vitest';
 import { readFileSync, writeFileSync, mkdtempSync, rmSync } from 'node:fs';
