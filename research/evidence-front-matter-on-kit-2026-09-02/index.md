@@ -84,6 +84,30 @@ cases above, but summarised per show:
   but markedly less wasted space across the two pages combined than
   before.
 
+## JurisdictionBlock and TrophiesPage With-Thanks onto Flow
+
+Fixes a second, latent instance of the "nested inside an extra wrapping
+View defeats minPresenceAhead" issue (pdf-kit README) — both headings were
+very likely already failing to protect against being orphaned, since
+Phase A didn't touch this (it's a Phase B restructure, not a mechanical
+swap). Only the donations grid's BalancedColumns switch produces a visible
+diff (the two golden fixtures with donations configured); the
+minPresenceAhead fix itself has no golden fixture positioned at the exact
+crossover to demonstrate visually.
+
+- `bagsd-withthanks-BEFORE.png` / `-AFTER.png` — 2 donors. BEFORE: row-major
+  flexWrap (left, right, done). AFTER: BalancedColumns groups by measured
+  height (left, right — the two-item case looks identical here since a
+  single row can't show the grouping difference; included for completeness).
+- `sw-withthanks-BEFORE.png` / `-AFTER.png` — 5 donors, the case that
+  actually shows the difference. BEFORE: row-major alternation (2 rows of
+  2 + 1 solo, reading left-right-left-right-left). AFTER: column-major
+  balance (2 items in the left column, 3 in the right) — a deliberate
+  column-major reading order, the standard shape for a printed sponsor/
+  donor list, and the direct purpose of switching to BalancedColumns.
+  Neither layout loses or duplicates a name; this is a reading-order
+  trade-off inherent to adopting measured-height column balancing.
+
 ## Cover FitText (club name + show title)
 
 No real fixture's baseline changed — see the commit message
