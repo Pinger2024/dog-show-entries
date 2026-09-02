@@ -398,13 +398,14 @@ export function FrontMatterContent({ show, compact }: FrontMatterProps & { compa
         </View>
       )}
 
-      {/* Class definitions stay atomic — they're short enough (typically
-          8-12 defs on one page) that fitting them on a single page is
-          always preferable to a two-page split. */}
+      {/* No wrapping View here — ClassDefinitionsContent renders a pdf-kit
+          Flow, which needs to be a direct child of the page's own flow for
+          its heading-glue protection to work (see that component's own
+          comment, and the pdf-kit README's minPresenceAhead-inside-a-
+          wrapper limitation). The section gap is applied as the heading's
+          own marginTop instead. */}
       {(show.classDefinitions?.length ?? 0) > 0 && (
-        <View style={{ marginTop: SECTION_GAP }} wrap={false} minPresenceAhead={compact ? 120 : 240}>
-          <ClassDefinitionsContent show={show} />
-        </View>
+        <ClassDefinitionsContent show={show} sectionGap={SECTION_GAP} />
       )}
 
       {/* Sponsors get a page of their own (Mandy 2026-06-19) — `break` starts
@@ -1485,21 +1486,51 @@ export function JudgesListPage({ show }: FrontMatterProps) {
 
 // ── Class Definitions ──────────────────────────────────────────
 
-export function ClassDefinitionsContent({ show }: FrontMatterProps) {
+/**
+ * `sectionGap` becomes the heading's own `marginTop` rather than an outer
+ * wrapping View, so this can render as a genuine direct child of the
+ * page's flow — see the file-level note on FrontMatterContent's class-
+ * definitions call site for why that matters (pdf-kit's Flow needs no
+ * extra wrapping View between it and the page for minPresenceAhead to
+ * hold — README: "A react-pdf limitation this kit's tests found").
+ */
+export function ClassDefinitionsContent({ show, sectionGap = 0 }: FrontMatterProps & { sectionGap?: number }) {
   const defs = show.classDefinitions ?? [];
   if (defs.length === 0) return null;
+  // A single Flow block: heading = the section band, body = every
+  // definition. Flow keeps the heading glued to the START of the body
+  // (never orphaned alone at a page foot) WITHOUT forcing the whole list
+  // atomic — historically the "Definitions of Classes" block was one big
+  // wrap={false} unit (see FrontMatterContent), so a list just slightly
+  // too tall for the current page moved WHOLESALE onto a fresh page
+  // (Mandy 2026-07-20: "a 16-definition list spilled one item onto a
+  // near-blank page" — the hand-tuned fix was to tighten spacing so it
+  // fit, which doesn't generalise to a longer list). Now the list can
+  // split at a definition boundary like any other flowing content, and a
+  // list too long for even a fresh page paginates instead of overflowing.
   return (
-    <>
-      <SectionBand title="Definitions of Classes" />
-      {defs.map((def) => (
-        <KeepTogether key={def.name}>
-          <Text style={styles.classDefName}>{def.name}</Text>
-          {def.description && (
-            <Text style={styles.classDefDescription}>{def.description}</Text>
-          )}
-        </KeepTogether>
-      ))}
-    </>
+    <Flow
+      blocks={[
+        {
+          key: 'class-definitions',
+          heading: <SectionBand title="Definitions of Classes" />,
+          headingStyle: sectionGap ? { marginTop: sectionGap } : undefined,
+          keepWithHeadingHeight: 60,
+          body: (
+            <>
+              {defs.map((def) => (
+                <KeepTogether key={def.name}>
+                  <Text style={styles.classDefName}>{def.name}</Text>
+                  {def.description && (
+                    <Text style={styles.classDefDescription}>{def.description}</Text>
+                  )}
+                </KeepTogether>
+              ))}
+            </>
+          ),
+        },
+      ]}
+    />
   );
 }
 
