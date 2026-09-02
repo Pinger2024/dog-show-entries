@@ -139,6 +139,11 @@ describe('design system conformance (Show Experience green)', () => {
       file: 'src/components/judge-contract/judge-contract-pdf.tsx',
       reason: 'react-pdf styling file — renders a static PDF, not the live app shell',
     },
+    {
+      file: 'src/components/pdf-kit/section-title.tsx',
+      reason:
+        'react-pdf styling file — the "catalogue" SectionTitle variant mirrors catalogue-styles.ts C.primary (print palette, not the app shell)',
+    },
   ];
 
   it('should not reference the retired #2D5F3F brand hex outside the allowlist', () => {
