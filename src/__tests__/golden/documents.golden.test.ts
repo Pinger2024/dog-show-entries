@@ -113,7 +113,24 @@ async function compareDocument(slug: string, docName: string, buffer: Buffer): P
 
   const baseline = parseGeometry(readFileSync(baselinePath, 'utf8'));
   const diff = diffGeometry(baseline, current);
-  if (isGeometryDiffEmpty(diff)) return;
+  if (isGeometryDiffEmpty(diff)) {
+    // Text-layer drift (see pdf-inspect.ts's isDroppedLetterMatch) never
+    // fails this test on its own, but is worth a discoverable record so
+    // occurrences can be counted across the whole guard even when nothing
+    // else about the document changed — write the same diff.md a real
+    // mismatch would, just without expect.fail().
+    if (diff.textDrift.length > 0) {
+      const outDir = path.join(OUTPUT_DIR, slug, docName);
+      mkdirSync(outDir, { recursive: true });
+      const summary = summariseDiff(`${slug} — ${docName}`, diff);
+      writeFileSync(path.join(outDir, 'diff.md'), summary + '\n');
+      console.log(
+        `[golden] text-layer drift only (test still passes): ${slug}/${docName} — ` +
+          `${diff.textDrift.length} occurrence(s), see ${path.relative(process.cwd(), outDir)}/diff.md`,
+      );
+    }
+    return;
+  }
 
   const outDir = path.join(OUTPUT_DIR, slug, docName);
   mkdirSync(outDir, { recursive: true });
