@@ -42,4 +42,44 @@ describe('computeSh01Stats — RKC SH01 counting rules (Mandy 2026-07-07)', () =
     expect(breeds[0].mixed).toBe(2);
     expect(breeds[0].absentMixed).toBe(1);
   });
+
+  // Single-breed shows leave show_classes.breed_id NULL (there's only ever
+  // one breed at the show) — confirmed against real Clyde Valley + GSD Club
+  // of Scotland data 2026-08-31. Dog/bitch classes are still sex-specific
+  // (judged separately), so totals must land in Dogs & Bitches, not Mixed.
+  const nullBreedSexClasses = [
+    { sex: 'dog', breed: null },
+    { sex: 'bitch', breed: null },
+  ];
+
+  it('single-breed show, NULL class breed, no show breed passed: falls back to the entries dog breed', () => {
+    const entries: Sh01EntryInput[] = [
+      dogEntry('d1', 'dog', false),
+      dogEntry('d2', 'dog', true),
+      dogEntry('b1', 'bitch', false),
+    ];
+    const { breeds } = computeSh01Stats(entries, nullBreedSexClasses);
+    expect(breeds).toHaveLength(1);
+    const row = breeds[0];
+    expect(row.breedName).toBe('German Shepherd Dog');
+    expect(row.judgedSeparately).toBe(true);
+    expect(row.dogs).toBe(2);
+    expect(row.absentDogs).toBe(1);
+    expect(row.bitches).toBe(1);
+    expect(row.absentBitches).toBe(0);
+  });
+
+  it('single-breed show, NULL class breed, show breed passed explicitly (shows.breedId): uses it', () => {
+    const entries: Sh01EntryInput[] = [
+      dogEntry('d1', 'dog', false),
+      dogEntry('b1', 'bitch', true),
+    ];
+    const { breeds } = computeSh01Stats(entries, nullBreedSexClasses, 'German Shepherd Dog');
+    expect(breeds).toHaveLength(1);
+    const row = breeds[0];
+    expect(row.judgedSeparately).toBe(true);
+    expect(row.dogs).toBe(1);
+    expect(row.bitches).toBe(1);
+    expect(row.absentBitches).toBe(1);
+  });
 });

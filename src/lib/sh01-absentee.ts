@@ -53,11 +53,24 @@ export interface Sh01Totals {
 export function computeSh01Stats(
   entries: Sh01EntryInput[],
   showClasses: Sh01ClassInput[] = [],
+  showBreedName?: string | null,
 ): Sh01Totals {
+  // Single-breed shows leave show_classes.breed_id NULL — there's only ever
+  // one breed at the show, so no per-class breed was ever set (Mandy/Michael
+  // 2026-08-31: Clyde Valley + GSD Club of Scotland both showed their totals
+  // in the Mixed column despite dogs and bitches being judged separately).
+  // Resolve a class's breed as: its own breed, else the show's breed
+  // (shows.breedId, passed in as showBreedName), else — if every entered dog
+  // is the same breed — that breed.
+  const entryBreedNames = new Set(
+    entries.map((e) => e.dog?.breed?.name).filter((n): n is string => Boolean(n)),
+  );
+  const fallbackBreedName = showBreedName ?? (entryBreedNames.size === 1 ? [...entryBreedNames][0] : null);
+
   // A breed is "judged separately" if it has any sex-specific class.
   const separateBreeds = new Set<string>();
   for (const c of showClasses) {
-    const name = c.breed?.name;
+    const name = c.breed?.name ?? fallbackBreedName;
     if (name && (c.sex === 'dog' || c.sex === 'bitch')) separateBreeds.add(name);
   }
 
