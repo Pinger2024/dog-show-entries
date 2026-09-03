@@ -1,6 +1,7 @@
 import { Document, Page, Text, View, Image, StyleSheet, Font } from '@react-pdf/renderer';
 import path from 'path';
 import type { PrizeCardPage } from '@/lib/prize-card-pages';
+import { formatLondonLongDate } from '@/lib/date-utils';
 
 /**
  * Prize Card COMPOSITE — the official template design. Unlike the plain
@@ -177,12 +178,8 @@ const styles = StyleSheet.create({
 });
 
 export function PrizeCardComposite({ show, pages }: CompositeProps) {
-  const showDate = new Date(show.date).toLocaleDateString('en-GB', {
-    weekday: 'long',
-    day: 'numeric',
-    month: 'long',
-    year: 'numeric',
-  });
+  // Always Europe/London, never the process's own timezone (Michael 2026-09-03).
+  const showDate = formatLondonLongDate(show.date);
   const showTypeLabel = SHOW_TYPE_LABELS[show.showType] ?? show.showType;
 
   // No confirmed entries anywhere yet — a zero-Page Document is invalid PDF,

@@ -10,13 +10,13 @@
  * Handling entries have no dog and are excluded naturally.
  */
 import { and, eq, inArray, isNull } from 'drizzle-orm';
-import { format, parseISO } from 'date-fns';
 import type { Database } from '@/server/db';
 import * as schema from '@/server/db/schema';
 import { getPaidOrderIdsForShow } from '@/server/services/show-metrics';
 import { svCoatDisplayName } from '@/lib/class-labels';
 import { resolveJudgeForClass } from '@/lib/judge-resolution';
 import { formatRegNumber, smartOwnerTitleCase } from '@/components/catalogue/catalogue-utils';
+import { formatLondonDateSlash } from '@/lib/date-utils';
 import type { GradingCardEntry, GradingCardsInfo } from '@/components/reports/grading-cards-pdf';
 
 export interface GradingCardsLoad {
@@ -27,7 +27,7 @@ export interface GradingCardsLoad {
 function safeDate(iso: string | null | undefined): string {
   if (!iso) return '';
   try {
-    return format(parseISO(iso), 'dd/MM/yyyy');
+    return formatLondonDateSlash(iso);
   } catch {
     return iso;
   }

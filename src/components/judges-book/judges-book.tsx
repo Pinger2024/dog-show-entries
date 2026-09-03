@@ -3,6 +3,7 @@ import { Document, Page, Text, View, Image, StyleSheet, Font } from '@react-pdf/
 import path from 'path';
 import type { JudgesBookClass, JudgesBookShowInfo } from '@/app/api/judges-book/[showId]/route';
 import { buildJudgesBookPages, type JudgesBookAwardsSection } from '@/lib/judges-book-pages';
+import { formatLondonShortDate } from '@/lib/date-utils';
 // Side-effect: registers the HankenGrotesk family used on the branded front
 // cover sheet below. Imported from a single shared module (not registered
 // inline here) — see src/lib/pdf-fonts.ts for why duplicate registration of
@@ -564,11 +565,8 @@ const coverStyles = StyleSheet.create({
 
 /** Front cover sheet — club branding, show details, the judge's name. */
 export function JudgesBookCover({ show }: { show: JudgesBookShowInfo }) {
-  const showDate = new Date(show.date).toLocaleDateString('en-GB', {
-    day: 'numeric',
-    month: 'long',
-    year: 'numeric',
-  });
+  // Always Europe/London, never the process's own timezone (Michael 2026-09-03).
+  const showDate = formatLondonShortDate(show.date);
   return (
     <Page size="A4" style={coverStyles.page}>
       <View style={coverStyles.top}>
@@ -892,11 +890,8 @@ export function JudgesBook({
   show: JudgesBookShowInfo;
   classes: JudgesBookClass[];
 }) {
-  const showDate = new Date(show.date).toLocaleDateString('en-GB', {
-    day: 'numeric',
-    month: 'long',
-    year: 'numeric',
-  });
+  // Always Europe/London, never the process's own timezone (Michael 2026-09-03).
+  const showDate = formatLondonShortDate(show.date);
 
   // Dog → Bitch → Special Awards → Junior Handling running order, with a
   // dog-side awards sign-off page after the last dog class, a mirrored

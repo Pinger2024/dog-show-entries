@@ -2,14 +2,16 @@
  * Shared catalogue formatting utilities.
  * RKC-standard typography for all catalogue PDF formats.
  */
+import { londonCalendarDateStr } from '@/lib/date-utils';
 
-/** Format date as DD.MM.YYYY (RKC catalogue standard) */
+/** Format date as DD.MM.YYYY (RKC catalogue standard). Reads the calendar
+ *  date on the Europe/London timezone, never the process's own — `new
+ *  Date('2020-05-15').getDate()` reads the SERVER's local calendar day,
+ *  which rolls back a day on any negative-offset process (Michael
+ *  2026-09-03). */
 export function formatDobKC(dob: string | null | undefined): string {
   if (!dob) return '';
-  const d = new Date(dob);
-  const day = String(d.getDate()).padStart(2, '0');
-  const month = String(d.getMonth() + 1).padStart(2, '0');
-  const year = d.getFullYear();
+  const [year, month, day] = londonCalendarDateStr(new Date(dob)).split('-');
   return `${day}.${month}.${year}`;
 }
 

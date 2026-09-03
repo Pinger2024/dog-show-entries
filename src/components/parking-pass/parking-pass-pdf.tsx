@@ -1,5 +1,6 @@
 import { Document, Page, Text, View, StyleSheet, Font } from '@react-pdf/renderer';
 import path from 'node:path';
+import { formatLondonLongDate } from '@/lib/date-utils';
 
 // Self-contained registration (mirrors judge-contract-pdf.tsx) rather than
 // importing the shared src/lib/pdf-fonts.ts module — this document is
@@ -124,14 +125,10 @@ const s = StyleSheet.create({
  *  catalogue-ready emails (e.g. "Saturday 6 June 2026"). Single-day shows
  *  print one date; multi-day shows print a start–end range. */
 function formatShowDateLine(startDate: string, endDate: string): string {
-  const fmt = (d: string) =>
-    new Date(d).toLocaleDateString('en-GB', {
-      weekday: 'long',
-      day: 'numeric',
-      month: 'long',
-      year: 'numeric',
-    });
-  return startDate === endDate ? fmt(startDate) : `${fmt(startDate)} – ${fmt(endDate)}`;
+  // Always Europe/London, never the process's own timezone (Michael 2026-09-03).
+  return startDate === endDate
+    ? formatLondonLongDate(startDate)
+    : `${formatLondonLongDate(startDate)} – ${formatLondonLongDate(endDate)}`;
 }
 
 export function ParkingPassPdf({ data }: { data: ParkingPassPdfData }) {

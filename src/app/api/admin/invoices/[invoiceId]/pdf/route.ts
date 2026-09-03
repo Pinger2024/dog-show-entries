@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from 'next/server';
 import { eq } from 'drizzle-orm';
 import { renderToBuffer, type DocumentProps } from '@react-pdf/renderer';
 import React from 'react';
-import { format } from 'date-fns';
 import { auth } from '@/lib/auth';
 import { db } from '@/server/db';
 import { invoices } from '@/server/db/schema';
@@ -10,6 +9,7 @@ import { makePdfResponse } from '@/lib/pdf-utils';
 import { stripUnembeddedBase14Fonts } from '@/lib/pdf-pad';
 import { sanitizeFilename } from '@/lib/slugify';
 import { InvoicePdf, type InvoicePdfInfo } from '@/components/reports/invoice-pdf';
+import { formatLondonShortDate, formatLondonLongDateNoComma } from '@/lib/date-utils';
 
 /**
  * Club invoices carry Remi's real Stripe-fee economics — they must never be
@@ -50,7 +50,9 @@ export async function GET(
     clubName: invoice.organisation.name,
     showName: invoice.show.name,
     showDate: safeDate(invoice.show.startDate),
-    issuedAt: format(invoice.issuedAt, 'd MMMM yyyy'),
+    // issuedAt is a timestamptz instant — Europe/London, never the process's
+    // own timezone (Michael 2026-09-03).
+    issuedAt: formatLondonShortDate(invoice.issuedAt),
   };
 
   try {
@@ -74,7 +76,7 @@ export async function GET(
 
 function safeDate(iso: string): string {
   try {
-    return format(new Date(iso), 'EEEE d MMMM yyyy');
+    return formatLondonLongDateNoComma(iso);
   } catch {
     return iso;
   }

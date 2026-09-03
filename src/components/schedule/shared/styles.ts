@@ -12,6 +12,7 @@ import { StyleSheet, Font } from '@react-pdf/renderer';
 import path from 'path';
 import type { ScheduleData } from '@/server/db/schema/shows';
 import { getDockingStatement as getDockingStatementShared } from '@/lib/rkc-compliance';
+import { formatLondonLongDate, formatLondonShortDate } from '@/lib/date-utils';
 // Side-effect: registers the HankenGrotesk family used below for display/
 // heading elements. Imported from a single shared module (not registered
 // inline here) — see src/lib/pdf-fonts.ts for why duplicate registration
@@ -118,23 +119,21 @@ export function formatVenue(name: string, address?: string | null, postcode?: st
   return parts.join(', ').replace(/,\s*,/g, ',').replace(/\s+/g, ' ').trim();
 }
 
+// Always Europe/London, never the process's own timezone — production runs
+// in UTC (Render), and entriesOpenDate/entryCloseDate/postalCloseDate store
+// a UK wall-clock instant (e.g. 2026-04-26T23:00:00Z = 27 April 00:00 BST).
+// A plain `toLocaleDateString` with no explicit timeZone used to silently
+// print the day BEFORE the real UK date on the live server (Michael
+// 2026-09-03: BAGSD schedule printed 26 April/18 June instead of 27
+// April/19 June). See formatLondonDate's doc comment in date-utils.ts —
+// it's also safe for date-only fields like show.date, so every date here
+// goes through it, not just the timestamptz ones.
 export function formatDate(dateStr: string): string {
-  const d = new Date(dateStr);
-  return d.toLocaleDateString('en-GB', {
-    weekday: 'long',
-    day: 'numeric',
-    month: 'long',
-    year: 'numeric',
-  });
+  return formatLondonLongDate(dateStr);
 }
 
 export function formatShortDate(dateStr: string): string {
-  const d = new Date(dateStr);
-  return d.toLocaleDateString('en-GB', {
-    day: 'numeric',
-    month: 'long',
-    year: 'numeric',
-  });
+  return formatLondonShortDate(dateStr);
 }
 
 export function formatTime(timeStr: string): string {
@@ -151,9 +150,12 @@ export function formatTime(timeStr: string): string {
 
 export function getEstimationDate(closeDate: string | null): string | null {
   if (!closeDate) return null;
-  const d = new Date(closeDate);
-  d.setDate(d.getDate() - 7);
-  return formatShortDate(d.toISOString());
+  // Shift by exactly 7×24h of the underlying instant (never process-local
+  // getDate()/setDate(), which read/write the SERVER's own calendar day —
+  // wrong on the UTC production box) — formatShortDate below then renders
+  // the result on the Europe/London calendar.
+  const shifted = new Date(new Date(closeDate).getTime() - 7 * 24 * 60 * 60 * 1000);
+  return formatShortDate(shifted.toISOString());
 }
 
 export function getDockingStatement(sd: ScheduleData | null): string {

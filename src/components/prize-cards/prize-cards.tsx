@@ -1,5 +1,6 @@
 import { Document, Page, Text, View, StyleSheet, Font, Image } from '@react-pdf/renderer';
 import path from 'path';
+import { formatLondonLongDate } from '@/lib/date-utils';
 
 // Register Times New Roman
 const fontsDir = path.join(process.cwd(), 'public', 'fonts');
@@ -252,12 +253,8 @@ export function PrizeCards({ show, classes, includeJudgeName, placements, cardSt
   // Full date format with weekday + ordinal day matches the Higham Press
   // tradition (e.g. "Saturday 16 May 2026") — feels ceremonial vs the bare
   // "16 May 2026" the previous design used.
-  const showDate = new Date(show.date).toLocaleDateString('en-GB', {
-    weekday: 'long',
-    day: 'numeric',
-    month: 'long',
-    year: 'numeric',
-  });
+  // Always Europe/London, never the process's own timezone (Michael 2026-09-03).
+  const showDate = formatLondonLongDate(show.date);
   const showTypeLabel = SHOW_TYPE_LABELS[show.showType] ?? show.showType;
   const placementCount = Math.min(Math.max(placements, 1), 5);
 
