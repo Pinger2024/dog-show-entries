@@ -44,3 +44,11 @@ jobs:
 
       # pretest hook handles `db:push:test`, which respects DATABASE_URL above.
       - run: npm test
+      - name: Upload golden diffs (changed-page PNGs + diff.md) when the guard fails
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: golden-output
+          path: golden-output/
+          if-no-files-found: ignore
+          retention-days: 14
