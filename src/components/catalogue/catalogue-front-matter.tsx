@@ -11,6 +11,7 @@ import { ss, SV, SV_FONTS } from '@/components/schedule/shared/sv-styles';
 import { Numero } from '@/components/schedule/shared/numero';
 import { getRkcScheduleProfile } from '@/lib/rkc-schedule-profile';
 import { RKC_JUDGES_WELFARE_STATEMENT, isRkcJudgesWelfareStatement } from '@/lib/rkc-statements';
+import { formatLondonLongDate } from '@/lib/date-utils';
 
 // A5 portrait is 148mm x 210mm = ~419.53pt x ~595.28pt. These widths are the
 // usable content width inside CoverPage's coverTopBand (paddingHorizontal:
@@ -96,14 +97,9 @@ function CatalogueFolio() {
   return <Folio style={styles.footer} format={catalogueFolioFormat} />;
 }
 
+// Always Europe/London, never the process's own timezone (Michael 2026-09-03).
 function formatCoverDate(dateStr: string): string {
-  const d = new Date(dateStr);
-  return d.toLocaleDateString('en-GB', {
-    weekday: 'long',
-    day: 'numeric',
-    month: 'long',
-    year: 'numeric',
-  });
+  return formatLondonLongDate(dateStr);
 }
 
 function formatTime(timeStr: string): string {

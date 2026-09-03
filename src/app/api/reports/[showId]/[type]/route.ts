@@ -5,7 +5,6 @@ import { eq, asc } from 'drizzle-orm';
 import * as schema from '@/server/db/schema';
 import { renderToBuffer, type DocumentProps } from '@react-pdf/renderer';
 import React from 'react';
-import { format, parseISO } from 'date-fns';
 import { sanitizeFilename } from '@/lib/slugify';
 import { authenticatePdfRequest, makePdfResponse } from '@/lib/pdf-utils';
 import { stripUnembeddedBase14Fonts } from '@/lib/pdf-pad';
@@ -20,6 +19,7 @@ import {
 } from '@/components/reports/show-report-pdf';
 import { Sh01AbsenteeReport } from '@/components/reports/sh01-absentee-report';
 import { computeSh01Stats, type Sh01EntryInput, type Sh01ClassInput } from '@/lib/sh01-absentee';
+import { formatLondonShortDate, formatLondonLongDateNoComma, formatLondonDateSlash } from '@/lib/date-utils';
 import { SvResultsReport, type SvResultsReportInfo } from '@/components/reports/sv-results-pdf';
 import { loadSvResultsData } from '@/server/services/sv-results-data';
 import { buildSvResultsReport, buildSvResultsXlsxRows } from '@/lib/sv-results';
@@ -89,7 +89,7 @@ export async function GET(
 
   const show = await db.query.shows.findFirst({
     where: eq(schema.shows.id, showId),
-    with: { organisation: { columns: publicOrgColumns }, breed: true },
+    with: { organisation: { columns: publicOrgColumns } },
   });
   if (!show) {
     return NextResponse.json({ error: 'Show not found' }, { status: 404 });
@@ -129,7 +129,7 @@ export async function GET(
         orgName: load.show.organisationName,
         showName: load.show.name,
         showDate: safeDate(load.show.startDate),
-        generatedAt: format(new Date(), 'd MMMM yyyy'),
+        generatedAt: formatLondonShortDate(new Date()),
       };
       const svElement = React.createElement(SvResultsReport, { info: svInfo, data });
       const buffer = await renderToBuffer(svElement as React.ReactElement<DocumentProps>);
@@ -254,7 +254,7 @@ export async function GET(
     showName: show.name,
     organisation: show.organisation?.name ?? null,
     showDate: safeDate(show.startDate),
-    generatedAt: format(new Date(), 'd MMMM yyyy'),
+    generatedAt: formatLondonShortDate(new Date()),
   };
 
   // Order classes by class number (Junior Handlers last) — shared by the
@@ -313,14 +313,7 @@ export async function GET(
       // RKC SH01 Championship Absentee Report — per-breed dog/bitch/absentee
       // statistics feeding the KC's CC allocation (Mandy 2026-07-07).
       const nonDeleted = entries.filter((e) => !e.deletedAt) as unknown as Sh01EntryInput[];
-      // Single-breed shows leave show_classes.breed_id NULL (there's only
-      // ever one breed) — fall back to the show's own breed so sexed classes
-      // still land in Dogs & Bitches instead of Mixed (Mandy/Michael 2026-08-31).
-      const { breeds } = computeSh01Stats(
-        nonDeleted,
-        showClasses as unknown as Sh01ClassInput[],
-        show.breed?.name ?? null,
-      );
+      const { breeds } = computeSh01Stats(nonDeleted, showClasses as unknown as Sh01ClassInput[]);
       if (type === 'sh01-xlsx') {
         const buffer = await buildSh01Xlsx(breeds);
         return xlsxResponse(buffer, `${sanitizeFilename(show.name)}-KC-Absentee-Report-SH01.xlsx`, isPreview);
@@ -328,7 +321,7 @@ export async function GET(
       const element = React.createElement(Sh01AbsenteeReport, {
         info: {
           society: show.organisation?.name ?? show.name,
-          showDate: format(parseISO(show.startDate), 'dd/MM/yyyy'),
+          showDate: formatLondonDateSlash(show.startDate),
           secretaryName: show.secretaryName ?? '',
         },
         breeds,
@@ -357,7 +350,7 @@ async function renderPdf(element: React.ReactElement, filename: string, isPrevie
 
 function safeDate(iso: string): string {
   try {
-    return format(parseISO(iso), 'EEEE d MMMM yyyy');
+    return formatLondonLongDateNoComma(iso);
   } catch {
     return iso;
   }
@@ -365,7 +358,7 @@ function safeDate(iso: string): string {
 
 function safeXlsxDate(iso: string): string {
   try {
-    return format(parseISO(iso), 'dd/MM/yyyy');
+    return formatLondonDateSlash(iso);
   } catch {
     return iso;
   }

@@ -3,6 +3,7 @@ import path from 'path';
 // Side-effect import: registers Inter font + hyphenation callback.
 import { C } from '@/components/catalogue/catalogue-styles';
 import { KC_PLACEMENTS } from '@/lib/placements';
+import { formatLondonShortDate } from '@/lib/date-utils';
 
 /**
  * Award Board PDF — a wipe-clean, laminatable show-day grid where
@@ -277,13 +278,8 @@ export function AwardBoard({
   const showTypeLabel = show?.showType
     ? (SHOW_TYPE_LABELS[show.showType] ?? show.showType)
     : null;
-  const showDate = show?.showDate
-    ? new Date(show.showDate).toLocaleDateString('en-GB', {
-        day: 'numeric',
-        month: 'long',
-        year: 'numeric',
-      })
-    : null;
+  // Always Europe/London, never the process's own timezone (Michael 2026-09-03).
+  const showDate = show?.showDate ? formatLondonShortDate(show.showDate) : null;
 
   const title = show?.clubName
     ? `Award Board — ${show.clubName}`

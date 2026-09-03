@@ -1,6 +1,6 @@
 import { Document, Page, Text, View, StyleSheet, Font } from '@react-pdf/renderer';
 import path from 'node:path';
-import { formatCurrency } from '@/lib/date-utils';
+import { formatCurrency, formatLondonLongDate, formatLondonShortDate } from '@/lib/date-utils';
 
 const fontsDir = path.join(process.cwd(), 'public', 'fonts');
 Font.register({
@@ -236,22 +236,16 @@ function formatPence(pence: number | null): string {
   return formatCurrency(pence);
 }
 
+// Always Europe/London, never the process's own timezone (Michael 2026-09-03)
+// — offerSentAt/acceptedAt/generatedAt are instants, and formatting them
+// with no explicit timeZone picks up the SERVER's own zone (UTC in prod).
 function formatDate(d: Date | null): string {
   if (!d) return '—';
-  return d.toLocaleDateString('en-GB', {
-    weekday: 'long',
-    day: 'numeric',
-    month: 'long',
-    year: 'numeric',
-  });
+  return formatLondonLongDate(d);
 }
 
 function formatDateShort(d: Date): string {
-  return d.toLocaleDateString('en-GB', {
-    day: 'numeric',
-    month: 'long',
-    year: 'numeric',
-  });
+  return formatLondonShortDate(d);
 }
 
 export function JudgeContractPdf({ data }: { data: JudgeContractPdfData }) {

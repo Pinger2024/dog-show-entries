@@ -49,45 +49,32 @@ import {
   type SvGrade,
 } from '@/lib/sv-grading';
 import { SV_RULES } from '@/lib/sv-rules';
+import { formatLondonLongDate, formatLondonAbbrevDate } from '@/lib/date-utils';
 
 // ── Formatting helpers ─────────────────────────────────────────────────────
-
-function toDateOnly(input: string | Date | null | undefined): Date | null {
-  if (!input) return null;
-  // Drizzle hands us Date objects for some date columns and ISO strings for
-  // others (depends on the column type + driver). Accept both, anchored at
-  // noon UTC so we don't get a TZ-driven previous-day in en-GB.
-  if (input instanceof Date) {
-    return Number.isNaN(input.getTime()) ? null : input;
-  }
-  const datePart = String(input).slice(0, 10);
-  const d = new Date(`${datePart}T12:00:00Z`);
-  return Number.isNaN(d.getTime()) ? null : d;
-}
+//
+// Always Europe/London, never the process's own timezone or a raw
+// UTC-substring slice. Drizzle hands us Date objects for some date columns
+// and ISO strings for others (depends on the column type + driver) — both
+// are instants, and formatLondonDate() renders an instant's Europe/London
+// calendar date regardless of the server's own timezone. This used to slice
+// the first 10 characters off an ISO string (the UTC date), which is wrong
+// for entriesOpenDate/entryCloseDate/postalCloseDate: those store a UK
+// wall-clock instant (e.g. 2026-04-26T23:00:00Z = 27 April 00:00 BST), so
+// the UTC-date substring was a day behind the real UK date (Michael
+// 2026-09-03).
 
 function fmtDate(input: string | Date | null | undefined): string {
-  const d = toDateOnly(input);
-  if (!d) return '';
-  return d.toLocaleDateString('en-GB', {
-    weekday: 'long',
-    day: 'numeric',
-    month: 'long',
-    year: 'numeric',
-  });
+  if (!input) return '';
+  return formatLondonLongDate(input);
 }
 
 /** Shorter form for the right-column "Key dates" list — "Sun 31 May 2026". The
  *  full long-form fmtDate runs into the label when stacked at 50% page width
  *  (Amanda 2026-05-22). */
 function fmtDateShort(input: string | Date | null | undefined): string {
-  const d = toDateOnly(input);
-  if (!d) return '';
-  return d.toLocaleDateString('en-GB', {
-    weekday: 'short',
-    day: 'numeric',
-    month: 'short',
-    year: 'numeric',
-  });
+  if (!input) return '';
+  return formatLondonAbbrevDate(input);
 }
 
 function fmtMoney(pence: number | null | undefined): string {

@@ -1,6 +1,7 @@
 import { View, Text, Image } from '@react-pdf/renderer';
 import { FitText } from '@/components/pdf-kit/fit-text';
 import { styles, C } from './catalogue-styles';
+import { formatLondonLongDate } from '@/lib/date-utils';
 
 const SHOW_TYPE_LABELS: Record<string, string> = {
   championship: 'Championship Show',
@@ -42,14 +43,8 @@ export function CatalogueHeader({
   subtitle,
   logoUrl,
 }: CatalogueHeaderProps) {
-  const formattedDate = date
-    ? new Date(date).toLocaleDateString('en-GB', {
-        weekday: 'long',
-        day: 'numeric',
-        month: 'long',
-        year: 'numeric',
-      })
-    : '';
+  // Always Europe/London, never the process's own timezone (Michael 2026-09-03).
+  const formattedDate = date ? formatLondonLongDate(date) : '';
 
   const showTypeLabel = showType ? SHOW_TYPE_LABELS[showType] : undefined;
 

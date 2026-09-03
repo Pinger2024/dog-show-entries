@@ -7,11 +7,11 @@
 
 import path from 'node:path';
 import sharp from 'sharp';
-import { format, parseISO } from 'date-fns';
 import { db } from '@/server/db';
 import { and, eq, isNull, asc, sql, inArray } from 'drizzle-orm';
 import * as schema from '@/server/db/schema';
 import { formatDogName, formatDogNameForCatalogue } from '@/lib/utils';
+import { formatLondonLongDateNoComma } from '@/lib/date-utils';
 import { appendRegistrationFlags } from '@/lib/registration-flags';
 import { renderToBuffer, Document, Page, Text, StyleSheet } from '@react-pdf/renderer';
 import { CatalogueRingside } from '@/components/catalogue/catalogue-ringside';
@@ -1036,7 +1036,7 @@ function escapeXml(s: string): string {
 }
 
 function formatShowDate(isoDate: string): string {
-  return format(parseISO(isoDate), 'EEEE d MMMM yyyy'); // "Saturday 4 July 2026"
+  return formatLondonLongDateNoComma(isoDate); // "Saturday 4 July 2026"
 }
 
 async function composeOneCard(

@@ -1,5 +1,6 @@
 import { Document, Page, Text, View, StyleSheet, Font } from '@react-pdf/renderer';
 import path from 'path';
+import { formatLondonShortDate } from '@/lib/date-utils';
 
 const fontsDir = path.join(process.cwd(), 'public', 'fonts');
 Font.register({
@@ -187,11 +188,8 @@ export function RingBoard({
   show: RingBoardShowInfo;
   rings: RingBoardRing[];
 }) {
-  const showDate = new Date(show.date).toLocaleDateString('en-GB', {
-    day: 'numeric',
-    month: 'long',
-    year: 'numeric',
-  });
+  // Always Europe/London, never the process's own timezone (Michael 2026-09-03).
+  const showDate = formatLondonShortDate(show.date);
   const showTypeLabel = SHOW_TYPE_LABELS[show.showType] ?? show.showType;
 
   return (

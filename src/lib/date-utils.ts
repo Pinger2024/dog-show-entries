@@ -236,6 +236,70 @@ export function londonCalendarDateStr(instant: Date): string {
 }
 
 /**
+ * Formats any instant (a Date, an ISO timestamp string, or a plain
+ * YYYY-MM-DD date-only string) as a human date string, ALWAYS anchored to
+ * the Europe/London calendar day — never the process's local timezone.
+ *
+ * Production runs in UTC (Render). `entriesOpenDate`/`entryCloseDate`/
+ * `postalCloseDate` are `timestamptz` columns that store a specific UK
+ * wall-clock instant (e.g. `2026-07-17T23:00:00Z` = 18 July 00:00 BST) —
+ * every printed document (schedule, catalogue, reports, invoices, judges
+ * book, prize cards…) must show the UK date an exhibitor would recognise,
+ * not whichever day that instant happens to fall on in the server's own
+ * timezone. Confirmed live 2026-09-03: the same BAGSD schedule printed
+ * "26 April" (open) / "18 June" (close) on the UTC server but "27 April" /
+ * "19 June" when rendered in London time — the correct dates.
+ *
+ * Safe for date-only strings too: `new Date('2026-08-29')` is UTC
+ * midnight, and Europe/London is always UTC or UTC+1, so formatting it in
+ * Europe/London can only move the wall-clock time later within the same
+ * calendar day — it never shifts the date backward. So routing every
+ * document date through this (rather than only the timestamptz fields)
+ * costs nothing and removes an entire class of "which TZ is this box in"
+ * bugs at once.
+ */
+export function formatLondonDate(
+  instant: Date | string,
+  opts: Intl.DateTimeFormatOptions = { day: 'numeric', month: 'long', year: 'numeric' },
+): string {
+  const d = typeof instant === 'string' ? new Date(instant) : instant;
+  if (Number.isNaN(d.getTime())) return '';
+  return new Intl.DateTimeFormat('en-GB', { ...opts, timeZone: 'Europe/London' }).format(d);
+}
+
+/** Long form used on schedule/catalogue cover pages: "Saturday, 27 April 2026"
+ *  (`Intl.DateTimeFormat`'s en-GB long-weekday form always inserts the
+ *  comma — the same as the `toLocaleDateString('en-GB', {weekday:'long',...})`
+ *  calls this replaces, so it matches what those call sites already printed). */
+export function formatLondonLongDate(instant: Date | string): string {
+  return formatLondonDate(instant, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+}
+
+/** Same long form WITHOUT the comma: "Saturday 27 April 2026" — matches the
+ *  date-fns `format(d, 'EEEE d MMMM yyyy')` convention used by a few report/
+ *  invoice call sites, so moving those to Europe/London-safe formatting
+ *  doesn't also silently insert a comma that wasn't there before. */
+export function formatLondonLongDateNoComma(instant: Date | string): string {
+  return formatLondonLongDate(instant).replace(', ', ' ');
+}
+
+/** Short form used for key-dates lists: "27 April 2026" (no weekday). */
+export function formatLondonShortDate(instant: Date | string): string {
+  return formatLondonDate(instant, { day: 'numeric', month: 'long', year: 'numeric' });
+}
+
+/** Abbreviated form for dense tables: "Sun 27 Apr 2026". */
+export function formatLondonAbbrevDate(instant: Date | string): string {
+  return formatLondonDate(instant, { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
+}
+
+/** dd/MM/yyyy in Europe/London, e.g. SH01/SV results report headers. */
+export function formatLondonDateSlash(instant: Date | string): string {
+  const [y, m, d] = londonCalendarDateStr(typeof instant === 'string' ? new Date(instant) : instant).split('-');
+  return `${d}/${m}/${y}`;
+}
+
+/**
  * Returns today's date in Europe/London as a YYYY-MM-DD string.
  * Comparing this to `shows.startDate` (also YYYY-MM-DD) avoids every UTC/BST
  * edge case that arises from constructing Date objects from date-only strings.

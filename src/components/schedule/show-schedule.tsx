@@ -1056,7 +1056,7 @@ export function ShowSchedule({
               'Exhibitors are responsible for the behaviour of their children & will be held responsible for any damage they cause.',
               'Awards will be given out at the end of each Class.',
               'Winners may use the Titles of “Regional Sieger / Regional Siegerin” of their respective Classes.',
-              `Entries close on ${show.entryCloseDate ? new Date(show.entryCloseDate).toLocaleDateString('en-GB') : 'the published closing date'} and the Group is not obliged to accept entries after that date; it is at the sole discretion of the event secretary whether late entries will be accepted. No entries will be accepted on the day.`,
+              `Entries close on ${show.entryCloseDate ? formatShortDate(show.entryCloseDate) : 'the published closing date'} and the Group is not obliged to accept entries after that date; it is at the sole discretion of the event secretary whether late entries will be accepted. No entries will be accepted on the day.`,
               'Please respect the Venue and clean up after your animal. Anyone found not cleaning up after their animals will be asked to leave the Venue.',
               'In the interest of SAFETY no running around the outside of the ring will be allowed, except in the designated area specifically provided for this practice.',
               'The use of Remote Trainers and Pinch Collars will not be allowed and anyone found using them will be reported and disqualified.',
