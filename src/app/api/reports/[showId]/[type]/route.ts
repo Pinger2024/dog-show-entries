@@ -89,7 +89,7 @@ export async function GET(
 
   const show = await db.query.shows.findFirst({
     where: eq(schema.shows.id, showId),
-    with: { organisation: { columns: publicOrgColumns } },
+    with: { organisation: { columns: publicOrgColumns }, breed: true },
   });
   if (!show) {
     return NextResponse.json({ error: 'Show not found' }, { status: 404 });
@@ -313,7 +313,14 @@ export async function GET(
       // RKC SH01 Championship Absentee Report — per-breed dog/bitch/absentee
       // statistics feeding the KC's CC allocation (Mandy 2026-07-07).
       const nonDeleted = entries.filter((e) => !e.deletedAt) as unknown as Sh01EntryInput[];
-      const { breeds } = computeSh01Stats(nonDeleted, showClasses as unknown as Sh01ClassInput[]);
+      // Single-breed shows leave show_classes.breed_id NULL (there's only
+      // ever one breed) — fall back to the show's own breed so sexed classes
+      // still land in Dogs & Bitches instead of Mixed (Mandy/Michael 2026-08-31).
+      const { breeds } = computeSh01Stats(
+        nonDeleted,
+        showClasses as unknown as Sh01ClassInput[],
+        show.breed?.name ?? null,
+      );
       if (type === 'sh01-xlsx') {
         const buffer = await buildSh01Xlsx(breeds);
         return xlsxResponse(buffer, `${sanitizeFilename(show.name)}-KC-Absentee-Report-SH01.xlsx`, isPreview);
