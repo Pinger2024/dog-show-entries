@@ -151,6 +151,42 @@ async function compareDocument(slug: string, docName: string, buffer: Buffer): P
   );
 }
 
+/**
+ * Every console.warn/console.error a document's render is ALLOWED to
+ * produce. Empty for every real-show fixture — react-pdf's layout
+ * warnings (advert IMAGE pages, ring-numbers duplicate keys, an oversized
+ * Officers & Committee VIEW) were all root-caused rather than suppressed
+ * (2026-09-03: see catalogue-by-breed.tsx/catalogue-by-class.tsx/
+ * catalogue-ringside.tsx's AdvertPage reuse, pdf-generation.ts's
+ * generateRingNumbersPdf dedupe, and schedule/shared/elements.tsx's
+ * InfoCard `wrap` prop). A document not listed here that produces ANY
+ * warning fails outright — see the `it.each(names)` block below.
+ *
+ * Only add an entry for a warning that is a DELIBERATE, understood
+ * consequence of a synthetic stress fixture proving an escape hatch still
+ * works (never for a real show, and never as a way to silence something
+ * merely inconvenient to fix) — `fixture`/`document` may be `'*'` to match
+ * any, `pattern` is matched as a plain substring.
+ */
+interface WarningAllowlistEntry {
+  fixture: string;
+  document: string;
+  pattern: string;
+  reason: string;
+}
+
+const WARNING_ALLOWLIST: WarningAllowlistEntry[] = [];
+
+function allowlistedReasonFor(slug: string, docName: string, warning: string): string | null {
+  const entry = WARNING_ALLOWLIST.find(
+    (e) =>
+      (e.fixture === '*' || e.fixture === slug) &&
+      (e.document === '*' || e.document === docName) &&
+      warning.includes(e.pattern),
+  );
+  return entry?.reason ?? null;
+}
+
 const fixtures = loadFixtureFiles();
 
 it('has at least one golden fixture to render', () => {
@@ -208,6 +244,22 @@ describe.each(fixtures)('golden documents: $slug', ({ slug, fixture }) => {
           `Rendered: ${rendered.map((r) => r.name).join(', ') || '(none)'}`,
       );
     }
+
+    // Warnings first — a warning carries real omission/duplication risk
+    // (react-pdf silently drops or duplicates content on exactly the
+    // conditions that produce these), so it fails the document even if
+    // the rendered geometry happens to still match its baseline.
+    const unexpected = doc.warnings.filter((w) => !allowlistedReasonFor(slug, docName, w));
+    if (unexpected.length > 0) {
+      expect.fail(
+        `"${slug}/${docName}" produced ${unexpected.length} unexpected console warning(s) during render ` +
+          `(none allowlisted in WARNING_ALLOWLIST):\n` +
+          unexpected.map((w) => `  - ${w}`).join('\n') +
+          `\nIf this is a deliberate synthetic stress case, add an explicit WARNING_ALLOWLIST entry with a ` +
+          `reason. Otherwise fix the root cause — see the doc comment above WARNING_ALLOWLIST for recent examples.`,
+      );
+    }
+
     await compareDocument(slug, docName, doc.buffer);
   }, 30_000);
 });

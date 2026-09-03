@@ -14,6 +14,14 @@ import { s, CSv } from './styles';
 
 type Variant = 'rkc' | 'sv';
 
+/** Above this many rows, an InfoCard list (Judges, Officers & Committee)
+ *  can plausibly outgrow a whole blank A5 page — pass `wrap` at the call
+ *  site once the list is this long. Every real-show golden fixture tops
+ *  out at 3 judges / 12 officers; this only engages for the pathological
+ *  case (the 30-officer stress fixture), never for a real club. See
+ *  InfoCard's `wrap` prop doc comment for why this can't just default on. */
+export const INFO_CARD_LIST_WRAP_THRESHOLD = 20;
+
 export function SectionBand({ title, variant = 'rkc' }: { title: string; variant?: Variant }) {
   return (
     <View style={[s.sectionBand, variant === 'sv' && { backgroundColor: CSv.primary }]}>
@@ -26,15 +34,43 @@ export function InfoCard({
   title,
   children,
   variant = 'rkc',
+  // Most InfoCards hold a short, fixed amount of text (fees, dates, a
+  // single officer's name) and should never be split mid-card by a page
+  // break — hence wrap={false} by default: react-pdf moves the WHOLE card
+  // to the next page as one unit when it doesn't fit in what's left,
+  // exactly what you want for a small card.
+  //
+  // But a card whose content is an unbounded LIST (Judges, Officers &
+  // Committee) can legitimately outgrow a full, blank page on a show with
+  // a big panel or committee — with wrap={false} react-pdf can't split
+  // something that doesn't even fit on its own page, so it warns "Node of
+  // type VIEW can't wrap between pages and it's bigger than available page
+  // height" AND keeps rendering it as one unsplittable block that spills
+  // past the page edge: real content silently lost off the bottom of the
+  // page, not just a noisy warning (caught by the 30-officer stress
+  // fixture, 2026-09-03 — 4 of 30 officers were rendered but invisible,
+  // past the printable area).
+  //
+  // Pass wrap={true} at a call site ONLY when it has already checked the
+  // list is long enough to realistically hit that ceiling (see the
+  // `judges.length > ...` / `sd.officers.length > ...` guards in
+  // show-schedule.tsx / show-schedule-multibreed.tsx) — every real-show
+  // golden fixture has well under that many judges or officers, so this
+  // never changes their pagination; wrap only turns on for the pathological
+  // case, where the trade-off is a card that can split (and very
+  // occasionally show its title alone at a page foot) instead of one that
+  // silently eats its own tail.
+  wrap = false,
 }: {
   title?: string;
   children: React.ReactNode;
   variant?: Variant;
+  wrap?: boolean;
 }) {
   return (
     <View
       style={[s.infoCard, variant === 'sv' && { borderLeftColor: CSv.primary }]}
-      wrap={false}
+      wrap={wrap}
     >
       {title && (
         <Text style={[s.infoCardTitle, variant === 'sv' && { color: CSv.primary }]}>{title}</Text>

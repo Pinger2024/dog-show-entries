@@ -956,12 +956,20 @@ export async function generateRingNumbersPdf(
     orderBy: [schema.catalogueNumberAsc()],
   });
 
-  const numbers = entries
-    .map((e) => e.catalogueNumber)
-    .filter((n): n is string => n != null && n.trim() !== '')
-    .map((n) => parseInt(n, 10))
-    .filter((n) => !isNaN(n))
-    .sort((a, b) => a - b);
+  // Ring numbers are per DOG (one catalogue number per dog —
+  // project_dog_one_catalogue_number), but this query is per ENTRY ROW: a
+  // dog entered in a second class gets a second `entries` row sharing the
+  // SAME catalogue number. Without deduping here, that dog's number is
+  // duplicated in the list — react-pdf then warns "Encountered two
+  // children with the same key" (the number is used as the React key) and,
+  // for real, prints that dog TWO ring-number cards instead of one.
+  const numbers = [...new Set(
+    entries
+      .map((e) => e.catalogueNumber)
+      .filter((n): n is string => n != null && n.trim() !== '')
+      .map((n) => parseInt(n, 10))
+      .filter((n) => !isNaN(n)),
+  )].sort((a, b) => a - b);
 
   if (numbers.length === 0) {
     throw new Error('No catalogue numbers found — assign catalogue numbers before generating ring numbers');

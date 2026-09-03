@@ -13,6 +13,7 @@ import {
 import { TonalWash } from '@/components/sv-pdf/cover-atoms';
 import { SV, SV_FONTS } from '@/components/schedule/shared/sv-styles';
 import { svCoatDisplayName, sectionClasses } from '@/lib/class-labels';
+import { AdvertPage } from '@/components/schedule/shared/advert-page';
 
 // Class-sponsor banner strip. Renders at the FULL content width (A5 419.5pt −
 // 22pt L/R padding = 375.5pt) at the image's own aspect ratio, capped at this
@@ -981,9 +982,7 @@ function AdvertPages({
   return (
     <>
       {matching.map((ad) => (
-        <Page key={`ad-${position}-${ad.id}`} size="A5" style={{ padding: 0, margin: 0 }}>
-          <Image src={ad.imageUrl!} style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
-        </Page>
+        <AdvertPage key={`ad-${position}-${ad.id}`} advert={ad} />
       ))}
     </>
   );

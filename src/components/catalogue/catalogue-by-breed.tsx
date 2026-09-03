@@ -1,5 +1,5 @@
 import { Fragment } from 'react';
-import { Document, Page, View, Text, Image } from '@react-pdf/renderer';
+import { Document, Page, View, Text } from '@react-pdf/renderer';
 import { styles } from './catalogue-styles';
 import {
   CoverPage,
@@ -8,6 +8,7 @@ import {
   createBreedIndexRenderer,
   isMultiBreedChampionship,
 } from './catalogue-front-matter';
+import { AdvertPage } from '@/components/schedule/shared/advert-page';
 import { formatDobKC, formatPedigreeKC, formatOwnerKC, uppercaseName } from './catalogue-utils';
 import type { CatalogueEntry, CatalogueShowInfo, ClassSponsorshipInfo } from './catalogue-types';
 
@@ -435,9 +436,7 @@ function AdvertPages({
   return (
     <>
       {matching.map((ad) => (
-        <Page key={`ad-${position}-${ad.id}`} size="A5" style={{ padding: 0, margin: 0 }}>
-          <Image src={ad.imageUrl!} style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
-        </Page>
+        <AdvertPage key={`ad-${position}-${ad.id}`} advert={ad} />
       ))}
     </>
   );
