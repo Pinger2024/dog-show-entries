@@ -44,6 +44,42 @@ export interface RenderedDocument {
    *  appears in every failure message (e.g. "catalogue-standard"). */
   name: string;
   buffer: Buffer;
+  /** Every console.warn/console.error message emitted WHILE this specific
+   *  document rendered (react-pdf layout warnings, mainly — "Node of type
+   *  X can't wrap between pages...", "Encountered two children with the
+   *  same key..."). documents.golden.test.ts fails a document outright if
+   *  it produced anything here that isn't on its explicit allowlist — see
+   *  that file's WARNING_ALLOWLIST doc comment for why the allowlist is
+   *  empty for every real-show fixture. */
+  warnings: string[];
+}
+
+/** Renders one document's PDF via `fn`, capturing every console.warn/error
+ *  emitted during JUST that render (still passed through to the real
+ *  console — GOLDEN_TRACE's stderr attribution and normal test output are
+ *  unaffected) and returning it as a fully-formed RenderedDocument. Every
+ *  push in renderAllDocuments() below goes through this so no document's
+ *  render can silently skip warning attribution. */
+async function renderTracked(name: string, fn: () => Promise<Buffer>): Promise<RenderedDocument> {
+  trace(name);
+  const warnings: string[] = [];
+  const origWarn = console.warn;
+  const origError = console.error;
+  console.warn = (...args: unknown[]) => {
+    warnings.push(args.map(String).join(' '));
+    origWarn(...args);
+  };
+  console.error = (...args: unknown[]) => {
+    warnings.push(args.map(String).join(' '));
+    origError(...args);
+  };
+  try {
+    const buffer = await fn();
+    return { name, buffer, warnings };
+  } finally {
+    console.warn = origWarn;
+    console.error = origError;
+  }
 }
 
 /** True when the fixture has at least one confirmed, non-deleted entry —
@@ -217,30 +253,30 @@ export async function renderAllDocuments(showId: string, fixture: ShowFixture): 
   // ── Catalogue — the DB-free seam, every format the ruleset supports ──────
   const snapshot = await buildCatalogueSnapshot(db, showId);
   for (const format of CATALOGUE_FORMATS) {
-    trace(`catalogue-${format}`);
-    const buffer = await renderCatalogueFromSnapshot(snapshot, format);
-    out.push({ name: `catalogue-${format}`, buffer });
+    out.push(await renderTracked(`catalogue-${format}`, () => renderCatalogueFromSnapshot(snapshot, format)));
   }
 
   // ── Schedule — public for a non-draft show, but authing anyway costs
   //    nothing and matches what a secretary's browser actually sends. ──────
   authAs(secretary);
-  out.push({
-    name: 'schedule',
-    buffer: await bufferFromPdfResponse(
-      await scheduleGET(req(`http://localhost/api/schedule/${showId}`), params({ showId })),
-      'schedule',
+  out.push(
+    await renderTracked('schedule', async () =>
+      bufferFromPdfResponse(
+        await scheduleGET(req(`http://localhost/api/schedule/${showId}`), params({ showId })),
+        'schedule',
+      ),
     ),
-  });
+  );
 
   authAs(secretary);
-  out.push({
-    name: 'judges-book',
-    buffer: await bufferFromPdfResponse(
-      await judgesBookGET(req(`http://localhost/api/judges-book/${showId}`), params({ showId })),
-      'judges-book',
+  out.push(
+    await renderTracked('judges-book', async () =>
+      bufferFromPdfResponse(
+        await judgesBookGET(req(`http://localhost/api/judges-book/${showId}`), params({ showId })),
+        'judges-book',
+      ),
     ),
-  });
+  );
 
   // ── Entry-dependent documents — skipped entirely on a zero-confirmed-
   //    entries show (a draft show that's published a schedule but hasn't
@@ -250,33 +286,36 @@ export async function renderAllDocuments(showId: string, fixture: ShowFixture): 
   //    on every real show shaped like this. ──────────────────────────────
   if (entriesConfirmed) {
     authAs(secretary);
-    out.push({
-      name: 'prize-cards',
-      buffer: await bufferFromPdfResponse(
-        await prizeCardsGET(req(`http://localhost/api/prize-cards/${showId}`), params({ showId })),
-        'prize-cards',
+    out.push(
+      await renderTracked('prize-cards', async () =>
+        bufferFromPdfResponse(
+          await prizeCardsGET(req(`http://localhost/api/prize-cards/${showId}`), params({ showId })),
+          'prize-cards',
+        ),
       ),
-    });
+    );
 
     for (const format of ['multi-up', 'single'] as const) {
       authAs(secretary);
-      out.push({
-        name: `ring-numbers-${format}`,
-        buffer: await bufferFromPdfResponse(
-          await ringNumbersGET(req(`http://localhost/api/ring-numbers/${showId}?format=${format}`), params({ showId })),
-          `ring-numbers-${format}`,
+      out.push(
+        await renderTracked(`ring-numbers-${format}`, async () =>
+          bufferFromPdfResponse(
+            await ringNumbersGET(req(`http://localhost/api/ring-numbers/${showId}?format=${format}`), params({ showId })),
+            `ring-numbers-${format}`,
+          ),
         ),
-      });
+      );
     }
 
     authAs(secretary);
-    out.push({
-      name: 'ring-board',
-      buffer: await bufferFromPdfResponse(
-        await ringBoardGET(req(`http://localhost/api/ring-board/${showId}`), params({ showId })),
-        'ring-board',
+    out.push(
+      await renderTracked('ring-board', async () =>
+        bufferFromPdfResponse(
+          await ringBoardGET(req(`http://localhost/api/ring-board/${showId}`), params({ showId })),
+          'ring-board',
+        ),
       ),
-    });
+    );
   } else {
     console.log(
       `[golden] skipping prize-cards/ring-numbers/ring-board for show ${showId} — no confirmed entries ` +
@@ -296,25 +335,27 @@ export async function renderAllDocuments(showId: string, fixture: ShowFixture): 
   }
   for (const type of reportTypes) {
     authAs(secretary);
-    out.push({
-      name: `report-${type}`,
-      buffer: await bufferFromPdfResponse(
-        await reportsGET(req(`http://localhost/api/reports/${showId}/${type}`), params({ showId, type })),
-        `report-${type}`,
+    out.push(
+      await renderTracked(`report-${type}`, async () =>
+        bufferFromPdfResponse(
+          await reportsGET(req(`http://localhost/api/reports/${showId}/${type}`), params({ showId, type })),
+          `report-${type}`,
+        ),
       ),
-    });
+    );
   }
 
   const invoiceRow = await db.query.invoices.findFirst({ where: eq(schema.invoices.showId, showId) });
   if (invoiceRow) {
     authAs(admin);
-    out.push({
-      name: 'invoice',
-      buffer: await bufferFromPdfResponse(
-        await invoiceGET(req(`http://localhost/api/admin/invoices/${invoiceRow.id}/pdf`), params({ invoiceId: invoiceRow.id })),
-        'invoice',
+    out.push(
+      await renderTracked('invoice', async () =>
+        bufferFromPdfResponse(
+          await invoiceGET(req(`http://localhost/api/admin/invoices/${invoiceRow.id}/pdf`), params({ invoiceId: invoiceRow.id })),
+          'invoice',
+        ),
       ),
-    });
+    );
   }
 
   return out;
