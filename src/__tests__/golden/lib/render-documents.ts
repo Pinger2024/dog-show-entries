@@ -31,6 +31,12 @@ import {
   renderCatalogueFromSnapshot,
   CATALOGUE_FORMATS,
 } from '@/server/services/catalogue-snapshot';
+
+/** GOLDEN_TRACE=1 prints the document about to be rendered, so a react-pdf warning on
+ *  stderr can be attributed to a document (warnings carry no context of their own). */
+const trace = (name: string) => {
+  if (process.env.GOLDEN_TRACE === '1') console.log(`[golden] rendering ${name}`);
+};
 import type { ShowFixture } from '../../../../scripts/lib/export-show-fixture-core';
 
 export interface RenderedDocument {
@@ -106,7 +112,8 @@ interface SessionUser {
   role: string;
 }
 
-function authAs(user: SessionUser) {
+function authAs(user: SessionUser, docName?: string) {
+  if (docName) trace(docName);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   vi.mocked(auth).mockResolvedValue({ user: user as any } as any);
 }
@@ -118,7 +125,7 @@ function authAs(user: SessionUser) {
 const params = <T extends Record<string, string>>(record: T): { params: Promise<T> } => ({
   params: Promise.resolve(record),
 });
-const req = (url: string) => new NextRequest(url);
+const req = (url: string) => { trace(url.replace('http://localhost/api/', '')); return new NextRequest(url); };
 
 /** A route that fails returns a JSON error body, not a PDF — treat that as
  *  a hard test failure (naming the document) rather than silently
@@ -210,6 +217,7 @@ export async function renderAllDocuments(showId: string, fixture: ShowFixture): 
   // ── Catalogue — the DB-free seam, every format the ruleset supports ──────
   const snapshot = await buildCatalogueSnapshot(db, showId);
   for (const format of CATALOGUE_FORMATS) {
+    trace(`catalogue-${format}`);
     const buffer = await renderCatalogueFromSnapshot(snapshot, format);
     out.push({ name: `catalogue-${format}`, buffer });
   }
