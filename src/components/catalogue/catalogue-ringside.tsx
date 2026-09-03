@@ -1,5 +1,6 @@
 import { Fragment } from 'react';
-import { Document, Page, View, Text, Image, StyleSheet } from '@react-pdf/renderer';
+import { Document, Page, View, Text, StyleSheet } from '@react-pdf/renderer';
+import { AdvertPage } from '@/components/schedule/shared/advert-page';
 import './catalogue-styles'; // side-effect: registers Inter + LibreBaskerville fonts
 import { C } from './catalogue-styles';
 import type { CatalogueEntry, CatalogueShowInfo } from './catalogue-types';
@@ -449,9 +450,7 @@ function AdvertPages({
   return (
     <>
       {matching.map((ad) => (
-        <Page key={`ad-${position}-${ad.id}`} size="A5" style={{ padding: 0, margin: 0 }}>
-          <Image src={ad.imageUrl!} style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
-        </Page>
+        <AdvertPage key={`ad-${position}-${ad.id}`} advert={ad} />
       ))}
     </>
   );
