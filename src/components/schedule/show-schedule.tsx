@@ -19,7 +19,7 @@ import {
   getDockingStatement,
   s,
 } from './shared/styles';
-import { SectionBand, InfoCard, ImportantShowNotices, GoldRule, Rule, TwoColSectionHeader } from './shared/elements';
+import { SectionBand, InfoCard, ImportantShowNotices, GoldRule, Rule, TwoColSectionHeader, INFO_CARD_LIST_WRAP_THRESHOLD } from './shared/elements';
 import { sortOfficers } from './shared/officers';
 import { buildEntryFeeGroups } from './shared/entry-fee-groups';
 import { juniorHandlerFeeForSchedule } from './shared/junior-handler-fee';
@@ -550,7 +550,7 @@ export function ShowSchedule({
 
         {/* Judges */}
         {judges.length > 0 && (
-          <InfoCard variant={variant} title="Judges">
+          <InfoCard variant={variant} title="Judges" wrap={judges.length > INFO_CARD_LIST_WRAP_THRESHOLD}>
             {judges.map((judge, i) => {
               // Prefer the API-computed role label (includes "Junior Handling",
               // "Dogs & Bitches" etc.); fall back to breed list for multi-breed shows.
@@ -609,7 +609,7 @@ export function ShowSchedule({
           <SectionBand variant={variant} title="Officials" />
 
           {sd?.officers && sd.officers.length > 0 && (
-            <InfoCard variant={variant} title="Officers &amp; Committee">
+            <InfoCard variant={variant} title="Officers &amp; Committee" wrap={sd.officers.length > INFO_CARD_LIST_WRAP_THRESHOLD}>
               {sortOfficers(sd.officers).map((o, i) => (
                 <View key={i} style={s.officialRow}>
                   <Text style={s.officialPosition}>{o.position}</Text>
