@@ -172,6 +172,57 @@ export function buildSvClassNumbering(
   return map;
 }
 
+/** Minimal shape {@link canonicalSvClassOrder} needs from each row — a
+ *  looser cousin of {@link ClassLike} (only what the comparator reads). */
+export type SvOrderableClass = {
+  sex?: string | null;
+  svCoatType?: 'stock' | 'long_stock' | null;
+  classDefinition?: { type?: string | null; name?: string | null } | null;
+};
+
+/**
+ * Canonical SV/WUSV class order for a whole show: sexed breed (`sv_age`)
+ * classes ordered bitch-before-dog within each {@link SV_AGE_ORDER} age band,
+ * long coat (`long_stock`) before stock coat within an age×sex, then every
+ * other class (Junior Handling, Special Awards, anything not `sv_age`
+ * dog/bitch) appended afterwards in its original relative order.
+ *
+ * This is the repair-tool half of `buildSvClassNumbering`'s numbering logic:
+ * that function derives class NUMBERS/labels from whatever order the rows
+ * are already in; this function derives the ROW ORDER itself, for shows
+ * whose stored `sort_order`/`class_number` were never set to the canonical
+ * sequence in the first place (a show created before the 11 Aug 2026 cutover
+ * — see `scripts/resort-sv-show-classes.ts`). Every sorted PDF and the
+ * catalogue numbering both honour the stored `sort_order`/`class_number`
+ * directly and deliberately do NOT re-derive it — this function is what
+ * fixes the stored order, not a replacement for reading it.
+ */
+export function canonicalSvClassOrder<T extends SvOrderableClass>(rows: T[]): T[] {
+  const isSexedSvAge = (r: T) =>
+    r.classDefinition?.type === 'sv_age' && (r.sex === 'dog' || r.sex === 'bitch');
+
+  const sexed = rows.filter(isSexedSvAge);
+  const rest = rows.filter((r) => !isSexedSvAge(r));
+
+  const coatRank = (r: T): number => (r.svCoatType === 'long_stock' ? 0 : r.svCoatType === 'stock' ? 1 : 2);
+
+  const sortedSexed = [...sexed].sort((a, b) => {
+    const ai = SV_AGE_ORDER.indexOf(svDisplayAge(a.classDefinition?.name));
+    const bi = SV_AGE_ORDER.indexOf(svDisplayAge(b.classDefinition?.name));
+    if (ai !== bi) {
+      if (ai === -1) return 1;
+      if (bi === -1) return -1;
+      return ai - bi;
+    }
+    // Same age — bitch before dog (Amanda 2026-05-28).
+    if (a.sex !== b.sex) return a.sex === 'bitch' ? -1 : 1;
+    // Same age × sex — long coat before stock (regional groups 2026-08-11).
+    return coatRank(a) - coatRank(b);
+  });
+
+  return [...sortedSexed, ...rest];
+}
+
 /** Special Award Classes sit outside the RKC-licensed class count too — the
  *  schedule renders them as A, B, C, … in their own dedicated section (judged
  *  in the lunch break). Amanda 2026-05-19.

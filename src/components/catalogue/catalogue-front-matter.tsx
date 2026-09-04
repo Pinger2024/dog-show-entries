@@ -12,6 +12,7 @@ import { Numero } from '@/components/schedule/shared/numero';
 import { getRkcScheduleProfile } from '@/lib/rkc-schedule-profile';
 import { RKC_JUDGES_WELFARE_STATEMENT, isRkcJudgesWelfareStatement } from '@/lib/rkc-statements';
 import { formatLondonLongDate } from '@/lib/date-utils';
+import { pickSvCoverJudges } from '@/lib/schedule-judges';
 
 // A5 portrait is 148mm x 210mm = ~419.53pt x ~595.28pt. These widths are the
 // usable content width inside CoverPage's coverTopBand (paddingHorizontal:
@@ -830,7 +831,11 @@ function SvCoverPage({ show, classCount }: { show: CatalogueShowInfo; classCount
     show.judgeDisplayList && show.judgeDisplayList.length > 0
       ? show.judgeDisplayList
       : uniqueJudges;
-  const breedJudge = coverJudges[0] ?? 'Judge TBC';
+  // Select the breed judge(s) explicitly by role rather than printing
+  // whichever judge's assignment row happened to be inserted first — that
+  // previously surfaced the Junior Handling judge under "Breed Judge"
+  // (Mandy 2026-09-04, Midlands Region GSD Group).
+  const breedJudgeLines = pickSvCoverJudges(coverJudges);
 
   return (
     <PageFrame size="A5" style={{ backgroundColor: SV.paper, padding: 0, color: SV.ink, fontFamily: SV_FONTS.sans }}>
@@ -910,10 +915,17 @@ function SvCoverPage({ show, classCount }: { show: CatalogueShowInfo; classCount
             ) : null}
           </View>
           <View style={{ width: '50%', paddingLeft: 8 }}>
-            <Text style={[ss.eyebrow, { marginBottom: 3 }]}>Breed Judge</Text>
-            <Text style={{ fontFamily: SV_FONTS.serif, fontSize: 13, lineHeight: 1.15, color: SV.ink }}>
-              {breedJudge}
+            <Text style={[ss.eyebrow, { marginBottom: 3 }]}>
+              {breedJudgeLines.length > 1 ? 'Breed Judges' : 'Breed Judge'}
             </Text>
+            {breedJudgeLines.map((line, i) => (
+              <Text
+                key={i}
+                style={{ fontFamily: SV_FONTS.serif, fontSize: 13, lineHeight: 1.15, color: SV.ink, marginTop: i > 0 ? 2 : 0 }}
+              >
+                {line}
+              </Text>
+            ))}
           </View>
         </View>
 
