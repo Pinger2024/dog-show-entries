@@ -14,6 +14,7 @@ import { formatAtcNumber } from '@/lib/registration-flags';
 import { computePrizeCardCounts } from '@/lib/prize-card-counts';
 import { BRAND } from '@/lib/brand';
 import { checkOwnerRecord, type OwnerCheckIssue } from '@/lib/catalogue-data-checks';
+import { SV_CLASS_AUTO_CREATE_COMBOS } from '@/lib/class-labels';
 import {
   shows,
   entries,
@@ -7388,18 +7389,6 @@ export const secretaryRouter = createTRPCRouter({
       const nonManaged = existing.filter((sc) => !managedIds.includes(sc.id));
       const baseClassNumber = nonManaged.reduce((max, sc) => Math.max(max, sc.classNumber ?? 0), 0);
 
-      type CoatSex = { sex: 'bitch' | 'dog'; coat: 'stock' | 'long_stock' };
-      // Within each age: bitch before dog; Long Coat ('a') before Short/Stock
-      // Coat ('b') so the stored classNumber order matches the a/b display
-      // order on the schedule + catalogue. Regional groups flipped this
-      // 2026-08-11 (long coat now shown first — previously stock was 'a').
-      const COMBOS: CoatSex[] = [
-        { sex: 'bitch', coat: 'long_stock' },
-        { sex: 'bitch', coat: 'stock' },
-        { sex: 'dog', coat: 'long_stock' },
-        { sex: 'dog', coat: 'stock' },
-      ];
-
       const values: {
         showId: string;
         classDefinitionId: string;
@@ -7412,7 +7401,7 @@ export const secretaryRouter = createTRPCRouter({
 
       let idx = 0;
       for (const def of ageDefs) {
-        for (const { sex, coat } of COMBOS) {
+        for (const { sex, coat } of SV_CLASS_AUTO_CREATE_COMBOS) {
           values.push({
             showId: input.showId,
             classDefinitionId: def.id,

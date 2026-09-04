@@ -37,6 +37,7 @@ import { DEFAULT_REGIONAL_FEE_TIERS } from '@/lib/regional-fee-calc';
 import type { RegionalFeeConfig } from '@/server/db/schema/shows';
 import { PUBLIC_SHOW_STATUSES } from '@/lib/public-show-statuses';
 import { scheduleCatalogueRefresh } from '@/server/services/catalogue-jobs';
+import { SV_CLASS_AUTO_CREATE_COMBOS } from '@/lib/class-labels';
 import type { Database } from '@/server/db';
 
 /** Validation for the regional (SV/WUSV) tiered fee config jsonb — mirrors the
@@ -768,17 +769,6 @@ export const showsRouter = createTRPCRouter({
           orderBy: [asc(classDefinitions.sortOrder)],
         });
         const fee = firstEntryFee ?? entryFee ?? 0;
-        // SV convention: within each age, bitch classes first then dog; Long
-        // Coat (sub-letter 'a') before Short/Stock Coat ('b') so the stored
-        // classNumber order matches the a/b display order used by the
-        // schedule + catalogue. Regional groups flipped this 2026-08-11 (long
-        // coat now shown first — previously stock was 'a', Amanda 2026-05-28).
-        const COMBOS: Array<{ sex: 'bitch' | 'dog'; coat: 'stock' | 'long_stock' }> = [
-          { sex: 'bitch', coat: 'long_stock' },
-          { sex: 'bitch', coat: 'stock' },
-          { sex: 'dog', coat: 'long_stock' },
-          { sex: 'dog', coat: 'stock' },
-        ];
         const svValues: Array<{
           showId: string;
           classDefinitionId: string;
@@ -790,7 +780,7 @@ export const showsRouter = createTRPCRouter({
         }> = [];
         let idx = 0;
         for (const def of svAgeDefs) {
-          for (const { sex, coat } of COMBOS) {
+          for (const { sex, coat } of SV_CLASS_AUTO_CREATE_COMBOS) {
             svValues.push({
               showId: show!.id,
               classDefinitionId: def.id,

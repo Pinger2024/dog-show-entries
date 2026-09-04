@@ -125,6 +125,20 @@ export function buildScheduleJudges(
     };
   });
 
+  // Breed-role judges first, alphabetical by name; Junior-Handling-only
+  // judges after, also alphabetical. Every consumer of this list (the
+  // schedule route, the catalogue snapshot, the print pipeline) relies on
+  // this ordering — without it, whichever judge's assignment row happened
+  // to be inserted first could print as the "breed judge" on the SV cover
+  // (Mandy 2026-09-04). SAC and "also does JH" entries are appended below
+  // with their existing semantics unchanged.
+  judges.sort((a, b) => {
+    const aJh = a.role === 'Junior Handling';
+    const bJh = b.role === 'Junior Handling';
+    if (aJh !== bJh) return aJh ? 1 : -1;
+    return a.name.localeCompare(b.name);
+  });
+
   // Special Awards Classes judges — appended with the explicit role label so
   // the dedicated SAC block can find them even when they also judge breeds.
   for (const sac of specialAwardsJudges) {
@@ -156,4 +170,40 @@ export function buildScheduleJudges(
   }
 
   return judges;
+}
+
+const JH_ROLE_PREFIX = 'Junior Handling — ';
+const SAC_ROLE_PREFIX = 'Special Awards Classes — ';
+const BREED_ROLE_PREFIXES = ['Dogs & Bitches — ', 'Dogs — ', 'Bitches — '];
+
+/**
+ * Pick the breed judge(s) to print on the SV/WUSV catalogue cover from the
+ * already-built `judgeDisplayList` labels (see {@link buildScheduleJudges}).
+ * The cover used to print `coverJudges[0]` — whichever judge's assignment
+ * row was inserted first — which surfaced the Junior Handling judge when
+ * their row happened to come first (Mandy 2026-09-04, Midlands Region GSD
+ * Group). This selects explicitly by role instead:
+ *
+ * - No breed judge found → `['Judge TBC']`.
+ * - Exactly one → the judge's NAME only (role prefix stripped, any
+ *   "(subject to RKC approval)" suffix kept).
+ * - More than one → one label per line, keeping the role prefix so the
+ *   reader can tell Dogs from Bitches.
+ *
+ * Pure and label-based (not shape-based) so it never needs a new field on
+ * the catalogue snapshot — the snapshot hash is the identity of a stored
+ * catalogue and a shape change would force already-printed catalogues to
+ * re-render.
+ */
+export function pickSvCoverJudges(labels: readonly string[]): string[] {
+  const breedLabels = labels.filter(
+    (label) => !label.startsWith(JH_ROLE_PREFIX) && !label.startsWith(SAC_ROLE_PREFIX),
+  );
+  if (breedLabels.length === 0) return ['Judge TBC'];
+  if (breedLabels.length === 1) {
+    const label = breedLabels[0];
+    const prefix = BREED_ROLE_PREFIXES.find((p) => label.startsWith(p));
+    return [prefix ? label.slice(prefix.length) : label];
+  }
+  return breedLabels;
 }
