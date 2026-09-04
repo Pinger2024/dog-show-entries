@@ -164,14 +164,17 @@ describe('computeSettlementItemisation — withdrawn-but-paid entries', () => {
     // payment — both must agree with how show-metrics reads refund state.
     const orderV4 = await makeOrder({ showId: show.id, exhibitorId: exhibitor.id, status: 'paid', totalAmount: 2000 });
     await makeEntry({ showId: show.id, dogId: dog!.id, exhibitorId: exhibitor.id, orderId: orderV4.id, totalFee: 800 });
-    await makeEntry({
+    const orderV4CancelledEntry = await makeEntry({
       showId: show.id, dogId: dog!.id, exhibitorId: exhibitor.id, orderId: orderV4.id, totalFee: 1200, status: 'cancelled',
     });
     await makePayment({
       orderId: orderV4.id, stripePaymentId: 'pi_v4', amount: 2000, status: 'partially_refunded', refundAmount: 1200,
     });
+    // entryId set, matching executeStripeRefund's real behaviour when
+    // secretary.issueRefund passes opts.entryId — the refund row is tied to
+    // the specific entry it refunded.
     await makePayment({
-      orderId: orderV4.id, stripePaymentId: 'pi_v4', amount: 1200, status: 'refunded', type: 'refund',
+      orderId: orderV4.id, entryId: orderV4CancelledEntry!.id, stripePaymentId: 'pi_v4', amount: 1200, status: 'refunded', type: 'refund',
     });
 
     // Order V5 (direct, paid): withdrawn @ £9.00 — rule 3, direct channel.
@@ -209,11 +212,12 @@ describe('computeSettlementItemisation — withdrawn-but-paid entries', () => {
     // false gap even though the refund happened after the fact.
     expect(findLines(itemisation.viaRemi, 'Multi-dog package discount')).toEqual([]);
 
-    // The £12 refund shows as the pre-existing "Refunds to exhibitors"
-    // credit line (unchanged behaviour) — not double-counted anywhere else.
-    expect(findLines(itemisation.viaRemi, 'Refunds to exhibitors')).toEqual([
-      { label: 'Refunds to exhibitors', amountPence: -1_200, isCredit: true },
-    ]);
+    // The £12 refund fully cancelled its entry (a withdrawn entry refunded
+    // in full) — that entry already shows nowhere on the statement (not in
+    // Entries, not in Withdrawn — fee kept), so the refund must NOT also
+    // appear as a credit line, or the club is under-settled by £12 twice
+    // over (fix 2026-09-04, GSD Club of Scotland double-count bug).
+    expect(findLines(itemisation.viaRemi, 'Refunds to exhibitors')).toEqual([]);
 
     // ── Rule 4/5: reconcile precisely against show-metrics' withdrawnKeptPence
     // — the canonical figure for "fee withdrawn entries keep with the
