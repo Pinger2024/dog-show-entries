@@ -1,4 +1,4 @@
-import { and, eq, inArray, isNull, or, sql } from 'drizzle-orm';
+import { and, eq, inArray, isNull, ne, or, sql } from 'drizzle-orm';
 import {
   entries,
   entryClasses,
@@ -357,13 +357,46 @@ export async function computeSettlementItemisation(
   const captureGapCount = feeRow?.captureGap ?? 0;
 
   // ── Refund rows — explicit type='refund' payment rows, NOT the running
-  // refundAmount column on the original charge (see stripe-refunds.ts). ──
+  // refundAmount column on the original charge (see stripe-refunds.ts).
+  //
+  // Scoped to avoid double-counting refunded money that's already excluded
+  // from the settlement some other way (Mandy/Michael 2026-09-04, GSD Club
+  // of Scotland: the club was under-settled £52.51 because this line
+  // credited a refund the entry-status filters had already excluded):
+  //
+  //  - `inArray(payments.orderId, paidOrderIdsOrPlaceholder)` drops refund
+  //    rows on a FULLY refunded order (status='refunded', not 'paid') —
+  //    that order's entries already show NOWHERE on the statement (the
+  //    confirmed/withdrawn/cancelled queries above all scope to paid
+  //    orders), so crediting its refund on top double-subtracted it. This
+  //    also means a whole-order refund (secretary.refundOrder, entryId
+  //    NULL) — which always fully drains the payment — never reaches this
+  //    line at all, which is exactly right: it would otherwise carry
+  //    Remi's platform-fee share too (refundOrder refunds the FULL Stripe
+  //    charge, platform fee included — never club money).
+  //  - `or(isNull(payments.entryId), ne(entries.status, 'cancelled'))` drops
+  //    a per-entry refund (secretary.issueRefund) once it has cancelled
+  //    that entry (a withdrawn entry refunded in full) — that entry is
+  //    already excluded from every entry line by its status, so crediting
+  //    its refund again double-subtracted it a second time.
+  //  - A refund that DOESN'T cancel its entry (a partial refund on an
+  //    entry that stays 'confirmed' or 'withdrawn') still shows the
+  //    entry's full original totalFee in the Entries/Withdrawn lines, so
+  //    THIS is the genuine case the line still exists for — the money that
+  //    actually went back must still be credited or the club statement
+  //    overstates what it collected.
   const [refundRow] = paidOrderIds.length
     ? await db
         .select({ total: sql<number>`COALESCE(SUM(${payments.amount}), 0)::int` })
         .from(payments)
-        .innerJoin(orders, eq(payments.orderId, orders.id))
-        .where(and(eq(orders.showId, showId), eq(payments.type, 'refund')))
+        .leftJoin(entries, eq(payments.entryId, entries.id))
+        .where(
+          and(
+            inArray(payments.orderId, paidOrderIdsOrPlaceholder),
+            eq(payments.type, 'refund'),
+            or(isNull(payments.entryId), ne(entries.status, 'cancelled')),
+          ),
+        )
     : [{ total: 0 }];
   const refundTotalPence = refundRow?.total ?? 0;
 
