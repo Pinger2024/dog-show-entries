@@ -70,6 +70,24 @@ export const SV_AGE_ORDER = [
   'Working',
 ];
 
+/**
+ * Per-age (sex × coat) combination order used when auto-creating a wusv
+ * show's SV age classes (`shows.create`, `secretary.setupWusvClasses`):
+ * within each age, bitch before dog; Long Coat before Short/Stock Coat —
+ * the same convention {@link canonicalSvClassOrder} enforces, kept as a
+ * single shared constant so the two auto-create call sites can't drift out
+ * of canonical order from each other (they used to each hand-roll an
+ * identical literal). Iterating `SV_AGE_ORDER` outer, this inner, produces
+ * an already-canonical class list — see the auto-create invariant test in
+ * `sv-class-numbering.test.ts`.
+ */
+export const SV_CLASS_AUTO_CREATE_COMBOS: Array<{ sex: 'bitch' | 'dog'; coat: 'stock' | 'long_stock' }> = [
+  { sex: 'bitch', coat: 'long_stock' },
+  { sex: 'bitch', coat: 'stock' },
+  { sex: 'dog', coat: 'long_stock' },
+  { sex: 'dog', coat: 'stock' },
+];
+
 /** Strip the "SV " disambiguation prefix the DB carries on some age defs. */
 export function svDisplayAge(name: string | null | undefined): string {
   return (name ?? '').replace(/^SV\s+/, '');

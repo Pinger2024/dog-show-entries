@@ -1,5 +1,11 @@
 import { describe, it, expect } from 'vitest';
-import { buildClassLabelMap, buildSvClassNumbering, canonicalSvClassOrder, SV_AGE_ORDER } from '../class-labels';
+import {
+  buildClassLabelMap,
+  buildSvClassNumbering,
+  canonicalSvClassOrder,
+  SV_AGE_ORDER,
+  SV_CLASS_AUTO_CREATE_COMBOS,
+} from '../class-labels';
 
 /**
  * SV/WUSV regional class numbering (Amanda 2026-05-28; coat-letter order
@@ -275,5 +281,22 @@ describe('canonicalSvClassOrder — repair-tool ordering', () => {
     ];
     const sorted = canonicalSvClassOrder(rows);
     expect(sorted.map((r) => r.id)).toEqual(['b-Adult-long', 'd-Adult-stock', 'jh-b', 'jh-a']);
+  });
+
+  // Invariant: a freshly auto-created wusv show's SV age classes
+  // (shows.create + secretary.setupWusvClasses, which both iterate
+  // SV_AGE_ORDER outer / SV_CLASS_AUTO_CREATE_COMBOS inner) must already be
+  // canonical — that's WHY shows created after the 11 Aug 2026 cutover
+  // never needed the repair script. SV_CLASS_AUTO_CREATE_COMBOS is a plain
+  // exported literal (no DB involved), so this is a pure, no-DB check.
+  it('produces an already-canonical order when combined with SV_AGE_ORDER (the auto-create invariant)', () => {
+    let idx = 0;
+    const autoCreated: OrderRow[] = [];
+    for (const age of SV_AGE_ORDER) {
+      for (const { sex, coat } of SV_CLASS_AUTO_CREATE_COMBOS) {
+        autoCreated.push({ id: `auto-${idx++}`, sex, svCoatType: coat, classDefinition: { type: 'sv_age', name: age } });
+      }
+    }
+    expect(canonicalSvClassOrder(autoCreated)).toEqual(autoCreated);
   });
 });
