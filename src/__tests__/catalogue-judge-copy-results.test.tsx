@@ -14,6 +14,12 @@ import { isValidElement, type ReactElement } from 'react';
  * new `judge-copy` catalogue format. CatalogueByClass is a pure (hook-free)
  * component, so it's called directly and the react-pdf element tree is
  * walked for text, exactly like catalogue-banner-full-width.test.tsx does.
+ *
+ * Mandy 2026-09-06, after seeing a real render with names filled into the
+ * grid: "I don't think we need the name on the results just the catalogue
+ * number and grade as the name is just a [waste]" — so the grid holds ONLY
+ * the catalogue number and the grade; the class listing directly above it
+ * keeps the names exactly as it always has.
  */
 
 const SHOW_CLASS_WORKING = 'sc-working';
@@ -104,6 +110,18 @@ describe('CatalogueByClass — judge-copy results fill-in', () => {
     // relabelled — G1 (3rd overall) must NOT read "G3".
     expect(text).not.toContain('G3');
     expect(text).not.toContain('G4');
+
+    // The grid holds catalogue number + grade ONLY — no dog name (Mandy
+    // 2026-09-06: "the name is just a waste"). Exact line sequence per row:
+    // ordinal, bare number, "Gr", rating.
+    expect(text).toMatch(/1st\n1\nGr\nSG1\n/);
+    expect(text).toMatch(/2nd\n2\nGr\nSG2\n/);
+    expect(text).toMatch(/3rd\n3\nGr\nG1\n/);
+    expect(text).toMatch(/4th\n4\nGr\nG2\n/);
+    // The class listing above the grid is untouched — dog names still print
+    // there exactly as before.
+    expect(text).toContain('DOG 1');
+    expect(text).toContain('DOG 2');
   });
 
   it('NO RESULT for one dog: that dog degrades to the exact same blank dots as the steward copy', () => {
@@ -144,12 +162,13 @@ describe('CatalogueByClass — judge-copy results fill-in', () => {
     expect(dottedSlots).toBeGreaterThan(0);
   });
 
-  it('Junior Handling class: placings fill in with the HANDLER name (same identity the class listing itself prints), not just the catalogue number', () => {
-    // Team lead 2026-09-05, from a real North East Regional render (page
-    // 31): breed classes fill "39 YAKASIMBA BUBBLES", but JH filled only
-    // "70" / "74" — the handler's name (already printed above, in the same
-    // class listing, via jhHandlerName) never made it into the identity
-    // write-in slot.
+  it('Junior Handling class: placings fill in with the catalogue number only — never the handler name', () => {
+    // Mandy 2026-09-06, having seen a real render with names in the grid:
+    // "I don't think we need the name on the results just the catalogue
+    // number and grade as the name is just a [waste]". This supersedes the
+    // team lead's earlier ask (2026-09-05) to put the handler's name in the
+    // identity slot — the class listing above already names the handler;
+    // the grid must not repeat it.
     const jhEntry = makeEntry({
       catalogueNumber: '10',
       entryType: 'junior_handler',
@@ -170,18 +189,22 @@ describe('CatalogueByClass — judge-copy results fill-in', () => {
     ]);
 
     const text = allText(CatalogueByClass({ show: makeShow(), entries: [jhEntry, jhEntry2], judgeResults }));
-    // The identity slot: catalogue number PLUS the handler's name together —
-    // same pairing the breed-class identity slot uses (number + name).
-    expect(text).toMatch(/1st\n10 {2}Alexxa Cowan\n/);
-    expect(text).toMatch(/2nd\n11 {2}Sam Swift\n/);
+    // The grid: ordinal, bare catalogue number, "Gr", (blank — see next test).
+    expect(text).toMatch(/1st\n10\nGr\n/);
+    expect(text).toMatch(/2nd\n11\nGr\n/);
+    // The class listing ABOVE the grid is untouched — it still names the
+    // handler exactly as before (jhHandlerName renders as the entry's
+    // headline, per renderEntry's isJH branch).
+    expect(text).toMatch(/10\nAlexxa Cowan\n/);
+    expect(text).toMatch(/11\nSam Swift\n/);
   });
 
   it('Junior Handling class: the grade slot stays blank — there is no SV grade for a handler, so never substitute the placement number', () => {
-    // Team lead 2026-09-05, from the same real render: JHB rendered "1st 74
-    // GR 1" / "2nd 73 GR 2" — computeSvClassRatings' ungraded-but-placed
-    // fallback (plain placement number, meant for a results BADGE) leaked
-    // into the grid's explicitly-labelled "Gr" slot, reading as a meaningless
-    // (and to a child handler, faintly insulting) "Grade 1".
+    // Team lead 2026-09-05, from a real render: JHB rendered "1st 74 GR 1" /
+    // "2nd 73 GR 2" — computeSvClassRatings' ungraded-but-placed fallback
+    // (plain placement number, meant for a results BADGE) leaked into the
+    // grid's explicitly-labelled "Gr" slot, reading as a meaningless (and to
+    // a child handler, faintly insulting) "Grade 1".
     const jhEntry = makeEntry({
       catalogueNumber: '73',
       entryType: 'junior_handler',
@@ -200,15 +223,18 @@ describe('CatalogueByClass — judge-copy results fill-in', () => {
     ]);
 
     const text = allText(CatalogueByClass({ show: makeShow(), entries: [jhEntry, jhEntry2], judgeResults }));
-    // The identity is still filled (this class WAS judged)...
-    expect(text).toMatch(/1st\n74 {2}Julia Sobolewska\n/);
-    expect(text).toMatch(/2nd\n73 {2}Alexxa Cowan\n/);
+    // The identity (bare number) IS filled — this class WAS judged...
+    expect(text).toMatch(/1st\n74\nGr\n/);
+    expect(text).toMatch(/2nd\n73\nGr\n/);
     // ...but the "Gr" slot for each of those two rows must be the ordinary
     // blank dots, never a bare "1" or "2".
-    expect(text).toMatch(/1st\n74 {2}Julia Sobolewska\nGr\n…\n/);
-    expect(text).toMatch(/2nd\n73 {2}Alexxa Cowan\nGr\n…\n/);
+    expect(text).toMatch(/1st\n74\nGr\n…\n/);
+    expect(text).toMatch(/2nd\n73\nGr\n…\n/);
     expect(text).not.toContain('Gr\n1\n');
     expect(text).not.toContain('Gr\n2\n');
+    // The class listing above still names both handlers.
+    expect(text).toMatch(/73\nAlexxa Cowan\n/);
+    expect(text).toMatch(/74\nJulia Sobolewska\n/);
   });
 
   it('withheld exhibitor: judge-copy fill-in never surfaces the redacted address', () => {
