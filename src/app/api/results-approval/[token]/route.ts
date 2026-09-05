@@ -13,6 +13,7 @@ import {
   breeds,
 } from '@/server/db/schema';
 import { getPlacementLabel, achievementLabels } from '@/lib/placements';
+import { buildClassLabelMap, svCoatDisplayName, svDisplayAge } from '@/lib/class-labels';
 import { resend, FROM, emailHeader } from '@/server/services/email';
 import { BRAND } from '@/lib/brand';
 
@@ -218,6 +219,14 @@ export async function GET(
     with: { dog: { columns: { id: true, registeredName: true } } },
   });
 
+  // Canonical per-class label ("11a"/"11b" on wusv, plain number on RKC) —
+  // same helper the schedule/catalogue/judges-book/prize-cards use, so the
+  // judge's approval page agrees with every other render surface instead of
+  // showing the raw class_number (a wusv show runs each age×sex twice, once
+  // per coat, so the raw numbers alone are indistinguishable — Mandy, NE
+  // Regional 5 Sept 2026).
+  const classLabelMap = buildClassLabelMap(filteredClasses, show.showRuleset);
+
   // Build breed-grouped results HTML
   const breedGroupMap = new Map<string, {
     breedName: string;
@@ -255,10 +264,15 @@ export async function GET(
       .join('');
 
     const sexLabel = sc.sex === 'dog' ? ' Dog' : sc.sex === 'bitch' ? ' Bitch' : '';
-    const classNum = sc.classNumber != null ? `#${sc.classNumber} ` : '';
+    // Label first: a Junior Handling class has class_number = NULL but a
+    // canonical label ('JHA'/'JHB'), and a number-only guard dropped it.
+    const classLabel = classLabelMap.get(sc.id) ?? (sc.classNumber != null ? String(sc.classNumber) : '');
+    const classNum = classLabel ? `#${classLabel} ` : '';
+    const coat = svCoatDisplayName(sc.svCoatType);
+    const coatLabel = coat ? ` — ${esc(coat)}` : '';
 
     breedGroupMap.get(breedName)!.classesHtml.push(`
-      <div class="class-header">${classNum}${sc.classDefinition.name}${sexLabel} <span style="color: ${BRAND.ink2}; font-weight: normal; font-size: 12px;">(${dogsForward} presented / ${confirmed.length} entered)</span></div>
+      <div class="class-header">${classNum}${esc(svDisplayAge(sc.classDefinition.name))}${sexLabel}${coatLabel} <span style="color: ${BRAND.ink2}; font-weight: normal; font-size: 12px;">(${dogsForward} presented / ${confirmed.length} entered)</span></div>
       ${resultRows ? `<table class="class-table"><thead><tr><th>Cat #</th><th>Dog</th><th>Place</th><th>Award</th></tr></thead><tbody>${resultRows}</tbody></table>` : '<p style="padding: 4px 10px; font-size: 13px; color: ${BRAND.ink2};">No results recorded</p>'}
     `);
 

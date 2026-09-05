@@ -29,6 +29,7 @@ import {
   achievementLabels,
   type AchievementType,
 } from '@/lib/placements';
+import { svCoatDisplayName } from '@/lib/class-labels';
 import { SE_H } from '@/components/show-experience/tokens';
 import { resolveTopAwards, buildPlacementIndex, eligibleCandidates, isPuppyOnShowDate } from '@/lib/top-awards';
 import { Badge } from '@/components/ui/badge';
@@ -992,9 +993,11 @@ export default function SecretaryResultsPage() {
                     className="rounded-lg border bg-white p-3"
                   >
                     <div className="mb-2 flex items-center gap-2">
-                      {cls.classNumber != null && (
+                      {/* Label-first guard — a Junior Handling class has no
+                          class_number but does have a canonical label. */}
+                      {(cls.classLabel || cls.classNumber != null) && (
                         <span className="text-xs font-bold text-muted-foreground">
-                          #{cls.classNumber}
+                          #{cls.classLabel || cls.classNumber}
                         </span>
                       )}
                       <h4 className="font-semibold text-sm">
@@ -1003,6 +1006,11 @@ export default function SecretaryResultsPage() {
                       {cls.sex && (
                         <Badge variant="outline" className="text-xs capitalize">
                           {cls.sex}
+                        </Badge>
+                      )}
+                      {svCoatDisplayName(cls.svCoatType) && (
+                        <Badge variant="outline" className="text-xs">
+                          {svCoatDisplayName(cls.svCoatType)}
                         </Badge>
                       )}
                       <span className="text-xs text-muted-foreground">
