@@ -27,7 +27,8 @@ export type DocumentRowKey =
   | 'sh01'
   | 'sv-results'
   | 'grading-cards'
-  | 'judge-critiques';
+  | 'judge-critiques'
+  | 'judge-copy-catalogue';
 
 export interface DocumentEligibilityContext {
   showRuleset: 'rkc' | 'wusv' | null | undefined;
@@ -55,6 +56,11 @@ export function documentRowVisible(rowKey: DocumentRowKey, ctx: DocumentEligibil
   switch (rowKey) {
     case 'sv-results':
     case 'grading-cards':
+    // The judge's keepsake copy (catalogue with results filled in) is an
+    // SV/WUSV-only concept — RKC has no per-dog grading scale to fill in
+    // and already gets the Marked Catalogue for its post-results record
+    // (Mandy 2026-09-05: "Regionals only at this stage").
+    case 'judge-copy-catalogue':
       return isWusv;
     case 'sh01':
       return !isWusv && ctx.showType === 'championship';

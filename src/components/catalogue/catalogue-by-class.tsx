@@ -14,6 +14,24 @@ import { TonalWash } from '@/components/sv-pdf/cover-atoms';
 import { SV, SV_FONTS } from '@/components/schedule/shared/sv-styles';
 import { svCoatDisplayName, sectionClasses } from '@/lib/class-labels';
 import { AdvertPage } from '@/components/schedule/shared/advert-page';
+import { computeSvClassRatings } from '@/lib/sv-grading';
+
+/**
+ * One dog's recorded result, for the "judge-copy" format only — the SV/WUSV
+ * regional catalogue re-rendered post-show with the steward's write-in
+ * placings/grading block filled in with the real result instead of dots
+ * (Mandy 2026-09-05: "keeping the updated catalogue for the judge with all
+ * the results added ... just replicate the exact catalogue we produce but
+ * add in the results sg1, sg3 etc"). Keyed by `${catalogueNumber}-${showClassId}`
+ * — the same key shape CatalogueMarked's resultsMap already uses — since the
+ * catalogue snapshot carries no real `entryClassId`.
+ */
+export interface JudgeCopyResult {
+  svGrade: string | null;
+  placement: number | null;
+  placementStatus: 'withheld' | 'unplaced' | null;
+  specialAward: string | null;
+}
 
 // Class-sponsor banner strip. Renders at the FULL content width (A5 419.5pt −
 // 22pt L/R padding = 375.5pt) at the image's own aspect ratio, capped at this
@@ -207,6 +225,72 @@ function renderSvPlacings(count: number): React.ReactElement {
   );
 }
 
+/**
+ * The judge-copy variant of {@link renderSvPlacings} — same grid, same
+ * styling, but each slot is filled with the dog that actually finished
+ * there (catalogue number + name) and its SV rating (grade + within-grade
+ * rank, e.g. "SG1"), instead of a blank write-in. A slot with no recorded
+ * placement (class not yet judged, or that dog withheld/unplaced) degrades
+ * to the exact same dots as the blank steward's copy — never a wrong or
+ * empty-looking grade.
+ *
+ * `computeSvClassRatings` restarts its rank per grade (SG1, SG2, then G1,
+ * G2…), so it MUST be run once per class over every dog that has a result —
+ * never per-dog — which is why this takes the whole class's `sorted` list
+ * rather than being called per entry.
+ */
+function renderSvPlacingsFilled(
+  sorted: CatalogueEntry[],
+  showClassId: string | undefined,
+  judgeResults: Map<string, JudgeCopyResult>,
+): React.ReactElement {
+  const count = sorted.length;
+
+  const classResults: {
+    entryClassId: string;
+    svGrade: string | null;
+    placement: number | null;
+    entry: CatalogueEntry;
+  }[] = [];
+  if (showClassId) {
+    for (const entry of sorted) {
+      if (!entry.catalogueNumber) continue;
+      const key = `${entry.catalogueNumber}-${showClassId}`;
+      const result = judgeResults.get(key);
+      if (!result) continue;
+      classResults.push({ entryClassId: key, svGrade: result.svGrade, placement: result.placement, entry });
+    }
+  }
+
+  const ratingByKey = computeSvClassRatings(classResults);
+  const byPlacement = new Map<number, { entry: CatalogueEntry; rating: string }>();
+  for (const cr of classResults) {
+    if (cr.placement != null) {
+      byPlacement.set(cr.placement, { entry: cr.entry, rating: ratingByKey.get(cr.entryClassId) ?? '' });
+    }
+  }
+
+  return (
+    <View style={svPlacings.wrap} wrap={false}>
+      {Array.from({ length: count }, (_, i) => i + 1).map((n) => {
+        const filled = byPlacement.get(n);
+        return (
+          <View key={n} style={svPlacings.cell}>
+            <Text style={svPlacings.ordinal}>{ordinalLabel(n)}</Text>
+            <Text style={svPlacings.writeIn}>
+              {filled
+                ? `${filled.entry.catalogueNumber ?? ''}  ${uppercaseName(filled.entry.dogName) || ''}`.trim()
+                : '………'}
+            </Text>
+            <Text style={svPlacings.gradeLabel}>Gr</Text>
+            <Text style={svPlacings.gradeWriteIn}>{filled ? filled.rating || '—' : '…'}</Text>
+          </View>
+        );
+      })}
+    </View>
+  );
+}
+
 export function renderSvEntry(
   entry: CatalogueEntry,
   rowKey: string,
@@ -348,6 +432,14 @@ interface Props {
    * false so existing callers see no change in behaviour.
    */
   compact?: boolean;
+  /**
+   * Judge-copy fill-in data — real results keyed by
+   * `${catalogueNumber}-${showClassId}`. Only ever passed for the
+   * `judge-copy` format on a WUSV show; every other caller omits it, so the
+   * SV write-in grid renders its ordinary blank dots and this component's
+   * output for every existing format is byte-for-byte unchanged.
+   */
+  judgeResults?: Map<string, JudgeCopyResult>;
 }
 
 // Group entries by class, preserving sort metadata.
@@ -368,6 +460,10 @@ function groupByClass(entries: CatalogueEntry[]) {
      *  naive `sex` check, which a legacy-tagged Junior Handling class
      *  (sex set instead of null) would fool. */
     classDefinitionType?: string | null;
+    /** The FK this class's dogs share — first-seen wins (every entry in the
+     *  group is, by construction, in the same show class). Used only to key
+     *  judge-copy result lookups; every other format ignores it. */
+    showClassId?: string;
     entries: CatalogueEntry[];
   }> = {};
 
@@ -386,6 +482,7 @@ function groupByClass(entries: CatalogueEntry[]) {
         sortOrder: cls.sortOrder,
         svCoatType: cls.svCoatType ?? null,
         classDefinitionType: cls.classDefinitionType ?? null,
+        showClassId: cls.showClassId,
         entries: [],
       };
       classes[classKey].entries.push(entry);
@@ -434,7 +531,7 @@ function ChallengeCertificateHeader({ sex }: { sex: 'DOG' | 'BITCH' }) {
   );
 }
 
-export function CatalogueByClass({ show, entries, compact }: Props) {
+export function CatalogueByClass({ show, entries, compact, judgeResults }: Props) {
   const isSvShow = show.showRuleset === 'wusv';
   // Build a lookup: classLabel -> sponsorship info (array, since one class
   // can have multiple sponsors — e.g. one for the trophy and another for
@@ -638,7 +735,7 @@ export function CatalogueByClass({ show, entries, compact }: Props) {
       >
       {isSvShow && <TonalWash variant="inside" buffer={show.svWashes?.inside} />}
       {chunkKeys.map((classKey, idx) => {
-        const { className, sex, classLabel, svCoatType, entries: classEntries } = grouped[classKey];
+        const { className, sex, classLabel, svCoatType, showClassId, entries: classEntries } = grouped[classKey];
         const sorted = [...classEntries].sort(
           (a, b) => (a.catalogueNumber ?? '').localeCompare(b.catalogueNumber ?? '', undefined, { numeric: true })
         );
@@ -733,7 +830,9 @@ export function CatalogueByClass({ show, entries, compact }: Props) {
          *  • SV/WUSV: a placing + grade slot per dog, dynamic to the class
          *    size, at the FOOT of the class (Mandy 2026-06-14). */
         const renderPlacings = () =>
-          isSvShow ? renderSvPlacings(sorted.length) : (
+          isSvShow ? (
+            judgeResults ? renderSvPlacingsFilled(sorted, showClassId, judgeResults) : renderSvPlacings(sorted.length)
+          ) : (
             <View style={styles.placementsRow} wrap={false}>
               {['1st', '2nd', '3rd', 'Res', 'VHC'].map((lbl) => (
                 <View key={lbl} style={styles.placementSlot}>

@@ -32,7 +32,7 @@ export const documentRenderJobs = pgTable(
       .notNull()
       .references(() => shows.id, { onDelete: 'cascade' }),
     documentType: text('document_type').notNull(), // 'catalogue' only today
-    format: text('format').notNull(), // 'standard' | 'by-class' | 'judging' | 'absentees' | 'marked'
+    format: text('format').notNull(), // 'standard' | 'by-class' | 'judging' | 'absentees' | 'marked' | 'judge-copy'
     status: text('status').notNull().default('queued'), // 'queued' | 'running' | 'done' | 'failed'
     attempts: integer('attempts').notNull().default(0),
     maxAttempts: integer('max_attempts').notNull().default(3),
@@ -80,4 +80,4 @@ export const documentRenderJobsRelations = relations(documentRenderJobs, ({ one 
 }));
 
 export type DocumentRenderJobStatus = 'queued' | 'running' | 'done' | 'failed';
-export type DocumentRenderJobFormat = 'standard' | 'by-class' | 'judging' | 'absentees' | 'marked';
+export type DocumentRenderJobFormat = 'standard' | 'by-class' | 'judging' | 'absentees' | 'marked' | 'judge-copy';

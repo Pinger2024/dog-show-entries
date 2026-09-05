@@ -34,7 +34,7 @@ export async function GET(
 
   if (!isCatalogueFormat(format)) {
     return NextResponse.json(
-      { error: 'Invalid format. Use "standard", "by-class", "judging", "absentees", or "marked".' },
+      { error: 'Invalid format. Use "standard", "by-class", "judging", "absentees", "marked", or "judge-copy".' },
       { status: 400 },
     );
   }

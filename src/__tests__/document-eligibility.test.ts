@@ -43,6 +43,15 @@ describe('documentRowVisible', () => {
     expect(documentRowVisible('grading-cards', { showRuleset: 'rkc', showType: 'championship' })).toBe(false);
   });
 
+  // Mandy 2026-09-05: the judge's keepsake catalogue (results filled into
+  // the existing SV write-in grid) is regionals-only — RKC has no SV
+  // grading scale and already gets the Marked Catalogue for its post-show
+  // record.
+  it('shows the judge-copy catalogue only on a wusv show', () => {
+    expect(documentRowVisible('judge-copy-catalogue', { showRuleset: 'wusv', showType: 'open' })).toBe(true);
+    expect(documentRowVisible('judge-copy-catalogue', { showRuleset: 'rkc', showType: 'championship' })).toBe(false);
+  });
+
   it('shows all RKC-only rows on an rkc show', () => {
     for (const key of RKC_ONLY_KEYS) {
       expect(documentRowVisible(key, { showRuleset: 'rkc', showType: 'open' }), key).toBe(true);

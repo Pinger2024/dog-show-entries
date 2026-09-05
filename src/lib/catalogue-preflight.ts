@@ -68,7 +68,7 @@ export interface CatalogueSnapshotMeta {
  * not imported — so this module, which runs inside a worker/test process,
  * never pulls in that file's web-facing dependency graph).
  */
-export type PreflightFormat = 'standard' | 'by-class' | 'judging' | 'absentees' | 'marked';
+export type PreflightFormat = 'standard' | 'by-class' | 'judging' | 'absentees' | 'marked' | 'judge-copy';
 
 /** `booklet` ⇒ the artefact must be saddle-stitchable: pages % 4 === 0.
  *  `loose` ⇒ single-sided/write-in sheets — no multiple-of-4 requirement. */
@@ -101,6 +101,7 @@ const PREFLIGHT_LABELS: Record<PreflightFormat, string> = {
   judging: "Stewards' catalogue (write-in working sheets, not booklet-padded)",
   marked: 'Marked catalogue (post-results, not booklet-padded)',
   absentees: 'Absentee list (post-show subset, not booklet-padded)',
+  'judge-copy': "Judge's catalogue (post-results, regionals only, not booklet-padded)",
 };
 
 function buildPreflightRationale(
@@ -110,8 +111,9 @@ function buildPreflightRationale(
 ): string {
   if (format !== effectiveFormat) {
     // Only reachable when showRuleset === 'wusv' and format is standard,
-    // judging or absentees — marked never collapses, and by-class already
-    // equals its own effective format. See resolvePreflightContract.
+    // judging or absentees — marked and judge-copy never collapse, and
+    // by-class already equals its own effective format. See
+    // resolvePreflightContract.
     const bindingNote =
       binding === 'booklet'
         ? 'still checked as a saddle-stitched booklet because that is what was requested, even though the by-class content drawn underneath is not padded to a multiple of 4'
@@ -130,6 +132,8 @@ function buildPreflightRationale(
       return "Stewards' catalogue: write-in working sheets, not booklet-padded; groups by class, so NFC entries (which hold no class) are correctly absent.";
     case 'marked':
       return 'Marked catalogue: post-results record, not booklet-padded; groups by class, so NFC entries are correctly absent.';
+    case 'judge-copy':
+      return "Judge's catalogue: post-results keepsake for regionals, not booklet-padded; groups by class, so NFC entries are correctly absent.";
     case 'absentees':
     default:
       return 'Absentee list: a subset of the confirmed entries by definition, not booklet-padded; entry names are not checked.';
@@ -166,7 +170,8 @@ export function resolvePreflightContract(
   showRuleset: string | null | undefined,
 ): PreflightContract {
   const isWusv = showRuleset === 'wusv';
-  const effectiveFormat: PreflightFormat = format === 'marked' ? 'marked' : isWusv ? 'by-class' : format;
+  const effectiveFormat: PreflightFormat =
+    format === 'marked' || format === 'judge-copy' ? format : isWusv ? 'by-class' : format;
 
   const binding: PreflightBinding = format === 'standard' || format === 'by-class' ? 'booklet' : 'loose';
 
@@ -181,7 +186,9 @@ export function resolvePreflightContract(
           ? 'competing'
           : effectiveFormat === 'marked'
             ? 'competing'
-            : 'none'; // absentees
+            : effectiveFormat === 'judge-copy'
+              ? 'competing'
+              : 'none'; // absentees
 
   return {
     format,

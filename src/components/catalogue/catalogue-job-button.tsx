@@ -78,7 +78,7 @@ export function CatalogueJobButton({
   className,
 }: {
   showId: string;
-  format: 'standard' | 'by-class' | 'judging' | 'absentees' | 'marked';
+  format: 'standard' | 'by-class' | 'judging' | 'absentees' | 'marked' | 'judge-copy';
   icon: React.ReactNode;
   label?: string;
   /** Button text once the artefact is ready to open. */

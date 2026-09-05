@@ -21,6 +21,7 @@ import {
   MessageSquare,
   PoundSterling,
   Printer,
+  ScrollText,
   Trophy,
   UserX,
 } from 'lucide-react';
@@ -595,6 +596,16 @@ export default function DocumentsPage() {
               >
                 <PdfViewerButton icon={<Trophy className="size-4" />} label="View" url={`/api/reports/${showId}/sv-results`} />
               </DocRow>
+              {documentRowVisible('judge-copy-catalogue', docCtx) && (
+                <DocRow
+                  icon={<ScrollText className="size-4" />}
+                  label="Judge's catalogue (with results)"
+                  description="A keepsake copy of the catalogue with every dog's grade and placing filled in — for the judge to take home"
+                  note={!resultsFinalised ? 'Will be blank until results are published' : undefined}
+                >
+                  <CatalogueJobButton icon={<ScrollText className="size-4" />} label="View" showId={showId} format="judge-copy" />
+                </DocRow>
+              )}
               <DocRow
                 icon={<FileSpreadsheet className="size-4" />}
                 label="SV Results Spreadsheet"

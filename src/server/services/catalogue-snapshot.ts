@@ -57,7 +57,7 @@ import { getTonalWash } from '@/server/services/sv-tonal-wash';
 import { renderToBuffer } from '@react-pdf/renderer';
 import React from 'react';
 import { CatalogueAbsentees } from '@/components/catalogue/catalogue-absentees';
-import { CatalogueByClass } from '@/components/catalogue/catalogue-by-class';
+import { CatalogueByClass, type JudgeCopyResult } from '@/components/catalogue/catalogue-by-class';
 import { CatalogueByBreed } from '@/components/catalogue/catalogue-by-breed';
 import { CatalogueMarked, transferDisplayLabel } from '@/components/catalogue/catalogue-marked';
 import { CatalogueJudging } from '@/components/catalogue/catalogue-judging';
@@ -70,7 +70,18 @@ import type {
 } from '@/components/catalogue/catalogue-types';
 import type { MarkedResult, MarkedAchievement } from '@/components/catalogue/catalogue-marked';
 
-export const CATALOGUE_FORMATS = ['standard', 'by-class', 'judging', 'absentees', 'marked'] as const;
+// 'judge-copy' — the SV/WUSV regional catalogue re-rendered post-results
+// with the write-in placings/grading grid filled in with the real result,
+// as a keepsake for the judge (Mandy 2026-09-05). Deliberately NOT named
+// 'judging' (already the stewards' write-in catalogue, blank) or 'marked'
+// (the RKC submission copy, which un-redacts withheld owners on purpose —
+// see catalogue-marked.tsx's header comment — and has no SV grading
+// concept at all). Regionals only: hidden on RKC shows by
+// SECRETARY_ONLY_FORMATS + document-eligibility.ts's judge-copy-catalogue
+// row, but still renders harmlessly for an RKC show (as the plain by-class
+// catalogue, no fill-in) since this array feeds the golden suite's
+// blanket per-fixture render regardless of ruleset.
+export const CATALOGUE_FORMATS = ['standard', 'by-class', 'judging', 'absentees', 'marked', 'judge-copy'] as const;
 export type CatalogueFormat = (typeof CATALOGUE_FORMATS)[number];
 
 // ── Legacy buffer marker (backward compat only) ─────────────────────────
@@ -104,6 +115,12 @@ type SnapshotEntryClass = CatalogueEntry['classes'][number] & {
     placement: number | null;
     placementStatus: 'withheld' | 'unplaced' | null;
     specialAward: string | null;
+    /** SV grading scale value ('sg' | 'g' | 'a' | ... | 'disqualified'),
+     *  null for RKC shows and for SV dogs not yet graded. Carried through
+     *  ONLY so the `judge-copy` format can fill in the existing SV write-in
+     *  grid — see catalogue-by-class.tsx's renderSvPlacingsFilled and
+     *  lib/sv-grading.ts's computeSvClassRatings. No other format reads it. */
+    svGrade: string | null;
   } | null;
 };
 
@@ -448,6 +465,7 @@ export async function buildCatalogueSnapshot(db: Database, showId: string): Prom
                   ? ec.result.placementStatus
                   : null,
               specialAward: ec.result.specialAward,
+              svGrade: ec.result.svGrade ?? null,
             }
           : null,
       })),
@@ -796,15 +814,24 @@ export async function renderCatalogueFromSnapshot(
       transfers: transfersMap,
     });
   } else {
+    const byClassComponent = isAllBreed ? CatalogueByBreed : CatalogueByClass;
     const formatComponents = {
       standard: CatalogueRingside,
-      'by-class': isAllBreed ? CatalogueByBreed : CatalogueByClass,
+      'by-class': byClassComponent,
       judging: CatalogueJudging,
       absentees: CatalogueAbsentees,
+      // Same renderer as by-class — 'judge-copy' only differs in the extra
+      // `judgeResults` prop wired in below, which fills the existing SV
+      // write-in grid instead of leaving it blank. Never collapses under
+      // the WUSV rule below (like 'marked' above) so it stays itself
+      // regardless of ruleset — see the CATALOGUE_FORMATS comment for why
+      // an RKC show still needs this to render something sane rather than
+      // throw (the golden suite renders every format for every fixture).
+      'judge-copy': byClassComponent,
     } as const;
 
     const isWusv = showInfo.showRuleset === 'wusv';
-    const effectiveFormat = isWusv ? 'by-class' : format;
+    const effectiveFormat = format === 'judge-copy' ? 'judge-copy' : isWusv ? 'by-class' : format;
 
     if (isWusv) {
       const [cover, inside] = await Promise.all([
@@ -815,7 +842,36 @@ export async function renderCatalogueFromSnapshot(
     }
 
     const Component = formatComponents[effectiveFormat as keyof typeof formatComponents];
-    pdfDocument = React.createElement(Component, { show: showInfo, entries: catalogueEntries });
+
+    // Judge-copy's fill-in data, built the same way CatalogueMarked's
+    // resultsMap is above: re-key the results ALREADY captured on every
+    // snapshot's entries (see SnapshotEntryClass.result) — no separate
+    // fetch. Only meaningful for WUSV (SV grading doesn't exist for RKC),
+    // and only ever passed when actually rendering 'judge-copy' so every
+    // other format's props — and therefore its rendered bytes — are
+    // unaffected.
+    let judgeResults: Map<string, JudgeCopyResult> | undefined;
+    if (format === 'judge-copy' && isWusv) {
+      judgeResults = new Map();
+      for (const entry of filteredEntries) {
+        if (!entry.catalogueNumber) continue;
+        for (const ec of entry.classes) {
+          if (!ec.showClassId || !ec.result) continue;
+          judgeResults.set(`${entry.catalogueNumber}-${ec.showClassId}`, {
+            svGrade: ec.result.svGrade,
+            placement: ec.result.placement,
+            placementStatus: ec.result.placementStatus,
+            specialAward: ec.result.specialAward,
+          });
+        }
+      }
+    }
+
+    pdfDocument = React.createElement(Component, {
+      show: showInfo,
+      entries: catalogueEntries,
+      ...(judgeResults ? { judgeResults } : {}),
+    });
   }
 
   const buffer = await renderToBuffer(pdfDocument);
@@ -835,4 +891,5 @@ export const CATALOGUE_FORMAT_LABELS: Record<CatalogueFormat, string> = {
   judging: 'Steward-Catalogue',
   absentees: 'Absentees',
   marked: 'Marked-Catalogue',
+  'judge-copy': 'Judges-Catalogue',
 };
