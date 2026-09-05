@@ -1,4 +1,4 @@
-import { format, parseISO, formatDistanceToNow, differenceInMonths, isToday, isYesterday } from 'date-fns';
+import { format, parseISO, formatDistanceToNow, differenceInMonths, isToday, isYesterday, addMonths } from 'date-fns';
 
 /** Parse a YYYY-MM-DD date string as local (not UTC) — avoids off-by-one from ISO parsing.
  *  Also accepts Date objects and ISO timestamp strings so it's safe to pass superjson-hydrated
@@ -72,6 +72,9 @@ export function penceToPoundsString(pence: number): string {
 /**
  * Returns true if ageMonths falls within the nullable [min, max) window
  * used by class definitions. Inclusive lower, exclusive upper.
+ *
+ * Prefer {@link isAgeEligibleOnShowDay} when you have the DOB and show
+ * date in hand — that variant is RKC-accurate on anniversary days.
  */
 export function isWithinAgeRange(
   ageMonths: number,
@@ -84,10 +87,273 @@ export function isWithinAgeRange(
 }
 
 /**
+ * Shared date-anchored bound check behind {@link isAgeEligibleOnShowDay} and
+ * {@link getAgeEligibilityDetail} — returns which bound (if any) failed.
+ * "Of six and not exceeding twelve calendar months" means the dog is in the
+ * window on or before her 12-month anniversary day — Amanda 2026-05-28: a
+ * dog whose first birthday IS the show day should still be eligible for
+ * Puppy.
+ *
+ * Integer `differenceInMonths` floors, so `ageMonths < 12` wrongly
+ * excludes the anniversary day and `ageMonths <= 12` wrongly INcludes
+ * the following 27 days. The right test is date-anchored.
+ */
+function ageBoundFailure(
+  dob: string | Date,
+  showDate: string | Date,
+  minAgeMonths: number | null,
+  maxAgeMonths: number | null,
+): 'min' | 'max' | null {
+  const dobDate = typeof dob === 'string' ? parseLocalDate(dob) : dob;
+  const show = typeof showDate === 'string' ? parseLocalDate(showDate) : showDate;
+  if (minAgeMonths !== null && show < addMonths(dobDate, minAgeMonths)) return 'min';
+  if (maxAgeMonths !== null && show > addMonths(dobDate, maxAgeMonths)) return 'max';
+  return null;
+}
+
+/**
+ * RKC-accurate class-eligibility check — see {@link ageBoundFailure} for the
+ * anniversary-day semantics.
+ */
+export function isAgeEligibleOnShowDay(
+  dob: string | Date,
+  showDate: string | Date,
+  minAgeMonths: number | null,
+  maxAgeMonths: number | null,
+): boolean {
+  return ageBoundFailure(dob, showDate, minAgeMonths, maxAgeMonths) === null;
+}
+
+/**
+ * Like {@link isAgeEligibleOnShowDay}, but when ineligible also reports which
+ * bound failed — 'min' (too young) or 'max' (too old) — so callers can show
+ * a specific reason without re-running the check per bound.
+ */
+export function getAgeEligibilityDetail(
+  dob: string | Date,
+  showDate: string | Date,
+  minAgeMonths: number | null,
+  maxAgeMonths: number | null,
+): { eligible: boolean; failedBound: 'min' | 'max' | null } {
+  const failedBound = ageBoundFailure(dob, showDate, minAgeMonths, maxAgeMonths);
+  return { eligible: failedBound === null, failedBound };
+}
+
+/** A class the dog is being entered into, for competition age eligibility. */
+export interface EntryClassForAgeCheck {
+  name: string;
+  type: string;
+  minAgeMonths: number | null;
+  maxAgeMonths: number | null;
+}
+
+/**
+ * Age eligibility for a COMPETITION (non-NFC) entry, judged against the
+ * specific class(es) the dog is entered in.
+ *
+ * The RKC minimum to compete is six months — EXCEPT Baby Puppy, an age class
+ * "of four and less than six calendar months of age on the first day of the
+ * show". A blanket "must be at least 6 months" gate therefore wrongly blocked
+ * legitimate Baby Puppy entries and shooed them into NFC (Amanda 2026-07-18,
+ * North East Regional).
+ *
+ * Rule: age-restricted classes (any class — regardless of type — that carries
+ * its own min/max window) are judged on that window; every other competition
+ * class keeps the six-month floor. Returns a user-facing message for the
+ * first blocking class, or null when the dog is eligible for everything
+ * entered.
+ */
+export function isAgeRestrictedClass(c: {
+  minAgeMonths: number | null;
+  maxAgeMonths: number | null;
+}): boolean {
+  return c.minAgeMonths !== null || c.maxAgeMonths !== null;
+}
+
+export function getCompetitionAgeError(params: {
+  dogName: string;
+  dob: string | Date;
+  showDate: string | Date;
+  classes: EntryClassForAgeCheck[];
+}): string | null {
+  const { dogName, dob, showDate, classes } = params;
+  const show = typeof showDate === 'string' ? parseLocalDate(showDate) : showDate;
+  const born = typeof dob === 'string' ? parseLocalDate(dob) : dob;
+  const ageMonths = differenceInMonths(show, born);
+
+  const isAgeRestricted = isAgeRestrictedClass;
+
+  // Age-restricted classes are judged on their own window (Baby Puppy 4–6mo).
+  for (const c of classes.filter(isAgeRestricted)) {
+    const { eligible, failedBound } = getAgeEligibilityDetail(
+      born,
+      show,
+      c.minAgeMonths,
+      c.maxAgeMonths,
+    );
+    if (eligible) continue;
+    if (failedBound === 'max') {
+      return `${dogName} will be ${ageMonths} months old on show day, which is too old for "${c.name}".`;
+    }
+    return `${dogName} will only be ${ageMonths} months old on show day — too young for "${c.name}". You can enter Not For Competition (NFC) instead.`;
+  }
+
+  // Every other competition class keeps the RKC six-month minimum. Also the
+  // belt-and-braces floor when no class resolved (that empty case is rejected
+  // elsewhere, but never regress to silently admitting an under-age dog).
+  const hasNonAgeClass = classes.some((c) => !isAgeRestricted(c));
+  if ((hasNonAgeClass || classes.length === 0) && ageMonths < 6) {
+    if (ageMonths < 4) {
+      return `${dogName} will only be ${ageMonths} months old on show day. Dogs must be at least 6 months old to enter competition classes, or at least 12 weeks old for Not For Competition (NFC) entries.`;
+    }
+    return `${dogName} will only be ${ageMonths} months old on show day. Dogs must be at least 6 months old for competition classes. You can enter Not For Competition (NFC) instead.`;
+  }
+
+  return null;
+}
+
+/**
  * Computes a handler's age in whole years on the show date.
  */
 export function handlerAgeYearsOnDate(handlerDob: string, showDate: string): number {
   return Math.floor(differenceInMonths(new Date(showDate), new Date(handlerDob)) / 12);
+}
+
+/**
+ * Converts any instant to the Europe/London calendar date it falls on, as a
+ * YYYY-MM-DD string. {@link todayInLondon} delegates here for "now"; callers
+ * with an arbitrary instant (e.g. entry-close-rules.ts, comparing a close
+ * TIME rather than the current moment) use it directly so a BST/GMT boundary
+ * can never shift which calendar day an instant lands on.
+ */
+export function londonCalendarDateStr(instant: Date): string {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Europe/London',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(instant);
+}
+
+/**
+ * Formats any instant (a Date, an ISO timestamp string, or a plain
+ * YYYY-MM-DD date-only string) as a human date string, ALWAYS anchored to
+ * the Europe/London calendar day — never the process's local timezone.
+ *
+ * Production runs in UTC (Render). `entriesOpenDate`/`entryCloseDate`/
+ * `postalCloseDate` are `timestamptz` columns that store a specific UK
+ * wall-clock instant (e.g. `2026-07-17T23:00:00Z` = 18 July 00:00 BST) —
+ * every printed document (schedule, catalogue, reports, invoices, judges
+ * book, prize cards…) must show the UK date an exhibitor would recognise,
+ * not whichever day that instant happens to fall on in the server's own
+ * timezone. Confirmed live 2026-09-03: the same BAGSD schedule printed
+ * "26 April" (open) / "18 June" (close) on the UTC server but "27 April" /
+ * "19 June" when rendered in London time — the correct dates.
+ *
+ * Safe for date-only strings too: `new Date('2026-08-29')` is UTC
+ * midnight, and Europe/London is always UTC or UTC+1, so formatting it in
+ * Europe/London can only move the wall-clock time later within the same
+ * calendar day — it never shifts the date backward. So routing every
+ * document date through this (rather than only the timestamptz fields)
+ * costs nothing and removes an entire class of "which TZ is this box in"
+ * bugs at once.
+ */
+export function formatLondonDate(
+  instant: Date | string,
+  opts: Intl.DateTimeFormatOptions = { day: 'numeric', month: 'long', year: 'numeric' },
+): string {
+  const d = typeof instant === 'string' ? new Date(instant) : instant;
+  if (Number.isNaN(d.getTime())) return '';
+  return new Intl.DateTimeFormat('en-GB', { ...opts, timeZone: 'Europe/London' }).format(d);
+}
+
+/** Long form used on schedule/catalogue cover pages: "Saturday, 27 April 2026"
+ *  (`Intl.DateTimeFormat`'s en-GB long-weekday form always inserts the
+ *  comma — the same as the `toLocaleDateString('en-GB', {weekday:'long',...})`
+ *  calls this replaces, so it matches what those call sites already printed). */
+export function formatLondonLongDate(instant: Date | string): string {
+  return formatLondonDate(instant, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+}
+
+/** Same long form WITHOUT the comma: "Saturday 27 April 2026" — matches the
+ *  date-fns `format(d, 'EEEE d MMMM yyyy')` convention used by a few report/
+ *  invoice call sites, so moving those to Europe/London-safe formatting
+ *  doesn't also silently insert a comma that wasn't there before. */
+export function formatLondonLongDateNoComma(instant: Date | string): string {
+  return formatLondonLongDate(instant).replace(', ', ' ');
+}
+
+/** Short form used for key-dates lists: "27 April 2026" (no weekday). */
+export function formatLondonShortDate(instant: Date | string): string {
+  return formatLondonDate(instant, { day: 'numeric', month: 'long', year: 'numeric' });
+}
+
+/** Abbreviated form for dense tables: "Sun 27 Apr 2026". */
+export function formatLondonAbbrevDate(instant: Date | string): string {
+  return formatLondonDate(instant, { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
+}
+
+/** dd/MM/yyyy in Europe/London, e.g. SH01/SV results report headers. */
+export function formatLondonDateSlash(instant: Date | string): string {
+  const [y, m, d] = londonCalendarDateStr(typeof instant === 'string' ? new Date(instant) : instant).split('-');
+  return `${d}/${m}/${y}`;
+}
+
+/**
+ * Returns today's date in Europe/London as a YYYY-MM-DD string.
+ * Comparing this to `shows.startDate` (also YYYY-MM-DD) avoids every UTC/BST
+ * edge case that arises from constructing Date objects from date-only strings.
+ */
+export function todayInLondon(): string {
+  return londonCalendarDateStr(new Date());
+}
+
+/**
+ * YYYY-MM-DD string for `days` from today, computed on the Europe/London
+ * calendar date (not a raw UTC/wall-clock offset) — the timezone-safe way to
+ * build a comparison bound against DATE columns like shows.start_date, e.g.
+ * "is this show within the next 7 days". Companion to todayInLondon().
+ */
+export function londonDateOffset(days: number): string {
+  const parts = todayInLondon().split('-').map(Number);
+  const [y, m, d] = parts as [number, number, number];
+  return new Date(Date.UTC(y, m - 1, d + days)).toISOString().slice(0, 10);
+}
+
+/**
+ * True once it's the morning of the show (UK time) or later.
+ * Gates exhibit visibility for stewards and the public dog-photo feed —
+ * admins and host-club secretaries always bypass this check at the call site.
+ */
+export function isShowDayReached(startDate: string): boolean {
+  return todayInLondon() >= startDate;
+}
+
+/**
+ * Formats an entries-close timestamp's TIME as a human phrase, always in
+ * UK time regardless of the viewer's timezone (shows are UK events):
+ * 23:59 or 00:00 → "midnight", 12:00 → "noon", otherwise "5pm" / "12:30pm".
+ * Mandy 2026-07-21: countdowns showed the close DATE but not the time, and
+ * exhibitors (and secretaries) genuinely didn't know when the door shut.
+ */
+export function formatCloseTimeUK(date: Date): string {
+  const hm = new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'Europe/London',
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: false,
+  }).format(date);
+  const [h, m] = hm.split(':').map(Number);
+  // Mandy 2026-07-23: show "23:59" rather than "midnight" — midnight is
+  // ambiguous about WHICH day it belongs to, the very confusion this
+  // feature exists to kill. 24h digits for the edge times, friendly 12h
+  // words for everything else.
+  if (h === 23 && m === 59) return '23:59';
+  if (h === 0 && m === 0) return '00:00';
+  if (h === 12 && m === 0) return 'noon';
+  const hour12 = ((h + 11) % 12) + 1;
+  const ampm = h < 12 ? 'am' : 'pm';
+  return m === 0 ? `${hour12}${ampm}` : `${hour12}:${String(m).padStart(2, '0')}${ampm}`;
 }
 
 /**

@@ -6,7 +6,6 @@ import {
   Handshake,
   Loader2,
   Plus,
-  RotateCcw,
   Trash2,
   Pencil,
   ExternalLink,
@@ -15,15 +14,17 @@ import {
   Upload,
   ArrowLeft,
   ArrowRight,
-  ArrowUp,
-  ArrowDown,
   X,
 } from 'lucide-react';
 import Link from 'next/link';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
+import { formatSvClassName } from '@/lib/class-labels';
+import { buildBestAwards } from '@/lib/best-awards';
+import { AwardsPicker, NotRecordableHint } from '@/components/awards/awards-picker';
 import { trpc } from '@/lib/trpc';
 import { uploadImage } from '@/lib/upload';
+import { SE_H } from '@/components/show-experience/tokens';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -73,11 +74,11 @@ const TIER_LABELS: Record<string, string> = {
 };
 
 const TIER_COLORS: Record<string, string> = {
-  title: 'bg-amber-100 text-amber-800',
+  title: 'bg-se-honey-soft text-se-honey-deep',
   show: 'bg-violet-100 text-violet-800',
   class: 'bg-sky-100 text-sky-800',
-  prize: 'bg-emerald-100 text-emerald-800',
-  advertiser: 'bg-slate-100 text-slate-800',
+  prize: 'bg-se-fresh-soft text-se-fresh-deep',
+  advertiser: 'bg-muted text-foreground',
 };
 
 /* ─── Sponsor Directory Tab ──────────────────────────── */
@@ -241,7 +242,7 @@ function SponsorDirectory({
                   <label className="cursor-pointer">
                     {uploading ? <Loader2 className="size-4 animate-spin" /> : <Upload className="size-4" />}
                     {uploading ? 'Uploading...' : 'Upload Logo'}
-                    <input type="file" accept="image/*" className="hidden" onChange={handleLogoUpload} />
+                    <input type="file" accept="image/jpeg,image/png,image/webp" className="hidden" onChange={handleLogoUpload} />
                   </label>
                 </Button>
               </div>
@@ -485,104 +486,6 @@ function ShowSponsorAssignments({
               </div>
             </DialogContent>
           </Dialog>
-          <Dialog open={classDialogOpen} onOpenChange={(open) => {
-            setClassDialogOpen(open);
-            if (!open) resetClassForm();
-          }}>
-            <DialogTrigger asChild>
-              <Button size="sm" variant="outline" className="min-h-[2.75rem] w-full sm:w-auto" disabled={!orgSponsors?.length}>
-                <Trophy className="size-4" />
-                Class Sponsorship
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="max-w-md">
-              <DialogHeader>
-                <DialogTitle>Assign Class Sponsorship</DialogTitle>
-              </DialogHeader>
-              <div className="space-y-4">
-                <div>
-                  <Label>Sponsor *</Label>
-                  <Select value={classSponsorId} onValueChange={setClassSponsorId}>
-                    <SelectTrigger className="h-11"><SelectValue placeholder="Select sponsor" /></SelectTrigger>
-                    <SelectContent>
-                      {orgSponsors?.map((s) => (
-                        <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <Label>Class *</Label>
-                  <Select value={selectedClassId} onValueChange={setSelectedClassId}>
-                    <SelectTrigger className="h-11"><SelectValue placeholder="Select class" /></SelectTrigger>
-                    <SelectContent>
-                      {classes?.map((c) => (
-                        <SelectItem key={c.id} value={c.id}>
-                          {c.classNumber ? `${c.classNumber}. ` : ''}{c.classDefinition.name}
-                          {c.sex ? ` (${c.sex === 'dog' ? 'Dog' : 'Bitch'})` : ''}
-                          {c.breed ? ` — ${c.breed.name}` : ''}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <Label>Trophy Name</Label>
-                  <Input value={trophyName} onChange={(e) => setTrophyName(e.target.value)} placeholder="The Dorado Memorial Trophy" className="h-11" />
-                </div>
-                <div>
-                  <Label>Trophy Donor</Label>
-                  <Input value={trophyDonor} onChange={(e) => setTrophyDonor(e.target.value)} placeholder="May differ from sponsor" className="h-11" />
-                </div>
-                <div>
-                  <Label>Prize Description</Label>
-                  <Input value={prizeDescription} onChange={(e) => setPrizeDescription(e.target.value)} placeholder="Best in class rosette" className="h-11" />
-                </div>
-                <Button
-                  onClick={async () => {
-                    if (!classSponsorId || !selectedClassId) return;
-                    // Find or create a show sponsor for the selected org sponsor
-                    const existing = showSponsorList?.find((ss) => ss.sponsorId === classSponsorId);
-                    if (existing) {
-                      // Already assigned to the show — use that show sponsor
-                      assignClassMutation.mutate({
-                        showSponsorId: existing.id,
-                        showClassId: selectedClassId,
-                        trophyName: trophyName.trim() || undefined,
-                        trophyDonor: trophyDonor.trim() || undefined,
-                        prizeDescription: prizeDescription.trim() || undefined,
-                      });
-                    } else {
-                      // Auto-assign the sponsor to the show as a class-tier sponsor, then create class sponsorship
-                      assignMutation.mutate(
-                        {
-                          showId,
-                          sponsorId: classSponsorId,
-                          tier: 'class' as const,
-                        },
-                        {
-                          onSuccess: (newShowSponsor) => {
-                            assignClassMutation.mutate({
-                              showSponsorId: newShowSponsor.id,
-                              showClassId: selectedClassId,
-                              trophyName: trophyName.trim() || undefined,
-                              trophyDonor: trophyDonor.trim() || undefined,
-                              prizeDescription: prizeDescription.trim() || undefined,
-                            });
-                          },
-                        }
-                      );
-                    }
-                  }}
-                  disabled={!classSponsorId || !selectedClassId || assignClassMutation.isPending || assignMutation.isPending}
-                  className="w-full min-h-[2.75rem]"
-                >
-                  {(assignClassMutation.isPending || assignMutation.isPending) && <Loader2 className="size-4 animate-spin" />}
-                  Assign Sponsorship
-                </Button>
-              </div>
-            </DialogContent>
-          </Dialog>
         </div>
       </div>
 
@@ -657,13 +560,16 @@ function ShowSponsorAssignments({
                           <div className="min-w-0 flex-1">
                             <p className="text-sm font-medium truncate">
                               {cs.showClass?.classNumber ? `${cs.showClass.classNumber}. ` : ''}
-                              {cs.showClass?.classDefinition?.name ?? 'Class'}
+                              {formatSvClassName(
+                                cs.showClass?.classDefinition?.name ?? 'Class',
+                                (cs.showClass as { svCoatType?: 'stock' | 'long_stock' | null } | undefined)?.svCoatType,
+                              )}
                               {cs.showClass?.breed && (
                                 <span className="text-muted-foreground"> — {cs.showClass.breed.name}</span>
                               )}
                             </p>
                             {cs.trophyName && (
-                              <p className="mt-0.5 flex items-center gap-1 text-xs text-amber-600">
+                              <p className="mt-0.5 flex items-center gap-1 text-xs text-se-honey-deep">
                                 <Trophy className="size-3 shrink-0" />
                                 <span className="truncate">{cs.trophyName}</span>
                               </p>
@@ -795,7 +701,7 @@ function AutocompleteInput({
         placeholder={placeholder}
         className={cn(
           'h-9 w-full rounded-none border-0 bg-transparent px-2 text-sm outline-none',
-          'focus:bg-blue-50/50 focus:ring-1 focus:ring-inset focus:ring-blue-400',
+          'focus:bg-se-honey-soft/50 focus:ring-1 focus:ring-inset focus:ring-se-honey',
           'placeholder:text-muted-foreground/40',
           className
         )}
@@ -837,6 +743,7 @@ type ClassSponsorship = {
   sponsorName: string | null;
   sponsorAffix: string | null;
   trophyName: string | null;
+  bannerImageUrl?: string | null;
 };
 
 function SponsorshipRow({
@@ -844,11 +751,16 @@ function SponsorshipRow({
   suggestions,
   onSaved,
   onRemoved,
+  allowBanner = false,
 }: {
   sponsorship: ClassSponsorship;
   suggestions: Suggestion[];
   onSaved: () => void;
   onRemoved: () => void;
+  /** Per-class sponsor banners are SV/WUSV-only for now (Amanda
+   *  2026-05-23 — "I don't want this for RKC shows yet"). Defaults to
+   *  off so non-SV callers don't accidentally expose the controls. */
+  allowBanner?: boolean;
 }) {
   const [name, setName] = useState(sponsorship.sponsorName ?? '');
   const [affix, setAffix] = useState(sponsorship.sponsorAffix ?? '');
@@ -865,6 +777,36 @@ function SponsorshipRow({
     onSuccess: () => onRemoved(),
     onError: (err) => toast.error(err.message),
   });
+  const setBannerMutation = trpc.secretary.setClassSponsorBanner.useMutation({
+    onSuccess: () => {
+      toast.success('Banner saved');
+      onSaved();
+    },
+    onError: (err) => toast.error(err.message),
+  });
+
+  const bannerInputRef = useRef<HTMLInputElement>(null);
+  const [bannerUploading, setBannerUploading] = useState(false);
+  const handleBannerUpload = useCallback(
+    async (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0];
+      if (!file) return;
+      try {
+        setBannerUploading(true);
+        const publicUrl = await uploadImage(file);
+        setBannerMutation.mutate({ id: sponsorship.id, imageUrl: publicUrl, storageKey: null });
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : 'Upload failed');
+      } finally {
+        setBannerUploading(false);
+        if (bannerInputRef.current) bannerInputRef.current.value = '';
+      }
+    },
+    [sponsorship.id, setBannerMutation]
+  );
+  const handleBannerRemove = useCallback(() => {
+    setBannerMutation.mutate({ id: sponsorship.id, imageUrl: null, storageKey: null });
+  }, [sponsorship.id, setBannerMutation]);
 
   const debouncedSave = useCallback(
     (field: 'sponsorName' | 'sponsorAffix' | 'trophyName', value: string) => {
@@ -932,7 +874,7 @@ function SponsorshipRow({
   return (
     <>
       {/* Desktop: inline cells */}
-      <div ref={rowRef} className="hidden sm:contents">
+      <div ref={rowRef} className="hidden lg:contents">
         <div className="border-b border-r">
           <AutocompleteInput
             value={name}
@@ -956,7 +898,7 @@ function SponsorshipRow({
             }}
             onBlur={() => handleBlur('sponsorAffix', affix)}
             placeholder="Affix"
-            className="h-9 w-full rounded-none border-0 bg-transparent px-2 text-sm outline-none focus:bg-blue-50/50 focus:ring-1 focus:ring-inset focus:ring-blue-400 placeholder:text-muted-foreground/40"
+            className="h-9 w-full rounded-none border-0 bg-transparent px-2 text-sm outline-none focus:bg-se-honey-soft/50 focus:ring-1 focus:ring-inset focus:ring-se-honey placeholder:text-muted-foreground/40"
           />
         </div>
         <div className="border-b border-r">
@@ -969,10 +911,40 @@ function SponsorshipRow({
             }}
             onBlur={() => handleBlur('trophyName', trophy)}
             placeholder="Trophy"
-            className="h-9 w-full rounded-none border-0 bg-transparent px-2 text-sm outline-none focus:bg-blue-50/50 focus:ring-1 focus:ring-inset focus:ring-blue-400 placeholder:text-muted-foreground/40"
+            className="h-9 w-full rounded-none border-0 bg-transparent px-2 text-sm outline-none focus:bg-se-honey-soft/50 focus:ring-1 focus:ring-inset focus:ring-se-honey placeholder:text-muted-foreground/40"
           />
         </div>
-        <div className="flex items-center justify-center border-b">
+        <div className="flex items-center justify-center gap-1 border-b">
+          {allowBanner && (
+            <>
+              <button
+                type="button"
+                onClick={() => bannerInputRef.current?.click()}
+                disabled={bannerUploading || setBannerMutation.isPending || !sponsorship.sponsorName?.trim()}
+                title={sponsorship.bannerImageUrl ? 'Replace class banner' : 'Upload class banner'}
+                className={cn(
+                  'flex size-7 items-center justify-center rounded transition-colors',
+                  sponsorship.bannerImageUrl
+                    ? 'text-se-fresh-deep hover:bg-se-fresh-soft'
+                    : 'text-muted-foreground/50 hover:bg-muted hover:text-foreground',
+                  (bannerUploading || setBannerMutation.isPending) && 'opacity-60'
+                )}
+              >
+                {bannerUploading || setBannerMutation.isPending ? (
+                  <Loader2 className="size-3.5 animate-spin" />
+                ) : (
+                  <ImageIcon className="size-3.5" />
+                )}
+              </button>
+              <input
+                ref={bannerInputRef}
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                className="hidden"
+                onChange={handleBannerUpload}
+              />
+            </>
+          )}
           <button
             type="button"
             onClick={() => removeMutation.mutate({ id: sponsorship.id })}
@@ -989,7 +961,7 @@ function SponsorshipRow({
       </div>
 
       {/* Mobile: stacked fields */}
-      <div ref={mobileRowRef} className="sm:hidden">
+      <div ref={mobileRowRef} className="lg:hidden">
         <div className="flex items-start gap-2 rounded-md border bg-card p-3">
           <div className="min-w-0 flex-1 space-y-2">
             <div>
@@ -1019,7 +991,7 @@ function SponsorshipRow({
                   }}
                   onBlur={() => handleBlur('sponsorAffix', affix)}
                   placeholder="Affix"
-                  className="mt-0.5 h-9 w-full rounded-md border bg-background px-2 text-sm outline-none focus:ring-1 focus:ring-blue-400 placeholder:text-muted-foreground/40"
+                  className="mt-0.5 h-9 w-full rounded-md border bg-background px-2 text-sm outline-none focus:ring-1 focus:ring-se-honey placeholder:text-muted-foreground/40"
                 />
               </div>
               <div>
@@ -1033,7 +1005,7 @@ function SponsorshipRow({
                   }}
                   onBlur={() => handleBlur('trophyName', trophy)}
                   placeholder="Trophy"
-                  className="mt-0.5 h-9 w-full rounded-md border bg-background px-2 text-sm outline-none focus:ring-1 focus:ring-blue-400 placeholder:text-muted-foreground/40"
+                  className="mt-0.5 h-9 w-full rounded-md border bg-background px-2 text-sm outline-none focus:ring-1 focus:ring-se-honey placeholder:text-muted-foreground/40"
                 />
               </div>
             </div>
@@ -1050,8 +1022,59 @@ function SponsorshipRow({
               <X className="size-3.5" />
             )}
           </button>
+          </div>
+          {/* Mobile: class banner preview / upload (SV/WUSV only) */}
+          {allowBanner && sponsorship.sponsorName?.trim() && (
+            <div className="mt-3 border-t pt-3">
+              {sponsorship.bannerImageUrl ? (
+                <div className="space-y-1.5">
+                  <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Class banner</p>
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={sponsorship.bannerImageUrl}
+                    alt="Class banner"
+                    className="h-auto w-full rounded border bg-muted/30"
+                  />
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => bannerInputRef.current?.click()}
+                      disabled={bannerUploading || setBannerMutation.isPending}
+                      className="text-xs text-se-honey-deep underline-offset-2 hover:underline"
+                    >
+                      {bannerUploading ? 'Uploading…' : 'Replace'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleBannerRemove}
+                      disabled={setBannerMutation.isPending}
+                      className="text-xs text-muted-foreground underline-offset-2 hover:text-destructive hover:underline"
+                    >
+                      Remove
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => bannerInputRef.current?.click()}
+                  disabled={bannerUploading || setBannerMutation.isPending}
+                  className="flex h-10 w-full items-center justify-center gap-2 rounded border border-dashed text-xs text-muted-foreground hover:border-foreground/40 hover:text-foreground"
+                >
+                  {bannerUploading || setBannerMutation.isPending ? (
+                    <Loader2 className="size-3.5 animate-spin" />
+                  ) : (
+                    <ImageIcon className="size-3.5" />
+                  )}
+                  {bannerUploading ? 'Uploading…' : 'Upload class banner (optional)'}
+                </button>
+              )}
+              <p className="mt-1.5 text-[11px] leading-snug text-muted-foreground">
+                Use a <span className="font-medium text-foreground">wide landscape banner</span> (roughly 3:1 to 4:1). Upload it as the sponsor supplied it — don&apos;t stretch or resize it. It sits full-width in the catalogue at its own shape.
+              </p>
+            </div>
+          )}
         </div>
-      </div>
     </>
   );
 }
@@ -1125,25 +1148,20 @@ function NewSponsorshipRow({
       setName(s.sponsor_name);
       if (s.sponsor_affix) setAffix(s.sponsor_affix);
       setIsActive(true);
-      // Auto-save after picking a suggestion
-      if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
-      saveTimerRef.current = setTimeout(() => {
-        createMutation.mutate({
-          showClassId,
-          sponsorName: s.sponsor_name,
-          sponsorAffix: s.sponsor_affix ?? undefined,
-          trophyName: trophy.trim() || undefined,
-        });
-      }, 800);
+      // Don't auto-save here — closure captures whatever trophy state
+      // was when the user clicked the suggestion, which is usually
+      // empty, and a second row gets created when trySave fires on
+      // blur after trophy is filled in. Blur-driven save is the
+      // single commit point.
     },
-    [showClassId, trophy, createMutation]
+    [],
   );
 
   if (!isActive) {
     return (
       <>
         {/* Desktop: + button in the grid */}
-        <div className="hidden sm:contents">
+        <div className="hidden lg:contents">
           <div className="border-b border-r">
             <button
               type="button"
@@ -1159,7 +1177,7 @@ function NewSponsorshipRow({
           <div className="border-b" />
         </div>
         {/* Mobile: + button */}
-        <div className="sm:hidden">
+        <div className="lg:hidden">
           <button
             type="button"
             onClick={() => setIsActive(true)}
@@ -1176,8 +1194,8 @@ function NewSponsorshipRow({
   return (
     <>
       {/* Desktop: inline cells */}
-      <div ref={rowRef} className="hidden sm:contents">
-        <div className="border-b border-r bg-blue-50/30">
+      <div ref={rowRef} className="hidden lg:contents">
+        <div className="border-b border-r bg-se-honey-soft/30">
           <AutocompleteInput
             value={name}
             onChange={(v) => setName(v)}
@@ -1185,30 +1203,30 @@ function NewSponsorshipRow({
             placeholder="Type sponsor name..."
             onPickSuggestion={handlePickSuggestion}
             onBlur={handleRowBlur}
-            className="bg-blue-50/30"
+            className="bg-se-honey-soft/30"
           />
         </div>
-        <div className="border-b border-r bg-blue-50/30">
+        <div className="border-b border-r bg-se-honey-soft/30">
           <input
             type="text"
             value={affix}
             onChange={(e) => setAffix(e.target.value)}
             onBlur={handleRowBlur}
             placeholder="Affix"
-            className="h-9 w-full rounded-none border-0 bg-transparent px-2 text-sm outline-none focus:bg-blue-50/50 focus:ring-1 focus:ring-inset focus:ring-blue-400 placeholder:text-muted-foreground/40"
+            className="h-9 w-full rounded-none border-0 bg-transparent px-2 text-sm outline-none focus:bg-se-honey-soft/50 focus:ring-1 focus:ring-inset focus:ring-se-honey placeholder:text-muted-foreground/40"
           />
         </div>
-        <div className="border-b border-r bg-blue-50/30">
+        <div className="border-b border-r bg-se-honey-soft/30">
           <input
             type="text"
             value={trophy}
             onChange={(e) => setTrophy(e.target.value)}
             onBlur={handleRowBlur}
             placeholder="Trophy"
-            className="h-9 w-full rounded-none border-0 bg-transparent px-2 text-sm outline-none focus:bg-blue-50/50 focus:ring-1 focus:ring-inset focus:ring-blue-400 placeholder:text-muted-foreground/40"
+            className="h-9 w-full rounded-none border-0 bg-transparent px-2 text-sm outline-none focus:bg-se-honey-soft/50 focus:ring-1 focus:ring-inset focus:ring-se-honey placeholder:text-muted-foreground/40"
           />
         </div>
-        <div className="flex items-center justify-center border-b bg-blue-50/30">
+        <div className="flex items-center justify-center border-b bg-se-honey-soft/30">
           <button
             type="button"
             onClick={() => {
@@ -1225,8 +1243,8 @@ function NewSponsorshipRow({
       </div>
 
       {/* Mobile: stacked fields */}
-      <div ref={mobileRowRef} className="sm:hidden">
-        <div className="flex items-start gap-2 rounded-md border border-blue-200 bg-blue-50/30 p-3">
+      <div ref={mobileRowRef} className="lg:hidden">
+        <div className="flex items-start gap-2 rounded-md border border-se-honey-line bg-se-honey-soft/30 p-3">
           <div className="min-w-0 flex-1 space-y-2">
             <div>
               <label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Sponsor</label>
@@ -1249,7 +1267,7 @@ function NewSponsorshipRow({
                   onChange={(e) => setAffix(e.target.value)}
                   onBlur={handleRowBlur}
                   placeholder="Affix"
-                  className="mt-0.5 h-9 w-full rounded-md border bg-background px-2 text-sm outline-none focus:ring-1 focus:ring-blue-400 placeholder:text-muted-foreground/40"
+                  className="mt-0.5 h-9 w-full rounded-md border bg-background px-2 text-sm outline-none focus:ring-1 focus:ring-se-honey placeholder:text-muted-foreground/40"
                 />
               </div>
               <div>
@@ -1260,7 +1278,7 @@ function NewSponsorshipRow({
                   onChange={(e) => setTrophy(e.target.value)}
                   onBlur={handleRowBlur}
                   placeholder="Trophy"
-                  className="mt-0.5 h-9 w-full rounded-md border bg-background px-2 text-sm outline-none focus:ring-1 focus:ring-blue-400 placeholder:text-muted-foreground/40"
+                  className="mt-0.5 h-9 w-full rounded-md border bg-background px-2 text-sm outline-none focus:ring-1 focus:ring-se-honey placeholder:text-muted-foreground/40"
                 />
               </div>
             </div>
@@ -1283,43 +1301,15 @@ function NewSponsorshipRow({
   );
 }
 
-/* ─── Best Award Types ────────────────────────────── */
-
-const DEFAULT_AWARDS_SINGLE_BREED = [
-  'Best in Show',
-  'Reserve Best in Show',
-  'Best Dog',
-  'Best Bitch',
-  'Best Puppy Dog',
-  'Best Puppy Bitch',
-  'Best Veteran',
-];
-
-const DEFAULT_AWARDS_MULTI_BREED = [
-  'Best of Breed',
-  'Best Dog',
-  'Best Bitch',
-  'Best Puppy Dog',
-  'Best Puppy Bitch',
-  'Best in Show',
-  'Reserve Best in Show',
-];
-
-function getDefaultAwards(showScope?: string): string[] {
-  return showScope === 'single_breed'
-    ? [...DEFAULT_AWARDS_SINGLE_BREED]
-    : [...DEFAULT_AWARDS_MULTI_BREED];
-}
-
 /* ─── Edit Awards Dialog ──────────────────────────── */
 
 function EditAwardsDialog({
   awards,
-  showScope,
+  showType,
   onSave,
 }: {
   awards: string[];
-  showScope?: string;
+  showType?: string | null;
   onSave: (awards: string[]) => void;
 }) {
   const [open, setOpen] = useState(false);
@@ -1334,40 +1324,6 @@ function EditAwardsDialog({
     },
     [awards]
   );
-
-  const handleAdd = useCallback(() => {
-    setEditAwards((prev) => [...prev, '']);
-  }, []);
-
-  const handleRemove = useCallback((index: number) => {
-    setEditAwards((prev) => prev.filter((_, i) => i !== index));
-  }, []);
-
-  const handleChange = useCallback((index: number, value: string) => {
-    setEditAwards((prev) => prev.map((v, i) => (i === index ? value : v)));
-  }, []);
-
-  const handleMoveUp = useCallback((index: number) => {
-    if (index === 0) return;
-    setEditAwards((prev) => {
-      const next = [...prev];
-      [next[index - 1], next[index]] = [next[index]!, next[index - 1]!];
-      return next;
-    });
-  }, []);
-
-  const handleMoveDown = useCallback((index: number) => {
-    setEditAwards((prev) => {
-      if (index >= prev.length - 1) return prev;
-      const next = [...prev];
-      [next[index], next[index + 1]] = [next[index + 1]!, next[index]!];
-      return next;
-    });
-  }, []);
-
-  const handleReset = useCallback(() => {
-    setEditAwards(getDefaultAwards(showScope));
-  }, [showScope]);
 
   const handleSave = useCallback(() => {
     const cleaned = editAwards
@@ -1395,55 +1351,9 @@ function EditAwardsDialog({
           <DialogTitle>Edit Best Awards</DialogTitle>
         </DialogHeader>
         <p className="text-sm text-muted-foreground">
-          Customise which best awards appear in the sponsorship table. Reorder, add, or remove as needed.
+          Tick the awards your show gives out. Reorder, untick, or add a bespoke trophy as needed.
         </p>
-        <div className="mt-2 space-y-2">
-          {editAwards.map((award, idx) => (
-            <div key={idx} className="flex items-center gap-1.5">
-              <div className="flex flex-col">
-                <button
-                  type="button"
-                  className="rounded p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-30"
-                  disabled={idx === 0}
-                  onClick={() => handleMoveUp(idx)}
-                >
-                  <ArrowUp className="size-3.5" />
-                </button>
-                <button
-                  type="button"
-                  className="rounded p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-30"
-                  disabled={idx === editAwards.length - 1}
-                  onClick={() => handleMoveDown(idx)}
-                >
-                  <ArrowDown className="size-3.5" />
-                </button>
-              </div>
-              <Input
-                value={award}
-                onChange={(e) => handleChange(idx, e.target.value)}
-                placeholder="Award name"
-                className="flex-1"
-              />
-              <button
-                type="button"
-                className="rounded p-1.5 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
-                onClick={() => handleRemove(idx)}
-              >
-                <X className="size-4" />
-              </button>
-            </div>
-          ))}
-        </div>
-        <div className="mt-2 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-          <Button variant="outline" size="sm" className="gap-1.5" onClick={handleAdd}>
-            <Plus className="size-3.5" />
-            Add Award
-          </Button>
-          <Button variant="ghost" size="sm" className="gap-1.5 text-muted-foreground" onClick={handleReset}>
-            <RotateCcw className="size-3.5" />
-            Reset to Defaults
-          </Button>
-        </div>
+        <AwardsPicker value={editAwards} onChange={setEditAwards} showType={showType} />
         <div className="mt-4 flex justify-end gap-2">
           <Button variant="outline" onClick={() => setOpen(false)}>
             Cancel
@@ -1563,7 +1473,7 @@ function AwardSponsorshipRow({
   return (
     <>
       {/* Desktop: inline cells */}
-      <div ref={rowRef} className="hidden sm:contents">
+      <div ref={rowRef} className="hidden lg:contents">
         <div className="border-b border-r">
           <AutocompleteInput
             value={name}
@@ -1587,7 +1497,7 @@ function AwardSponsorshipRow({
             }}
             onBlur={() => handleBlur('sponsorAffix', affix)}
             placeholder="Affix"
-            className="h-9 w-full rounded-none border-0 bg-transparent px-2 text-sm outline-none focus:bg-blue-50/50 focus:ring-1 focus:ring-inset focus:ring-blue-400 placeholder:text-muted-foreground/40"
+            className="h-9 w-full rounded-none border-0 bg-transparent px-2 text-sm outline-none focus:bg-se-honey-soft/50 focus:ring-1 focus:ring-inset focus:ring-se-honey placeholder:text-muted-foreground/40"
           />
         </div>
         <div className="border-b border-r">
@@ -1600,7 +1510,7 @@ function AwardSponsorshipRow({
             }}
             onBlur={() => handleBlur('trophyName', trophy)}
             placeholder="Trophy"
-            className="h-9 w-full rounded-none border-0 bg-transparent px-2 text-sm outline-none focus:bg-blue-50/50 focus:ring-1 focus:ring-inset focus:ring-blue-400 placeholder:text-muted-foreground/40"
+            className="h-9 w-full rounded-none border-0 bg-transparent px-2 text-sm outline-none focus:bg-se-honey-soft/50 focus:ring-1 focus:ring-inset focus:ring-se-honey placeholder:text-muted-foreground/40"
           />
         </div>
         <div className="flex items-center justify-center border-b">
@@ -1615,7 +1525,7 @@ function AwardSponsorshipRow({
       </div>
 
       {/* Mobile: stacked fields */}
-      <div ref={mobileRowRef} className="sm:hidden">
+      <div ref={mobileRowRef} className="lg:hidden">
         <div className="flex items-start gap-2 rounded-md border bg-card p-3">
           <div className="min-w-0 flex-1 space-y-2">
             <div>
@@ -1645,7 +1555,7 @@ function AwardSponsorshipRow({
                   }}
                   onBlur={() => handleBlur('sponsorAffix', affix)}
                   placeholder="Affix"
-                  className="mt-0.5 h-9 w-full rounded-md border bg-background px-2 text-sm outline-none focus:ring-1 focus:ring-blue-400 placeholder:text-muted-foreground/40"
+                  className="mt-0.5 h-9 w-full rounded-md border bg-background px-2 text-sm outline-none focus:ring-1 focus:ring-se-honey placeholder:text-muted-foreground/40"
                 />
               </div>
               <div>
@@ -1659,7 +1569,7 @@ function AwardSponsorshipRow({
                   }}
                   onBlur={() => handleBlur('trophyName', trophy)}
                   placeholder="Trophy"
-                  className="mt-0.5 h-9 w-full rounded-md border bg-background px-2 text-sm outline-none focus:ring-1 focus:ring-blue-400 placeholder:text-muted-foreground/40"
+                  className="mt-0.5 h-9 w-full rounded-md border bg-background px-2 text-sm outline-none focus:ring-1 focus:ring-se-honey placeholder:text-muted-foreground/40"
                 />
               </div>
             </div>
@@ -1763,7 +1673,7 @@ function NewAwardSponsorshipRow({
     return (
       <>
         {/* Desktop: + button in the grid */}
-        <div className="hidden sm:contents">
+        <div className="hidden lg:contents">
           <div className="border-b border-r">
             <button
               type="button"
@@ -1779,7 +1689,7 @@ function NewAwardSponsorshipRow({
           <div className="border-b" />
         </div>
         {/* Mobile: + button */}
-        <div className="sm:hidden">
+        <div className="lg:hidden">
           <button
             type="button"
             onClick={() => setIsActive(true)}
@@ -1796,8 +1706,8 @@ function NewAwardSponsorshipRow({
   return (
     <>
       {/* Desktop: inline cells */}
-      <div ref={rowRef} className="hidden sm:contents">
-        <div className="border-b border-r bg-blue-50/30">
+      <div ref={rowRef} className="hidden lg:contents">
+        <div className="border-b border-r bg-se-honey-soft/30">
           <AutocompleteInput
             value={name}
             onChange={(v) => setName(v)}
@@ -1805,30 +1715,30 @@ function NewAwardSponsorshipRow({
             placeholder="Type sponsor name..."
             onPickSuggestion={handlePickSuggestion}
             onBlur={handleRowBlur}
-            className="bg-blue-50/30"
+            className="bg-se-honey-soft/30"
           />
         </div>
-        <div className="border-b border-r bg-blue-50/30">
+        <div className="border-b border-r bg-se-honey-soft/30">
           <input
             type="text"
             value={affix}
             onChange={(e) => setAffix(e.target.value)}
             onBlur={handleRowBlur}
             placeholder="Affix"
-            className="h-9 w-full rounded-none border-0 bg-transparent px-2 text-sm outline-none focus:bg-blue-50/50 focus:ring-1 focus:ring-inset focus:ring-blue-400 placeholder:text-muted-foreground/40"
+            className="h-9 w-full rounded-none border-0 bg-transparent px-2 text-sm outline-none focus:bg-se-honey-soft/50 focus:ring-1 focus:ring-inset focus:ring-se-honey placeholder:text-muted-foreground/40"
           />
         </div>
-        <div className="border-b border-r bg-blue-50/30">
+        <div className="border-b border-r bg-se-honey-soft/30">
           <input
             type="text"
             value={trophy}
             onChange={(e) => setTrophy(e.target.value)}
             onBlur={handleRowBlur}
             placeholder="Trophy"
-            className="h-9 w-full rounded-none border-0 bg-transparent px-2 text-sm outline-none focus:bg-blue-50/50 focus:ring-1 focus:ring-inset focus:ring-blue-400 placeholder:text-muted-foreground/40"
+            className="h-9 w-full rounded-none border-0 bg-transparent px-2 text-sm outline-none focus:bg-se-honey-soft/50 focus:ring-1 focus:ring-inset focus:ring-se-honey placeholder:text-muted-foreground/40"
           />
         </div>
-        <div className="flex items-center justify-center border-b bg-blue-50/30">
+        <div className="flex items-center justify-center border-b bg-se-honey-soft/30">
           <button
             type="button"
             onClick={() => {
@@ -1845,8 +1755,8 @@ function NewAwardSponsorshipRow({
       </div>
 
       {/* Mobile: stacked fields */}
-      <div ref={mobileRowRef} className="sm:hidden">
-        <div className="flex items-start gap-2 rounded-md border border-blue-200 bg-blue-50/30 p-3">
+      <div ref={mobileRowRef} className="lg:hidden">
+        <div className="flex items-start gap-2 rounded-md border border-se-honey-line bg-se-honey-soft/30 p-3">
           <div className="min-w-0 flex-1 space-y-2">
             <div>
               <label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Sponsor</label>
@@ -1869,7 +1779,7 @@ function NewAwardSponsorshipRow({
                   onChange={(e) => setAffix(e.target.value)}
                   onBlur={handleRowBlur}
                   placeholder="Affix"
-                  className="mt-0.5 h-9 w-full rounded-md border bg-background px-2 text-sm outline-none focus:ring-1 focus:ring-blue-400 placeholder:text-muted-foreground/40"
+                  className="mt-0.5 h-9 w-full rounded-md border bg-background px-2 text-sm outline-none focus:ring-1 focus:ring-se-honey placeholder:text-muted-foreground/40"
                 />
               </div>
               <div>
@@ -1880,7 +1790,7 @@ function NewAwardSponsorshipRow({
                   onChange={(e) => setTrophy(e.target.value)}
                   onBlur={handleRowBlur}
                   placeholder="Trophy"
-                  className="mt-0.5 h-9 w-full rounded-md border bg-background px-2 text-sm outline-none focus:ring-1 focus:ring-blue-400 placeholder:text-muted-foreground/40"
+                  className="mt-0.5 h-9 w-full rounded-md border bg-background px-2 text-sm outline-none focus:ring-1 focus:ring-se-honey placeholder:text-muted-foreground/40"
                 />
               </div>
             </div>
@@ -1929,12 +1839,17 @@ function ClassSponsorshipTable({
     [show?.scheduleData]
   );
 
-  // Customisable best awards list — falls back to defaults based on show scope
+  // Customisable best awards list — falls back to the show-type canonical
+  // defaults (src/lib/best-awards.ts), the SAME source resolveTopAwards
+  // (results), the catalogue and the judges' book already draw from. This
+  // used to fall back to a separate showScope-keyed list that lived only in
+  // this file, so a never-edited show could show one "usual" list here and
+  // a different one inside the Edit Awards picker — unify on one source.
   const bestAwards: string[] = useMemo(() => {
     const stored = (show?.scheduleData as Record<string, unknown> | null)?.bestAwards as string[] | undefined;
     if (stored && stored.length > 0) return stored;
-    return getDefaultAwards(show?.showScope);
-  }, [show?.scheduleData, show?.showScope]);
+    return buildBestAwards(show?.showType, []);
+  }, [show?.scheduleData, show?.showType]);
 
   const saveBestAwards = useCallback(
     (awards: string[]) => {
@@ -2022,6 +1937,10 @@ function ClassSponsorshipTable({
     );
   }
 
+  // SV/WUSV gates per-class sponsor banner uploads — RKC shows don't
+  // get the controls yet (Amanda 2026-05-23).
+  const isSvShow = show?.showRuleset === 'wusv';
+
   type ShowClass = (typeof classes)[number];
 
   function renderAwardsSection() {
@@ -2037,24 +1956,36 @@ function ClassSponsorshipTable({
       }
     });
 
+    // Sponsors left pointing at an award that is no longer on the list —
+    // e.g. the award name was corrected afterwards. The catalogue and
+    // schedule still PRINT these (deliberately: sponsor-only extras must
+    // never be silently dropped), so if we only rendered awards from
+    // `bestAwards` the secretary would see them on the paperwork with no
+    // way to remove them — exactly what happened to GSD Scotland's
+    // mistyped "Best Challenge Certificate" (Mandy 2026-08-13).
+    const bestAwardKeys = new Set(bestAwards.map((a) => a.toLowerCase().trim()));
+    const orphanedAwards = [...awardMap.keys()].filter(
+      (award) => !bestAwardKeys.has(award.toLowerCase().trim()),
+    );
+
     return (
       <div className="mb-8">
         <div className="mb-2 flex items-center justify-between gap-2">
           <div className="flex items-center gap-2">
-            <Award className="size-4 text-amber-600" />
-            <h3 className="text-sm font-semibold uppercase tracking-wider text-amber-800">Best Awards</h3>
+            <Award className="size-4 text-se-honey-deep" />
+            <h3 className="text-sm font-semibold uppercase tracking-wider text-se-honey-deep">Best Awards</h3>
           </div>
           <EditAwardsDialog
             awards={bestAwards}
-            showScope={show?.showScope}
+            showType={show?.showType}
             onSave={saveBestAwards}
           />
         </div>
 
         {/* Desktop: spreadsheet grid */}
-        <div className="hidden overflow-hidden rounded-md border sm:block">
+        <div className="hidden overflow-hidden rounded-md border lg:block">
           {/* Header */}
-          <div className="grid grid-cols-[minmax(140px,1.2fr)_minmax(120px,1fr)_minmax(100px,0.8fr)_minmax(100px,0.8fr)_36px] border-b-2 bg-amber-50/80 text-xs font-medium uppercase tracking-wider text-amber-800/70">
+          <div className="grid grid-cols-[minmax(140px,1.2fr)_minmax(120px,1fr)_minmax(100px,0.8fr)_minmax(100px,0.8fr)_36px] border-b-2 bg-se-honey-soft/80 text-xs font-medium uppercase tracking-wider text-se-honey-ink/70">
             <div className="border-r px-2 py-2">Award</div>
             <div className="border-r px-2 py-2">Sponsor Name</div>
             <div className="border-r px-2 py-2">Affix</div>
@@ -2074,12 +2005,13 @@ function ClassSponsorshipTable({
                 <div className="grid grid-cols-[minmax(140px,1.2fr)_minmax(120px,1fr)_minmax(100px,0.8fr)_minmax(100px,0.8fr)_36px]">
                   {/* Award label cell — spans all sponsorship rows */}
                   <div
-                    className="flex items-start border-b border-r px-2 py-2 text-sm font-medium"
+                    className="border-b border-r px-2 py-2 text-sm font-medium"
                     style={{
                       gridRow: `1 / span ${entries.length + 1}`,
                     }}
                   >
                     {award}
+                    <NotRecordableHint award={award} />
                   </div>
 
                   {/* Existing award sponsorship rows */}
@@ -2108,7 +2040,7 @@ function ClassSponsorshipTable({
         </div>
 
         {/* Mobile: card-based layout */}
-        <div className="space-y-2 sm:hidden">
+        <div className="space-y-2 lg:hidden">
           {bestAwards.map((award) => {
             const data = awardMap.get(award);
             const entries = data?.entries ?? [];
@@ -2116,8 +2048,9 @@ function ClassSponsorshipTable({
 
             return (
               <div key={award} className="rounded-lg border bg-card">
-                <div className="border-b bg-amber-50/50 px-3 py-2">
+                <div className="border-b bg-se-honey-soft/50 px-3 py-2">
                   <p className="text-sm font-medium">{award}</p>
+                  <NotRecordableHint award={award} />
                 </div>
                 <div className="space-y-2 p-2">
                   {entries.map((entry, localIdx) => (
@@ -2141,6 +2074,42 @@ function ClassSponsorshipTable({
             );
           })}
         </div>
+
+        {/* Leftovers: sponsors still attached to an award that has since
+            been removed or renamed. They PRINT on the schedule and
+            catalogue, so they must be visible and removable here. */}
+        {orphanedAwards.length > 0 && (
+          <div className="mt-4 rounded-lg border border-se-honey-line bg-se-honey-soft/50 p-3">
+            <p className="text-sm font-medium text-se-honey-ink">
+              Sponsors for awards you no longer give
+            </p>
+            <p className="mt-0.5 text-xs text-se-honey-ink/80">
+              These still print on your schedule and catalogue. Remove them, or put the award back on the list above.
+            </p>
+            <div className="mt-2 space-y-2">
+              {orphanedAwards.map((award) => {
+                const data = awardMap.get(award)!;
+                return (
+                  <div key={award} className="rounded-md border bg-card p-2">
+                    <p className="text-sm font-medium">{award}</p>
+                    <div className="mt-1 space-y-2">
+                      {data.entries.map((entry, localIdx) => (
+                        <AwardSponsorshipRow
+                          key={`orphan-${award}-${data.indices[localIdx]}`}
+                          entry={entry}
+                          entryIndex={data.indices[localIdx]!}
+                          allEntries={awardSponsors}
+                          suggestions={suggestionsList}
+                          onSave={saveAwardSponsors}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
       </div>
     );
   }
@@ -2161,7 +2130,7 @@ function ClassSponsorshipTable({
         </div>
 
         {/* Desktop: spreadsheet grid */}
-        <div className="hidden overflow-hidden rounded-md border sm:block">
+        <div className="hidden overflow-hidden rounded-md border lg:block">
           {/* Header */}
           <div className="grid grid-cols-[minmax(140px,1.2fr)_minmax(120px,1fr)_minmax(100px,0.8fr)_minmax(100px,0.8fr)_36px] border-b-2 bg-muted/60 text-xs font-medium uppercase tracking-wider text-muted-foreground">
             <div className="border-r px-2 py-2">Class / Award</div>
@@ -2174,7 +2143,7 @@ function ClassSponsorshipTable({
           {/* Rows */}
           {sectionClasses.map((cls, idx) => {
             const sponsorships = cls.classSponsorships ?? [];
-            const displayLabel = `#${cls.classNumber ?? '?'} ${cls.classDefinition.name}`;
+            const displayLabel = `#${cls.classNumber ?? '?'} ${formatSvClassName(cls.classDefinition.name, (cls as { svCoatType?: 'stock' | 'long_stock' | null }).svCoatType)}`;
             const rowBg = idx % 2 === 0 ? '' : 'bg-muted/20';
 
             return (
@@ -2199,6 +2168,7 @@ function ClassSponsorshipTable({
                       suggestions={suggestionsList}
                       onSaved={invalidate}
                       onRemoved={invalidate}
+                      allowBanner={isSvShow}
                     />
                   ))}
 
@@ -2215,10 +2185,10 @@ function ClassSponsorshipTable({
         </div>
 
         {/* Mobile: card-based layout */}
-        <div className="space-y-2 sm:hidden">
+        <div className="space-y-2 lg:hidden">
           {sectionClasses.map((cls) => {
             const sponsorships = cls.classSponsorships ?? [];
-            const displayLabel = `#${cls.classNumber ?? '?'} ${cls.classDefinition.name}`;
+            const displayLabel = `#${cls.classNumber ?? '?'} ${formatSvClassName(cls.classDefinition.name, (cls as { svCoatType?: 'stock' | 'long_stock' | null }).svCoatType)}`;
 
             return (
               <div key={cls.id} className="rounded-lg border bg-card">
@@ -2233,6 +2203,7 @@ function ClassSponsorshipTable({
                       suggestions={suggestionsList}
                       onSaved={invalidate}
                       onRemoved={invalidate}
+                      allowBanner={isSvShow}
                     />
                   ))}
                   <NewSponsorshipRow
@@ -2316,7 +2287,7 @@ export default function SponsorsPage() {
     <div>
       <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <h2 className="font-serif text-lg font-semibold">Sponsors</h2>
+          <h2 className={cn(SE_H, 'font-serif text-lg')}>Sponsors</h2>
           <p className="text-sm text-muted-foreground">
             Manage your sponsor directory and assign sponsors to this show. RKC regulations require all sponsorships to be acknowledged in schedules and catalogues.
           </p>
@@ -2334,6 +2305,7 @@ export default function SponsorsPage() {
           <TabsTrigger value="assignments">Show Sponsors</TabsTrigger>
           <TabsTrigger value="table">Class Sponsorship</TabsTrigger>
           <TabsTrigger value="directory">Sponsor Directory</TabsTrigger>
+          <TabsTrigger value="donations">Donations</TabsTrigger>
         </TabsList>
         <TabsContent value="assignments" className="mt-4">
           <ShowSponsorAssignments
@@ -2351,7 +2323,166 @@ export default function SponsorsPage() {
         <TabsContent value="directory" className="mt-4">
           <SponsorDirectory organisationId={show.organisationId} />
         </TabsContent>
+        <TabsContent value="donations" className="mt-4">
+          <ShowDonations showId={showId} />
+        </TabsContent>
       </Tabs>
+    </div>
+  );
+}
+
+/* ─── Donations — name + optional kennel affix, no amount ─────
+   Mandy 2026-06-17: a place to thank folk who donated rather than sponsoring a
+   class. These appear in the catalogue under "With thanks for their kind
+   donations". Distinct from class/show sponsors and exhibitor checkout donations. */
+function ShowDonations({ showId }: { showId: string }) {
+  const utils = trpc.useUtils();
+  const { data: donations, isLoading } = trpc.secretary.listShowDonations.useQuery({ showId });
+
+  const [donorName, setDonorName] = useState('');
+  const [affix, setAffix] = useState('');
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editName, setEditName] = useState('');
+  const [editAffix, setEditAffix] = useState('');
+
+  const invalidate = () => utils.secretary.listShowDonations.invalidate({ showId });
+
+  const createMutation = trpc.secretary.createShowDonation.useMutation({
+    onSuccess: () => { setDonorName(''); setAffix(''); invalidate(); },
+    onError: (e) => toast.error(e.message ?? 'Could not add that donation'),
+  });
+  const updateMutation = trpc.secretary.updateShowDonation.useMutation({
+    onSuccess: () => { setEditingId(null); invalidate(); },
+    onError: (e) => toast.error(e.message ?? 'Could not save that change'),
+  });
+  const deleteMutation = trpc.secretary.deleteShowDonation.useMutation({
+    onSuccess: () => invalidate(),
+    onError: (e) => toast.error(e.message ?? 'Could not remove that donation'),
+  });
+
+  const handleAdd = () => {
+    const name = donorName.trim();
+    if (!name) return;
+    createMutation.mutate({ showId, donorName: name, affix: affix.trim() || null });
+  };
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <h3 className={cn(SE_H, 'font-serif text-base')}>Donations</h3>
+        <p className="text-sm text-muted-foreground">
+          Record the people who kindly gave a donation rather than sponsoring a
+          class. They&apos;ll be thanked in the catalogue. Just a name and their
+          kennel affix if they have one — no amounts.
+        </p>
+      </div>
+
+      {/* Add a donor — stacks on mobile */}
+      <Card>
+        <CardContent className="pt-6">
+          <div className="grid gap-3 sm:grid-cols-[1fr_1fr_auto] sm:items-end">
+            <div className="space-y-1.5">
+              <Label htmlFor="donor-name">Name</Label>
+              <Input
+                id="donor-name"
+                value={donorName}
+                onChange={(e) => setDonorName(e.target.value)}
+                placeholder="e.g. Mandy McAteer"
+                className="h-11"
+                onKeyDown={(e) => { if (e.key === 'Enter') handleAdd(); }}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="donor-affix">
+                Kennel affix <span className="text-muted-foreground">(optional)</span>
+              </Label>
+              <Input
+                id="donor-affix"
+                value={affix}
+                onChange={(e) => setAffix(e.target.value)}
+                placeholder="e.g. Hundark"
+                className="h-11"
+                onKeyDown={(e) => { if (e.key === 'Enter') handleAdd(); }}
+              />
+            </div>
+            <Button
+              onClick={handleAdd}
+              disabled={!donorName.trim() || createMutation.isPending}
+              className="h-11 min-h-[2.75rem]"
+            >
+              {createMutation.isPending ? <Loader2 className="size-4 animate-spin" /> : <Plus className="size-4" />}
+              Add
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* List of donors */}
+      {isLoading ? (
+        <p className="py-4 text-center text-sm text-muted-foreground">Loading…</p>
+      ) : (donations?.length ?? 0) === 0 ? (
+        <EmptyState
+          icon={Handshake}
+          title="No donations yet"
+          description="Add your first donor above. They'll appear in the catalogue with a thank-you."
+          variant="card"
+        />
+      ) : (
+        <div className="space-y-2">
+          {donations!.map((d) => (
+            <Card key={d.id}>
+              <CardContent className="flex flex-col gap-3 py-3 sm:flex-row sm:items-center sm:justify-between">
+                {editingId === d.id ? (
+                  <div className="grid w-full gap-2 sm:grid-cols-[1fr_1fr_auto] sm:items-center">
+                    <Input value={editName} onChange={(e) => setEditName(e.target.value)} className="h-10" placeholder="Name" />
+                    <Input value={editAffix} onChange={(e) => setEditAffix(e.target.value)} className="h-10" placeholder="Affix (optional)" />
+                    <div className="flex gap-2">
+                      <Button
+                        size="sm"
+                        className="min-h-[2.75rem] sm:min-h-0"
+                        disabled={!editName.trim() || updateMutation.isPending}
+                        onClick={() => updateMutation.mutate({ id: d.id, donorName: editName.trim(), affix: editAffix.trim() || null })}
+                      >
+                        {updateMutation.isPending ? <Loader2 className="size-3.5 animate-spin" /> : null}
+                        Save
+                      </Button>
+                      <Button size="sm" variant="ghost" className="min-h-[2.75rem] sm:min-h-0" onClick={() => setEditingId(null)}>
+                        Cancel
+                      </Button>
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    <div className="min-w-0">
+                      <span className="font-medium">{d.donorName}</span>
+                      {d.affix && <span className="text-muted-foreground"> · {d.affix}</span>}
+                    </div>
+                    <div className="flex shrink-0 gap-1">
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="min-h-[2.75rem] sm:min-h-0"
+                        onClick={() => { setEditingId(d.id); setEditName(d.donorName); setEditAffix(d.affix ?? ''); }}
+                      >
+                        <Pencil className="size-3.5" /> Edit
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="min-h-[2.75rem] text-destructive sm:min-h-0"
+                        disabled={deleteMutation.isPending}
+                        onClick={() => deleteMutation.mutate({ id: d.id })}
+                      >
+                        <Trash2 className="size-3.5" /> Remove
+                      </Button>
+                    </div>
+                  </>
+                )}
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

@@ -12,12 +12,15 @@ import {
   dogOwners,
 } from '@/server/db/schema';
 import { getPlacementLabel, achievementLabels } from '@/lib/placements';
-import { resend, FROM, APP_URL, btn } from './email';
+import { svCoatDisplayName, svDisplayAge } from '@/lib/class-labels';
+import { buildResultsSubject } from '@/lib/results-subject';
+import { resend, FROM, APP_URL, btn, emailHeader, emailFooter } from './email';
+import { BRAND } from '@/lib/brand';
 
 const placementColor: Record<number, string> = {
-  1: '#d97706',
-  2: '#6b7280',
-  3: '#92400e',
+  1: BRAND.green,
+  2: BRAND.ink2,
+  3: '#8a5a2b',
 };
 
 /**
@@ -97,16 +100,24 @@ export async function sendExhibitorResultsEmails(showId: string) {
         .filter((ec) => ec.result)
         .map((ec) => {
           const r = ec.result!;
-          const className = ec.showClass?.classDefinition?.name ?? 'Class';
+          // Strip the "SV " disambiguation prefix some sv_age defs carry
+          // ("SV Yearling") — matches the catalogue/schedule everywhere else;
+          // no-op for a plain RKC/unprefixed name.
+          const className = svDisplayAge(ec.showClass?.classDefinition?.name) || 'Class';
           const sex = ec.showClass?.sex;
           const sexLabel = sex === 'dog' ? ' Dog' : sex === 'bitch' ? ' Bitch' : '';
+          // A wusv show runs each age×sex TWICE, once per coat — without the
+          // coat wording, an exhibitor's own results email shows two
+          // identical-looking class rows (Mandy, NE Regional 5 Sept 2026).
+          const coat = svCoatDisplayName(ec.showClass?.svCoatType);
+          const coatLabel = coat ? ` — ${coat}` : '';
           const pLabel = r.placement ? getPlacementLabel(r.placement) : 'Entered';
-          const pColor = r.placement ? (placementColor[r.placement] ?? '#374151') : '#9ca3af';
+          const pColor = r.placement ? (placementColor[r.placement] ?? BRAND.ink2) : '#8f9488';
 
           return `<tr>
-            <td style="padding: 6px 12px; border-bottom: 1px solid #f0f0f0; font-size: 14px;">${className}${sexLabel}</td>
-            <td style="padding: 6px 12px; border-bottom: 1px solid #f0f0f0; font-size: 14px; font-weight: 600; color: ${pColor};">${pLabel}</td>
-            ${r.specialAward ? `<td style="padding: 6px 12px; border-bottom: 1px solid #f0f0f0; font-size: 12px; color: #b45309;">${r.specialAward}</td>` : '<td></td>'}
+            <td style="padding: 6px 12px; border-bottom: 1px solid ${BRAND.line}; font-size: 14px;">${className}${sexLabel}${coatLabel}</td>
+            <td style="padding: 6px 12px; border-bottom: 1px solid ${BRAND.line}; font-size: 14px; font-weight: 600; color: ${pColor};">${pLabel}</td>
+            ${r.specialAward ? `<td style="padding: 6px 12px; border-bottom: 1px solid ${BRAND.line}; font-size: 12px; color: ${BRAND.ink2};">${r.specialAward}</td>` : '<td></td>'}
           </tr>`;
         })
         .join('');
@@ -118,10 +129,10 @@ export async function sendExhibitorResultsEmails(showId: string) {
 
       return `
         <div style="margin-bottom: 20px;">
-          <h3 style="margin: 0 0 4px; font-size: 16px; color: #1a1a1a;">${dogName}</h3>
-          ${breedName ? `<p style="margin: 0 0 8px; font-size: 13px; color: #666;">${breedName}</p>` : ''}
-          ${dogAchievements.length > 0 ? `<div style="margin-bottom: 8px;">${dogAchievements.map((a) => `<span style="display: inline-block; padding: 2px 8px; background: #fef3c7; color: #92400e; border-radius: 4px; font-size: 12px; font-weight: 600; margin-right: 4px;">${a}</span>`).join('')}</div>` : ''}
-          ${classRows ? `<table style="width: 100%; border-collapse: collapse;">${classRows}</table>` : '<p style="font-size: 13px; color: #999;">No results recorded for this entry.</p>'}
+          <h3 style="margin: 0 0 4px; font-size: 16px; color: ${BRAND.ink};">${dogName}</h3>
+          ${breedName ? `<p style="margin: 0 0 8px; font-size: 13px; color: ${BRAND.ink2};">${breedName}</p>` : ''}
+          ${dogAchievements.length > 0 ? `<div style="margin-bottom: 8px;">${dogAchievements.map((a) => `<span style="display: inline-block; padding: 2px 8px; background: #e3f5ea; color: #1f6b43; border-radius: 4px; font-size: 12px; font-weight: 600; margin-right: 4px;">${a}</span>`).join('')}</div>` : ''}
+          ${classRows ? `<table style="width: 100%; border-collapse: collapse;">${classRows}</table>` : '<p style="font-size: 13px; color: ${BRAND.ink2};">No results recorded for this entry.</p>'}
         </div>`;
     }).join('');
 
@@ -129,19 +140,17 @@ export async function sendExhibitorResultsEmails(showId: string) {
 <!DOCTYPE html>
 <html>
 <head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
-<body style="margin: 0; padding: 0; background-color: #f5f3ef; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
+<body style="margin: 0; padding: 0; background-color: ${BRAND.paper}; font-family: 'Hanken Grotesk', -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
   <div style="max-width: 600px; margin: 0 auto; padding: 24px 16px;">
-    <div style="text-align: center; padding: 24px 0;">
-      <h1 style="margin: 0; font-family: Georgia, 'Times New Roman', serif; font-size: 28px; color: #2D5F3F; letter-spacing: -0.5px;">Remi</h1>
-    </div>
-    <div style="background: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
-      <div style="background: #2D5F3F; padding: 24px 24px 20px; text-align: center;">
-        <div style="display: inline-block; width: 40px; height: 40px; line-height: 40px; border-radius: 50%; background: rgba(255,255,255,0.2); font-size: 20px; color: #fff; margin-bottom: 8px;">&#127942;</div>
-        <h2 style="margin: 0; color: #ffffff; font-size: 22px; font-weight: 700;">Your Results</h2>
-        <p style="margin: 8px 0 0; color: #b8d4c4; font-size: 14px;">${show.name} &middot; ${showDate}</p>
+    ${emailHeader()}
+    <div style="background: #ffffff; border: 1px solid ${BRAND.line}; border-radius: 14px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+      <div style="background: ${BRAND.deep}; padding: 24px 24px 20px; text-align: center;">
+        <div style="display: inline-block; width: 40px; height: 40px; line-height: 40px; border-radius: 50%; background: rgba(243,236,220,0.2); font-size: 20px; color: ${BRAND.cream}; margin-bottom: 8px;">&#127942;</div>
+        <h2 style="margin: 0; color: ${BRAND.cream}; font-size: 22px; font-weight: 700;">Your Results</h2>
+        <p style="margin: 8px 0 0; color: rgba(243, 236, 220, 0.78); font-size: 14px;">${show.name} &middot; ${showDate}</p>
       </div>
       <div style="padding: 24px;">
-        <p style="font-size: 15px; color: #333; margin-bottom: 20px;">
+        <p style="font-size: 15px; color: ${BRAND.ink}; margin-bottom: 20px;">
           Hi ${exhibitor.name ?? 'there'}, the results from <strong>${show.name}</strong> have been published. Here are your results:
         </p>
         ${dogSections}
@@ -149,8 +158,8 @@ export async function sendExhibitorResultsEmails(showId: string) {
           ${btn(resultsUrl, 'View Full Results')}
         </div>
         <!-- Share -->
-        <div style="padding: 16px; text-align: center; background: #f4f9f6; border-radius: 8px; margin: 0 0 16px;">
-          <p style="margin: 0 0 10px; font-size: 13px; font-weight: 600; color: #444;">Share your results!</p>
+        <div style="padding: 16px; text-align: center; background: #eaf7ee; border-radius: 8px; margin: 0 0 16px;">
+          <p style="margin: 0 0 10px; font-size: 13px; font-weight: 600; color: ${BRAND.ink};">Share your results!</p>
           <div style="display: inline-block;">
             <!--[if mso]><table><tr><td><![endif]-->
             <a href="https://wa.me/?text=${encodeURIComponent(`Check out my results from ${show.name}! 🏆 ${resultsUrl}`)}" target="_blank" rel="noopener noreferrer" style="display: inline-block; padding: 8px 16px; background: #25D366; color: #fff; font-size: 13px; font-weight: 600; text-decoration: none; border-radius: 6px; margin: 0 4px;">WhatsApp</a>
@@ -161,30 +170,14 @@ export async function sendExhibitorResultsEmails(showId: string) {
         </div>
       </div>
     </div>
-    <p style="text-align: center; margin-top: 16px; font-size: 12px; color: #999;">
-      Sent by <a href="${APP_URL}" style="color: #2D5F3F; text-decoration: none; font-weight: 600;">Remi</a> on behalf of ${show.organisation?.name ?? 'the show society'}.
-    </p>
+    ${emailFooter(show.organisation?.name ?? 'the show society')}
   </div>
 </body>
 </html>`;
 
-    // Build a celebratory subject line based on best result
-    const allPlacements = exhibitor.entries.flatMap((e) =>
-      e.entryClasses.filter((ec) => ec.result?.placement).map((ec) => ec.result!.placement!)
-    );
-    const allAwards = exhibitor.entries.flatMap((e) =>
-      showAchievements.filter((a) => a.dogId === e.dogId).map((a) => achievementLabels[a.type] ?? a.type)
-    );
-    const bestDogName = exhibitor.entries[0]?.dog?.registeredName ?? '';
-
-    let subject: string;
-    if (allAwards.length > 0) {
-      subject = `${bestDogName} — ${allAwards[0]}! 🏆 ${show.name}`;
-    } else if (allPlacements.length > 0 && Math.min(...allPlacements) <= 3) {
-      subject = `${bestDogName} placed ${getPlacementLabel(Math.min(...allPlacements))}! 🏆 ${show.name}`;
-    } else {
-      subject = `Your Results — ${show.name}`;
-    }
+    // Build a celebratory subject line crediting the dog that achieved the
+    // best result (award, else best placement) — not just entries[0].
+    const subject = buildResultsSubject(exhibitor.entries, showAchievements, show.name);
 
     emailPayloads.push({
       from: FROM,
@@ -343,10 +336,10 @@ export async function sendFollowerResultsNotifications(showId: string) {
     const dogSections = follower.dogs.map((d) => {
       const highlights = [...d.awards, ...d.placements].join(', ');
       return `
-        <div style="padding: 12px; border-bottom: 1px solid #f0f0f0;">
-          <p style="margin: 0 0 4px; font-size: 15px; font-weight: 600; color: #1a1a1a;">${d.dogName}</p>
-          ${d.breedName ? `<p style="margin: 0 0 4px; font-size: 13px; color: #666;">${d.breedName}</p>` : ''}
-          <p style="margin: 0; font-size: 14px; color: #2D5F3F; font-weight: 600;">${highlights}</p>
+        <div style="padding: 12px; border-bottom: 1px solid ${BRAND.line};">
+          <p style="margin: 0 0 4px; font-size: 15px; font-weight: 600; color: ${BRAND.ink};">${d.dogName}</p>
+          ${d.breedName ? `<p style="margin: 0 0 4px; font-size: 13px; color: ${BRAND.ink2};">${d.breedName}</p>` : ''}
+          <p style="margin: 0; font-size: 14px; color: ${BRAND.green}; font-weight: 600;">${highlights}</p>
         </div>`;
     }).join('');
 
@@ -354,26 +347,22 @@ export async function sendFollowerResultsNotifications(showId: string) {
 <!DOCTYPE html>
 <html>
 <head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
-<body style="margin: 0; padding: 0; background-color: #f5f3ef; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
+<body style="margin: 0; padding: 0; background-color: ${BRAND.paper}; font-family: 'Hanken Grotesk', -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
   <div style="max-width: 600px; margin: 0 auto; padding: 24px 16px;">
-    <div style="text-align: center; padding: 24px 0;">
-      <h1 style="margin: 0; font-family: Georgia, 'Times New Roman', serif; font-size: 28px; color: #2D5F3F;">Remi</h1>
-    </div>
-    <div style="background: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
-      <div style="background: #2D5F3F; padding: 24px; text-align: center;">
-        <h2 style="margin: 0; color: #ffffff; font-size: 20px;">Dogs You Follow Placed!</h2>
-        <p style="margin: 8px 0 0; color: #b8d4c4; font-size: 14px;">${show.name} &middot; ${showDate}</p>
+    ${emailHeader()}
+    <div style="background: #ffffff; border: 1px solid ${BRAND.line}; border-radius: 14px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+      <div style="background: ${BRAND.deep}; padding: 24px; text-align: center;">
+        <h2 style="margin: 0; color: ${BRAND.cream}; font-size: 20px;">Dogs You Follow Placed!</h2>
+        <p style="margin: 8px 0 0; color: rgba(243, 236, 220, 0.78); font-size: 14px;">${show.name} &middot; ${showDate}</p>
       </div>
       <div style="padding: 16px 24px;">
         ${dogSections}
       </div>
-      <div style="padding: 16px 24px; text-align: center; border-top: 1px solid #e5e5e5;">
+      <div style="padding: 16px 24px; text-align: center; border-top: 1px solid ${BRAND.line};">
         ${btn(`${APP_URL}/shows/${show.slug ?? show.id}/results`, 'View Full Results')}
       </div>
     </div>
-    <p style="text-align: center; margin-top: 16px; font-size: 12px; color: #999;">
-      Sent by <a href="${APP_URL}" style="color: #2D5F3F; text-decoration: none; font-weight: 600;">Remi</a>
-    </p>
+    ${emailFooter()}
   </div>
 </body>
 </html>`;
@@ -462,11 +451,17 @@ export async function createResultsMilestonePosts(showId: string) {
     if (!entry.dogId || !entry.dog) continue;
     for (const ec of entry.entryClasses) {
       if (ec.result?.placement && ec.result.placement <= 3) {
-        const className = ec.showClass?.classDefinition?.name ?? 'class';
+        // Same "SV " prefix strip as the exhibitor results email above.
+        const className = svDisplayAge(ec.showClass?.classDefinition?.name) || 'class';
         const sex = ec.showClass?.sex;
         const sexLabel = sex === 'dog' ? ' Dog' : sex === 'bitch' ? ' Bitch' : '';
+        // Same coat disambiguation as the exhibitor results email above —
+        // a wusv show's shared social caption must not conflate the two
+        // coat classes of the same age×sex.
+        const coat = svCoatDisplayName(ec.showClass?.svCoatType);
+        const coatLabel = coat ? ` — ${coat}` : '';
         const pLabel = getPlacementLabel(ec.result.placement);
-        const caption = `Placed ${pLabel} in ${className}${sexLabel} at ${show.name}`;
+        const caption = `Placed ${pLabel} in ${className}${sexLabel}${coatLabel} at ${show.name}`;
 
         if (!dogMilestones.has(entry.dogId)) {
           dogMilestones.set(entry.dogId, {

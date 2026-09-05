@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { publicOrgColumns } from '@/server/trpc/public-org-columns';
 import { db } from '@/server/db';
 import { eq } from 'drizzle-orm';
 import * as schema from '@/server/db/schema';
@@ -6,6 +7,7 @@ import { generateRingNumbersPdf } from '@/server/services/pdf-generation';
 import type { RingNumberFormat } from '@/components/ring-numbers/ring-numbers';
 import { sanitizeFilename } from '@/lib/slugify';
 import { authenticatePdfRequest, makePdfResponse } from '@/lib/pdf-utils';
+import { syncCatalogueNumbers } from '@/server/services/catalogue-numbering';
 
 export async function GET(
   request: NextRequest,
@@ -19,7 +21,7 @@ export async function GET(
 
   const show = await db.query.shows.findFirst({
     where: eq(schema.shows.id, showId),
-    with: { organisation: true },
+    with: { organisation: { columns: publicOrgColumns } },
   });
 
   if (!show) {
@@ -28,6 +30,8 @@ export async function GET(
 
   const authResult = await authenticatePdfRequest(show.organisationId);
   if (authResult instanceof NextResponse) return authResult;
+
+  await syncCatalogueNumbers(db, showId, { allowResort: false });
 
   const searchParams = request.nextUrl.searchParams;
   const format: RingNumberFormat = searchParams.get('format') === 'single' ? 'single' : 'multi-up';

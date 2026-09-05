@@ -7,6 +7,8 @@ import { PageHeader, PageTitle } from '@/components/ui/page-header';
 import { ProfileForm } from './profile-form';
 import { PasswordForm } from './password-form';
 import { ProSubscription } from './pro-subscription';
+import { CloseAccountForm } from './close-account-form';
+import { WusvProfileForm } from './wusv-profile-form';
 
 export default function SettingsPage() {
   const { data: session } = useSession();
@@ -25,7 +27,9 @@ export default function SettingsPage() {
         {/* Profile settings */}
         <div className="space-y-6">
           <ProfileForm />
+          <WusvProfileForm />
           <PasswordForm />
+          <CloseAccountForm />
         </div>
 
         {/* Pro subscription — exhibitors only */}

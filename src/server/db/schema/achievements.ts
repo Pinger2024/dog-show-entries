@@ -9,6 +9,7 @@ import {
 import { relations } from 'drizzle-orm';
 import { achievementTypeEnum } from './enums';
 import { dogs } from './dogs';
+import { shows } from './shows';
 
 export const achievements = pgTable(
   'achievements',
@@ -23,6 +24,11 @@ export const achievements = pgTable(
     date: date('date', { mode: 'string' }).notNull(),
     judgeId: uuid('judge_id'),
     details: jsonb('details'),
+    // Per-achievement publication (Amanda 2026-05-28). Stewards publish
+    // top awards as the day progresses — e.g. Dog CC + Reserve Dog CC +
+    // Best Puppy Dog after the male classes, then bitch awards after the
+    // bitch classes. Null = not yet visible to the public.
+    publishedAt: timestamp('published_at', { withTimezone: true }),
     createdAt: timestamp('created_at', { withTimezone: true })
       .defaultNow()
       .notNull(),
@@ -41,5 +47,11 @@ export const achievementsRelations = relations(achievements, ({ one }) => ({
   dog: one(dogs, {
     fields: [achievements.dogId],
     references: [dogs.id],
+  }),
+  // Show context (type/scope) so title-tracking can tell whether a Best
+  // Dog/Bitch was a CC win — see lib/effective-achievement-type.ts.
+  show: one(shows, {
+    fields: [achievements.showId],
+    references: [shows.id],
   }),
 }));

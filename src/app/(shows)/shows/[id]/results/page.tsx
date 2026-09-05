@@ -1,6 +1,6 @@
 'use client';
 
-import { use, useCallback, useEffect } from 'react';
+import { use, useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { format, parseISO } from 'date-fns';
@@ -14,15 +14,52 @@ import {
   Award,
   Share2,
   Check,
+  Quote,
+  ChevronDown,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { trpc } from '@/lib/trpc';
 import { getPlacementLabel, placementColors, achievementLabels } from '@/lib/placements';
+import { computeSvClassRatings } from '@/lib/sv-grading';
+import { svCoatDisplayName } from '@/lib/class-labels';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { SE_H } from '@/components/show-experience/tokens';
+import { cn } from '@/lib/utils';
 
 function slugify(text: string) {
   return text.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
+}
+
+const CRITIQUE_OVERVIEW_COLLAPSE_LENGTH = 320;
+
+/** A published judge's opening remarks — collapsed by default when long so
+ *  it doesn't push the actual results below the fold. */
+function JudgeCritiqueOverview({ judgeName, overviewText }: { judgeName: string; overviewText: string }) {
+  const isLong = overviewText.length > CRITIQUE_OVERVIEW_COLLAPSE_LENGTH;
+  const [expanded, setExpanded] = useState(!isLong);
+
+  return (
+    <div className="rounded-lg border bg-card p-4 sm:p-5">
+      <div className="mb-2 flex items-center gap-2">
+        <Quote className="size-4 text-primary/60" />
+        <h2 className={cn(SE_H, 'text-base sm:text-lg')}>Judge&apos;s Critique — {judgeName}</h2>
+      </div>
+      <p className={cn('whitespace-pre-line text-sm leading-relaxed text-muted-foreground', !expanded && 'line-clamp-4')}>
+        {overviewText}
+      </p>
+      {isLong && (
+        <button
+          type="button"
+          className="mt-2 flex min-h-[2.75rem] items-center gap-1 text-sm text-primary hover:underline sm:min-h-0"
+          onClick={() => setExpanded((v) => !v)}
+        >
+          <ChevronDown className={cn('size-4 transition-transform', expanded && 'rotate-180')} />
+          {expanded ? 'Show less' : 'Read more'}
+        </button>
+      )}
+    </div>
+  );
 }
 
 /** Share via native share sheet on mobile, copy to clipboard on desktop */
@@ -136,32 +173,37 @@ export default function LiveResultsPage({
     );
   }
 
-  const { show, breedGroups } = data;
+  const { show, breedGroups, critiqueOverviews } = data;
   const isLive = show.status === 'in_progress';
   const isCompleted = show.status === 'completed';
   const isPublished = !!show.resultsPublishedAt;
   const isUnpublished = 'unpublished' in data && data.unpublished;
+  // SV/WUSV regionals show a grade+rank rating (V1, SG2, VP1) instead of
+  // plain placements (Amanda 2026-05-28).
+  const isWusv = (show as { showRuleset?: string }).showRuleset === 'wusv';
 
-  // Group achievements by type for display
-  const showLevelTypes = ['best_in_show', 'reserve_best_in_show', 'best_puppy_in_show', 'best_long_coat_in_show'];
-  const breedLevelTypes = [
-    'best_of_breed', 'best_puppy_in_breed', 'best_veteran_in_breed',
-    'dog_cc', 'reserve_dog_cc', 'bitch_cc', 'reserve_bitch_cc',
-    'best_puppy_dog', 'best_puppy_bitch',
-    'best_long_coat_dog', 'best_long_coat_bitch',
-    'cc', 'reserve_cc',
-  ];
-  const showAwards = (achievements ?? []).filter((a) =>
-    showLevelTypes.includes(a.type)
-  );
-  const breedAwards = (achievements ?? []).filter((a) =>
-    breedLevelTypes.includes(a.type)
-  );
-  const breedAwardsByBreed = new Map<string, typeof breedAwards>();
-  for (const a of breedAwards) {
-    const breedName = a.dog?.breed?.name ?? 'Unknown';
-    if (!breedAwardsByBreed.has(breedName)) breedAwardsByBreed.set(breedName, []);
-    breedAwardsByBreed.get(breedName)!.push(a);
+  // SV/WUSV regionals have only 4 top awards (no BoB/CC/BIS). Show those
+  // in their own block and suppress the shared Best Awards block — their four
+  // types aren't in NAME_TO_TYPE, so routing them through the secretary's
+  // configured order would drop them (Amanda 2026-05-28).
+  const svAwardOrder = ['most_promising_young_dog', 'most_promising_young_bitch', 'best_dog', 'best_bitch'];
+  const svAwards = isWusv
+    ? svAwardOrder
+        .map((t) => (achievements ?? []).find((a) => a.type === t))
+        .filter((a): a is NonNullable<typeof a> => !!a)
+    : [];
+  // Best Awards, in the secretary's configured order (server-sorted) — every
+  // achievement the show recorded, never gated by a hardcoded type list.
+  const bestAwards = isWusv ? [] : (achievements ?? []);
+  // Per-breed strips only make sense on genuine all-breed shows — for the
+  // single-breed shows this page mostly serves, the top block IS the story.
+  const breedAwardsByBreed = new Map<string, typeof bestAwards>();
+  if (breedGroups.length > 1) {
+    for (const a of bestAwards) {
+      const breedName = a.dog?.breed?.name ?? 'Unknown';
+      if (!breedAwardsByBreed.has(breedName)) breedAwardsByBreed.set(breedName, []);
+      breedAwardsByBreed.get(breedName)!.push(a);
+    }
   }
   const lastUpdated = dataUpdatedAt
     ? new Date(dataUpdatedAt).toLocaleTimeString('en-GB', {
@@ -170,10 +212,10 @@ export default function LiveResultsPage({
       })
     : null;
 
-  // Build share text for show-level awards
-  const showAwardsShareText = showAwards.length > 0
-    ? showAwards.map((a) => {
-        const label = achievementLabels[a.type] ?? a.type;
+  // Build share text for the Best Awards block
+  const bestAwardsShareText = bestAwards.length > 0
+    ? bestAwards.map((a) => {
+        const label = a.awardName ?? achievementLabels[a.type] ?? a.type;
         const dog = a.dog?.registeredName ?? 'TBC';
         const breed = a.dog?.breed?.name ? ` (${a.dog.breed.name})` : '';
         return `${label}: ${dog}${breed}`;
@@ -196,12 +238,12 @@ export default function LiveResultsPage({
           <div className="mt-4">
             <div className="flex flex-wrap items-center gap-2">
               {isPublished && (
-                <Badge className="bg-green-600 text-xs">
+                <Badge className="bg-primary text-xs">
                   Published Results
                 </Badge>
               )}
               {isLive && !isPublished && (
-                <Badge className="bg-green-600 text-xs">
+                <Badge className="bg-primary text-xs">
                   <span className="relative mr-1.5 flex size-2">
                     <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-white opacity-75" />
                     <span className="relative inline-flex size-2 rounded-full bg-white" />
@@ -217,7 +259,7 @@ export default function LiveResultsPage({
               )}
             </div>
 
-            <h1 className="mt-2 font-serif text-2xl font-bold tracking-tight sm:text-3xl">
+            <h1 className={cn(SE_H, 'mt-2 text-2xl sm:text-3xl')}>
               {show.name} — Results
             </h1>
 
@@ -277,27 +319,30 @@ export default function LiveResultsPage({
           </div>
         ) : (
           <div className="space-y-8">
-            {/* Show-level awards (BIS/RBIS/BPS) */}
-            {showAwards.length > 0 && (
-              <div id="show-awards" className="rounded-lg border border-amber-200 bg-gradient-to-b from-amber-50/80 to-amber-50/30 p-4 sm:p-5">
-                <div className="mb-3 flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <Trophy className="size-5 text-amber-600" />
-                    <h2 className="font-serif text-lg font-semibold text-amber-900">
-                      Show Awards
-                    </h2>
-                  </div>
-                  <ShareButton
-                    title={`${show.name} — Show Awards`}
-                    text={`Show Awards at ${show.name}\n\n${showAwardsShareText}`}
-                    hash="show-awards"
-                    size="sm"
-                  />
+            {/* Judge's opening remarks — only for critique documents the
+                secretary has explicitly published (see critiques.publish).
+                Shown above the class results per the design. */}
+            {critiqueOverviews.length > 0 && (
+              <div className="space-y-4">
+                {critiqueOverviews.map((c, i) => (
+                  <JudgeCritiqueOverview key={`${c.judgeName}-${i}`} judgeName={c.judgeName} overviewText={c.overviewText} />
+                ))}
+              </div>
+            )}
+
+            {/* SV/WUSV regional top awards — the only 4 (no BoB/CC/BIS) */}
+            {svAwards.length > 0 && (
+              <div id="top-awards" className="rounded-lg border border-se-honey-line bg-se-honey-soft p-4 sm:p-5">
+                <div className="mb-3 flex items-center gap-2">
+                  <Trophy className="size-5 text-se-honey-deep" />
+                  <h2 className="font-serif text-lg font-semibold text-se-honey-deep">
+                    Top Awards
+                  </h2>
                 </div>
                 <div className="space-y-2">
-                  {showAwards.map((a) => (
+                  {svAwards.map((a) => (
                     <div key={a.id} className="flex flex-wrap items-center gap-1.5 sm:gap-3">
-                      <Badge className="w-auto sm:w-44 justify-center bg-amber-100 text-amber-800 border-amber-300 text-xs font-semibold whitespace-nowrap">
+                      <Badge className="w-auto sm:w-52 justify-center bg-se-honey-soft text-se-honey-deep border-se-honey-line text-xs font-semibold whitespace-nowrap">
                         {achievementLabels[a.type] ?? a.type}
                       </Badge>
                       {a.dog ? (
@@ -310,13 +355,67 @@ export default function LiveResultsPage({
                       ) : (
                         <span className="font-medium text-sm">Unknown dog</span>
                       )}
-                      {a.dog?.breed && (
-                        <span className="text-xs text-muted-foreground">
-                          ({a.dog.breed.name})
-                        </span>
-                      )}
                     </div>
                   ))}
+                </div>
+              </div>
+            )}
+
+            {/* Best Awards — every achievement the show recorded, in the
+                secretary's configured order (server-sorted via resolveTopAwards),
+                labelled with her configured name. Never gated by a hardcoded
+                type list — an award type outside that list still shows, just
+                sorted after the configured ones. */}
+            {bestAwards.length > 0 && (
+              <div>
+                <span id="top-awards" />
+                <div id="show-awards" className="rounded-lg border border-se-honey-line bg-se-honey-soft p-4 sm:p-5">
+                  <div className="mb-3 flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Trophy className="size-5 text-se-honey-deep" />
+                      <h2 className="font-serif text-lg font-semibold text-se-honey-deep">
+                        Best Awards
+                      </h2>
+                    </div>
+                    <ShareButton
+                      title={`${show.name} — Best Awards`}
+                      text={`Best Awards at ${show.name}\n\n${bestAwardsShareText}`}
+                      hash="show-awards"
+                      size="sm"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    {bestAwards.map((a) => (
+                      <div key={a.id} className="flex flex-wrap items-center gap-1.5 sm:gap-3">
+                        {/* min-w, never a fixed w: a configured name runs as
+                            long as "Reserve Bitch Challenge Certificate", and
+                            whitespace-nowrap would push it out of a fixed box. */}
+                        <Badge className="w-auto sm:min-w-44 justify-center bg-se-honey-soft text-se-honey-deep border-se-honey-line text-xs font-semibold whitespace-nowrap">
+                          {a.awardName ?? achievementLabels[a.type] ?? a.type}
+                        </Badge>
+                        {a.dog ? (
+                          <Link
+                            href={`/dog/${a.dogId}`}
+                            className="font-medium text-sm text-primary hover:underline"
+                          >
+                            {a.dog.registeredName}
+                          </Link>
+                        ) : (
+                          <span className="font-medium text-sm">Unknown dog</span>
+                        )}
+                        {/* On a single-breed show the breed is the same on
+                            every line — printing it 13 times is noise that
+                            pushes each award onto two rows. Only worth the
+                            space when there is more than one breed to tell
+                            apart. */}
+                        {a.dog?.breed && breedGroups.length > 1 && (
+                          <span className="text-xs text-muted-foreground">
+                            ({a.dog.breed.name})
+                          </span>
+                        )}
+                      </div>
+                    ))}
+                  </div>
                 </div>
               </div>
             )}
@@ -327,11 +426,17 @@ export default function LiveResultsPage({
 
               // Build share text for this breed
               const topResults = group.classes
-                .flatMap((cls) =>
-                  cls.results
+                .flatMap((cls) => {
+                  // A wusv show runs each age×sex twice (once per coat) —
+                  // the shared class name is ambiguous on its own, so the
+                  // coat must ride along in any text pulled out of the
+                  // class object (share captions included).
+                  const coat = svCoatDisplayName(cls.svCoatType);
+                  const classLabel = coat ? `${cls.className} — ${coat}` : cls.className;
+                  return cls.results
                     .filter((r) => r.placement && r.placement <= 3)
-                    .map((r) => `${getPlacementLabel(r.placement!)}: ${r.dogName}${cls.className ? ` (${cls.className})` : ''}`)
-                )
+                    .map((r) => `${getPlacementLabel(r.placement!)}: ${r.dogName}${classLabel ? ` (${classLabel})` : ''}`);
+                })
                 .slice(0, 6);
 
               const breedShareText = [
@@ -362,7 +467,7 @@ export default function LiveResultsPage({
                     <div className="mb-4 flex flex-wrap gap-x-4 gap-y-1.5">
                       {breedAwardsForGroup.map((a) => (
                         <div key={a.id} className="flex items-center gap-1.5 text-sm">
-                          <Award className="size-4 text-amber-500" />
+                          <Award className="size-4 text-se-honey-deep" />
                           <span className="text-xs font-medium text-muted-foreground">
                             {achievementLabels[a.type] ?? a.type}:
                           </span>
@@ -381,16 +486,26 @@ export default function LiveResultsPage({
                     </div>
                   )}
                   <div className="space-y-4">
-                    {group.classes.map((cls) => (
+                    {group.classes.map((cls) => {
+                      // SV ratings restart per grade (SG1, SG2, G1, G2…) — so
+                      // compute the within-grade rank across the whole class
+                      // rather than per result (Amanda 2026-05-28).
+                      const svRatings = isWusv ? computeSvClassRatings(cls.results) : null;
+                      return (
                       <div
                         key={cls.classId}
                         id={`class-${cls.classId}`}
-                        className="rounded-lg border bg-white p-4"
+                        className="rounded-lg border bg-card p-4"
                       >
                         <div className="mb-3 flex items-center gap-2">
-                          {cls.classNumber != null && (
+                          {/* Guard on the LABEL, not the number — Junior
+                              Handling classes carry class_number = NULL but
+                              still get a canonical label ('JHA'/'JHB') from
+                              buildClassLabelMap, and a number-only guard hid
+                              them entirely (Mandy 2026-09-05, NE Regional). */}
+                          {(cls.classLabel || cls.classNumber != null) && (
                             <span className="text-xs font-bold text-muted-foreground">
-                              #{cls.classNumber}
+                              #{cls.classLabel || cls.classNumber}
                             </span>
                           )}
                           <h3 className="font-semibold text-sm">
@@ -404,22 +519,44 @@ export default function LiveResultsPage({
                               {cls.sex}
                             </Badge>
                           )}
+                          {svCoatDisplayName(cls.svCoatType) && (
+                            <Badge
+                              variant="outline"
+                              className="text-xs"
+                            >
+                              {svCoatDisplayName(cls.svCoatType)}
+                            </Badge>
+                          )}
                           <span className="text-xs text-muted-foreground">
-                            ({cls.dogsForward} forward)
+                            ({cls.dogsForward} presented / {cls.entriesCount} entered)
                           </span>
                         </div>
                         <div className="space-y-1.5">
                           {cls.results.map((result) => (
                             <div key={result.entryClassId}>
                               <div className="flex flex-wrap items-center gap-1.5 sm:gap-3 text-sm">
-                                {result.placement && (
+                                {isWusv && svRatings?.get(result.entryClassId) ? (
+                                  <Badge
+                                    variant="outline"
+                                    className={`w-auto sm:w-16 justify-center text-xs font-semibold whitespace-nowrap ${result.placement ? placementColors[result.placement] ?? '' : ''}`}
+                                  >
+                                    {svRatings.get(result.entryClassId)}
+                                  </Badge>
+                                ) : !isWusv && result.placement ? (
                                   <Badge
                                     variant="outline"
                                     className={`w-auto sm:w-16 justify-center text-xs font-semibold whitespace-nowrap ${placementColors[result.placement] ?? ''}`}
                                   >
                                     {getPlacementLabel(result.placement)}
                                   </Badge>
-                                )}
+                                ) : result.placementStatus === 'withheld' ? (
+                                  <Badge
+                                    variant="outline"
+                                    className="w-auto sm:w-16 justify-center text-xs font-semibold whitespace-nowrap text-muted-foreground"
+                                  >
+                                    W/H
+                                  </Badge>
+                                ) : null}
                                 <span className="font-mono text-xs text-muted-foreground">
                                   {result.catalogueNumber ?? '—'}
                                 </span>
@@ -438,7 +575,7 @@ export default function LiveResultsPage({
                                 {result.specialAward && (
                                   <Badge
                                     variant="secondary"
-                                    className="shrink-0 text-xs bg-amber-50 text-amber-700"
+                                    className="shrink-0 text-xs bg-se-honey-soft text-se-honey-deep"
                                   >
                                     <Award className="mr-0.5 size-3" />
                                     {result.specialAward}
@@ -455,7 +592,7 @@ export default function LiveResultsPage({
                                 </div>
                               )}
                               {result.critiqueText && (
-                                <div className="ml-[4.75rem] mt-1.5 rounded-lg border-l-2 border-gold/30 bg-muted/50 px-3 py-2">
+                                <div className="ml-[4.75rem] mt-1.5 rounded-lg border-l-2 border-se-honey/30 bg-muted/50 px-3 py-2">
                                   <p className="text-sm italic leading-relaxed text-muted-foreground">
                                     &ldquo;{result.critiqueText}&rdquo;
                                   </p>
@@ -465,7 +602,8 @@ export default function LiveResultsPage({
                           ))}
                         </div>
                       </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 </div>
               );

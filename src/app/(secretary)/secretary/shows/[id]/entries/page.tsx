@@ -6,16 +6,20 @@ import {
   ArrowRight,
   Download,
   Edit3,
+  FileClock,
   Loader2,
   Plus,
   Search,
   Ticket,
   X,
 } from 'lucide-react';
+import { RegistrationFlagsField } from '@/components/shows/registration-flags-field';
+import { appendRegistrationFlags, registrationFlagSuffix } from '@/lib/registration-flags';
 import { toast } from 'sonner';
 import { trpc } from '@/lib/trpc';
-import { formatDogName } from '@/lib/utils';
-import { formatCurrency } from '@/lib/date-utils';
+import { formatSvClassName, svCoatDisplayName } from '@/lib/class-labels';
+import { cn, formatDogName } from '@/lib/utils';
+import { formatCurrency, isAgeEligibleOnShowDay, isAgeRestrictedClass } from '@/lib/date-utils';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
@@ -53,22 +57,93 @@ import {
 } from '@/components/ui/dialog';
 import { isGsdOnlyClass, isGsdBreed } from '@/lib/class-templates';
 import { EmptyState } from '@/components/ui/empty-state';
-import { EntryItem, entryStatusConfig, formatDate } from '../_lib/show-utils';
+import { SECard, Eyebrow } from '@/components/show-experience/kit';
+import { SE_H } from '@/components/show-experience/tokens';
+import { EntryItem, entryStatusConfig, formatDate, formatDogsEnteredParts, classEntriesLabel } from '../_lib/show-utils';
 import { useShowId } from '../_lib/show-context';
+
+/* Entry status pill — same fresh/honey/light pill language as the rest of
+ * the Show Experience surfaces (dashboard's getStatusPill, section nav's
+ * SECTION_BADGE_TONES). entryStatusConfig's Badge variants stay in
+ * show-utils.ts for anywhere still using shadcn Badge. */
+const ENTRY_STATUS_TONES: Record<string, string> = {
+  pending: 'bg-se-honey-soft text-se-honey-deep',
+  confirmed: 'bg-se-fresh-soft text-se-fresh-deep',
+  withdrawn: 'bg-se-surface text-se-ink2 shadow-[inset_0_0_0_1px_var(--color-se-line)]',
+  transferred: 'bg-se-surface text-se-ink2 shadow-[inset_0_0_0_1px_var(--color-se-line)]',
+  cancelled: 'bg-destructive/10 text-destructive',
+};
+
+function EntryStatusPill({ status }: { status: string }) {
+  const config = entryStatusConfig[status] ?? { label: status };
+  return (
+    <span className={cn(
+      'inline-flex h-6 shrink-0 items-center rounded-full px-2.5 text-[11.5px] font-semibold',
+      ENTRY_STATUS_TONES[status] ?? 'bg-se-surface text-se-ink2 shadow-[inset_0_0_0_1px_var(--color-se-line)]',
+    )}>
+      {config.label}
+    </span>
+  );
+}
 
 export default function EntriesPage() {
   const showId = useShowId();
 
+  // Default to "active" — withdrawn/cancelled entries are noise on the primary
+  // entries view (and their count drifts from the layout banner's confirmed
+  // count, which secretaries flag as a discrepancy). The dropdown still has
+  // explicit Pending/Withdrawn/Cancelled/All options for when they drill in.
+  // Declared above the query so the query key can depend on it: "pending"
+  // (awaiting-payment) entries are hidden from the default list as abandoned
+  // checkouts, so we ask the server for them explicitly when that filter is on.
+  const [statusFilter, setStatusFilter] = useState('active');
+
   const { data: showData } = trpc.shows.getById.useQuery({ id: showId });
-  const { data: entriesData, isLoading: entriesLoading } = trpc.entries.getForShow.useQuery({ showId, limit: 500 });
+  const { data: entriesData, isLoading: entriesLoading } = trpc.entries.getForShow.useQuery({
+    showId,
+    limit: 500,
+    ...(statusFilter === 'pending' ? { status: 'pending' as const } : {}),
+  });
   const entries = entriesData?.items ?? [];
   const total = entriesData?.total ?? 0;
+  // Summary tiles read the same canonical stats query the dashboard and
+  // banner use (same query key as layout.tsx's getShowEntryStats — React
+  // Query dedupes it, no extra network call) rather than filtering the
+  // client-side entries list, so this page can never disagree with the
+  // dashboard about how many dogs are entered (Amanda's 74/75/78 report).
+  const { data: entryStats } = trpc.secretary.getShowEntryStats.useQuery(
+    { showId },
+    { staleTime: 60_000 }
+  );
 
   const [search, setSearch] = useState('');
-  const [statusFilter, setStatusFilter] = useState('all');
   const [editingEntry, setEditingEntry] = useState<EntryItem | null>(null);
+  const [flagsEntry, setFlagsEntry] = useState<EntryItem | null>(null);
   const [transferringEntry, setTransferringEntry] = useState<EntryItem | null>(null);
   const [showAddEntry, setShowAddEntry] = useState(false);
+
+  const formatClassWithSex = (ec: {
+    showClass?: {
+      sex?: string | null;
+      svCoatType?: 'stock' | 'long_stock' | null;
+      classDefinition?: { name?: string | null } | null;
+    } | null;
+  }): string => {
+    const name = ec.showClass?.classDefinition?.name ?? '?';
+    // Coat-split classes: a long-coat entry must read e.g. "Adult Long Coat
+    // Dog", not just "Adult Dog" — the coat was being dropped (Mandy
+    // 2026-07-13). Wording is now "Long Coat" everywhere, RKC and regional
+    // alike (regional groups dropped their "Long Stock Coat" wording
+    // 2026-08-11 — see svCoatDisplayName). Stock/unsplit classes stay
+    // unlabelled.
+    const coatLabel = svCoatDisplayName('long_stock');
+    const coat = ec.showClass?.svCoatType === 'long_stock' ? `${coatLabel} ` : '';
+    const base = `${name} ${coat}`.trim();
+    const sex = ec.showClass?.sex;
+    if (sex === 'dog') return `${base} Dog`;
+    if (sex === 'bitch') return `${base} Bitch`;
+    return base;
+  };
 
   const filtered = useMemo(() => {
     return entries.filter((entry) => {
@@ -80,7 +155,11 @@ export default function EntriesPage() {
         entry.dog?.breed?.name?.toLowerCase().includes(q);
 
       const matchesStatus =
-        statusFilter === 'all' || entry.status === statusFilter;
+        statusFilter === 'all'
+          ? true
+          : statusFilter === 'active'
+            ? entry.status !== 'withdrawn' && entry.status !== 'cancelled'
+            : entry.status === statusFilter;
 
       return matchesSearch && matchesStatus;
     });
@@ -102,11 +181,12 @@ export default function EntriesPage() {
     const rows = entries.map((e) => [
       e.exhibitor?.name ?? '',
       e.exhibitor?.email ?? '',
-      e.dog?.registeredName ?? '',
+      // Carries the RKC paperwork flags, same as the catalogue does.
+      e.dog?.registeredName ? appendRegistrationFlags(e.dog.registeredName, e) : '',
       e.dog?.breed?.name ?? '',
       e.entryClasses
-        .map((ec) => ec.showClass?.classDefinition?.name ?? '')
-        .filter(Boolean)
+        .map((ec) => formatClassWithSex(ec))
+        .filter((s) => s && s !== '?')
         .join('; '),
       (e.totalFee / 100).toFixed(2),
       e.status,
@@ -130,18 +210,65 @@ export default function EntriesPage() {
     toast.success(`${entries.length} entries exported to CSV`);
   }
 
+  const dogsEntered = entryStats?.dogsEntered ?? 0;
+  const awaitingPayment = entryStats?.pending ?? 0;
+  const withdrawnCount = entryStats?.withdrawn ?? 0;
+  const dogsEnteredSub = entryStats
+    ? formatDogsEnteredParts({
+        paid: entryStats.confirmed,
+        notForCompetition: entryStats.notForCompetitionEntries,
+        otherOrderless: entryStats.otherOrderlessEntries,
+      })
+    : '';
+  const classEntriesSub = classEntriesLabel(dogsEntered, entryStats?.classEntries);
+
   return (
     <>
-      <Card>
-        <CardHeader>
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
+      {/* Stat summary — DOGS ENTERED spans the full row on mobile (its
+          sub-line is longer than "Total"/"Confirmed" ever were), AWAITING
+          PAYMENT + WITHDRAWN sit 2-up beneath; sm and up go back to a
+          single 3-across row. */}
+      <div className="mb-4 grid grid-cols-2 gap-2.5 sm:grid-cols-3">
+        <SECard className="col-span-2 p-3.5 sm:col-span-1">
+          <Eyebrow>Dogs entered</Eyebrow>
+          <p className={cn(SE_H, 'mt-1 text-[22px] leading-none tabular-nums text-se-ink')}>{dogsEntered}</p>
+          {dogsEnteredSub && (
+            <p className="mt-1 truncate text-[11px] text-se-ink3">{dogsEnteredSub}</p>
+          )}
+          {classEntriesSub && (
+            <p className="mt-1 truncate text-[11px] text-se-ink3">{classEntriesSub}</p>
+          )}
+        </SECard>
+        <SECard className="p-3.5">
+          <Eyebrow>Awaiting payment</Eyebrow>
+          <p className={cn(SE_H, 'mt-1 text-[22px] leading-none tabular-nums text-se-honey-deep')}>{awaitingPayment}</p>
+          <p className="mt-1 text-[11px] text-se-ink3">{awaitingPayment} started checkout</p>
+        </SECard>
+        <SECard className="p-3.5">
+          <Eyebrow>Withdrawn</Eyebrow>
+          <p className={cn(SE_H, 'mt-1 text-[22px] leading-none tabular-nums text-se-ink')}>{withdrawnCount}</p>
+          {withdrawnCount > 0 && (
+            <p className="mt-1 text-[11px] text-se-ink3">
+              fee kept · {formatCurrency(entryStats?.withdrawnKeptPence ?? 0)}
+            </p>
+          )}
+        </SECard>
+      </div>
+
+      <SECard>
+        <div className="flex flex-col gap-3 p-4 pb-0 sm:flex-row sm:items-start sm:justify-between sm:gap-4 sm:p-6 sm:pb-0">
             <div>
-              <CardTitle className="text-base sm:text-lg">Entries ({total})</CardTitle>
-              <CardDescription>
-                All entries for this show
-              </CardDescription>
+              <p className={cn(SE_H, 'text-base text-se-ink sm:text-lg')}>Entries ({filtered.length})</p>
+              <p className="mt-0.5 text-sm text-se-ink3">
+                {statusFilter === 'active' && 'Active entries — withdrawn and cancelled hidden by default'}
+                {statusFilter === 'all' && 'Every entry on this show, including withdrawn and cancelled'}
+                {statusFilter === 'pending' && 'Entries on orders awaiting payment'}
+                {statusFilter === 'confirmed' && 'Confirmed entries on paid orders'}
+                {statusFilter === 'withdrawn' && 'Entries the exhibitor pulled out of after paying'}
+                {statusFilter === 'cancelled' && 'Cancelled entries'}
+              </p>
               {total > entries.length && (
-                <p className="text-xs text-amber-600">
+                <p className="text-xs text-se-honey-deep">
                   Showing {entries.length} of {total} — CSV export may be incomplete
                 </p>
               )}
@@ -162,25 +289,25 @@ export default function EntriesPage() {
                 Export CSV
               </Button>
             </div>
-          </div>
-        </CardHeader>
-        <CardContent>
-          {/* Filters */}
+        </div>
+        <div className="p-4 sm:p-6">
+          {/* Filters — same search/select language as the public browse page */}
           <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center">
-            <div className="relative flex-1 min-w-0">
-              <Search className="absolute left-2.5 top-2.5 size-4 text-muted-foreground" />
+            <div className="relative min-w-0 flex-1">
+              <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-se-ink3" />
               <Input
                 placeholder="Search exhibitor, dog, or breed..."
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                className="pl-9"
+                className="h-11 rounded-[13px] border-se-line bg-se-surface pl-10 text-se-ink placeholder:text-se-ink3 shadow-none transition-shadow focus-visible:border-se-fresh focus-visible:ring-se-fresh/25"
               />
             </div>
             <Select value={statusFilter} onValueChange={setStatusFilter}>
-              <SelectTrigger className="w-full sm:w-36">
+              <SelectTrigger className="h-11 w-full rounded-[13px] border-se-line bg-se-surface text-se-ink shadow-none sm:w-36">
                 <SelectValue placeholder="Status" />
               </SelectTrigger>
-              <SelectContent>
+              <SelectContent className="border-se-line bg-se-surface text-se-ink">
+                <SelectItem value="active">Active</SelectItem>
                 <SelectItem value="all">All Statuses</SelectItem>
                 <SelectItem value="pending">Pending</SelectItem>
                 <SelectItem value="confirmed">Confirmed</SelectItem>
@@ -207,20 +334,12 @@ export default function EntriesPage() {
           ) : (
             <>
               {/* Mobile card view */}
-              <div className="space-y-3 sm:hidden">
-                {filtered.map((entry) => {
-                  const es = entryStatusConfig[entry.status] ?? {
-                    label: entry.status,
-                    variant: 'outline' as const,
-                  };
-                  return (
-                    <div
-                      key={entry.id}
-                      className="rounded-lg border p-3 space-y-2"
-                    >
+              <div className="space-y-2.5 sm:hidden">
+                {filtered.map((entry) => (
+                  <SECard key={entry.id} className="space-y-2 p-3.5">
                       <div className="flex items-start justify-between gap-2">
                         <div className="min-w-0 flex-1">
-                          <p className="font-medium truncate">
+                          <p className="truncate font-medium text-se-ink">
                             {entry.dog?.registeredName ?? '\u2014'}
                             {entry.isNfc && (
                               <Badge variant="outline" className="ml-1.5 text-xs align-middle">
@@ -228,16 +347,16 @@ export default function EntriesPage() {
                               </Badge>
                             )}
                           </p>
-                          <p className="text-xs text-muted-foreground truncate">
+                          <p className="truncate text-xs text-se-ink3">
                             {entry.dog?.breed?.name ?? ''} &middot; {entry.exhibitor?.name ?? '\u2014'}
                           </p>
                         </div>
-                        <div className="flex items-center gap-1.5 shrink-0">
-                          <Badge variant={es.variant}>{es.label}</Badge>
+                        <div className="flex shrink-0 items-center gap-1.5">
+                          <EntryStatusPill status={entry.status} />
                           {entry.entryClasses.length > 0 && (
                             <button
                               onClick={() => setTransferringEntry(entry)}
-                              className="flex size-9 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
+                              className="flex size-9 items-center justify-center rounded-md text-se-ink3 hover:bg-se-paper2 hover:text-se-ink"
                               title="Transfer class"
                             >
                               <ArrowLeftRight className="size-4" />
@@ -246,10 +365,19 @@ export default function EntriesPage() {
                           {entry.dog && (
                             <button
                               onClick={() => setEditingEntry(entry)}
-                              className="flex size-9 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
+                              className="flex size-9 items-center justify-center rounded-md text-se-ink3 hover:bg-se-paper2 hover:text-se-ink"
                               title="Edit dog details"
                             >
                               <Edit3 className="size-4" />
+                            </button>
+                          )}
+                          {entry.dog && (
+                            <button
+                              onClick={() => setFlagsEntry(entry)}
+                              className="flex size-9 items-center justify-center rounded-md text-se-ink3 hover:bg-se-paper2 hover:text-se-ink"
+                              title="RKC paperwork (NAF / TAF / CNAF)"
+                            >
+                              <FileClock className="size-4" />
                             </button>
                           )}
                         </div>
@@ -262,17 +390,16 @@ export default function EntriesPage() {
                               variant="secondary"
                               className="text-xs"
                             >
-                              {ec.showClass?.classDefinition?.name ?? '?'}
+                              {formatClassWithSex(ec)}
                             </Badge>
                           ))}
                         </div>
-                        <span className="text-sm font-semibold shrink-0 ml-2">
+                        <span className="ml-2 shrink-0 text-sm font-semibold text-se-ink">
                           {formatCurrency(entry.totalFee)}
                         </span>
                       </div>
-                    </div>
-                  );
-                })}
+                  </SECard>
+                ))}
               </div>
 
               {/* Desktop table view */}
@@ -292,10 +419,6 @@ export default function EntriesPage() {
                 </TableHeader>
                 <TableBody>
                   {filtered.map((entry) => {
-                    const es = entryStatusConfig[entry.status] ?? {
-                      label: entry.status,
-                      variant: 'outline' as const,
-                    };
                     return (
                       <TableRow key={entry.id}>
                         <TableCell>
@@ -325,14 +448,14 @@ export default function EntriesPage() {
                                 variant="secondary"
                                 className="text-xs"
                               >
-                                {ec.showClass?.classDefinition?.name ?? '?'}
+                                {formatClassWithSex(ec)}
                               </Badge>
                             ))}
                           </div>
                         </TableCell>
                         <TableCell>{formatCurrency(entry.totalFee)}</TableCell>
                         <TableCell>
-                          <Badge variant={es.variant}>{es.label}</Badge>
+                          <EntryStatusPill status={entry.status} />
                         </TableCell>
                         <TableCell className="hidden md:table-cell text-muted-foreground">
                           {formatDate(entry.createdAt)}
@@ -357,6 +480,15 @@ export default function EntriesPage() {
                                 <Edit3 className="size-4" />
                               </button>
                             )}
+                            {entry.dog && (
+                              <button
+                                onClick={() => setFlagsEntry(entry)}
+                                className="flex size-9 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
+                                title="RKC paperwork (NAF / TAF / CNAF)"
+                              >
+                                <FileClock className="size-4" />
+                              </button>
+                            )}
                           </div>
                         </TableCell>
                       </TableRow>
@@ -367,13 +499,21 @@ export default function EntriesPage() {
               </div>
             </>
           )}
-        </CardContent>
+        </div>
 
         {editingEntry && (
           <EditDogDialog
             entry={editingEntry}
             showId={showId}
             onClose={() => setEditingEntry(null)}
+          />
+        )}
+
+        {flagsEntry && (
+          <RegistrationFlagsDialog
+            entry={flagsEntry}
+            showId={showId}
+            onClose={() => setFlagsEntry(null)}
           />
         )}
 
@@ -392,7 +532,7 @@ export default function EntriesPage() {
             onClose={() => setTransferringEntry(null)}
           />
         )}
-      </Card>
+      </SECard>
     </>
   );
 }
@@ -565,7 +705,7 @@ function AddEntryDialog({
   const [selectedDogBreedName, setSelectedDogBreedName] = useState<string | null>(null);
   const [exhibitorEmail, setExhibitorEmail] = useState('');
   const [selectedClassIds, setSelectedClassIds] = useState<string[]>([]);
-  const [paymentMethod, setPaymentMethod] = useState<string>('postal');
+  const [paymentMethod, setPaymentMethod] = useState<string>('bank_transfer');
   const [isNfc, setIsNfc] = useState(false);
   const [sundryQuantities, setSundryQuantities] = useState<Record<string, number>>({});
 
@@ -863,9 +1003,9 @@ function AddEntryDialog({
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
+                  <SelectItem value="bank_transfer">Bank Transfer</SelectItem>
                   <SelectItem value="postal">Postal (cheque)</SelectItem>
                   <SelectItem value="cash">Cash</SelectItem>
-                  <SelectItem value="bank_transfer">Bank Transfer</SelectItem>
                   <SelectItem value="online">Online (already paid)</SelectItem>
                 </SelectContent>
               </Select>
@@ -903,13 +1043,12 @@ function AddEntryDialog({
                       filteredBySex++;
                       return false;
                     }
-                    if (sc.classDefinition?.type === 'age' && selectedDogDob && showDate) {
-                      const ageMonths =
-                        (new Date(showDate).getFullYear() - new Date(selectedDogDob).getFullYear()) * 12 +
-                        (new Date(showDate).getMonth() - new Date(selectedDogDob).getMonth());
+                    if (sc.classDefinition && isAgeRestrictedClass(sc.classDefinition) && selectedDogDob && showDate) {
                       const { minAgeMonths, maxAgeMonths } = sc.classDefinition;
-                      if (minAgeMonths !== null && ageMonths < minAgeMonths) { filteredByAge++; return false; }
-                      if (maxAgeMonths !== null && ageMonths >= maxAgeMonths) { filteredByAge++; return false; }
+                      if (!isAgeEligibleOnShowDay(selectedDogDob, showDate, minAgeMonths, maxAgeMonths)) {
+                        filteredByAge++;
+                        return false;
+                      }
                     }
                     return true;
                   });
@@ -927,7 +1066,10 @@ function AddEntryDialog({
                         }}
                       />
                       <span className="flex-1 text-sm">
-                        {sc.classDefinition?.name ?? 'Unknown Class'}
+                        {formatSvClassName(
+                          sc.classDefinition?.name,
+                          (sc as { svCoatType?: 'stock' | 'long_stock' | null }).svCoatType,
+                        )}
                         {sc.sex ? ` (${sc.sex === 'dog' ? 'Dog' : 'Bitch'})` : ''}
                       </span>
                       <span className="text-xs text-muted-foreground">
@@ -1206,5 +1348,103 @@ function TransferClassDialog({
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  );
+}
+
+/**
+ * Set an entry's RKC paperwork flags after the fact — exhibitors ring up to
+ * say the transfer has come through, or that it hasn't yet.
+ *
+ * Deliberately NOT part of EditDogDialog: that one edits the DOG (permanent,
+ * and demands a reason for the audit log), whereas these are per-show and
+ * change as the RKC processes the paperwork.
+ */
+function RegistrationFlagsDialog({
+  entry,
+  showId,
+  onClose,
+}: {
+  entry: EntryItem;
+  showId: string;
+  onClose: () => void;
+}) {
+  const [flags, setFlags] = useState({
+    naf: entry.naf ?? false,
+    taf: entry.taf ?? false,
+    cnaf: entry.cnaf ?? false,
+    atcNumber: entry.atcNumber ?? '',
+  });
+  const utils = trpc.useUtils();
+
+  const update = trpc.secretary.updateEntryRegistrationFlags.useMutation({
+    onSuccess: () => {
+      toast.success('RKC paperwork updated');
+      utils.entries.getForShow.invalidate({ showId });
+      onClose();
+    },
+    onError: (err) => toast.error(err.message ?? 'Could not update the paperwork flags'),
+  });
+
+  const dogName = entry.dog?.registeredName ?? 'this dog';
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 p-0 sm:items-center sm:p-4">
+      <Card className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-t-2xl sm:rounded-xl">
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <CardTitle>RKC paperwork</CardTitle>
+            <button
+              onClick={onClose}
+              className="flex size-11 items-center justify-center rounded-md text-muted-foreground hover:bg-muted"
+              aria-label="Close"
+            >
+              <X className="size-4" />
+            </button>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <p className="text-sm text-muted-foreground">
+            For <span className="font-semibold text-foreground">{dogName}</span> at this show
+            only. It prints after the dog&apos;s name in the catalogue.
+          </p>
+
+          <RegistrationFlagsField
+            idPrefix={`sec-regflags-${entry.id}`}
+            value={flags}
+            onChange={setFlags}
+          />
+
+          <p className="text-sm">
+            Will print as{' '}
+            <span className="font-semibold">
+              {dogName}
+              {registrationFlagSuffix(flags)}
+            </span>
+          </p>
+
+          <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
+            <Button variant="outline" className="min-h-[2.75rem]" onClick={onClose}>
+              Cancel
+            </Button>
+            <Button
+              className="min-h-[2.75rem]"
+              disabled={update.isPending}
+              onClick={() =>
+                update.mutate({
+                  entryId: entry.id,
+                  naf: flags.naf,
+                  taf: flags.taf,
+                  cnaf: flags.cnaf,
+                  atcNumber: flags.atcNumber.trim() || undefined,
+                })
+              }
+            >
+              {update.isPending && <Loader2 className="mr-2 size-4 animate-spin" />}
+              Save
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
   );
 }

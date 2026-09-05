@@ -1,8 +1,80 @@
 import type { ReactNode } from 'react';
-import { Page, View, Text, Image } from '@react-pdf/renderer';
+import { View, Text, Image } from '@react-pdf/renderer';
+import { PageFrame, Folio, KeepTogether, FitText, BalancedColumns, Flow } from '@/components/pdf-kit';
+import { estimateTextHeight } from '@/components/pdf-kit/measure';
 import { styles, C } from './catalogue-styles';
 import type { CatalogueEntry, CatalogueShowInfo, ClassSponsorshipInfo } from './catalogue-types';
-import { pickDefaultBestAwards } from './catalogue-utils';
+import { ownerHeading, uppercaseName, formatOwnerKC } from './catalogue-utils';
+import { buildBestAwards } from '@/lib/best-awards';
+import { MastheadBand, TonalWash, ClubCrestSlot } from '@/components/sv-pdf/cover-atoms';
+import { ss, SV, SV_FONTS } from '@/components/schedule/shared/sv-styles';
+import { Numero } from '@/components/schedule/shared/numero';
+import { getRkcScheduleProfile } from '@/lib/rkc-schedule-profile';
+import { RKC_JUDGES_WELFARE_STATEMENT, isRkcJudgesWelfareStatement } from '@/lib/rkc-statements';
+import { formatLondonLongDate } from '@/lib/date-utils';
+import { pickSvCoverJudges } from '@/lib/schedule-judges';
+
+// A5 portrait is 148mm x 210mm = ~419.53pt x ~595.28pt. These widths are the
+// usable content width inside CoverPage's coverTopBand (paddingHorizontal:
+// 20 each side) and coverContent (paddingHorizontal: 30 each side) — see
+// catalogue-styles.ts. Rounded down a couple of points for safety margin
+// rather than the exact float, since FitText's floor (`min`) means a value
+// that's a hair too generous only costs a slightly larger font, never an
+// overflow.
+const COVER_TOP_BAND_MAX_WIDTH = 378;
+const COVER_CONTENT_MAX_WIDTH = 358;
+// coverOrgName's letterSpacing (points added after each character) —
+// matches styles.coverOrgName's original value. measure.ts's fitFontSize
+// doesn't model letter-spacing tracking, so a name right at the width
+// boundary may fit its measured (untracked) width but overflow once
+// tracking is added — an accepted, minor imprecision here since FitText
+// only widens the rendered box when it actually shrinks the text (see
+// fit-text.tsx), so the worst case is the same graceful natural wrap the
+// original unconstrained Text already had, never new clipping.
+const COVER_ORG_NAME_LETTER_SPACING = 3;
+// styles.coverShowName's original fixed size — the ceiling FitText starts
+// from for the cover title.
+const COVER_SHOW_NAME_MAX_SIZE = 17;
+// A5 height (595.28pt) minus styles.frontMatterPage's top+bottom padding
+// ('20 22 30 22' — 20 top, 30 bottom): the usable height of a completely
+// FRESH front-matter page. Used only as the ceiling for KeepTogether's
+// escape hatch on atomic banner blocks — if an estimated block is taller
+// than this, it could never fit even starting a page of its own, so it
+// must fall back to wrapping rather than risk silently overflowing.
+const FRONT_MATTER_PAGE_USABLE_HEIGHT = 545.28;
+
+/**
+ * Conservative estimate of one Best-Awards row's rendered height, for the
+ * banner+header+first-row atomic block's KeepTogether escape hatch below.
+ * Deliberately overestimates rather than under- (every text measured
+ * against a generous single-column width rather than the row's true
+ * multi-column layout) — the safe direction for a "should this stay
+ * atomic" decision; it only needs to catch a genuinely pathological award
+ * name or sponsor stack, not reproduce the row's exact pixel height.
+ */
+function estimateBestAwardRowHeight(
+  award: string,
+  sponsors: Array<{ trophyName?: string | null; sponsorName?: string | null; sponsorAffix?: string | null }>,
+): number {
+  const awardNameHeight = estimateTextHeight(award, { width: 150, family: 'Inter', size: 9, lineHeight: 1.2 });
+  const winnerLineHeight = 12; // winner rule + label — fixed decorative height
+  const sponsorLinesHeight =
+    sponsors.length === 0
+      ? 10 // the em-dash placeholder row
+      : sponsors.reduce((sum, s) => {
+          const text = [s.trophyName, s.sponsorName, s.sponsorAffix].filter(Boolean).join(' — ');
+          return sum + estimateTextHeight(text, { width: 200, family: 'Inter', size: 8, lineHeight: 1.2 }) + 6;
+        }, 0);
+  return awardNameHeight + winnerLineHeight + sponsorLinesHeight + 10; // + row padding
+}
+
+// TrophiesPage's donations grid: styles.frontMatterPage is A5 with
+// paddingHorizontal 22 each side (419.53pt page - 44 = 375.53pt content
+// width), split into BalancedColumns' 2 columns with its default 12pt
+// columnGap — (375.53 - 12) / 2. Used only to estimate each donation's
+// height for balancing; the column View itself sizes from flex:1, not
+// this constant.
+const DONATIONS_COLUMN_WIDTH = 181.75;
 
 const SHOW_TYPE_LABELS: Record<string, string> = {
   championship: 'Championship Show',
@@ -13,14 +85,22 @@ const SHOW_TYPE_LABELS: Record<string, string> = {
   companion: 'Companion Show',
 };
 
+/** Every front-matter page's footer, factored out into one place so the
+ *  wording can't drift between pages — see pdf-kit's `Folio`. */
+function catalogueFolioFormat(pageNumber: number, totalPages: number): string {
+  return `Page ${pageNumber} of ${totalPages}  ·  Generated by Remi`;
+}
+
+/** The standard front-matter footer — same `<Folio>` on every A5
+ *  front-matter page (replaces the hand-rolled `fixed`+`render` `<Text>`
+ *  that used to be duplicated at the foot of every page function below). */
+function CatalogueFolio() {
+  return <Folio style={styles.footer} format={catalogueFolioFormat} />;
+}
+
+// Always Europe/London, never the process's own timezone (Michael 2026-09-03).
 function formatCoverDate(dateStr: string): string {
-  const d = new Date(dateStr);
-  return d.toLocaleDateString('en-GB', {
-    weekday: 'long',
-    day: 'numeric',
-    month: 'long',
-    year: 'numeric',
-  });
+  return formatLondonLongDate(dateStr);
 }
 
 function formatTime(timeStr: string): string {
@@ -51,23 +131,37 @@ function SectionBand({ title }: { title: string }) {
   );
 }
 
-function InfoCard({ title, children }: { title?: string; children: React.ReactNode }) {
+export function JurisdictionBlock() {
+  // NOT wrap={false} on the whole thing: on shows with a long Best Awards
+  // list, forcing this block atomic orphaned the whole thing onto its own
+  // near-empty page. Letting it wrap means the band + paragraph flow below
+  // the Best Awards content and split at the natural page boundary rather
+  // than wholesale.
+  //
+  // Built on Flow rather than the old minPresenceAhead-bearing View, which
+  // was ALSO wrapped in an outer `<View style={{width:'100%',marginTop:14}}>`
+  // — exactly the "nested inside even one extra wrapping View" case
+  // pdf-kit's README documents as silently defeating minPresenceAhead at
+  // any magnitude, so the band's orphan protection was very likely already
+  // a no-op. Flow renders no wrapper of its own, so as long as this stays a
+  // direct child of the page's flow (true today — see ShowParticularsContent,
+  // its only caller) the protection actually holds.
   return (
-    <View style={styles.infoCard} wrap={false}>
-      {title && <Text style={styles.infoCardTitle}>{title}</Text>}
-      {children}
-    </View>
-  );
-}
-
-function JurisdictionBlock() {
-  return (
-    <View style={{ width: '100%', marginTop: 14 }} wrap={false}>
-      <SectionBand title="Jurisdiction and Responsibilities" />
-      <Text style={{ fontFamily: 'Times', fontStyle: 'italic', fontSize: 8, lineHeight: 1.35, color: C.textMedium, paddingHorizontal: 8 }}>
-        The Officers and Committee members of the society holding the licence are deemed responsible for organising and conducting the show safely and in accordance with the Rules and Regulations of the Royal Kennel Club and agree to abide by and adopt any decision of the Board or any authority to whom the Board may delegate its powers, subject to the conditions of Regulation F16. In so doing those appointed as Officers and Committee members accept that they are jointly and severally responsible for the organisation of the show and that this is a binding undertaking (vide Royal Kennel Club General Show Regulations F4 and F5).
-      </Text>
-    </View>
+    <Flow
+      blocks={[
+        {
+          key: 'jurisdiction',
+          heading: <SectionBand title="Jurisdiction and Responsibilities" />,
+          headingStyle: { width: '100%', marginTop: 14 },
+          keepWithHeadingHeight: 60,
+          body: (
+            <Text style={{ fontFamily: 'Times', fontStyle: 'italic', fontSize: 8, lineHeight: 1.35, color: C.textMedium, paddingHorizontal: 8 }}>
+              The Officers and Committee members of the society holding the licence are deemed responsible for organising and conducting the show safely and in accordance with the Rules and Regulations of the Royal Kennel Club and agree to abide by and adopt any decision of the Board or any authority to whom the Board may delegate its powers, subject to the conditions of Regulation F16. In so doing those appointed as Officers and Committee members accept that they are jointly and severally responsible for the organisation of the show and that this is a binding undertaking (vide Royal Kennel Club General Show Regulations F4 and F5).
+            </Text>
+          ),
+        },
+      ]}
+    />
   );
 }
 
@@ -137,6 +231,12 @@ const showInfoStyles = {
  * This filter drops any custom statement that's clearly a duplicate of one
  * of the dedicated notices, so the cover stays the single source of truth
  * for "no wet weather" and "outside attraction".
+ *
+ * Also drops a custom statement that restates the RKC Judges' Welfare
+ * Commitment — that wording now always renders as its own mandatory block
+ * (see `JudgesWelfareCommitmentBlock`), so a secretary who typed it in as
+ * free text must not get it printed a second time (Mandy 2026-08-17,
+ * carried over from the same rule on the schedule).
  */
 function filterDuplicateRegulations(
   customStatements: string[] | undefined,
@@ -151,86 +251,150 @@ function filterDuplicateRegulations(
     if (show.outsideAttraction === true && lower.includes('outside attraction')) {
       return false;
     }
+    if (isRkcJudgesWelfareStatement(statement)) {
+      return false;
+    }
     return true;
   });
 }
 
-export function ShowInformationPage({ show }: FrontMatterProps) {
-  // Pull out everything we might render so we can decide whether the page
-  // is worth printing at all. Officers and guarantors are deliberately
-  // not surfaced here — see the comment near the render below.
+/**
+ * Mandatory RKC judges' undertaking — carried over from the schedule
+ * (Mandy 2026-08-17: the catalogue must show it too, exactly once).
+ * Wording comes from the single shared `RKC_JUDGES_WELFARE_STATEMENT`
+ * constant so the two documents can never state it differently; the
+ * bordered-box layout is the catalogue's own idiom (the schedule's
+ * `RkcJudgesWelfareCommitment` colour styling belongs to the schedule and
+ * isn't reused here). Rendered unconditionally from `ShowParticularsContent`
+ * — deliberately NOT gated behind `showHasShowInformation` — so it always
+ * appears once per catalogue, even for a show with no other show-information
+ * fields filled in.
+ */
+function JudgesWelfareCommitmentBlock() {
+  return (
+    <KeepTogether style={styles.welfareBlock}>
+      <Text style={styles.welfareBlockEyebrow}>Royal Kennel Club Welfare Undertaking</Text>
+      <Text style={styles.welfareBlockTitle}>Judges&apos; Welfare Commitment</Text>
+      <Text style={styles.welfareBlockText}>{RKC_JUDGES_WELFARE_STATEMENT}</Text>
+    </KeepTogether>
+  );
+}
+
+/** Heuristic: is there anything worth rendering in Show Information? */
+function showHasShowInformation(show: CatalogueShowInfo): boolean {
+  if (show.welcomeNote || show.awardsDescription) return true;
+  if (show.additionalNotes || show.futureShowDates) return true;
+  if (show.latestArrivalTime || show.catering) return true;
+  if (show.acceptsNfc || show.prizeMoney) return true;
+  if (show.judgedOnGroupSystem) return true;
+  if (filterDuplicateRegulations(show.customStatements, show).length > 0) return true;
+  return false;
+}
+
+/** `sectionGap` becomes the heading's own `marginTop` rather than an
+ *  outer wrapping View — see ClassDefinitionsContent's identical
+ *  convention and comment for why (Flow needs no wrapping View between
+ *  it and the page for minPresenceAhead to hold). */
+export function ShowInformationContent({ show, sectionGap = 0 }: FrontMatterProps & { sectionGap?: number }) {
+  if (!showHasShowInformation(show)) return null;
+
+  // The "Show Information" band used to be a bare sibling ahead of these
+  // subsections, relying entirely on an OUTER wrapping View's
+  // minPresenceAhead (in FrontMatterContent/ShowInformationPage) to avoid
+  // being orphaned. That protection only covers the space immediately
+  // after the band — if the very next subsection (e.g. a long Welcome
+  // note) is itself an atomic KeepTogether block too tall to fit
+  // alongside it, react-pdf moves that whole block on its own, stranding
+  // the band as the last line of the previous page regardless. Found live
+  // via the stress fixture's 2,000-character welcome note. Flow fixes
+  // this the same way it fixed ClassDefinitionsContent: the heading only
+  // needs to be a direct child of the page's own flow, not of an
+  // artificial "first subsection" pairing.
+  return (
+    <Flow
+      blocks={[
+        {
+          key: 'show-information',
+          heading: <SectionBand title="Show Information" />,
+          headingStyle: sectionGap ? { marginTop: sectionGap } : undefined,
+          keepWithHeadingHeight: 60,
+          body: <ShowInformationSubsections show={show} />,
+        },
+      ]}
+    />
+  );
+}
+
+function ShowInformationSubsections({ show }: FrontMatterProps) {
   const hasWelcome = !!show.welcomeNote;
   const hasAwardsDescription = !!show.awardsDescription;
   const hasAdditionalNotes = !!show.additionalNotes;
   const hasFutureShows = !!show.futureShowDates;
-  // Regulations moved off the cover (backlog #90): every regulation EXCEPT
-  // outside attraction and the no-wet-weather notice now lives here. We
-  // also dedupe custom statements that just restate the dedicated fields,
-  // since Amanda (and most secretaries) fill in BOTH (the field for
-  // structured data, the custom statement out of habit).
+  // Regulations: every regulation EXCEPT outside attraction and the
+  // no-wet-weather notice lives here (those stay as loud cover notices).
+  // Dedupe custom statements that just restate the structured fields
+  // — secretaries often fill in both, and duplicate rendering looks bad.
   const filteredStatements = filterDuplicateRegulations(show.customStatements, show);
   const hasCustomStatements = filteredStatements.length > 0;
   const hasGroupSystem = !!show.judgedOnGroupSystem;
   const hasRegulations = hasCustomStatements || hasGroupSystem;
   const practicalInfo: { label: string; value: string }[] = [];
-  if (show.latestArrivalTime) {
-    practicalInfo.push({ label: 'Latest Arrival', value: show.latestArrivalTime });
-  }
-  if (show.catering) {
-    practicalInfo.push({ label: 'Catering', value: show.catering });
-  }
-  if (show.acceptsNfc) {
-    practicalInfo.push({ label: 'NFC Entries', value: 'Accepted' });
-  }
-  if (show.prizeMoney) {
-    practicalInfo.push({ label: 'Prize Money', value: show.prizeMoney });
-  }
+  if (show.latestArrivalTime) practicalInfo.push({ label: 'Latest Arrival', value: show.latestArrivalTime });
+  if (show.catering) practicalInfo.push({ label: 'Catering', value: show.catering });
+  if (show.acceptsNfc) practicalInfo.push({ label: 'NFC Entries', value: 'Accepted' });
+  if (show.prizeMoney) practicalInfo.push({ label: 'Prize Money', value: show.prizeMoney });
   const hasPracticalInfo = practicalInfo.length > 0;
 
-  // Don't ship a blank page if nothing is set.
-  if (
-    !hasWelcome &&
-    !hasAwardsDescription &&
-    !hasAdditionalNotes &&
-    !hasFutureShows &&
-    !hasPracticalInfo &&
-    !hasRegulations
-  ) {
-    return null;
-  }
+  // Measured escape hatch: a short welcome note (the common case) stays
+  // atomic as before, but a very long one (the stress fixture's
+  // 2,000-character note is the proof case) falls back to wrapping
+  // rather than staying an all-or-nothing block. This matters even
+  // though the note itself fits on ONE page: KeepTogether's wrap={false}
+  // means the WHOLE block moves together, so if it doesn't fit in
+  // whatever space is left on the CURRENT page (varies — Jurisdiction/
+  // Sponsors content above it is elastic too), it bumps to a fresh page
+  // as a unit, stranding the "Show Information" heading above it as the
+  // last line of the page it left behind. Half a fresh page's usable
+  // height is the threshold: short enough that it still reliably fits
+  // alongside whatever's above it, generous enough that no real show's
+  // welcome note (measured against real fixtures) crosses it.
+  const welcomeHeight = hasWelcome
+    ? estimateTextHeight(show.welcomeNote!, {
+        width: 375, // frontMatterPage content width, A5 minus 22pt each side
+        family: 'Times',
+        size: 9,
+        lineHeight: 1.4,
+      })
+    : 0;
 
   return (
-    <Page size="A5" style={styles.frontMatterPage} wrap>
-      <SectionBand title="Show Information" />
-
+    <>
       {hasWelcome && (
-        <View wrap={false} style={{ marginBottom: 6 }}>
+        <KeepTogether
+          style={{ marginBottom: 6 }}
+          estimatedHeight={welcomeHeight}
+          maxHeight={FRONT_MATTER_PAGE_USABLE_HEIGHT / 2}
+        >
           <Text style={showInfoStyles.sectionTitle}>Welcome</Text>
           <Text style={{ ...showInfoStyles.bodyText, fontStyle: 'italic' }}>
             {show.welcomeNote}
           </Text>
-        </View>
+        </KeepTogether>
       )}
 
-      {/* Officers and Guarantors are deliberately NOT listed by name here.
-          Amanda's note: the standard RKC "Jurisdiction and Responsibilities"
-          paragraph (rendered by JurisdictionBlock at the bottom of
-          JudgesListPage and again on the schedule) covers them collectively
-          — "The Officers and Committee members of the society holding the
-          licence are deemed responsible..." — so naming them individually
-          is redundant. The schedule settings form still collects names
-          (we use them elsewhere — e.g. organisation people sync), but the
-          catalogue render skips the named list. */}
+      {/* Officers and Guarantors are deliberately not listed by name
+          here — the RKC Jurisdiction & Responsibilities paragraph on
+          the particulars page covers them collectively. */}
 
       {hasAwardsDescription && (
-        <View wrap={false} style={{ marginBottom: 6 }}>
+        <KeepTogether style={{ marginBottom: 6 }}>
           <Text style={showInfoStyles.sectionTitle}>Awards</Text>
           <Text style={showInfoStyles.bodyText}>{show.awardsDescription}</Text>
-        </View>
+        </KeepTogether>
       )}
 
       {hasPracticalInfo && (
-        <View wrap={false} style={{ marginBottom: 6 }}>
+        <KeepTogether style={{ marginBottom: 6 }}>
           <Text style={showInfoStyles.sectionTitle}>Practical Information</Text>
           {practicalInfo.map((item, i) => (
             <View key={i} style={showInfoStyles.officerRow}>
@@ -240,29 +404,25 @@ export function ShowInformationPage({ show }: FrontMatterProps) {
               </Text>
             </View>
           ))}
-        </View>
+        </KeepTogether>
       )}
 
       {hasAdditionalNotes && (
-        <View wrap={false} style={{ marginBottom: 6 }}>
+        <KeepTogether style={{ marginBottom: 6 }}>
           <Text style={showInfoStyles.sectionTitle}>Additional Notes</Text>
           <Text style={showInfoStyles.bodyText}>{show.additionalNotes}</Text>
-        </View>
+        </KeepTogether>
       )}
 
       {hasFutureShows && (
-        <View wrap={false} style={{ marginBottom: 6 }}>
+        <KeepTogether style={{ marginBottom: 6 }}>
           <Text style={showInfoStyles.sectionTitle}>Future Show Dates</Text>
           <Text style={showInfoStyles.bodyText}>{show.futureShowDates}</Text>
-        </View>
+        </KeepTogether>
       )}
 
-      {/* Regulations — moved off the cover per backlog #90. The cover keeps
-          only the RKC-mandatory loud notices (outside attraction, no wet
-          weather). Custom statements are deduped against the dedicated
-          fields above so the same notice doesn't appear twice. */}
       {hasRegulations && (
-        <View wrap={false} style={{ marginBottom: 6 }}>
+        <KeepTogether style={{ marginBottom: 6 }}>
           <Text style={showInfoStyles.sectionTitle}>Regulations</Text>
           {hasGroupSystem && (
             <Text style={{ ...showInfoStyles.bodyText, fontWeight: 'bold', marginBottom: 2 }}>
@@ -277,9 +437,103 @@ export function ShowInformationPage({ show }: FrontMatterProps) {
               {statement}
             </Text>
           ))}
+        </KeepTogether>
+      )}
+    </>
+  );
+}
+
+/** Combined particulars + show information page. Kept separate from
+ *  FrontMatterPage so catalogues that just need these two sections
+ *  (without Judges / Class defs / Best awards, e.g. marked catalogue)
+ *  still have a convenient wrapper. */
+export function ShowInformationPage({ show }: FrontMatterProps) {
+  return (
+    <PageFrame size="A5" style={styles.frontMatterPage} wrap>
+      <ShowParticularsContent show={show} />
+      <ShowInformationContent show={show} sectionGap={8} />
+      <CatalogueFolio />
+    </PageFrame>
+  );
+}
+
+/**
+ * Consolidated front-matter Page.
+ *
+ * Renders every front-matter section (particulars, info, judges, class
+ * definitions, best awards) inside a single wrapping <PageFrame> so they
+ * flow continuously instead of each forcing a new page. Sections are
+ * separated by a small vertical gap. This is the biggest whitespace
+ * reducer in the catalogue: a small show with short sections that
+ * previously cost 4-5 near-empty pages now packs them into 2-3 full
+ * pages.
+ *
+ * Use this instead of calling ShowInformationPage / JudgesListPage /
+ * ClassDefinitionsPage / BestAwardsPage individually.
+ */
+export function FrontMatterContent({ show, compact }: FrontMatterProps & { compact?: boolean }) {
+  const hasJudges = Object.keys(show.judgesByBreedName ?? {}).length > 0
+    || (show.judgeDisplayList?.length ?? 0) > 0;
+  // Section-between gap. The sectionBand style uses marginTop: -20 to
+  // bleed into the page's top padding when it's first on a page; that
+  // negative margin also eats ~20pt when the band appears mid-flow, so
+  // the gap here has to include 20pt of compensation PLUS the visible
+  // separation we actually want. In compact mode we tighten the visible
+  // gap to ~4pt (24 - 20 compensation) to pack more sections per page.
+  const SECTION_GAP = compact ? 24 : 34;
+  // Keep the standalone List of Judges section in both modes — Amanda's
+  // brief: it carries judge bios and photos that don't fit on the cover
+  // or inside Show Particulars, and dropping it loses RKC-significant
+  // information. Compact mode just tightens its surrounding spacing.
+  const showJudgesSection = hasJudges;
+  return (
+    <>
+      <ShowParticularsContent show={show} />
+
+      {/* No wrapping View here — ShowInformationContent renders a
+          pdf-kit Flow, which needs to be a direct child of the page's
+          own flow for its heading-glue protection to work (see that
+          component's own comment). The section gap is applied as the
+          heading's own marginTop instead. */}
+      <ShowInformationContent show={show} sectionGap={SECTION_GAP} />
+
+      {showJudgesSection && (
+        <View style={{ marginTop: SECTION_GAP }} minPresenceAhead={140}>
+          <JudgesListContent show={show} />
         </View>
       )}
-    </Page>
+
+      {/* No wrapping View here — ClassDefinitionsContent renders a pdf-kit
+          Flow, which needs to be a direct child of the page's own flow for
+          its heading-glue protection to work (see that component's own
+          comment, and the pdf-kit README's minPresenceAhead-inside-a-
+          wrapper limitation). The section gap is applied as the heading's
+          own marginTop instead. */}
+      {(show.classDefinitions?.length ?? 0) > 0 && (
+        <ClassDefinitionsContent show={show} sectionGap={SECTION_GAP} />
+      )}
+
+      {/* Sponsors get a page of their own (Mandy 2026-06-19) — `break` starts
+          the section on a fresh page so it never splits with a single award
+          (e.g. Best in Show) stranded at the foot of the preceding section. */}
+      {hasBestAwards(show) && (
+        <View break>
+          <BestAwardsContent show={show} compact={compact} />
+        </View>
+      )}
+    </>
+  );
+}
+
+/** Standalone front-matter page wrapper. Use this when the catalogue
+ *  wants front matter on its own Page; for maximum density, inline
+ *  FrontMatterContent at the top of the body's own PageFrame instead. */
+export function FrontMatterPage({ show, compact }: FrontMatterProps & { compact?: boolean }) {
+  return (
+    <PageFrame size="A5" style={styles.frontMatterPage} wrap>
+      <FrontMatterContent show={show} compact={compact} />
+      <CatalogueFolio />
+    </PageFrame>
   );
 }
 
@@ -316,8 +570,8 @@ const bestAwardsStyles = {
     flexDirection: 'row' as const,
     borderBottomWidth: 0.5,
     borderBottomColor: C.ruleLight,
-    paddingTop: 6,
-    paddingBottom: 8,
+    paddingTop: 4,
+    paddingBottom: 5,
   },
   awardCol: { width: '38%', paddingRight: 6 } as const,
   trophyCol: { width: '24%', paddingRight: 6 } as const,
@@ -358,7 +612,7 @@ const bestAwardsStyles = {
     borderBottomColor: C.textLight,
     borderBottomStyle: 'dotted',
     width: '100%',
-    marginTop: 4,
+    marginTop: 2,
   } as const,
   winnerLabel: {
     fontFamily: 'Inter',
@@ -370,27 +624,29 @@ const bestAwardsStyles = {
   } as const,
 };
 
-export function BestAwardsPage({ show }: FrontMatterProps) {
-  const bestAwards = show.bestAwards && show.bestAwards.length > 0
-    ? show.bestAwards
-    : pickDefaultBestAwards(show);
+/**
+ * True only if the society has opted in — either by configuring the
+ * best-awards list explicitly or by adding award sponsorships. We
+ * deliberately do NOT fall back to pickDefaultBestAwards here: Amanda
+ * flagged that the section was appearing on catalogues for shows where
+ * she hadn't added any awards, spilling blank pages for defaults the
+ * club hadn't actually pledged to list.
+ */
+function hasBestAwards(show: CatalogueShowInfo): boolean {
+  const hasExplicitAwards = (show.bestAwards?.length ?? 0) > 0;
+  const hasSponsors = (show.awardSponsors?.length ?? 0) > 0;
+  return hasExplicitAwards || hasSponsors;
+}
+
+export function BestAwardsContent({ show, compact }: FrontMatterProps & { compact?: boolean }) {
+  // Only render configured awards — no default-list fallback. If the
+  // secretary didn't add any, the section shouldn't exist (see
+  // hasBestAwards above for the rationale).
+  const bestAwards = show.bestAwards ?? [];
   const awardSponsors = show.awardSponsors ?? [];
+  if (bestAwards.length === 0 && awardSponsors.length === 0) return null;
 
-  // Nothing to show if both lists are empty even after defaults — only
-  // happens for shows that haven't been configured at all.
-  if (bestAwards.length === 0 && awardSponsors.length === 0) {
-    return null;
-  }
-
-  // Normalise award names once so the rest of the function can do plain
-  // string lookups instead of recomputing `.toLowerCase().trim()` on
-  // every comparison.
   const normaliseAward = (s: string) => s.toLowerCase().trim();
-
-  // Build a multimap of award name → sponsors. The same award can have
-  // multiple sponsors (e.g. Best in Show might have separate sponsors for
-  // the trophy and the rosettes), and Amanda's real shows do this — the
-  // earlier single-Map approach silently dropped duplicates.
   type Sponsor = typeof awardSponsors[number];
   const sponsorsByAward = new Map<string, Sponsor[]>();
   for (const s of awardSponsors) {
@@ -399,108 +655,331 @@ export function BestAwardsPage({ show }: FrontMatterProps) {
     list.push(s);
     sponsorsByAward.set(key, list);
   }
-
-  // Also include any sponsor whose award isn't in the bestAwards list —
-  // the society might have sponsored an extra award we don't know about.
   const bestAwardKeys = new Set(bestAwards.map(normaliseAward));
   const extraSponsorAwards = awardSponsors
     .filter((s) => !bestAwardKeys.has(normaliseAward(s.award)))
     .map((s) => s.award);
-  // Dedupe extras (multiple sponsors for the same extra award shouldn't
-  // produce duplicate rows).
+  // The secretary's own order, verbatim — awards as configured on the sponsors
+  // page, with any sponsor-only extras after. Mandy 2026-07-27: "the order in
+  // which we have the best awards in this table should be mirrored in the
+  // catalogue but currently they are not". This used to re-sort into a
+  // hardcoded canonical order, so anything that list didn't recognise (Reserve
+  // Best in Show, the Challenge Certificates, Long Coats, Baby Puppy) was
+  // silently dumped at the end.
   const allAwards = Array.from(new Set([...bestAwards, ...extraSponsorAwards]));
 
-  return (
-    <Page size="A5" style={styles.frontMatterPage} wrap>
-      <SectionBand title="Best Awards" />
+  // Trophy/Sponsor columns are pure clutter when no sponsor has been
+  // assigned to any award — the rows just fill with em-dashes. Amanda's
+  // feedback: only render those columns when at least one award has a
+  // sponsor configured. Empty state becomes a clean single-column
+  // "award + winner line" list.
+  const hasAnySponsor = awardSponsors.length > 0;
 
-      <Text
-        style={{
-          fontFamily: 'Times',
-          fontSize: 8,
-          fontStyle: 'italic',
-          color: C.textMedium,
-          marginBottom: 8,
-        }}
-      >
-        Awarded at the discretion of the judges. Winners may be filled in
-        ringside.
+  const headerRow = hasAnySponsor ? (
+    <View style={bestAwardsStyles.tableHeaderRow}>
+      <Text style={{ ...bestAwardsStyles.headerLabel, ...bestAwardsStyles.awardCol }}>
+        Award
       </Text>
+      <Text style={{ ...bestAwardsStyles.headerLabel, ...bestAwardsStyles.trophyCol }}>
+        Prize
+      </Text>
+      <Text style={{ ...bestAwardsStyles.headerLabel, ...bestAwardsStyles.sponsorCol }}>
+        Sponsor
+      </Text>
+    </View>
+  ) : null;
 
-      {/* Table header */}
-      <View style={bestAwardsStyles.tableHeaderRow}>
-        <Text style={{ ...bestAwardsStyles.headerLabel, ...bestAwardsStyles.awardCol }}>
-          Award
-        </Text>
-        <Text style={{ ...bestAwardsStyles.headerLabel, ...bestAwardsStyles.trophyCol }}>
-          Trophy
-        </Text>
-        <Text style={{ ...bestAwardsStyles.headerLabel, ...bestAwardsStyles.sponsorCol }}>
-          Sponsor
-        </Text>
-      </View>
-
-      {allAwards.map((award, i) => {
-        const sponsors = sponsorsByAward.get(normaliseAward(award)) ?? [];
-        return (
-          <View key={`${award}-${i}`} style={bestAwardsStyles.tableRow} wrap={false}>
-            <View style={bestAwardsStyles.awardCol}>
-              <Text style={bestAwardsStyles.awardName}>{award}</Text>
-              {/* Write-in space for the winner — backlog #95 */}
-              <View style={bestAwardsStyles.winnerLine} />
-              <Text style={bestAwardsStyles.winnerLabel}>Winner</Text>
-            </View>
-            <View style={bestAwardsStyles.trophyCol}>
-              {sponsors.length === 0 ? (
-                <Text style={{ ...bestAwardsStyles.trophyName, color: C.textLight }}>—</Text>
-              ) : (
-                sponsors.map((s, idx) => (
-                  <Text key={idx} style={{ ...bestAwardsStyles.trophyName, marginBottom: idx < sponsors.length - 1 ? 2 : 0 }}>
-                    {s.trophyName ?? '—'}
-                  </Text>
-                ))
-              )}
-            </View>
-            <View style={bestAwardsStyles.sponsorCol}>
-              {sponsors.length === 0 ? (
-                <Text style={{ ...bestAwardsStyles.sponsorName, color: C.textLight }}>—</Text>
-              ) : (
-                sponsors.map((s, idx) => (
-                  <View key={idx} style={{ marginBottom: idx < sponsors.length - 1 ? 4 : 0 }}>
-                    <Text style={bestAwardsStyles.sponsorName}>{s.sponsorName}</Text>
-                    {s.sponsorAffix && (
-                      <Text style={bestAwardsStyles.sponsorAffix}>{s.sponsorAffix}</Text>
-                    )}
-                  </View>
-                ))
-              )}
-            </View>
+  const compactRowStyle = {
+    flexDirection: 'row' as const,
+    borderBottomWidth: 0.4,
+    borderBottomColor: C.ruleLight,
+    paddingTop: 1.5,
+    paddingBottom: 1.5,
+    alignItems: 'baseline' as const,
+  };
+  const renderRow = (award: string, i: number) => {
+    const sponsors = sponsorsByAward.get(normaliseAward(award)) ?? [];
+    if (compact) {
+      // Single-line per award. Trophy + sponsor compressed onto one row,
+      // winner-line dropped (winners tend to get filled into the schedule
+      // or marked catalogue, not the published one). Saves ~30pt per row.
+      const sponsorText = sponsors.length === 0
+        ? null
+        : sponsors
+            .map((s) => [s.trophyName, s.sponsorName].filter(Boolean).join(' — '))
+            .join(' / ');
+      return (
+        <KeepTogether key={`${award}-${i}`} style={compactRowStyle}>
+          <Text style={{ fontFamily: 'Inter', fontSize: 7.5, fontWeight: 'bold', color: C.textDark, width: '40%', paddingRight: 4 }}>
+            {award}
+          </Text>
+          <Text style={{ fontFamily: 'Inter', fontSize: 7, color: C.textMedium, flex: 1 }}>
+            {sponsorText ?? '—'}
+          </Text>
+        </KeepTogether>
+      );
+    }
+    if (!hasAnySponsor) {
+      return (
+        <KeepTogether key={`${award}-${i}`} style={bestAwardsStyles.tableRow}>
+          <View style={{ width: '100%' }}>
+            <Text style={bestAwardsStyles.awardName}>{award}</Text>
+            <View style={bestAwardsStyles.winnerLine} />
+            <Text style={bestAwardsStyles.winnerLabel}>Winner</Text>
           </View>
-        );
-      })}
+        </KeepTogether>
+      );
+    }
+    return (
+      <KeepTogether key={`${award}-${i}`} style={bestAwardsStyles.tableRow}>
+        <View style={bestAwardsStyles.awardCol}>
+          <Text style={bestAwardsStyles.awardName}>{award}</Text>
+          <View style={bestAwardsStyles.winnerLine} />
+          <Text style={bestAwardsStyles.winnerLabel}>Winner</Text>
+        </View>
+        {/* Prize + sponsor render as PAIRED lines — one row per
+            sponsorship — so each prize sits beside the sponsor giving it.
+            The old independent-column layout let the pairs drift: with two
+            sponsors on one award, a sponsor affix line pushed the second
+            sponsor below its prize (Mandy 2026-07-22 — "Prize Money £25"
+            floated away from Pat Wills, who gives it). */}
+        <View style={{ width: '62%' }}>
+          {sponsors.length === 0 ? (
+            <View style={{ flexDirection: 'row' }}>
+              <Text style={{ ...bestAwardsStyles.trophyName, color: C.textLight, width: '39%', paddingRight: 6 }}>—</Text>
+              <Text style={{ ...bestAwardsStyles.sponsorName, color: C.textLight, flex: 1 }}>—</Text>
+            </View>
+          ) : (
+            sponsors.map((s, idx) => (
+              <View key={idx} style={{ flexDirection: 'row', marginBottom: idx < sponsors.length - 1 ? 4 : 0 }}>
+                <Text style={{ ...bestAwardsStyles.trophyName, width: '39%', paddingRight: 6 }}>
+                  {s.trophyName ?? '—'}
+                </Text>
+                <View style={{ flex: 1 }}>
+                  <Text style={bestAwardsStyles.sponsorName}>{s.sponsorName}</Text>
+                  {s.sponsorAffix && (
+                    <Text style={bestAwardsStyles.sponsorAffix}>{s.sponsorAffix}</Text>
+                  )}
+                </View>
+              </View>
+            ))
+          )}
+        </View>
+      </KeepTogether>
+    );
+  };
 
-      {/* RKC-required Jurisdiction & Responsibilities statement.
-          Lives at the bottom of Best Awards (rather than the
-          Judges page) so it doesn't push small judge bios onto
-          their own near-empty pages in the front matter. */}
-      <JurisdictionBlock />
+  // Measured escape hatch: this block is atomic (see below) so the
+  // banner never sits alone at a page foot, but a pathologically long
+  // award name or a long stack of sponsors on the very FIRST award could
+  // in principle make the block taller than a whole page — KeepTogether
+  // falls back to normal wrapping rather than silently overflowing in
+  // that case (matches "awards defaults spilling blank pages" being made
+  // impossible in general, not just for the specific award lists seen so
+  // far). Bare band + intro banner (~45pt) + optional header row (~20pt)
+  // + the first award row's own estimate.
+  const firstAward = allAwards[0];
+  const firstAwardSponsors = firstAward ? sponsorsByAward.get(normaliseAward(firstAward)) ?? [] : [];
+  const bannerEstimatedHeight =
+    45 + (hasAnySponsor ? 20 : 0) + (firstAward ? estimateBestAwardRowHeight(firstAward, firstAwardSponsors) : 0);
 
-      <Text
-        style={styles.footer}
-        render={({ pageNumber, totalPages }) =>
-          `Page ${pageNumber} of ${totalPages}  ·  Generated by Remi`
-        }
-        fixed
-      />
-    </Page>
+  return (
+    <>
+      {/* Keep banner + italic intro + header + first award row atomic so
+          the banner never sits alone at the foot of a page. Remaining
+          rows flow normally after that block. */}
+      <KeepTogether estimatedHeight={bannerEstimatedHeight} maxHeight={FRONT_MATTER_PAGE_USABLE_HEIGHT}>
+        <SectionBand title="Sponsors" />
+        {headerRow}
+        {allAwards.length > 0 && renderRow(allAwards[0], 0)}
+      </KeepTogether>
+      {allAwards.slice(1).map((award, i) => renderRow(award, i + 1))}
+    </>
+  );
+}
+
+/** Standalone Best Awards page — delegates to BestAwardsContent. */
+export function BestAwardsPage({ show }: FrontMatterProps) {
+  if (!hasBestAwards(show)) return null;
+  return (
+    <PageFrame size="A5" style={styles.frontMatterPage} wrap>
+      <BestAwardsContent show={show} />
+      <CatalogueFolio />
+    </PageFrame>
   );
 }
 
 // ── Cover Page ──────────────────────────────────────────────────
 
+/**
+ * SV/WUSV cover treatment — matches the SV schedule's Sieger Editorial
+ * design: full-page tonal wash + WUSV/GSDL/BRG masthead + hero lockup
+ * with the club crest beside it + 2×2 detail grid + bottom strip with
+ * entries-close + event secretary (Amanda 2026-05-23).
+ *
+ * Branched off from the standard `CoverPage` rather than threaded
+ * through it because the layouts are structurally different.
+ */
+function SvCoverPage({ show, classCount }: { show: CatalogueShowInfo; classCount: number }) {
+  const affiliation = 'Under the banner of GSDL — British Regional Group';
+  const dateDisplay = show.endDate
+    ? `${formatCoverDate(show.date)} — ${formatCoverDate(show.endDate)}`
+    : formatCoverDate(show.date);
+  const judges = show.judgesByBreedName ?? {};
+  const uniqueJudges = [...new Set(Object.values(judges))];
+  const coverJudges =
+    show.judgeDisplayList && show.judgeDisplayList.length > 0
+      ? show.judgeDisplayList
+      : uniqueJudges;
+  // Select the breed judge(s) explicitly by role rather than printing
+  // whichever judge's assignment row happened to be inserted first — that
+  // previously surfaced the Junior Handling judge under "Breed Judge"
+  // (Mandy 2026-09-04, Midlands Region GSD Group).
+  const breedJudgeLines = pickSvCoverJudges(coverJudges);
+
+  return (
+    <PageFrame size="A5" style={{ backgroundColor: SV.paper, padding: 0, color: SV.ink, fontFamily: SV_FONTS.sans }}>
+      <TonalWash variant="cover" buffer={show.svWashes?.cover} />
+      <MastheadBand />
+
+      <View
+        style={{
+          position: 'absolute',
+          top: '55mm',
+          left: '14mm',
+          right: '14mm',
+          bottom: '10mm',
+        }}
+      >
+        {/* Tiny meta — show name + licence */}
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline' }}>
+          <Text style={[ss.eyebrow, { maxWidth: '60%' }]}>{show.name}</Text>
+          {show.kcLicenceNo ? (
+            <Text style={[ss.eyebrow, { color: SV.ink3 }]}>
+              <Numero /> {show.kcLicenceNo}
+            </Text>
+          ) : null}
+        </View>
+
+        {/* Hero — "Catalogue" word, sized to match the schedule's
+            "Regional / Schedule" lockup; club crest to the right. */}
+        <View style={{ marginTop: '8mm', flexDirection: 'row', alignItems: 'flex-start' }}>
+          <View style={{ flex: 1, paddingRight: '10mm' }}>
+            <Text style={{ fontFamily: SV_FONTS.serif, fontStyle: 'italic', fontSize: 13, color: SV.ink3, marginBottom: 2 }}>
+              {classCount} {classCount === 1 ? 'class' : 'classes'}
+            </Text>
+            <Text style={{ fontFamily: SV_FONTS.serif, fontSize: 48, lineHeight: 0.92, letterSpacing: -0.5, color: SV.ink }}>
+              Official
+            </Text>
+            <Text style={{ fontFamily: SV_FONTS.serif, fontStyle: 'italic', fontSize: 28, lineHeight: 1, color: SV.accent, marginTop: 2 }}>
+              Catalogue
+            </Text>
+          </View>
+          <ClubCrestSlot logoUrl={show.logoUrl ?? null} />
+        </View>
+
+        <View style={{ height: 1, backgroundColor: SV.ink, marginTop: '10mm' }} />
+
+        {/* 2×2 info grid — Host Club / Date / Venue / Breed Judge */}
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', marginTop: '5mm' }}>
+          <View style={{ width: '50%', paddingRight: 8, marginBottom: '5mm' }}>
+            <Text style={[ss.eyebrow, { marginBottom: 3 }]}>Host Club</Text>
+            <Text style={{ fontFamily: SV_FONTS.serif, fontSize: 13, lineHeight: 1.15, color: SV.ink }}>
+              {show.organisation ?? ''}
+            </Text>
+            <Text style={[ss.bodySmall, { marginTop: 2 }]}>{affiliation}</Text>
+          </View>
+          <View style={{ width: '50%', paddingLeft: 8, marginBottom: '5mm' }}>
+            <Text style={[ss.eyebrow, { marginBottom: 3 }]}>Date</Text>
+            <Text style={{ fontFamily: SV_FONTS.serif, fontSize: 13, lineHeight: 1.15, color: SV.ink }}>
+              {dateDisplay}
+            </Text>
+            {(show.showOpenTime || show.startTime) ? (
+              <Text style={[ss.bodySmall, { marginTop: 2 }]}>
+                {show.showOpenTime ? `Grounds open ${show.showOpenTime}` : ''}
+                {show.showOpenTime && show.startTime ? ' · ' : ''}
+                {show.startTime ? `Judging from ${show.startTime}` : ''}
+              </Text>
+            ) : null}
+          </View>
+          <View style={{ width: '50%', paddingRight: 8 }}>
+            <Text style={[ss.eyebrow, { marginBottom: 3 }]}>Venue</Text>
+            <Text style={{ fontFamily: SV_FONTS.serif, fontSize: 13, lineHeight: 1.15, color: SV.ink }}>
+              {show.venue ?? ''}
+            </Text>
+            {show.venueAddress ? (
+              <Text style={[ss.bodySmall, { marginTop: 2 }]}>{show.venueAddress}</Text>
+            ) : null}
+            {show.venueWhat3words ? (
+              <Text style={[ss.bodySmall, { marginTop: 2 }]}>what3words: {show.venueWhat3words}</Text>
+            ) : null}
+          </View>
+          <View style={{ width: '50%', paddingLeft: 8 }}>
+            <Text style={[ss.eyebrow, { marginBottom: 3 }]}>
+              {breedJudgeLines.length > 1 ? 'Breed Judges' : 'Breed Judge'}
+            </Text>
+            {breedJudgeLines.map((line, i) => (
+              <Text
+                key={i}
+                style={{ fontFamily: SV_FONTS.serif, fontSize: 13, lineHeight: 1.15, color: SV.ink, marginTop: i > 0 ? 2 : 0 }}
+              >
+                {line}
+              </Text>
+            ))}
+          </View>
+        </View>
+
+        <View style={{ flex: 1 }} />
+
+        {/* Bottom strip — Event Secretary contact */}
+        <View style={{ height: 1, backgroundColor: SV.ink }} />
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginTop: '4mm' }}>
+          <View style={{ maxWidth: '50%' }}>
+            <Text style={[ss.eyebrow, { marginBottom: 3 }]}>Show Date</Text>
+            <Text style={{ fontFamily: SV_FONTS.serif, fontSize: 13, color: SV.ink }}>{formatCoverDate(show.date)}</Text>
+          </View>
+          <View style={{ alignItems: 'flex-end', maxWidth: '50%' }}>
+            <Text style={[ss.eyebrow, { marginBottom: 3 }]}>Event Secretary</Text>
+            <Text style={{ fontFamily: SV_FONTS.serif, fontSize: 13, lineHeight: 1.15, color: SV.ink }}>
+              {show.secretaryName ?? '—'}
+            </Text>
+            <Text style={{ fontFamily: SV_FONTS.sans, fontSize: 7, color: SV.ink3, marginTop: 2 }}>
+              {[show.secretaryEmail, show.secretaryPhone].filter(Boolean).join(' · ')}
+            </Text>
+          </View>
+        </View>
+      </View>
+    </PageFrame>
+  );
+}
+
 /** Cover page for the RKC standard catalogue — matching schedule design */
 export function CoverPage({ show }: FrontMatterProps) {
+  // SV/WUSV regionals get their own cover treatment matching the schedule.
+  if (show.showRuleset === 'wusv') {
+    // Count the SV breed-coat classes actually present (each coat counts as a
+    // class on the cover, mirroring the schedule's coat-row count) — derive
+    // from the rows rather than the stored totalClasses so the two covers
+    // can't drift apart (Amanda 2026-05-28).
+    const svClassCount = (show.allShowClasses ?? []).filter(
+      (c) => c.svCoatType != null,
+    ).length;
+    return <SvCoverPage show={show} classCount={svClassCount || (show.totalClasses ?? 0)} />;
+  }
+
   const showTypeLabel = show.showType ? SHOW_TYPE_LABELS[show.showType] : undefined;
+
+  // Formal RKC designation — reuses the schedule's own profile helper so the
+  // two documents can never state the show's designation differently (Mandy
+  // 2026-08-17). Guarded on showType being present: getRkcScheduleProfile
+  // requires it and some legacy/incomplete shows have none.
+  const rkcProfile = show.showType
+    ? getRkcScheduleProfile({
+        showType: show.showType,
+        showScope: show.showScope ?? '',
+        judgedOnGroupSystem: show.judgedOnGroupSystem,
+      })
+    : null;
 
   // Show judges on cover for single-breed OR when there's only one unique judge
   // Prefer sex-annotated display list (e.g. "Dogs — Mr A Winfrow") when available
@@ -517,11 +996,36 @@ export function CoverPage({ show }: FrontMatterProps) {
     : formatCoverDate(show.date);
 
   return (
-    <Page size="A5" style={styles.coverPage}>
-      {/* Green top band with organisation name */}
+    <PageFrame size="A5" style={styles.coverPage}>
+      {/* Green top band with organisation name. A very long club name
+          shrinks (down to a readable floor) rather than wrapping at full
+          size, which used to be one of the contributors to a long-name +
+          long-officials-list cover overflowing onto an unplanned page 2
+          (South Western's cover-overflow report). FitText only
+          constrains the rendered width when it actually shrinks the text
+          (see fit-text.tsx) — a short/normal org name renders exactly as
+          the plain, unconstrained `<Text>` this replaces always did. */}
       {show.organisation && (
         <View style={styles.coverTopBand}>
-          <Text style={styles.coverOrgName}>{show.organisation}</Text>
+          <FitText
+            maxWidth={COVER_TOP_BAND_MAX_WIDTH}
+            family="Inter"
+            weight="bold"
+            min={6}
+            max={9}
+            maxLines={2}
+            lineHeight={1.3}
+            reserveHeight
+            style={{
+              color: C.textOnPrimary,
+              textTransform: 'uppercase',
+              letterSpacing: COVER_ORG_NAME_LETTER_SPACING,
+              textAlign: 'center',
+              lineHeight: 1.3,
+            }}
+          >
+            {show.organisation}
+          </FitText>
         </View>
       )}
       {!show.organisation && <View style={{ height: 12 }} />}
@@ -547,8 +1051,29 @@ export function CoverPage({ show }: FrontMatterProps) {
           );
         })()}
 
-        {/* Show name — LibreBaskerville */}
-        <Text style={styles.coverShowName}>{show.name}</Text>
+        {/* Show name — shrinks (down to a readable floor) rather than
+            wrapping a long name across several lines at full size, which
+            used to be one of the contributors to a long-name + long-
+            officials-list cover overflowing onto an unplanned page 2.
+            maxLines is 3, not 2: the marked catalogue passes
+            `${show.name}\nMARKED CATALOGUE` (catalogue-marked.tsx) — an
+            explicit forced line break most callers don't use — so the
+            budget has to cover a 2-line name PLUS that forced third line,
+            or a long name alone would get needlessly shrunk trying to
+            satisfy an unreachable 2-line cap. */}
+        <FitText
+          maxWidth={COVER_CONTENT_MAX_WIDTH}
+          family="HankenGrotesk"
+          weight={800}
+          maxLines={3}
+          min={11}
+          max={COVER_SHOW_NAME_MAX_SIZE}
+          lineHeight={1.3}
+          reserveHeight
+          style={{ textAlign: 'center', color: C.textDark, marginBottom: 5, lineHeight: 1.3 }}
+        >
+          {show.name}
+        </FitText>
 
         {/* Show type badge */}
         {showTypeLabel && (
@@ -582,9 +1107,46 @@ export function CoverPage({ show }: FrontMatterProps) {
           </Text>
         )}
 
-        {/* RKC jurisdiction */}
+        {/* Formal RKC designation — "CATALOGUE OF <same designation as the
+            schedule cover>", in the catalogue's own print-first Times idiom
+            (not the schedule's coloured pill). RKC shows only; WUSV/SV
+            covers return via SvCoverPage above and never reach this code
+            (Mandy 2026-08-17). */}
+        {rkcProfile && (
+          <Text style={styles.coverDesignation}>
+            CATALOGUE OF {rkcProfile.designation}
+          </Text>
+        )}
+
+        {/* RKC jurisdiction — same exact wording as the schedule cover
+            (Mandy 2026-08-17), replacing the catalogue's previous,
+            differently-worded citation so a secretary never sees two
+            different "held under" lines on the same document. */}
         <Text style={styles.coverRegulatory}>
-          Held under Royal Kennel Club Rules &amp; Show Regulations F(1)
+          Held under Royal Kennel Club Limited Rules &amp; Regulations
+        </Text>
+
+        {/* Docking statement — mandatory RKC F(1).7.c(2) notice, now
+            prominent on the cover directly beneath the designation,
+            mirroring the schedule's cover (Mandy 2026-08-17). No longer
+            duplicated on the particulars page — see ShowParticularsContent. */}
+        {show.dockingStatement && (
+          <Text style={styles.coverDocking}>{show.dockingStatement}</Text>
+        )}
+
+        {/* Product label — so exhibitors buying a printed copy on the
+            day can see at a glance what the booklet is. Deliberately
+            understated; Amanda wanted it present but not shouty. */}
+        <Text style={{
+          fontFamily: 'Inter',
+          fontSize: 7.5,
+          letterSpacing: 1.8,
+          textTransform: 'uppercase',
+          color: C.textLight,
+          textAlign: 'center',
+          marginTop: 2,
+        }}>
+          Show Catalogue
         </Text>
 
         <GoldRule />
@@ -600,6 +1162,7 @@ export function CoverPage({ show }: FrontMatterProps) {
               <Text style={styles.coverDetailLabel}>Venue</Text>
               <Text style={styles.coverDetailValue}>
                 {[show.venue, show.venueAddress].filter(Boolean).join(', ').replace(/,\s*,/g, ',').trim()}
+                {show.venueWhat3words ? `\nwhat3words: ${show.venueWhat3words}` : ''}
               </Text>
             </View>
           )}
@@ -609,16 +1172,19 @@ export function CoverPage({ show }: FrontMatterProps) {
               <Text style={styles.coverDetailValue}>{j}</Text>
             </View>
           ))}
+          {/* Show Opens + Judging Starts as their own rows (label width 58 like
+              Date/Venue/Judges) so the times line up under the values above,
+              with the time in bold to stand out (Mandy 2026-07-20). */}
           {show.showOpenTime && (
             <View style={styles.coverDetailRow}>
               <Text style={styles.coverDetailLabel}>Show Opens</Text>
-              <Text style={styles.coverDetailValue}>{formatTime(show.showOpenTime)}</Text>
+              <Text style={[styles.coverDetailValue, { fontWeight: 'bold' }]}>{formatTime(show.showOpenTime)}</Text>
             </View>
           )}
           {show.startTime && (
             <View style={styles.coverDetailRow}>
               <Text style={styles.coverDetailLabel}>Judging Starts</Text>
-              <Text style={styles.coverDetailValue}>{formatTime(show.startTime)}</Text>
+              <Text style={[styles.coverDetailValue, { fontWeight: 'bold' }]}>{formatTime(show.startTime)}</Text>
             </View>
           )}
           {show.kcLicenceNo && (
@@ -689,86 +1255,32 @@ export function CoverPage({ show }: FrontMatterProps) {
           </View>
         )}
 
-        {/* On-call vet + show manager — compact */}
-        {(show.onCallVet || show.showManager) && (
-          <View style={{ width: '100%', marginTop: 2 }}>
-            {show.onCallVet && (
-              <View style={{ marginBottom: 2 }}>
-                <Text style={styles.coverSectionLabel}>On-Call Veterinary Surgeon</Text>
-                <Text style={styles.coverSectionText}>{show.onCallVet}</Text>
-              </View>
-            )}
-            {show.showManager && (
-              <View style={{ marginBottom: 2 }}>
-                <Text style={styles.coverSectionLabel}>Show Manager</Text>
-                <Text style={styles.coverSectionText}>{show.showManager}</Text>
-              </View>
-            )}
-          </View>
+        {/* On-call vet and Show Manager are the last items on the cover.
+            Sponsors, docking statement and Jurisdiction & Responsibilities
+            moved to ShowParticularsContent (composed into every other
+            front-matter page) so the cover stays consistent across shows
+            regardless of which optional fields are set. */}
+        {show.onCallVet && (
+          <KeepTogether style={{ width: '100%', marginTop: 2, marginBottom: 2 }}>
+            <Text style={styles.coverSectionLabel}>On-Call Veterinary Surgeon</Text>
+            <Text style={styles.coverSectionText}>{show.onCallVet}</Text>
+          </KeepTogether>
         )}
 
-        {/* Show-level sponsors on cover — logos displayed prominently.
-            We deliberately EXCLUDE `tier === 'title'` here because the
-            title sponsor is already rendered inline at the top of the
-            cover (right under the show name). Including it here too was
-            causing a duplicate Royal Canin block at the bottom of page 1
-            that orphaned its "SPONSORED BY" label across the page break
-            onto page 2 — Amanda flagged the rogue label in testing. */}
-        {show.showSponsors && show.showSponsors.length > 0 && (() => {
-          const tierSponsors = show.showSponsors!.filter(sp => sp.tier === 'show');
-          const supporterSponsors = show.showSponsors!.filter(sp => sp.tier !== 'title' && sp.tier !== 'show');
-          return (
-            <View style={{ width: '100%', marginTop: 6, marginBottom: 4 }}>
-              {tierSponsors.length > 0 && (
-                <View style={{ alignItems: 'center', marginBottom: 6 }} wrap={false}>
-                  <Text style={{ fontFamily: 'Inter', fontSize: 7, color: C.textLight, letterSpacing: 1.5, textTransform: 'uppercase', marginBottom: 4 }}>
-                    {tierSponsors.length === 1 ? 'Sponsored by' : 'Sponsors'}
-                  </Text>
-                  {tierSponsors.map((sp, i) => (
-                    <View key={i} style={{ alignItems: 'center', marginBottom: 4 }}>
-                      {sp.logoUrl && (
-                        <Image src={sp.logoUrl} style={{ width: 100, height: 50, objectFit: 'contain', marginBottom: 3 }} />
-                      )}
-                      <Text style={{ fontFamily: 'Inter', fontSize: 9, fontWeight: 'bold', color: C.textDark }}>
-                        {sp.customTitle ? `${sp.customTitle}: ` : ''}{sp.name}
-                      </Text>
-                    </View>
-                  ))}
-                </View>
-              )}
-              {supporterSponsors.length > 0 && (
-                <View style={{ ...styles.coverDetailCard, borderLeftColor: C.accent }}>
-                  <Text style={styles.coverSectionLabel}>With grateful thanks to</Text>
-                  {supporterSponsors.map((sp, i) => (
-                    <View key={i} style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 2 }}>
-                      {sp.logoUrl && (
-                        <Image src={sp.logoUrl} style={{ width: 30, height: 15, objectFit: 'contain', marginRight: 6 }} />
-                      )}
-                      <Text style={{ fontFamily: 'Inter', fontSize: 7.5, color: C.textMedium }}>
-                        {sp.name}
-                      </Text>
-                    </View>
-                  ))}
-                </View>
-              )}
-            </View>
-          );
-        })()}
+        {show.firstAiders && show.firstAiders.length > 0 && (
+          <KeepTogether style={{ width: '100%', marginTop: 2, marginBottom: 2 }}>
+            <Text style={styles.coverSectionLabel}>
+              {show.firstAiders.length === 1 ? 'First Aider' : 'First Aiders'}
+            </Text>
+            <Text style={styles.coverSectionText}>{show.firstAiders.join(', ')}</Text>
+          </KeepTogether>
+        )}
 
-        {/* Docking statement — mandatory per F(1).7.c(2) */}
-        {show.dockingStatement && (
-          <Text style={{
-            fontFamily: 'Times',
-            fontSize: 7,
-            fontStyle: 'italic',
-            color: C.textMedium,
-            textAlign: 'center',
-            marginTop: 4,
-            marginBottom: 2,
-            paddingHorizontal: 8,
-          }}>
-            {show.dockingStatement}
-          </Text>
+        {show.showManager && (
+          <KeepTogether style={{ width: '100%', marginTop: 2, marginBottom: 2 }}>
+            <Text style={styles.coverSectionLabel}>Show Manager</Text>
+            <Text style={styles.coverSectionText}>{show.showManager}</Text>
+          </KeepTogether>
         )}
 
         <Text style={styles.coverFooterText}>
@@ -778,39 +1290,120 @@ export function CoverPage({ show }: FrontMatterProps) {
 
       {/* Green bottom band */}
       <View style={styles.coverBottomBand} />
-    </Page>
+    </PageFrame>
   );
 }
 
-// ── Judges List Page ────────────────────────────────────────────
+// ── Show Particulars Block ──────────────────────────────────────
+//
+// Everything that used to trail the cover: show manager, supporter /
+// show-tier sponsors, docking statement, and the RKC-mandatory
+// Jurisdiction text. Rendered as a View so it can be composed inside
+// the consolidated front-matter Page together with other front-matter
+// sections, keeping the layout densely packed.
 
-/** Judges list page — breed -> judge name table with optional bios */
-export function JudgesListPage({ show }: FrontMatterProps) {
+export function ShowParticularsContent({ show }: FrontMatterProps) {
+  const sponsors = show.showSponsors ?? [];
+  const tierSponsors = sponsors.filter((sp) => sp.tier === 'show');
+  const supporterSponsors = sponsors.filter(
+    (sp) => sp.tier !== 'title' && sp.tier !== 'show',
+  );
+  const hasSponsors = tierSponsors.length > 0 || supporterSponsors.length > 0;
+
+  return (
+    <>
+      {/* Mandatory RKC judges' welfare undertaking — the first thing on the
+          front-matter content, ahead of sponsors/fees/notes, mirroring the
+          schedule's "first information page" placement (Mandy 2026-08-17). */}
+      <JudgesWelfareCommitmentBlock />
+
+      {/* Show Manager rendered on the CoverPage (after On-Call Vet)
+          per Amanda's feedback that the cover should end with the
+          show manager. Deliberately not re-rendered here. */}
+
+      {hasSponsors && (
+        <View style={{ marginBottom: 10 }}>
+          {tierSponsors.length > 0 && (
+            <KeepTogether style={{ alignItems: 'center', marginBottom: 6 }}>
+              <Text style={{ fontFamily: 'Inter', fontSize: 7, color: C.textLight, letterSpacing: 1.5, textTransform: 'uppercase', marginBottom: 4 }}>
+                {tierSponsors.length === 1 ? 'Sponsored by' : 'Sponsors'}
+              </Text>
+              {tierSponsors.map((sp, i) => (
+                <View key={i} style={{ alignItems: 'center', marginBottom: 4 }}>
+                  {sp.logoUrl && (
+                    <Image src={sp.logoUrl} style={{ width: 100, height: 50, objectFit: 'contain', marginBottom: 3 }} />
+                  )}
+                  <Text style={{ fontFamily: 'Inter', fontSize: 9, fontWeight: 'bold', color: C.textDark }}>
+                    {sp.customTitle ? `${sp.customTitle}: ` : ''}{sp.name}
+                  </Text>
+                </View>
+              ))}
+            </KeepTogether>
+          )}
+          {supporterSponsors.length > 0 && (
+            <View style={{ ...styles.coverDetailCard, borderLeftColor: C.accent }}>
+              <Text style={styles.coverSectionLabel}>With grateful thanks to</Text>
+              {supporterSponsors.map((sp, i) => (
+                <View key={i} style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 2 }}>
+                  {sp.logoUrl && (
+                    <Image src={sp.logoUrl} style={{ width: 30, height: 15, objectFit: 'contain', marginRight: 6 }} />
+                  )}
+                  <Text style={{ fontFamily: 'Inter', fontSize: 7.5, color: C.textMedium }}>
+                    {sp.name}
+                  </Text>
+                </View>
+              ))}
+            </View>
+          )}
+        </View>
+      )}
+
+      {/* Docking statement now renders prominently on the CoverPage instead
+          (Mandy 2026-08-17) — every real catalogue format renders CoverPage
+          in the same document as this component, so nothing loses the
+          statement by removing the second copy here. See CoverPage. */}
+
+      <JurisdictionBlock />
+    </>
+  );
+}
+
+// ── Judges List ─────────────────────────────────────────────────
+
+/**
+ * Normalise a judge's display name to a de-dupe key: strips a trailing
+ * parenthetical suffix (e.g. "(subject to RKC approval)"), trims whitespace,
+ * and lowercases. The breed table shows the plain name ("Hugh De Zutter")
+ * while the judge display list can carry an approval suffix ("Hugh De
+ * Zutter (subject to RKC approval)") — an exact-string match missed that and
+ * listed the main breed judge a second time under "Other Judges" (Mandy
+ * 2026-07-20). Exported for unit testing.
+ */
+export const normaliseJudgeName = (n: string) =>
+  n.replace(/\s*\([^)]*\)\s*$/, '').trim().toLowerCase();
+
+/** Judges list content block — breed → judge table or single-breed
+ *  card layout, depending on the show's judge data shape. Returned as
+ *  a fragment so it can be composed inside a larger front-matter page
+ *  or rendered standalone via JudgesListPage. */
+export function JudgesListContent({ show }: FrontMatterProps) {
   const judges = show.judgesByBreedName ?? {};
   const judgeBios = show.judgeBios ?? {};
   const ringNumbers = show.judgeRingNumbers ?? {};
   const hasRings = Object.keys(ringNumbers).length > 0;
   const sortedBreeds = Object.keys(judges).sort();
 
-  // For single-breed shows the judge assignments don't carry breed_ids,
-  // so judgesByBreedName is empty. Render from the display list instead,
-  // and include bios + photos from `judgeBios` / `judgePhotos`. Earlier
-  // versions only rendered the labels here, so single-breed catalogues
-  // were missing all the judge bios — Amanda flagged this in testing.
+  // Single-breed branch: no breed_id on the assignment, so we render
+  // from judgeDisplayList with bios + photos. Earlier versions only
+  // rendered the labels, so single-breed catalogues were missing all
+  // the judge bios.
   if (sortedBreeds.length === 0 && show.judgeDisplayList && show.judgeDisplayList.length > 0) {
-    // Group labels by judge name so the same judge with multiple roles
-    // (e.g. "Dogs — Mr X" and "Bitches — Mr X") only renders one bio
-    // block. We strip the role prefix off the label to get the judge
-    // name; if there's no " — " it's just the name.
-    //
     // FORMAT CONTRACT: judgeDisplayList strings are produced by route.ts
-    // and pdf-generation.ts as either `"<Role> — <Name>"` (with the U+2014
-    // em-dash separator) or just `"<Name>"` when the judge has no
-    // sex/JH role. The split below depends on em-dashes NOT appearing in
-    // RKC judge names, which has held in practice. If you ever change the
-    // label format on the producer side, also update this parser — or
-    // better, switch judgeDisplayList to a structured array.
-    const LABEL_SEPARATOR = ' \u2014 '; // " — " with the em-dash explicit
+    // and pdf-generation.ts as either `"<Role> — <Name>"` (U+2014 em-dash
+    // separator) or `"<Name>"`. Parser below assumes em-dashes don't
+    // appear inside RKC judge names (held in practice). If the format
+    // ever changes, switch judgeDisplayList to a structured array.
+    const LABEL_SEPARATOR = ' \u2014 ';
     const labelsByJudge = new Map<string, string[]>();
     for (const label of show.judgeDisplayList) {
       const sepIdx = label.indexOf(LABEL_SEPARATOR);
@@ -821,55 +1414,70 @@ export function JudgesListPage({ show }: FrontMatterProps) {
       labelsByJudge.set(name, list);
     }
 
-    return (
-      <Page size="A5" style={styles.frontMatterPage} wrap>
-        <SectionBand title="List of Judges" />
-        {Array.from(labelsByJudge.entries()).map(([name, roles], i) => {
-          const bio = judgeBios[name];
-          const photoUrl = show.judgePhotos?.[name];
-          // Format the role label: "Dogs & Bitches" rather than two
-          // separate "Dogs", "Bitches" lines for the same judge.
-          const roleLabel = roles.includes(name)
-            ? null // role list contained the bare name (no prefix)
-            : roles.join(' & ');
-          return (
-            <View key={i} wrap={false} style={{ marginBottom: 6 }}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                {photoUrl && (
-                  <Image src={photoUrl} style={{ width: 44, height: 44, borderRadius: 22 }} />
-                )}
-                <View style={{ flex: 1 }}>
-                  <Text style={{ fontFamily: 'Inter', fontSize: 11, fontWeight: 'bold', color: C.textDark }}>
-                    {name}
-                  </Text>
-                  {roleLabel && (
-                    <Text style={{ fontFamily: 'Inter', fontSize: 9, fontStyle: 'italic', color: C.textMedium }}>
-                      {roleLabel}
-                    </Text>
-                  )}
-                </View>
-              </View>
-              {bio && (
-                <Text style={{ ...styles.judgeBio, marginTop: 4, marginBottom: 0 }}>
-                  {bio}
+    const judgeEntries = Array.from(labelsByJudge.entries());
+
+    // Render a single judge's row. Extracted so the first judge can be
+    // rendered inside the wrap=false banner block (keeping banner and
+    // first judge atomic, so the banner never orphans at the bottom of
+    // a page) while subsequent judges render as normal flowing cards.
+    const renderJudgeCard = (name: string, roles: string[], key: string | number) => {
+      const bio = judgeBios[name];
+      const photoUrl = show.judgePhotos?.[name];
+      const roleLabel = roles.includes(name)
+        ? null
+        : roles.join(' & ');
+      return (
+        <KeepTogether key={key} style={{ marginBottom: 6 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+            {photoUrl && (
+              <Image src={photoUrl} style={{ width: 44, height: 44, borderRadius: 22 }} />
+            )}
+            <View style={{ flex: 1 }}>
+              <Text style={{ fontFamily: 'Inter', fontSize: 11, fontWeight: 'bold', color: C.textDark }}>
+                {name}
+              </Text>
+              {roleLabel && (
+                <Text style={{ fontFamily: 'Inter', fontSize: 9, fontStyle: 'italic', color: C.textMedium }}>
+                  {roleLabel}
                 </Text>
               )}
             </View>
-          );
-        })}
-        {/* Jurisdiction block moved out of this page — it was being
-            forced wrap={false} and pushing a small judge bio
-            (e.g. Miss P Ingham) onto its own near-empty page.
-            BestAwardsPage now hosts it instead. */}
-      </Page>
+          </View>
+          {bio && (
+            <Text style={{ ...styles.judgeBio, marginTop: 4, marginBottom: 0 }}>
+              {bio}
+            </Text>
+          )}
+        </KeepTogether>
+      );
+    };
+
+    return (
+      <>
+        {/* Band + first judge atomic. A long bio on the first judge
+            still forces a page break, but the banner will never sit
+            alone at the bottom of a page again. */}
+        <KeepTogether>
+          <SectionBand title="List of Judges" />
+          {judgeEntries.length > 0 &&
+            renderJudgeCard(judgeEntries[0][0], judgeEntries[0][1], 0)}
+        </KeepTogether>
+        {judgeEntries.slice(1).map(([name, roles], i) =>
+          renderJudgeCard(name, roles, i + 1)
+        )}
+      </>
     );
   }
 
   if (sortedBreeds.length === 0) return null;
 
   // Names already rendered in the breed table. Used to avoid
-  // double-rendering when we list "other" judges below.
-  const breedKeyedJudgeNames = new Set(Object.values(judges));
+  // double-rendering when we list "other" judges below. Compared via
+  // normaliseJudgeName (module-level, above) so an approval-suffix or
+  // case/whitespace difference still collapses to the same judge.
+  const breedKeyedJudgeNames = new Set(
+    Object.values(judges).map(normaliseJudgeName),
+  );
 
   // Judges with a bio/photo/display-list entry who are NOT assigned to
   // a specific breed — e.g. JH judges, or dog/bitch-only judges on a
@@ -883,8 +1491,9 @@ export function JudgesListPage({ show }: FrontMatterProps) {
       const sepIdx = label.indexOf(LABEL_SEPARATOR);
       const role = sepIdx >= 0 ? label.slice(0, sepIdx) : null;
       const name = sepIdx >= 0 ? label.slice(sepIdx + LABEL_SEPARATOR.length) : label;
-      // Skip judges already in the breed table
-      if (breedKeyedJudgeNames.has(name)) continue;
+      // Skip judges already in the breed table (the main breed judge must
+      // not reappear under "Other Judges").
+      if (breedKeyedJudgeNames.has(normaliseJudgeName(name))) continue;
       const list = rolesByJudge.get(name) ?? [];
       if (role) list.push(role);
       rolesByJudge.set(name, list);
@@ -895,17 +1504,20 @@ export function JudgesListPage({ show }: FrontMatterProps) {
   }
 
   return (
-    <Page size="A5" style={styles.frontMatterPage} wrap>
-      <SectionBand title="List of Judges" />
-
-      {/* Table header */}
-      <View style={{ ...styles.judgesListRow, borderBottomWidth: 1.5, borderBottomColor: C.primary, marginBottom: 4 }}>
-        <Text style={{ ...styles.judgesListBreed, fontWeight: 'bold' }}>Breed</Text>
-        <Text style={{ ...styles.judgesListJudge, fontWeight: 'bold' }}>Judge</Text>
-        {hasRings && (
-          <Text style={{ fontFamily: 'Inter', fontSize: 7.5, fontWeight: 'bold', width: 30, textAlign: 'right' }}>Ring</Text>
-        )}
-      </View>
+    <>
+      {/* Keep banner + table header atomic so the banner never sits
+          alone at the bottom of a page with the table flowing to the
+          next. */}
+      <KeepTogether>
+        <SectionBand title="List of Judges" />
+        <View style={{ ...styles.judgesListRow, borderBottomWidth: 1.5, borderBottomColor: C.primary, marginBottom: 4 }}>
+          <Text style={{ ...styles.judgesListBreed, fontWeight: 'bold' }}>Breed</Text>
+          <Text style={{ ...styles.judgesListJudge, fontWeight: 'bold' }}>Judge</Text>
+          {hasRings && (
+            <Text style={{ fontFamily: 'Inter', fontSize: 7.5, fontWeight: 'bold', width: 30, textAlign: 'right' }}>Ring</Text>
+          )}
+        </View>
+      </KeepTogether>
 
       {sortedBreeds.map((breed) => {
         const judgeName = judges[breed];
@@ -913,7 +1525,7 @@ export function JudgesListPage({ show }: FrontMatterProps) {
         const bio = judgeBios[judgeName ?? ''];
         const photoUrl = show.judgePhotos?.[judgeName ?? ''];
         return (
-          <View key={breed} wrap={false}>
+          <KeepTogether key={breed}>
             <View style={styles.judgesListRow}>
               <Text style={styles.judgesListBreed}>{breed}</Text>
               <Text style={styles.judgesListJudge}>{judgeName}</Text>
@@ -933,93 +1545,151 @@ export function JudgesListPage({ show }: FrontMatterProps) {
                 )}
               </View>
             )}
-          </View>
+          </KeepTogether>
         );
       })}
 
       {/* Other judges (JH, dogs/bitches-only, etc.) not in the breed
           table. Each gets a card-style row with photo + name + role +
           bio — matching the single-breed branch layout above. */}
-      {otherJudges.length > 0 && (
-        <View style={{ marginTop: 10 }}>
+      {otherJudges.length > 0 && (() => {
+        const renderOtherJudge = ({ name, roles }: { name: string; roles: string[] }, i: number) => {
+          const bio = judgeBios[name];
+          const photoUrl = show.judgePhotos?.[name];
+          const roleLabel = roles.length > 0 ? roles.join(' & ') : null;
+          return (
+            <KeepTogether key={i} style={{ marginBottom: 8 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                {photoUrl && (
+                  <Image src={photoUrl} style={{ width: 36, height: 36, borderRadius: 18 }} />
+                )}
+                <View style={{ flex: 1 }}>
+                  {/* Explicit lineHeight (matching styles.page's own 1.3)
+                      rather than relying on inheritance — same root cause
+                      as the CatalogueHeader title overlap (coordinator's
+                      review, 2026-09-02): a Text with no lineHeight of its
+                      own can get a react-pdf-computed box shorter than its
+                      actual rendered glyphs, so the KeepTogether wrapping
+                      this "Other Judges" list reserves less height than it
+                      needs and whatever renders immediately after it (the
+                      next page's own content, sharing the same document)
+                      starts before this name has finished drawing. Found
+                      via the "no two lines overlap" invariant on
+                      synthetic-stress-rkc-champ's catalogue-by-class,
+                      which shares this JudgesListContent component. */}
+                  <Text style={{ fontFamily: 'Inter', fontSize: 10, fontWeight: 'bold', lineHeight: 1.3, color: C.textDark }}>
+                    {name}
+                  </Text>
+                  {roleLabel && (
+                    <Text style={{ fontFamily: 'Inter', fontSize: 8, fontStyle: 'italic', lineHeight: 1.3, color: C.textMedium }}>
+                      {roleLabel}
+                    </Text>
+                  )}
+                </View>
+              </View>
+              {bio && (
+                <Text style={{ ...styles.judgeBio, marginTop: 3, marginBottom: 0 }}>
+                  {bio}
+                </Text>
+              )}
+            </KeepTogether>
+          );
+        };
+        const OtherJudgesHeading = (
           <Text style={{ fontFamily: 'Inter', fontSize: 8, fontWeight: 'bold', color: C.primary, textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 6 }}>
             Other Judges
           </Text>
-          {otherJudges.map(({ name, roles }, i) => {
-            const bio = judgeBios[name];
-            const photoUrl = show.judgePhotos?.[name];
-            const roleLabel = roles.length > 0 ? roles.join(' & ') : null;
-            return (
-              <View key={i} wrap={false} style={{ marginBottom: 8 }}>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                  {photoUrl && (
-                    <Image src={photoUrl} style={{ width: 36, height: 36, borderRadius: 18 }} />
-                  )}
-                  <View style={{ flex: 1 }}>
-                    <Text style={{ fontFamily: 'Inter', fontSize: 10, fontWeight: 'bold', color: C.textDark }}>
-                      {name}
-                    </Text>
-                    {roleLabel && (
-                      <Text style={{ fontFamily: 'Inter', fontSize: 8, fontStyle: 'italic', color: C.textMedium }}>
-                        {roleLabel}
-                      </Text>
-                    )}
-                  </View>
-                </View>
-                {bio && (
-                  <Text style={{ ...styles.judgeBio, marginTop: 3, marginBottom: 0 }}>
-                    {bio}
-                  </Text>
-                )}
-              </View>
-            );
-          })}
-        </View>
-      )}
+        );
+        return (
+          <KeepTogether style={{ marginTop: 10 }}>
+            {/* Heading + ALL cards kept together (wrap=false) so the "Other
+                Judges" list never splits across a page break — the heading +
+                first name on one page and the rest on the next looked wrong
+                (Mandy 2026-07-20). Other-judge lists are short (typically a
+                JH and a special-awards judge), so keeping them atomic is safe. */}
+            {OtherJudgesHeading}
+            {otherJudges.map((j, i) => renderOtherJudge(j, i))}
+          </KeepTogether>
+        );
+      })()}
 
-      <JurisdictionBlock />
-
-      <Text
-        style={styles.footer}
-        render={({ pageNumber, totalPages }) =>
-          `Page ${pageNumber} of ${totalPages}  ·  Generated by Remi`
-        }
-        fixed
-      />
-    </Page>
+    </>
   );
 }
 
-// ── Class Definitions Page ──────────────────────────────────────
-
-/** Class definitions page — name + description for each class */
-export function ClassDefinitionsPage({ show }: FrontMatterProps) {
-  const defs = show.classDefinitions ?? [];
-
-  // Always render if we have any class definitions (RKC F(1)11 requirement)
-  if (defs.length === 0) return null;
-
+/** Standalone Judges page — delegates to JudgesListContent.
+ *  Kept so callers that haven't switched to the consolidated
+ *  front-matter page still get a correctly wrapped Page. */
+export function JudgesListPage({ show }: FrontMatterProps) {
+  const hasJudges = Object.keys(show.judgesByBreedName ?? {}).length > 0
+    || (show.judgeDisplayList?.length ?? 0) > 0;
+  if (!hasJudges) return null;
   return (
-    <Page size="A5" style={styles.frontMatterPage} wrap>
-      <SectionBand title="Definitions of Classes" />
+    <PageFrame size="A5" style={styles.frontMatterPage} wrap>
+      <JudgesListContent show={show} />
+      <CatalogueFolio />
+    </PageFrame>
+  );
+}
 
-      {defs.map((def) => (
-        <View key={def.name} wrap={false}>
-          <Text style={styles.classDefName}>{def.name}</Text>
-          {def.description && (
-            <Text style={styles.classDefDescription}>{def.description}</Text>
-          )}
-        </View>
-      ))}
+// ── Class Definitions ──────────────────────────────────────────
 
-      <Text
-        style={styles.footer}
-        render={({ pageNumber, totalPages }) =>
-          `Page ${pageNumber} of ${totalPages}  ·  Generated by Remi`
-        }
-        fixed
-      />
-    </Page>
+/**
+ * `sectionGap` becomes the heading's own `marginTop` rather than an outer
+ * wrapping View, so this can render as a genuine direct child of the
+ * page's flow — see the file-level note on FrontMatterContent's class-
+ * definitions call site for why that matters (pdf-kit's Flow needs no
+ * extra wrapping View between it and the page for minPresenceAhead to
+ * hold — README: "A react-pdf limitation this kit's tests found").
+ */
+export function ClassDefinitionsContent({ show, sectionGap = 0 }: FrontMatterProps & { sectionGap?: number }) {
+  const defs = show.classDefinitions ?? [];
+  if (defs.length === 0) return null;
+  // A single Flow block: heading = the section band, body = every
+  // definition. Flow keeps the heading glued to the START of the body
+  // (never orphaned alone at a page foot) WITHOUT forcing the whole list
+  // atomic — historically the "Definitions of Classes" block was one big
+  // wrap={false} unit (see FrontMatterContent), so a list just slightly
+  // too tall for the current page moved WHOLESALE onto a fresh page
+  // (Mandy 2026-07-20: "a 16-definition list spilled one item onto a
+  // near-blank page" — the hand-tuned fix was to tighten spacing so it
+  // fit, which doesn't generalise to a longer list). Now the list can
+  // split at a definition boundary like any other flowing content, and a
+  // list too long for even a fresh page paginates instead of overflowing.
+  return (
+    <Flow
+      blocks={[
+        {
+          key: 'class-definitions',
+          heading: <SectionBand title="Definitions of Classes" />,
+          headingStyle: sectionGap ? { marginTop: sectionGap } : undefined,
+          keepWithHeadingHeight: 60,
+          body: (
+            <>
+              {defs.map((def) => (
+                <KeepTogether key={def.name}>
+                  <Text style={styles.classDefName}>{def.name}</Text>
+                  {def.description && (
+                    <Text style={styles.classDefDescription}>{def.description}</Text>
+                  )}
+                </KeepTogether>
+              ))}
+            </>
+          ),
+        },
+      ]}
+    />
+  );
+}
+
+/** Standalone Class Definitions page — delegates to ClassDefinitionsContent. */
+export function ClassDefinitionsPage({ show }: FrontMatterProps) {
+  if ((show.classDefinitions?.length ?? 0) === 0) return null;
+  return (
+    <PageFrame size="A5" style={styles.frontMatterPage} wrap>
+      <ClassDefinitionsContent show={show} />
+      <CatalogueFolio />
+    </PageFrame>
   );
 }
 
@@ -1055,37 +1725,93 @@ interface ExhibitorIndexPageProps {
  * Entries where the exhibitor has requested withholding from publication
  * per F(1).11.b.(6)/(8) are excluded from the index entirely.
  */
-export function ExhibitorIndexPage({ show, entries, breedName }: ExhibitorIndexPageProps) {
-  const byExhibitor = new Map<string, { name: string; address?: string; catNos: string[]; classes: string[] }>();
+/**
+ * Group index entries by exhibitor heading, alphabetical by surname.
+ * A withheld exhibitor stays IN the index — name and catalogue numbers,
+ * no address. Withholding protects the home address, not the fact of
+ * entry (Mandy 2026-08-12: "it should show name and catalogue numbers
+ * but no address" — previously these entries were skipped entirely and
+ * Sarah Hill vanished from South Western's RKC-bound catalogue). Same
+ * rule as the ringside index and redactWithheldOwnerAddresses.
+ */
+export function buildExhibitorIndexRows(entries: ExhibitorIndexEntry[]) {
+  const byExhibitor = new Map<string, { name: string; sortKey: string; address?: string; catNos: string[]; classes: string[] }>();
   for (const entry of entries) {
-    if (entry.withholdFromPublication) continue;
-    const name = entry.exhibitor ?? entry.owners[0]?.name ?? 'Unknown';
-    const key = name.toUpperCase();
+    const { heading, sortKey } = ownerHeading(entry.owners, entry.exhibitor);
+    const key = heading;
     if (!byExhibitor.has(key)) {
       byExhibitor.set(key, {
-        name: name.toUpperCase(),
-        address: entry.owners[0]?.address ?? undefined,
+        name: heading,
+        sortKey,
+        address: entry.withholdFromPublication ? undefined : (entry.owners[0]?.address ?? undefined),
         catNos: [],
         classes: [],
       });
     }
     const ex = byExhibitor.get(key)!;
+    // One withheld entry hides the address even if another of the same
+    // exhibitor's entries isn't flagged — withhold wins.
+    if (entry.withholdFromPublication) ex.address = undefined;
     if (entry.catalogueNumber && !ex.catNos.includes(entry.catalogueNumber)) {
       ex.catNos.push(entry.catalogueNumber);
     }
     for (const cls of entry.classes) {
-      const label = cls.classNumber != null ? `${cls.classNumber}` : cls.name ?? '';
+      const label = cls.classLabel ?? (cls.classNumber != null ? String(cls.classNumber) : cls.name ?? '');
       if (label && !ex.classes.includes(label)) ex.classes.push(label);
     }
   }
 
-  const sorted = Array.from(byExhibitor.values()).sort((a, b) => a.name.localeCompare(b.name));
+  return Array.from(byExhibitor.values()).sort((a, b) => {
+    const surnameCmp = a.sortKey.localeCompare(b.sortKey);
+    return surnameCmp !== 0 ? surnameCmp : a.name.localeCompare(b.name);
+  });
+}
+
+export function ExhibitorIndexPage({ show, entries, breedName, compact }: ExhibitorIndexPageProps & { compact?: boolean }) {
+  const sorted = buildExhibitorIndexRows(entries);
   if (sorted.length === 0) return null;
 
   const title = breedName ? `Exhibitor Index — ${breedName}` : 'Exhibitor Index';
 
+  // Compact single-line layout: full dog particulars are already on each
+  // class page, so the back-of-book index is a pure cross-reference. We
+  // drop addresses entirely and pack ~70 exhibitors per A5 page (vs ~30
+  // for the table layout).
+  if (compact) {
+    return (
+      <PageFrame size="A5" style={styles.frontMatterPage} wrap>
+        <SectionBand title={title} />
+        <Text style={{ fontFamily: 'Times', fontStyle: 'italic', fontSize: 7, color: C.textMedium, marginBottom: 6 }}>
+          Cross-reference: full particulars for each dog appear on the class page indicated.
+        </Text>
+        {sorted.map((ex, idx) => {
+          const cats = ex.catNos.sort((a, b) => a.localeCompare(b, undefined, { numeric: true })).join(', ');
+          const cls = ex.classes.sort((a, b) => a.localeCompare(b, undefined, { numeric: true })).join(', ');
+          return (
+            <KeepTogether
+              key={idx}
+              style={{ flexDirection: 'row', paddingVertical: 1.4, borderBottomWidth: 0.4, borderBottomColor: C.ruleLight, alignItems: 'baseline' }}
+            >
+              <Text style={{ fontFamily: 'Inter', fontSize: 6.7, fontWeight: 'bold', color: C.textDark, width: '38%', paddingRight: 4 }}>
+                {ex.name}
+              </Text>
+              <Text style={{ fontFamily: 'Inter', fontSize: 6.7, color: C.textDark, width: '24%', paddingRight: 4 }}>
+                {cats || '—'}
+              </Text>
+              <Text style={{ fontFamily: 'Inter', fontSize: 6.5, color: C.textMedium, flex: 1 }}>
+                {cls ? `cl ${cls}` : ''}
+              </Text>
+            </KeepTogether>
+          );
+        })}
+
+        <CatalogueFolio />
+      </PageFrame>
+    );
+  }
+
   return (
-    <Page size="A5" style={styles.frontMatterPage} wrap>
+    <PageFrame size="A5" style={styles.frontMatterPage} wrap>
       <SectionBand title={title} />
       <View style={{ flexDirection: 'row', borderBottomWidth: 1.5, borderBottomColor: C.primary, paddingBottom: 3, marginBottom: 4 }}>
         <Text style={{ fontFamily: 'Inter', fontSize: 6.5, fontWeight: 'bold', width: '40%', color: C.textDark }}>Exhibitor</Text>
@@ -1093,7 +1819,7 @@ export function ExhibitorIndexPage({ show, entries, breedName }: ExhibitorIndexP
         <Text style={{ fontFamily: 'Inter', fontSize: 6.5, fontWeight: 'bold', width: '40%', color: C.textDark }}>Classes</Text>
       </View>
       {sorted.map((ex, idx) => (
-        <View key={idx} wrap={false} style={{ flexDirection: 'row', paddingVertical: 1.5, borderBottomWidth: 0.5, borderBottomColor: C.ruleLight }}>
+        <KeepTogether key={idx} style={{ flexDirection: 'row', paddingVertical: 1.5, borderBottomWidth: 0.5, borderBottomColor: C.ruleLight }}>
           <View style={{ width: '40%', paddingRight: 4 }}>
             <Text style={{ fontFamily: 'Inter', fontSize: 7, fontWeight: 'bold', color: C.textDark }}>{ex.name}</Text>
             {ex.address && <Text style={{ fontFamily: 'Inter', fontSize: 6, color: C.textLight }}>{ex.address}</Text>}
@@ -1104,14 +1830,11 @@ export function ExhibitorIndexPage({ show, entries, breedName }: ExhibitorIndexP
           <Text style={{ fontFamily: 'Inter', fontSize: 6.5, width: '40%', color: C.textMedium }}>
             {ex.classes.sort((a, b) => a.localeCompare(b, undefined, { numeric: true })).join(', ')}
           </Text>
-        </View>
+        </KeepTogether>
       ))}
-      <Text
-        style={styles.footer}
-        render={({ pageNumber, totalPages }) => `Page ${pageNumber} of ${totalPages}  ·  Generated by Remi`}
-        fixed
-      />
-    </Page>
+
+      <CatalogueFolio />
+    </PageFrame>
   );
 }
 
@@ -1173,84 +1896,268 @@ interface TrophiesPageProps {
   sponsorships: ClassSponsorshipInfo[];
 }
 
-/** Trophies & Sponsorships front-matter page — compact table layout */
+/** Trophies & Sponsorships front-matter page — compact table layout, plus a
+ *  "With thanks for their kind donations" list for plain donors (Mandy
+ *  2026-06-17). Renders if there are sponsorships OR donations. */
 export function TrophiesPage({ show, sponsorships }: TrophiesPageProps) {
-  if (sponsorships.length === 0) return null;
+  const donations = show.donations ?? [];
+  // The sponsorship TABLE is suppressed when sponsorships are shown inline with
+  // the classes (skipTrophiesPage). Donations are independent of that — they
+  // still get their "With Thanks" list whether or not the table renders.
+  const showTrophyTable = sponsorships.length > 0 && !show.skipTrophiesPage;
+  if (!showTrophyTable && donations.length === 0) return null;
 
-  // Sort by class number, then class name
+  // Sort: numbered classes by classNumber, JH/unnumbered by classLabel, else name.
   const sorted = [...sponsorships].sort((a, b) => {
     if (a.classNumber != null && b.classNumber != null) return a.classNumber - b.classNumber;
     if (a.classNumber != null) return -1;
     if (b.classNumber != null) return 1;
+    if (a.classLabel && b.classLabel) return a.classLabel.localeCompare(b.classLabel);
     return a.className.localeCompare(b.className);
   });
 
+  const renderTrophyRow = (sp: (typeof sorted)[number], idx: number) => {
+    const label = sp.classLabel ?? (sp.classNumber != null ? String(sp.classNumber) : '');
+    const classHeading = label ? `${label}. ${sp.className}` : sp.className;
+
+    // Build trophy + sponsor combined text
+    const trophySponsorParts: string[] = [];
+    if (sp.trophyName) {
+      let part = sp.trophyName;
+      if (sp.trophyDonor) part += ` (${sp.trophyDonor})`;
+      trophySponsorParts.push(part);
+    }
+    if (sp.sponsorName) {
+      let part = `Sponsored by ${sp.sponsorName}`;
+      if (sp.sponsorAffix) part += ` (${sp.sponsorAffix})`;
+      trophySponsorParts.push(part);
+    }
+
+    return (
+      <KeepTogether
+        key={`${label}-${sp.className}-${idx}`}
+        style={{
+          flexDirection: 'row',
+          paddingVertical: 2.5,
+          borderBottomWidth: 0.5,
+          borderBottomColor: C.ruleLight,
+        }}
+      >
+        <Text style={{ fontFamily: 'Inter', fontSize: 7, fontWeight: 'bold', width: '30%', color: C.textDark }}>
+          {classHeading}
+        </Text>
+        <Text style={{ fontFamily: 'Times', fontSize: 6.5, fontStyle: 'italic', width: '35%', color: C.textMedium }}>
+          {trophySponsorParts.join('\n') || '—'}
+        </Text>
+        <Text style={{ fontFamily: 'Inter', fontSize: 6.5, width: '35%', color: C.textMedium }}>
+          {sp.prizeDescription || '—'}
+        </Text>
+      </KeepTogether>
+    );
+  };
+
+  const tableHeaderRow = (
+    <View style={{
+      flexDirection: 'row',
+      borderBottomWidth: 1.5,
+      borderBottomColor: C.primary,
+      paddingBottom: 3,
+      marginBottom: 4,
+    }}>
+      <Text style={{ fontFamily: 'Inter', fontSize: 6.5, fontWeight: 'bold', width: '30%', color: C.textDark }}>Class</Text>
+      <Text style={{ fontFamily: 'Inter', fontSize: 6.5, fontWeight: 'bold', width: '35%', color: C.textDark }}>Trophy / Sponsor</Text>
+      <Text style={{ fontFamily: 'Inter', fontSize: 6.5, fontWeight: 'bold', width: '35%', color: C.textDark }}>Prize</Text>
+    </View>
+  );
+
   return (
-    <Page size="A5" style={styles.frontMatterPage} wrap>
-      <SectionBand title="Trophies & Sponsorships" />
+    <PageFrame size="A5" style={styles.frontMatterPage} wrap>
+      {showTrophyTable && (
+        <>
+          {/* Keep banner + table header + first row atomic, matching the
+              same idiom BestAwardsContent and JudgesListContent already
+              use elsewhere in this file — previously MISSING here, so the
+              "Trophies & Sponsorships" banner could be stranded alone at
+              a page foot with every row on the next page. */}
+          <KeepTogether>
+            <SectionBand title="Trophies & Sponsorships" />
+            {tableHeaderRow}
+            {sorted.length > 0 && renderTrophyRow(sorted[0], 0)}
+          </KeepTogether>
+          {sorted.slice(1).map((sp, idx) => renderTrophyRow(sp, idx + 1))}
+        </>
+      )}
 
-      {/* Table header */}
-      <View style={{
-        flexDirection: 'row',
-        borderBottomWidth: 1.5,
-        borderBottomColor: C.primary,
-        paddingBottom: 3,
-        marginBottom: 4,
-      }}>
-        <Text style={{ fontFamily: 'Inter', fontSize: 6.5, fontWeight: 'bold', width: '30%', color: C.textDark }}>Class</Text>
-        <Text style={{ fontFamily: 'Inter', fontSize: 6.5, fontWeight: 'bold', width: '35%', color: C.textDark }}>Trophy / Sponsor</Text>
-        <Text style={{ fontFamily: 'Inter', fontSize: 6.5, fontWeight: 'bold', width: '35%', color: C.textDark }}>Prize</Text>
-      </View>
+      {/* With Thanks — plain donors (name + optional affix, no amount).
+          Built on Flow rather than the old minPresenceAhead-bearing View,
+          which was ALSO wrapped in an outer `<View style={{marginTop}}>` —
+          the same "nested inside an extra wrapping View" issue as
+          JurisdictionBlock, so the band's orphan protection was very
+          likely already a no-op (pdf-kit README). The donor list itself
+          is still NOT wrap={false} — it's elastic and must flow across a
+          page break — but now via BalancedColumns (by measured height)
+          rather than a flexWrap 50%-width layout, so an unevenly-sized
+          donor list (a few very long affixes) doesn't visibly stack one
+          column much taller than the other. */}
+      {donations.length > 0 && (
+        <Flow
+          blocks={[
+            {
+              key: 'with-thanks',
+              heading: (
+                <>
+                  <SectionBand title="With Thanks" />
+                  <Text style={{ fontFamily: 'Inter', fontSize: 8, color: C.textMedium, marginBottom: 5 }}>
+                    With thanks to the following for their kind donations:
+                  </Text>
+                </>
+              ),
+              headingStyle: { marginTop: sponsorships.length > 0 ? 14 : 0 },
+              keepWithHeadingHeight: 60,
+              body: (
+                <BalancedColumns
+                  columns={2}
+                  items={donations.map((d, i) => {
+                    const label = `${d.name}${d.affix ? ` (${d.affix})` : ''}`;
+                    return {
+                      key: `donation-${i}`,
+                      height:
+                        estimateTextHeight(label, {
+                          width: DONATIONS_COLUMN_WIDTH,
+                          family: 'Inter',
+                          size: 8,
+                          lineHeight: 1.3,
+                        }) + 2.5, // + marginBottom, matching the row below
+                      node: (
+                        <Text style={{ fontFamily: 'Inter', fontSize: 8, color: C.textDark, marginBottom: 2.5, paddingRight: 6 }}>
+                          {label}
+                        </Text>
+                      ),
+                    };
+                  })}
+                />
+              ),
+            },
+          ]}
+        />
+      )}
 
-      {sorted.map((sp, idx) => {
-        const classLabel = sp.classNumber != null
-          ? `${sp.classNumber}. ${sp.className}`
-          : sp.className;
+      <CatalogueFolio />
+    </PageFrame>
+  );
+}
 
-        // Build trophy + sponsor combined text
-        const trophySponsorParts: string[] = [];
-        if (sp.trophyName) {
-          let part = sp.trophyName;
-          if (sp.trophyDonor) part += ` (${sp.trophyDonor})`;
-          trophySponsorParts.push(part);
-        }
-        if (sp.sponsorName) {
-          let part = `Sponsored by ${sp.sponsorName}`;
-          if (sp.sponsorAffix) part += ` (${sp.sponsorAffix})`;
-          trophySponsorParts.push(part);
-        }
+// ── Not For Competition Page (Mandy 2026-06-17) ─────────────────
+//
+// NFC entries are exhibited but don't compete for placings, so they carry
+// no classes — which means the by-class grouping drops them entirely and
+// they vanish from the catalogue despite holding a catalogue number. Mandy:
+// "not for competition is not showing in the catalogue." This page lists
+// every NFC dog (cat number, breed, owner) in its own back-of-book section,
+// mirroring the per-entry layout used on the class pages. Returns null when
+// the show has no NFC entries, so ordinary catalogues gain nothing.
 
+export function NotForCompetitionPage({
+  entries,
+}: {
+  entries: CatalogueEntry[];
+}) {
+  const nfc = entries
+    .filter((e) => e.isNfc)
+    .sort((a, b) =>
+      (a.catalogueNumber ?? '').localeCompare(b.catalogueNumber ?? '', undefined, { numeric: true }),
+    );
+  if (nfc.length === 0) return null;
+
+  return (
+    <PageFrame size="A5" style={styles.frontMatterPage} wrap>
+      <SectionBand title="Not For Competition" />
+      <Text style={{ fontFamily: 'Times', fontStyle: 'italic', fontSize: 8, color: C.textMedium, marginBottom: 8 }}>
+        The following dogs are exhibited Not For Competition.
+      </Text>
+      {nfc.map((entry, idx) => {
+        const meta = [
+          entry.breed,
+          entry.sex === 'dog' ? 'Dog' : entry.sex === 'bitch' ? 'Bitch' : null,
+        ].filter(Boolean);
         return (
-          <View
-            key={`${sp.classNumber}-${sp.className}-${idx}`}
-            wrap={false}
-            style={{
-              flexDirection: 'row',
-              paddingVertical: 2.5,
-              borderBottomWidth: 0.5,
-              borderBottomColor: C.ruleLight,
-            }}
+          <KeepTogether
+            key={idx}
+            style={{ marginBottom: 4, paddingBottom: 3, borderBottomWidth: 0.5, borderBottomColor: C.ruleLight }}
           >
-            <Text style={{ fontFamily: 'Inter', fontSize: 7, fontWeight: 'bold', width: '30%', color: C.textDark }}>
-              {classLabel}
-            </Text>
-            <Text style={{ fontFamily: 'Times', fontSize: 6.5, fontStyle: 'italic', width: '35%', color: C.textMedium }}>
-              {trophySponsorParts.join('\n') || '—'}
-            </Text>
-            <Text style={{ fontFamily: 'Inter', fontSize: 6.5, width: '35%', color: C.textMedium }}>
-              {sp.prizeDescription || '—'}
-            </Text>
-          </View>
+            <View style={{ flexDirection: 'row', alignItems: 'baseline' }}>
+              <Text style={styles.catalogueNumber}>{entry.catalogueNumber ?? '—'}</Text>
+              <Text style={styles.dogName}>{uppercaseName(entry.dogName) || 'Unnamed'}</Text>
+            </View>
+            {meta.length > 0 && (
+              <Text style={styles.entryDetail}>{meta.join('  ·  ')}</Text>
+            )}
+            {entry.owners.length > 0 && (
+              <Text style={styles.entryDetail}>
+                <Text style={styles.entryDetailLabel}>
+                  Owner{entry.owners.length > 1 ? 's' : ''}:{' '}
+                </Text>
+                {formatOwnerKC(entry.owners, entry.withholdFromPublication)}
+              </Text>
+            )}
+          </KeepTogether>
         );
       })}
+      <CatalogueFolio />
+    </PageFrame>
+  );
+}
 
-      <Text
-        style={styles.footer}
-        render={({ pageNumber, totalPages }) =>
-          `Page ${pageNumber} of ${totalPages}  ·  Generated by Remi`
-        }
-        fixed
-      />
-    </Page>
+// ── Principal Awards write-in page (Mandy 2026-06-17) ───────────
+//
+// Back-of-book results page. Once every class is judged the principal
+// awards (Best of Breed, Challenge Certificates, Best Puppy in Show, …) are
+// decided; this gives the secretary/steward a clean write-in line per award
+// right after the classes. The list is show-type aware (championship shows
+// list CCs + Reserve CCs) and is drawn from lib/best-awards — the same
+// source the judges' book uses, so the two never drift. Any custom awards
+// the secretary added are appended.
+
+const bestsWriteInStyles = {
+  row: {
+    flexDirection: 'row' as const,
+    alignItems: 'flex-end' as const,
+    marginBottom: 13,
+  },
+  award: {
+    fontFamily: 'Inter',
+    fontSize: 9.5,
+    fontWeight: 'bold' as const,
+    color: C.textDark,
+    width: '45%',
+    paddingRight: 8,
+  } as const,
+  line: {
+    flex: 1,
+    borderBottomWidth: 0.75,
+    borderBottomColor: C.textLight,
+    borderBottomStyle: 'dotted' as const,
+    height: 12,
+  } as const,
+};
+
+export function BestsWriteInPage({ show }: FrontMatterProps) {
+  const awards = buildBestAwards(show.showType, show.bestAwards ?? []);
+  if (awards.length === 0) return null;
+
+  return (
+    <PageFrame size="A5" style={styles.frontMatterPage} wrap>
+      <SectionBand title="Best Awards" />
+      <Text style={{ fontFamily: 'Times', fontStyle: 'italic', fontSize: 8, color: C.textMedium, marginBottom: 12 }}>
+        To be completed as the principal awards are decided.
+      </Text>
+      {awards.map((award, i) => (
+        <KeepTogether key={i} style={bestsWriteInStyles.row}>
+          <Text style={bestsWriteInStyles.award}>{award}</Text>
+          <View style={bestsWriteInStyles.line} />
+        </KeepTogether>
+      ))}
+      <CatalogueFolio />
+    </PageFrame>
   );
 }

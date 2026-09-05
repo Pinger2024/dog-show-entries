@@ -1,12 +1,11 @@
 import type { MetadataRoute } from 'next';
 import { db } from '@/server/db';
-import { shows, dogs } from '@/server/db/schema';
-import { and, isNull, ne } from 'drizzle-orm';
+import { shows, dogs, entries } from '@/server/db/schema';
+import { and, eq, isNull, ne } from 'drizzle-orm';
 
 const BASE_URL = 'https://remishowmanager.co.uk';
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
-  // Static pages
   const staticPages: MetadataRoute.Sitemap = [
     { url: BASE_URL, changeFrequency: 'weekly', priority: 1 },
     { url: `${BASE_URL}/shows`, changeFrequency: 'daily', priority: 0.9 },
@@ -16,7 +15,8 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     { url: `${BASE_URL}/features`, changeFrequency: 'monthly', priority: 0.6 },
   ];
 
-  // All non-draft shows (published, entries_open, entries_closed, completed, etc.)
+  // Live shows only — drafts are excluded (cancelled shows stay so Google sees the
+  // status update in the JSON-LD before deindexing).
   const allShows = await db
     .select({ id: shows.id, slug: shows.slug, updatedAt: shows.updatedAt })
     .from(shows)
@@ -40,13 +40,19 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     ];
   });
 
-  // Public dog profiles (dogs with at least a registered name)
-  const allDogs = await db
+  // Only dogs with at least one confirmed entry — every other profile is thin
+  // content that dilutes crawl budget without ranking for anything.
+  const dogsWithHistory = await db
     .select({ id: dogs.id, updatedAt: dogs.updatedAt })
     .from(dogs)
-    .where(isNull(dogs.deletedAt));
+    .innerJoin(
+      entries,
+      and(eq(entries.dogId, dogs.id), eq(entries.status, 'confirmed'), isNull(entries.deletedAt))
+    )
+    .where(isNull(dogs.deletedAt))
+    .groupBy(dogs.id, dogs.updatedAt);
 
-  const dogPages: MetadataRoute.Sitemap = allDogs.map((dog) => ({
+  const dogPages: MetadataRoute.Sitemap = dogsWithHistory.map((dog) => ({
     url: `${BASE_URL}/dog/${dog.id}`,
     lastModified: dog.updatedAt ?? undefined,
     changeFrequency: 'weekly' as const,

@@ -12,6 +12,8 @@ import {
   ChevronDown,
   Loader2,
   MapPin,
+  Car,
+  Download,
 } from 'lucide-react';
 import { trpc } from '@/lib/trpc/client';
 import { formatCurrency } from '@/lib/date-utils';
@@ -86,10 +88,21 @@ export default function EntriesPage() {
     () => new Map(cataloguePurchases?.map((p) => [p.showId, p])),
     [cataloguePurchases]
   );
+  const { data: parkingPasses } = trpc.orders.myParkingPasses.useQuery();
+  const parkingMap = useMemo(() => {
+    const map = new Map<string, ParkingPass[]>();
+    for (const pass of parkingPasses ?? []) {
+      const existing = map.get(pass.showId);
+      if (existing) existing.push(pass);
+      else map.set(pass.showId, [pass]);
+    }
+    return map;
+  }, [parkingPasses]);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
   const [collapsedPast, setCollapsedPast] = useState(true);
 
   const allEntries = data?.items ?? [];
+  const unfinished = data?.unfinished ?? [];
 
   // Apply status filter
   const entries = statusFilter === 'all'
@@ -129,7 +142,7 @@ export default function EntriesPage() {
     );
   }
 
-  if (allEntries.length === 0) {
+  if (allEntries.length === 0 && unfinished.length === 0) {
     return (
       <div className="space-y-4">
         <PageHeader>
@@ -154,13 +167,50 @@ export default function EntriesPage() {
         <div>
           <PageTitle>My Entries</PageTitle>
           <PageDescription className="mt-1 flex flex-wrap gap-x-2 gap-y-0.5 text-sm">
-            {confirmedCount > 0 && <span className="font-medium text-emerald-600">{confirmedCount} confirmed</span>}
-            {pendingCount > 0 && <span className="font-medium text-amber-600">{pendingCount} pending</span>}
+            {confirmedCount > 0 && <span className="font-medium text-se-fresh-deep">{confirmedCount} confirmed</span>}
+            {pendingCount > 0 && <span className="font-medium text-se-honey-deep">{pendingCount} pending</span>}
             {withdrawnCount > 0 && <span>{withdrawnCount} withdrawn</span>}
             {totalFees > 0 && <span className="font-medium text-foreground">{formatCurrency(totalFees)} total</span>}
           </PageDescription>
         </div>
       </PageHeader>
+
+      {/* Unfinished checkout notice — an entry that was started but never
+          paid for. Shown as a gentle prompt, NOT a real entry row
+          (Amanda 2026-05-28). */}
+      {unfinished.length > 0 && (
+        <div className="rounded-xl border border-se-honey-line bg-se-honey-soft p-4 sm:p-5">
+          <div className="flex items-start gap-3">
+            <CalendarDays className="mt-0.5 size-5 shrink-0 text-se-honey-deep" />
+            <div className="min-w-0 flex-1">
+              <p className="font-semibold text-se-honey-ink">
+                {unfinished.length === 1 ? 'You have an entry to finish' : 'You have entries to finish'}
+              </p>
+              <p className="mt-1 text-sm text-se-honey-deep">
+                {unfinished.length === 1
+                  ? "You started entering but didn't complete payment, so it's not booked in yet."
+                  : "You started these entries but didn't complete payment, so they're not booked in yet."}
+              </p>
+              <div className="mt-3 space-y-2">
+                {unfinished.map((u) => (
+                  <div
+                    key={u.id}
+                    className="flex flex-col gap-2 rounded-lg border border-se-honey-line bg-se-surface p-3 sm:flex-row sm:items-center sm:justify-between"
+                  >
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-medium text-foreground">{u.dogName}</p>
+                      <p className="truncate text-xs text-muted-foreground">{u.showName}</p>
+                    </div>
+                    <Button asChild size="sm" className="min-h-[2.75rem] shrink-0 bg-se-honey text-se-honey-ink hover:bg-se-honey-deep hover:text-white">
+                      <Link href={`/shows/${u.showSlug}/enter`}>Finish entry</Link>
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Status filter pills */}
       <div className="flex flex-wrap gap-2">
@@ -199,12 +249,12 @@ export default function EntriesPage() {
       {upcoming.length > 0 && (
         <section>
           <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold uppercase tracking-wider text-muted-foreground">
-            <div className="size-2 rounded-full bg-emerald-500" />
+            <div className="size-2 rounded-full bg-se-fresh" />
             Upcoming ({upcoming.reduce((sum, g) => sum + g.entries.length, 0)} entries)
           </h2>
           <div className="space-y-4">
             {upcoming.map((group) => (
-              <ShowGroupCard key={group.showId} group={group} catalogueMap={catalogueMap} />
+              <ShowGroupCard key={group.showId} group={group} catalogueMap={catalogueMap} parkingMap={parkingMap} />
             ))}
           </div>
         </section>
@@ -224,7 +274,7 @@ export default function EntriesPage() {
           {!collapsedPast && (
             <div className="space-y-4">
               {past.map((group) => (
-                <ShowGroupCard key={group.showId} group={group} isPast catalogueMap={catalogueMap} />
+                <ShowGroupCard key={group.showId} group={group} isPast catalogueMap={catalogueMap} parkingMap={parkingMap} />
               ))}
             </div>
           )}
@@ -235,9 +285,21 @@ export default function EntriesPage() {
 }
 
 type CataloguePurchase = RouterOutputs['shows']['getMyCataloguePurchases'][number];
+type ParkingPass = RouterOutputs['orders']['myParkingPasses'][number];
 
-function ShowGroupCard({ group, isPast, catalogueMap }: { group: ShowGroup; isPast?: boolean; catalogueMap?: Map<string, CataloguePurchase> }) {
+function ShowGroupCard({
+  group,
+  isPast,
+  catalogueMap,
+  parkingMap,
+}: {
+  group: ShowGroup;
+  isPast?: boolean;
+  catalogueMap?: Map<string, CataloguePurchase>;
+  parkingMap?: Map<string, ParkingPass[]>;
+}) {
   const catalogue = catalogueMap?.get(group.showId);
+  const parkingPasses = parkingMap?.get(group.showId) ?? [];
 
   return (
     <Card className={isPast ? 'opacity-70' : ''}>
@@ -277,14 +339,41 @@ function ShowGroupCard({ group, isPast, catalogueMap }: { group: ShowGroup; isPa
 
       {/* Catalogue link */}
       {catalogue && (
-        <div className="border-t bg-emerald-50 px-3 py-2.5 dark:bg-emerald-900/20 sm:px-4">
+        <div className="border-t bg-se-fresh-soft px-3 py-2.5 sm:px-4">
           <Link
             href={`/shows/${catalogue.showSlug ?? group.showId}/catalogue`}
-            className="flex items-center gap-2 text-sm font-medium text-emerald-700 dark:text-emerald-400"
+            className="flex items-center gap-2 text-sm font-medium text-se-fresh-deep"
           >
             <BookOpen className="size-4" />
             {catalogue.isAvailable ? 'View Online Catalogue' : 'Catalogue — available soon'}
           </Link>
+        </div>
+      )}
+
+      {/* Extras — pre-paid parking pass(es) purchased at checkout */}
+      {parkingPasses.length > 0 && (
+        <div className="border-t bg-muted/30 px-3 py-2.5 sm:px-4">
+          <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+            Extras
+          </p>
+          <div className="space-y-2">
+            {parkingPasses.map((pass) => (
+              <div key={pass.orderId} className="flex items-center justify-between gap-3">
+                <div className="flex min-w-0 flex-1 items-center gap-2 text-sm font-medium">
+                  <Car className="size-4 shrink-0 text-muted-foreground" />
+                  <span className="truncate">
+                    Parking pass{pass.quantity > 1 ? ` × ${pass.quantity}` : ''}
+                  </span>
+                </div>
+                <Button asChild size="sm" variant="outline" className="min-h-[2.75rem] shrink-0">
+                  <a href={`/api/parking-pass/${pass.orderId}`}>
+                    <Download className="size-4" />
+                    Download
+                  </a>
+                </Button>
+              </div>
+            ))}
+          </div>
         </div>
       )}
     </Card>

@@ -6,7 +6,6 @@ import { format, parseISO } from 'date-fns';
 import {
   BookOpen,
   CalendarDays,
-  Download,
   Eye,
   Loader2,
   Lock,
@@ -18,6 +17,9 @@ import {
   Card,
   CardContent,
 } from '@/components/ui/card';
+import { SE_H } from '@/components/show-experience/tokens';
+import { cn } from '@/lib/utils';
+import { CatalogueJobButton } from '@/components/catalogue/catalogue-job-button';
 
 export default function CataloguePage() {
   const params = useParams();
@@ -51,7 +53,6 @@ export default function CataloguePage() {
   }
 
   const { showId, showName, hasPurchased, isAvailable, startDate } = data;
-  const catalogueUrl = `/api/catalogue/${showId}/standard`;
 
   // Not purchased
   if (!hasPurchased) {
@@ -63,7 +64,7 @@ export default function CataloguePage() {
               <Lock className="size-7 text-muted-foreground" />
             </div>
             <div>
-              <h1 className="text-xl font-bold">{showName}</h1>
+              <h1 className={cn(SE_H, 'text-xl')}>{showName}</h1>
               <p className="mt-2 text-sm text-muted-foreground">
                 The online catalogue is available to exhibitors who purchased it when entering.
               </p>
@@ -86,25 +87,25 @@ export default function CataloguePage() {
       <div className="mx-auto max-w-md px-4 py-12">
         <Card>
           <CardContent className="space-y-4 py-8 text-center">
-            <div className="mx-auto flex size-14 items-center justify-center rounded-full bg-amber-100 dark:bg-amber-900/30">
-              <CalendarDays className="size-7 text-amber-600 dark:text-amber-400" />
+            <div className="mx-auto flex size-14 items-center justify-center rounded-full bg-se-honey-soft">
+              <CalendarDays className="size-7 text-se-honey-deep" />
             </div>
             <div>
-              <h1 className="text-xl font-bold">{showName}</h1>
+              <h1 className={cn(SE_H, 'text-xl')}>{showName}</h1>
               <h2 className="mt-1 text-base font-semibold text-muted-foreground">
                 Catalogue Coming Soon
               </h2>
               <p className="mt-2 text-sm text-muted-foreground">
-                Your online catalogue will be available once entries close
+                Your online catalogue unlocks on the morning of the show
                 {startDate && (
-                  <>, ahead of the show on{' '}
+                  <>{' '}—{' '}
                   <span className="font-medium text-foreground">
-                    {format(parseISO(startDate), 'dd MMMM yyyy')}
+                    {format(parseISO(startDate), 'EEEE d MMMM yyyy')}
                   </span></>
                 )}.
               </p>
               <p className="mt-1 text-sm text-muted-foreground">
-                We&apos;ll include the link in your show reminder email too.
+                We&apos;ll email you a download link first thing that morning so it&apos;s ready before judging starts.
               </p>
             </div>
             <Button asChild variant="outline" className="min-h-[2.75rem]">
@@ -121,31 +122,29 @@ export default function CataloguePage() {
     <div className="mx-auto max-w-md px-4 py-12">
       <Card>
         <CardContent className="space-y-5 py-8 text-center">
-          <div className="mx-auto flex size-14 items-center justify-center rounded-full bg-emerald-100 dark:bg-emerald-900/30">
-            <BookOpen className="size-7 text-emerald-600 dark:text-emerald-400" />
+          <div className="mx-auto flex size-14 items-center justify-center rounded-full bg-se-fresh-soft">
+            <BookOpen className="size-7 text-se-fresh-deep" />
           </div>
           <div>
-            <h1 className="text-xl font-bold">{showName}</h1>
-            <h2 className="mt-1 text-base font-semibold text-emerald-600 dark:text-emerald-400">
+            <h1 className={cn(SE_H, 'text-xl')}>{showName}</h1>
+            <h2 className="mt-1 text-base font-semibold text-se-fresh-deep">
               Online Catalogue
             </h2>
           </div>
           <div className="flex flex-col gap-3">
-            <Button asChild className="min-h-[2.75rem] w-full">
-              <a href={`${catalogueUrl}?preview`} target="_blank" rel="noopener noreferrer">
-                <Eye className="mr-2 size-4" />
-                View Catalogue
-              </a>
-            </Button>
-            <Button asChild variant="outline" className="min-h-[2.75rem] w-full">
-              <a href={catalogueUrl} download>
-                <Download className="mr-2 size-4" />
-                Download PDF
-              </a>
-            </Button>
+            <CatalogueJobButton
+              icon={<Eye className="mr-2 size-4" />}
+              label="View Catalogue"
+              readyLabel="Ready — Open Catalogue"
+              showId={showId}
+              format="standard"
+              className="w-full"
+            />
           </div>
           <p className="text-xs text-muted-foreground">
-            Opens as a PDF. On mobile, your phone&apos;s PDF viewer will open automatically.
+            Tap to prepare your catalogue, then open it as a PDF — this can take a
+            minute for a large show. On mobile, your phone&apos;s PDF viewer will
+            open automatically.
           </p>
         </CardContent>
       </Card>

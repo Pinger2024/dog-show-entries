@@ -1,31 +1,32 @@
 'use client';
 
-import { useState } from 'react';
-import { useSession } from 'next-auth/react';
+import { useEffect, useState } from 'react';
+import Link from 'next/link';
 import {
   Award,
+  BarChart3,
+  BookMarked,
   BookOpen,
   Calendar,
-  CheckCircle,
+  CheckSquare,
   ClipboardList,
-  Check,
   Download,
-  ExternalLink,
-  FileText,
+  FileSpreadsheet,
   Gavel,
   Hash,
   List,
+  ListOrdered,
+  Loader2,
   Map,
+  MessageSquare,
+  PoundSterling,
   Printer,
-  Share2,
-  Sparkles,
   Trophy,
   UserX,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { trpc } from '@/lib/trpc';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
 import {
   Card,
   CardContent,
@@ -40,453 +41,608 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Label } from '@/components/ui/label';
-import { Switch } from '@/components/ui/switch';
+import { downloadCsv } from '../_lib/show-utils';
 import { useShowId } from '../_lib/show-context';
+import { documentRowVisible } from '../_lib/document-eligibility';
+import { PdfViewerButton } from '../_components/pdf-viewer-button';
+import { CatalogueJobButton } from '@/components/catalogue/catalogue-job-button';
+import { buildAbsenteeRow, buildFinancialStatementRow, membershipClaimLabel } from '@/lib/report-rows';
 
-const placementPreviews = [
-  { label: '1st', colour: 'bg-red-100 text-red-800 border-red-300' },
-  { label: '2nd', colour: 'bg-blue-100 text-blue-800 border-blue-300' },
-  { label: '3rd', colour: 'bg-yellow-100 text-yellow-800 border-yellow-300' },
-  { label: 'Reserve', colour: 'bg-green-100 text-green-800 border-green-300' },
-  { label: 'VHC', colour: 'bg-purple-100 text-purple-800 border-purple-300' },
-];
-
-interface DocumentLink {
-  label: string;
-  href: string;
-  icon: React.ReactNode;
-  description: string;
-  badge?: string;
+/**
+ * Fetch a same-origin file and kick off a download via a temporary anchor +
+ * object URL. Works inside an iOS-PWA standalone session where a plain
+ * <a download> link is silently ignored.
+ */
+async function downloadBlob(url: string, filename: string) {
+  const res = await fetch(url, { credentials: 'include' });
+  if (!res.ok) throw new Error(`Download failed: ${res.status}`);
+  const blob = await res.blob();
+  const blobUrl = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = blobUrl;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(blobUrl), 10_000);
 }
 
-function DocumentLinkCard({ doc }: { doc: DocumentLink }) {
-  const [copied, setCopied] = useState(false);
-
-  const fullUrl = typeof window !== 'undefined'
-    ? `${window.location.origin}${doc.href}`
-    : doc.href;
-
-  async function handleShare(e: React.MouseEvent) {
-    e.preventDefault();
-    e.stopPropagation();
-
-    if (typeof navigator !== 'undefined' && navigator.share) {
-      try {
-        await navigator.share({ title: doc.label, url: fullUrl });
-        return;
-      } catch (err) {
-        if ((err as Error).name === 'AbortError') return;
-      }
-    }
-    // Fallback: copy link
-    await navigator.clipboard.writeText(fullUrl);
-    setCopied(true);
-    toast.success('PDF link copied');
-    setTimeout(() => setCopied(false), 2000);
-  }
-
+function DocSection({
+  title,
+  description,
+  icon: Icon,
+  children,
+}: {
+  title: string;
+  description: string;
+  icon: React.ElementType;
+  children: React.ReactNode;
+}) {
   return (
-    <div className="flex items-start gap-3 rounded-lg border p-3 transition-colors hover:bg-muted">
-      <div className="mt-0.5 shrink-0 text-muted-foreground">
-        {doc.icon}
-      </div>
-      <div className="min-w-0 flex-1">
-        <p className="font-medium">
-          {doc.label}
-          {doc.badge && (
-            <Badge variant="secondary" className="ml-2 text-xs">
-              {doc.badge}
-            </Badge>
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <Icon className="size-5" />
+          {title}
+        </CardTitle>
+        <CardDescription>{description}</CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-2">{children}</CardContent>
+    </Card>
+  );
+}
+
+function DocRow({
+  icon,
+  label,
+  description,
+  note,
+  extra,
+  children,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  description: string;
+  note?: string;
+  /** Optional calm secondary detail line, below description/note — e.g. the
+   *  prize-card "needed" counts. Kept separate from `note` (which is a
+   *  warning-styled callout) so it never reads as an alert. */
+  extra?: React.ReactNode;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="flex flex-col gap-3 rounded-lg border p-3 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex items-start gap-3">
+        <div className="mt-0.5 shrink-0 text-muted-foreground">{icon}</div>
+        <div className="min-w-0">
+          <p className="font-medium">{label}</p>
+          <p className="text-xs text-muted-foreground">{description}</p>
+          {note && (
+            <p className="mt-1 text-xs font-medium text-se-honey-deep">{note}</p>
           )}
-        </p>
-        <p className="text-xs text-muted-foreground">
-          {doc.description}
-        </p>
-        <div className="mt-2 flex gap-2">
-          <a
-            href={doc.href}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex min-h-[2.75rem] items-center gap-1.5 rounded-md border bg-background px-2.5 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-muted"
-          >
-            <ExternalLink className="size-3" />
-            Open
-          </a>
-          <button
-            onClick={handleShare}
-            className="inline-flex min-h-[2.75rem] items-center gap-1.5 rounded-md border bg-background px-2.5 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-          >
-            {copied ? <Check className="size-3 text-emerald-600" /> : <Share2 className="size-3" />}
-            {copied ? 'Copied!' : 'Share'}
-          </button>
+          {extra && (
+            <p className="mt-1 text-xs text-muted-foreground">{extra}</p>
+          )}
         </div>
       </div>
+      <div className="flex flex-wrap gap-2 sm:shrink-0">{children}</div>
     </div>
   );
 }
 
-function DocumentGrid({ documents }: { documents: DocumentLink[] }) {
+/** CSV download button that works for both client-computed CSVs (onClick)
+ * and server-generated CSV routes (href), routed through downloadBlob so
+ * iOS PWA users get a real save instead of a silently-ignored tap. */
+function CsvButton({
+  label,
+  onGenerate,
+  disabled,
+}: {
+  label: string;
+  onGenerate: () => void | Promise<void>;
+  disabled?: boolean;
+}) {
+  const [busy, setBusy] = useState(false);
   return (
-    <div className="grid gap-3 sm:grid-cols-2">
-      {documents.map((doc) => (
-        <DocumentLinkCard key={doc.label} doc={doc} />
-      ))}
-    </div>
+    <Button
+      variant="outline"
+      className="min-h-[2.75rem]"
+      disabled={disabled || busy}
+      onClick={async () => {
+        setBusy(true);
+        try {
+          await onGenerate();
+        } catch (err) {
+          toast.error(`Download failed — ${(err as Error).message}`);
+        } finally {
+          setBusy(false);
+        }
+      }}
+    >
+      {busy ? <Loader2 className="size-4 animate-spin" /> : <FileSpreadsheet className="size-4" />}
+      {label}
+    </Button>
+  );
+}
+
+/** Excel download button for a server-generated .xlsx report (Mandy's
+ * original ask: "the option to generate on excel or pdf"). Same shape as
+ * CsvButton — self-contained busy state, routed through downloadBlob so
+ * iOS PWA users get a real save. Every xlsx route reuses the exact row
+ * builder or DB query its PDF/CSV sibling uses, so the two can't disagree. */
+function XlsxButton({ href, filename, label = 'Excel' }: { href: string; filename: string; label?: string }) {
+  const [busy, setBusy] = useState(false);
+  return (
+    <Button
+      variant="outline"
+      className="min-h-[2.75rem]"
+      disabled={busy}
+      onClick={async () => {
+        setBusy(true);
+        try {
+          await downloadBlob(href, filename);
+        } catch (err) {
+          toast.error(`Download failed — ${(err as Error).message}`);
+        } finally {
+          setBusy(false);
+        }
+      }}
+    >
+      {busy ? <Loader2 className="size-4 animate-spin" /> : <FileSpreadsheet className="size-4" />}
+      {label}
+    </Button>
   );
 }
 
 export default function DocumentsPage() {
   const showId = useShowId();
+  const [downloadingKey, setDownloadingKey] = useState<string | null>(null);
 
-  const { data: catalogueData } =
-    trpc.secretary.getCatalogueData.useQuery({ showId });
-  const { data: stats } =
-    trpc.secretary.getShowStats.useQuery({ showId });
+  async function handleDownload(key: string, href: string, filename: string) {
+    if (downloadingKey) return;
+    setDownloadingKey(key);
+    try {
+      await downloadBlob(href, filename);
+    } catch (err) {
+      toast.error(`Download failed — ${(err as Error).message}`);
+    } finally {
+      setDownloadingKey(null);
+    }
+  }
 
-  const entries = catalogueData?.entries ?? [];
-  const hasNumbers = entries.some((e) => e.catalogueNumber);
+  const { data: show } = trpc.shows.getById.useQuery({ id: showId });
+  const { data: catalogueData } = trpc.secretary.getCatalogueData.useQuery({ showId });
+  const { data: stats } = trpc.secretary.getShowStats.useQuery({ showId });
+  const { data: showJudges } = trpc.secretary.getShowJudges.useQuery({ showId });
+  const { data: entryReport } = trpc.secretary.getEntryReport.useQuery({ showId });
+  const { data: catalogueOrders } = trpc.secretary.getCatalogueOrders.useQuery({ showId });
+  const { data: extrasSummary } = trpc.secretary.getExtrasSummary.useQuery({ showId });
+  const { data: paymentReport } = trpc.secretary.getPaymentReport.useQuery({ showId });
+  const { data: withdrawnAndAbsent } = trpc.secretary.getAbsenteeList.useQuery({ showId });
+  const { data: prizeCardCounts } = trpc.secretary.getPrizeCardCounts.useQuery({ showId });
 
-  // Admin-only UI gate — only Amanda + Michael see internal Print Shop
-  // fulfilment tools like the Mixam overprint generator.
-  const { data: session } = useSession();
-  const isAdmin = session?.user?.role === 'admin';
+  const resultsFinalised = Boolean(catalogueData?.show?.resultsPublishedAt);
+  // SV / WUSV regional shows get the graded results report + spreadsheet the
+  // regional group circulates after the show (Mandy 2026-06-27). RKC shows
+  // use the Marked Catalogue for this instead — never show both.
+  const isWusvShow = stats?.showRuleset === 'wusv';
+  const docCtx = { showRuleset: stats?.showRuleset, showType: show?.showType };
+  const isKcChampionship = documentRowVisible('sh01', docCtx);
 
-  // Prize card options
-  const [prizeCardPlacements, setPrizeCardPlacements] = useState('5');
-  const [includeJudge, setIncludeJudge] = useState(true);
-  const [prizeCardStyle, setPrizeCardStyle] = useState<'filled' | 'outline'>('outline');
+  // Distinct judges (by id) so a multi-judge show can offer a separate Judge's
+  // Book per judge — e.g. the breed judge's book and the Junior Handling
+  // judge's book printed separately (Mandy 2026-06-19).
+  const distinctJudges = (() => {
+    const seen: Record<string, boolean> = {};
+    const out: { id: string; name: string }[] = [];
+    for (const ja of showJudges ?? []) {
+      const jid = ja.judge?.id;
+      const jname = ja.judge?.name;
+      if (jid && jname && !seen[jid]) {
+        seen[jid] = true;
+        out.push({ id: jid, name: jname });
+      }
+    }
+    return out;
+  })();
 
-  const catalogueDocuments: DocumentLink[] = hasNumbers
-    ? [
-        {
-          label: 'Standard Catalogue',
-          href: `/api/catalogue/${showId}/standard`,
-          icon: <FileText className="size-4" />,
-          description: 'RKC-format catalogue grouped by breed and sex',
-        },
-        {
-          label: 'Catalogue by Class',
-          href: `/api/catalogue/${showId}/by-class`,
-          icon: <List className="size-4" />,
-          description: 'Entries grouped by class number',
-        },
-        {
-          label: 'Judging Catalogue',
-          href: `/api/catalogue/${showId}/judging`,
-          icon: <Gavel className="size-4" />,
-          description: 'Condensed two-column format with write-in placements — minimises print cost',
-        },
-        {
-          label: 'Absentee List',
-          href: `/api/catalogue/${showId}/absentees`,
-          icon: <Download className="size-4" />,
-          description: 'Withdrawn entries with catalogue numbers',
-        },
-      ]
-    : [];
+  // Ring Numbers format — one card per A4 page (grid, home printing) or
+  // one ring number per page (professional/booklet printing). This is an
+  // output option, not two different documents, so it gets one row with a
+  // format control rather than two separate buttons (Mandy: two buttons for
+  // one route reads as two documents).
+  const [ringNumberFormat, setRingNumberFormat] = useState<'grid' | 'single'>('grid');
+  const ringNumbersHref = `/api/ring-numbers/${showId}${ringNumberFormat === 'single' ? '?format=single' : ''}`;
 
-  const preShowDocuments: DocumentLink[] = [
-    {
-      label: 'Show Schedule',
-      href: `/api/schedule/${showId}`,
-      icon: <Calendar className="size-4" />,
-      description:
-        'Complete schedule with cover page, judges, classes, entry fees, and postal entry form',
-    },
-  ];
+  // Prize cards — official template design, one page per placement
+  // (1st/2nd/3rd/Reserve) with the club/show/judge details overprinted.
+  // No customisation options: the artwork and layout are fixed.
+  const prizeCardHref = `/api/prize-cards/${showId}`;
+  const prizeCardPrintHref = `/api/prize-cards/${showId}/print`;
 
-  const showDayDocuments: DocumentLink[] = [
-    ...(hasNumbers
-      ? [
-          {
-            label: "Judge's Book",
-            href: `/api/judges-book/${showId}`,
-            icon: <ClipboardList className="size-4" />,
-            description:
-              'One page per class with exhibit numbers, placement columns, and signature area',
-          },
-          {
-            label: 'Ring Numbers (A4 Grid)',
-            href: `/api/ring-numbers/${showId}`,
-            icon: <Hash className="size-4" />,
-            description:
-              '6 ring number cards per A4 page — print on card stock, cut along the guidelines',
-          },
-          {
-            label: 'Ring Numbers (Single)',
-            href: `/api/ring-numbers/${showId}?format=single`,
-            icon: <Hash className="size-4" />,
-            description:
-              'One ring number per page — for professional printing or booklet binding',
-          },
-        ]
-      : []),
-    {
-      label: 'Ring Plan',
-      href: `/api/ring-board/${showId}`,
-      icon: <Map className="size-4" />,
-      description:
-        'Ring assignments showing judges, breeds, and classes with entry counts',
-    },
-  ];
+  // Calm one-liner so Mandy can order just what she needs instead of a full
+  // suite per class (her words, 2026-07-30). Nothing shown while the counts
+  // are still loading — this is a secondary detail, not worth a spinner.
+  const prizeCardCountsLine = !prizeCardCounts
+    ? null
+    : prizeCardCounts.total === 0
+      ? 'No entries yet — card counts appear as entries come in'
+      : `For current entries: ${prizeCardCounts.total} card${prizeCardCounts.total === 1 ? '' : 's'} — ` +
+        `${prizeCardCounts.first}× 1st · ${prizeCardCounts.second}× 2nd · ` +
+        `${prizeCardCounts.third}× 3rd · ${prizeCardCounts.reserve}× Reserve`;
 
-  const prizeCardQuery = `placements=${prizeCardPlacements}&judge=${includeJudge}&style=${prizeCardStyle}`;
-  const prizeCardHref = `/api/prize-cards/${showId}?${prizeCardQuery}`;
-  const prizeCardPrintHref = `/api/prize-cards/${showId}/print?${prizeCardQuery}`;
+  function exportEntryReportCsv() {
+    const headers = ['Entry Date', 'Status', 'Exhibitor', 'Email', 'Dog', 'Breed', 'Group', 'Sex', 'Classes', 'Fee (£)', 'NFC', 'Membership'];
+    const rows = (entryReport ?? []).map((e) => [
+      e.entryDate ? new Date(e.entryDate).toLocaleDateString('en-GB') : '',
+      e.status,
+      e.exhibitor?.name ?? '',
+      e.exhibitor?.email ?? '',
+      e.dog?.registeredName ?? 'Junior Handler',
+      e.dog?.breed?.name ?? '',
+      e.dog?.breed?.group?.name ?? '',
+      e.dog?.sex ?? '',
+      e.entryClasses.map((ec) => ec.showClass?.classDefinition?.name ?? '').filter(Boolean).join('; '),
+      (e.totalFee / 100).toFixed(2),
+      e.isNfc ? 'Yes' : 'No',
+      membershipClaimLabel(e.order),
+    ]);
+    downloadCsv(headers, rows, `entry-report-${showId}`);
+  }
 
-  const postShowDocuments: DocumentLink[] = hasNumbers
-    ? [
-        {
-          label: 'Marked Catalogue',
-          href: `/api/catalogue/${showId}/marked`,
-          icon: <CheckCircle className="size-4" />,
-          description:
-            'Full catalogue with results, placements, absentees, and awards annotated — required by the RKC within 14 days for championship shows',
-          badge: 'RKC',
-        },
-        {
-          label: 'Absentee Report',
-          href: `/api/absentee-report/${showId}`,
-          icon: <UserX className="size-4" />,
-          description:
-            'All entries marked absent — dog name, catalogue number, breed, class, and owner',
-        },
-      ]
-    : [];
+  function exportPaymentReportCsv() {
+    const headers = ['Exhibitor', 'Email', 'Item', 'Entry Fee (£)', 'Add-ons (£)', 'Total (£)', 'Status', 'Payments'];
+    const rows = (paymentReport?.rows ?? []).map((r) => [
+      r.exhibitor?.name ?? '',
+      r.exhibitor?.email ?? '',
+      r.itemDetail ? `${r.itemLabel} (${r.itemDetail})` : r.itemLabel,
+      (r.entryFee / 100).toFixed(2),
+      (r.addons / 100).toFixed(2),
+      (r.total / 100).toFixed(2),
+      r.status,
+      r.payments.map((p) => `${p.status}: £${(p.amount / 100).toFixed(2)}`).join('; '),
+    ]);
+    downloadCsv(headers, rows, `payment-report-${showId}`);
+  }
+
+  function exportCatalogueOrdersCsv() {
+    const printed = catalogueOrders?.printed ?? [];
+    const online = catalogueOrders?.online ?? [];
+    const headers = ['Type', 'Name', 'Email', 'Quantity'];
+    const rows = [
+      ...printed.map((p) => ['Printed', p.name, p.email, String(p.quantity)]),
+      ...online.map((o) => ['Online', o.name, o.email, String(o.quantity)]),
+    ];
+    downloadCsv(headers, rows, `catalogue-orders-${showId}`);
+  }
+
+  function exportExtrasSummaryCsv() {
+    if (!extrasSummary) return;
+    const headers = ['Section', 'Name', 'Email', 'Phone', 'Detail / Quantity', 'Total (£)'];
+    const rows: string[][] = [];
+    for (const section of extrasSummary.sundrySections) {
+      for (const buyer of section.buyers) {
+        rows.push([
+          section.label,
+          buyer.name ?? '',
+          buyer.email ?? '',
+          buyer.phone ?? '',
+          `Qty ${buyer.quantity}`,
+          ((buyer.quantity * buyer.unitPrice) / 100).toFixed(2),
+        ]);
+      }
+    }
+    for (const sp of extrasSummary.classSponsors) {
+      rows.push(['Class Sponsor', sp.sponsorName, '', '', sp.detail, sp.amountPence ? (sp.amountPence / 100).toFixed(2) : '']);
+    }
+    for (const sp of extrasSummary.showSponsors) {
+      rows.push(['Show Sponsor', sp.sponsorName, sp.email ?? '', sp.phone ?? '', sp.detail, sp.amountPence ? (sp.amountPence / 100).toFixed(2) : '']);
+    }
+    downloadCsv(headers, rows, `extras-summary-${showId}`);
+  }
+
+  // Shared with this report's .xlsx twin via lib/report-rows.ts — the same
+  // pure row-builder feeds both outputs so they can never disagree.
+  function exportWithdrawnAndAbsentCsv() {
+    const headers = ['Catalogue No', 'Dog Name', 'Breed', 'Sex', 'Classes', 'Owner', 'Exhibitor', 'Status'];
+    const rows = (withdrawnAndAbsent ?? []).map((e) => {
+      const r = buildAbsenteeRow(e);
+      return [r.catalogueNumber, r.dogName, r.breed, r.sex, r.classes, r.owner, r.exhibitor, r.status];
+    });
+    downloadCsv(headers, rows, `withdrawn-and-absent-${showId}`);
+  }
+
+  // Shared with the Financial Statement .xlsx via lib/report-rows.ts.
+  function exportFinancialStatementCsv() {
+    const catalogueBuyerEmails = new Set<string>([
+      ...(catalogueOrders?.printed ?? []).map((o) => o.email.toLowerCase()),
+      ...(catalogueOrders?.online ?? []).map((o) => o.email.toLowerCase()),
+    ]);
+    const headers = ['Dog', 'Exhibitor', 'Status', 'Classes', 'Fee', 'Catalogue Ordered'];
+    const rows = (entryReport ?? []).map((e) => {
+      const r = buildFinancialStatementRow(e, catalogueBuyerEmails);
+      return [r.dog, r.exhibitor, r.status, r.classes, r.fee, r.catalogueOrdered];
+    });
+    downloadCsv(headers, rows, `financial-statement-${showId}`);
+  }
 
   return (
     <div className="space-y-6">
-      {!hasNumbers && (
-        <Card className="border-amber-200 bg-amber-50 dark:border-amber-900 dark:bg-amber-950">
-          <CardContent className="py-4">
-            <div className="flex items-start gap-3">
-              <Hash className="mt-0.5 size-4 shrink-0 text-amber-600" />
-              <div>
-                <p className="font-medium text-amber-800 dark:text-amber-200">
-                  Catalogue numbers not yet assigned
-                </p>
-                <p className="mt-1 text-sm text-amber-700 dark:text-amber-300">
-                  Some documents require catalogue numbers. Go to the{' '}
-                  <a
-                    href={`/secretary/shows/${showId}/catalogue`}
-                    className="font-medium underline"
+      {/* ─────────────────────── Before the Show ─────────────────────── */}
+      <div>
+        <h2 className="mb-3 text-sm font-semibold uppercase tracking-wider text-muted-foreground">
+          Before the Show
+        </h2>
+        <div className="space-y-4">
+          <DocSection title="Catalogues" description="Printable catalogues in different formats — all A5 size" icon={BookOpen}>
+            <DocRow
+              icon={<List className="size-4" />}
+              label="Catalogue — By Class"
+              description="Entries grouped by class number"
+            >
+              <CatalogueJobButton icon={<List className="size-4" />} label="View" showId={showId} format="by-class" />
+            </DocRow>
+            {documentRowVisible('grading-cards', docCtx) && (
+              <DocRow
+                icon={<Award className="size-4" />}
+                label="Grading Cards"
+                description="One A5 double-sided card per dog — fold once for a 4-panel hand card the judge grades and hands back"
+                note={!catalogueData?.entries?.length ? 'Ring numbers will be blank until entries are confirmed' : undefined}
+              >
+                <PdfViewerButton icon={<Award className="size-4" />} label="View" url={`/api/reports/${showId}/grading-cards`} />
+              </DocRow>
+            )}
+            {documentRowVisible('catalogue-standard', docCtx) && (
+              <DocRow
+                icon={<BookOpen className="size-4" />}
+                label="Catalogue — Standard"
+                description="RKC-format catalogue grouped by breed and sex"
+              >
+                <CatalogueJobButton icon={<BookOpen className="size-4" />} label="View" showId={showId} format="standard" />
+              </DocRow>
+            )}
+            {documentRowVisible('catalogue-steward', docCtx) && (
+              <DocRow
+                icon={<Gavel className="size-4" />}
+                label="Catalogue — Steward"
+                description="Condensed two-column format with write-in placements — minimises print cost"
+              >
+                <CatalogueJobButton icon={<Gavel className="size-4" />} label="View" showId={showId} format="judging" />
+              </DocRow>
+            )}
+          </DocSection>
+
+          {documentRowVisible('judges-book', docCtx) && (
+            <DocSection title="Judge's Book" description="One page per class with exhibit numbers, placement columns, and signature area" icon={ClipboardList}>
+              {distinctJudges.length > 1 ? (
+                distinctJudges.map((j) => (
+                  <DocRow
+                    key={j.id}
+                    icon={<ClipboardList className="size-4" />}
+                    label={`Judge's Book — ${j.name}`}
+                    description={`${j.name}'s classes only`}
                   >
-                    Catalogue
-                  </a>{' '}
-                  tab to assign them first.
-                </p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Pre-Show Documents */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Calendar className="size-5" />
-            Pre-Show Documents
-          </CardTitle>
-          <CardDescription>
-            Documents needed before show day — schedule, entry forms
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <DocumentGrid documents={preShowDocuments} />
-        </CardContent>
-      </Card>
-
-      {/* Catalogues */}
-      {catalogueDocuments.length > 0 && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <BookOpen className="size-5" />
-              Catalogues
-            </CardTitle>
-            <CardDescription>
-              Printable catalogues in different formats — all A5 size
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <DocumentGrid documents={catalogueDocuments} />
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Show Day Documents */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <ClipboardList className="size-5" />
-            Show Day Documents
-          </CardTitle>
-          <CardDescription>
-            Essential documents for running the show on the day
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <DocumentGrid documents={showDayDocuments} />
-        </CardContent>
-      </Card>
-
-      {/* Post-Show Documents */}
-      {postShowDocuments.length > 0 && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Trophy className="size-5" />
-              Post-Show Documents
-            </CardTitle>
-            <CardDescription>
-              Documents for RKC submission and show records after judging is complete
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <DocumentGrid documents={postShowDocuments} />
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Prize Cards — admin-only: Amanda + Michael fulfil orders via
-          the Print Shop, regular secretaries don't need home-print PDFs. */}
-      {isAdmin && (
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Award className="size-5" />
-            Prize Cards
-            <span className="rounded-full bg-purple-600 px-2 py-0.5 text-[10px] font-semibold text-white">ADMIN</span>
-          </CardTitle>
-          <CardDescription>
-            A5 prize cards for 1st through to HC — customise and download
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="flex flex-wrap items-end gap-4">
-            <div className="space-y-1.5">
-              <Label htmlFor="placements">Placements per class</Label>
-              <Select
-                value={prizeCardPlacements}
-                onValueChange={setPrizeCardPlacements}
-              >
-                <SelectTrigger id="placements" className="w-full sm:w-40">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent position="popper">
-                  <SelectItem value="1">1st only</SelectItem>
-                  <SelectItem value="2">1st – 2nd</SelectItem>
-                  <SelectItem value="3">1st – 3rd</SelectItem>
-                  <SelectItem value="4">1st – Reserve</SelectItem>
-                  <SelectItem value="5">1st – VHC</SelectItem>
-                  <SelectItem value="6">1st – HC</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="card-style">Card Style</Label>
-              <Select
-                value={prizeCardStyle}
-                onValueChange={(v) => setPrizeCardStyle(v as 'filled' | 'outline')}
-              >
-                <SelectTrigger id="card-style" className="w-full sm:w-40">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent position="popper">
-                  <SelectItem value="filled">Filled (coloured bg)</SelectItem>
-                  <SelectItem value="outline">Outline (white bg)</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="flex items-center gap-2">
-              <Switch
-                id="judge"
-                checked={includeJudge}
-                onCheckedChange={setIncludeJudge}
-              />
-              <Label htmlFor="judge">Include judge name</Label>
-            </div>
-          </div>
-
-          <div className="flex flex-col gap-3 rounded-lg border bg-muted/50 p-4 sm:flex-row sm:items-center">
-            <Award className="size-8 shrink-0 text-amber-500 hidden sm:block" />
-            <div className="flex-1">
-              <p className="font-medium">
-                {(stats?.totalClasses ?? 0) > 0
-                  ? `${stats?.totalClasses ?? 0} classes × ${prizeCardPlacements} placements`
-                  : 'No classes yet'}
-              </p>
-              <p className="text-sm text-muted-foreground">
-                Each card is A5 landscape with your club branding, colour-coded
-                by placement
-              </p>
-            </div>
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-              <Button asChild className="w-full sm:w-auto min-h-[2.75rem]">
-                <a href={prizeCardPrintHref} target="_blank" rel="noopener noreferrer">
-                  <Printer className="size-4" />
-                  Print
-                </a>
-              </Button>
-              <Button asChild variant="outline" className="w-full sm:w-auto min-h-[2.75rem]">
-                <a href={prizeCardHref} target="_blank" rel="noopener noreferrer">
-                  <ExternalLink className="size-4" />
-                  Preview PDF
-                </a>
-              </Button>
-            </div>
-          </div>
-
-          {/* Admin-only: Mixam overprint PDF generator.
-              Produces a 5-page PDF with only the show-specific text +
-              logo, positioned to land on the cream middle zone of the
-              Mixam pre-printed blank prize cards. Used by fulfilment
-              to run Print Shop orders: load red blanks → print page 1
-              × N, swap to blue blanks → print page 2 × N, etc. */}
-          {isAdmin && (
-            <div className="flex flex-col gap-3 rounded-lg border border-dashed border-purple-300 bg-purple-50/50 p-4 sm:flex-row sm:items-center dark:border-purple-900 dark:bg-purple-950/30">
-              <Sparkles className="size-8 shrink-0 text-purple-600 hidden sm:block" />
-              <div className="flex-1">
-                <p className="font-medium flex items-center gap-2">
-                  Mixam Overprint PDF
-                  <span className="rounded-full bg-purple-600 px-2 py-0.5 text-[10px] font-semibold text-white">ADMIN</span>
-                </p>
-                <p className="text-sm text-muted-foreground">
-                  5-page overprint for use with Mixam-preprinted blanks — feed
-                  red blanks, print page 1 × N copies, swap to blue, print page 2, etc.
-                </p>
-              </div>
-              <Button asChild variant="outline" className="w-full sm:w-auto min-h-[2.75rem]">
-                <a
-                  href={`/api/prize-card-overprint/${showId}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
+                    <PdfViewerButton icon={<ClipboardList className="size-4" />} label="View" url={`/api/judges-book/${showId}?judge=${j.id}`} />
+                  </DocRow>
+                ))
+              ) : (
+                <DocRow
+                  icon={<ClipboardList className="size-4" />}
+                  label="Judge's Book"
+                  description="All classes, one page each"
                 >
-                  <Download className="size-4" />
-                  Download Overprint
-                </a>
-              </Button>
-            </div>
+                  <PdfViewerButton icon={<ClipboardList className="size-4" />} label="View" url={`/api/judges-book/${showId}`} />
+                </DocRow>
+              )}
+            </DocSection>
           )}
 
-          <div className="flex flex-wrap gap-2">
-            {placementPreviews.map((p) => (
-              <div
-                key={p.label}
-                className={`rounded-md border px-3 py-1.5 text-xs font-medium ${p.colour}`}
+          <DocSection title="Schedule" description="Complete schedule with cover page, judges, classes, entry fees, and postal entry form" icon={Calendar}>
+            <DocRow icon={<Calendar className="size-4" />} label="Show Schedule" description="Full printable schedule">
+              <PdfViewerButton icon={<Calendar className="size-4" />} label="View" url={`/api/schedule/${showId}`} />
+            </DocRow>
+          </DocSection>
+
+          <DocSection title="Entry Lists" description="Working lists you check while entries are coming in" icon={FileSpreadsheet}>
+            <DocRow icon={<ListOrdered className="size-4" />} label="Exhibitor List" description="Alphabetical list of exhibitors and their dogs">
+              <PdfViewerButton icon={<ListOrdered className="size-4" />} label="View" url={`/api/reports/${showId}/catalogue-order`} />
+              <XlsxButton href={`/api/reports/${showId}/catalogue-order-xlsx`} filename={`Exhibitor-List-${showId}.xlsx`} />
+            </DocRow>
+            <DocRow icon={<BookMarked className="size-4" />} label="Pre-booked Catalogues" description="Who ordered a printed or online catalogue">
+              <PdfViewerButton icon={<BookMarked className="size-4" />} label="View" url={`/api/reports/${showId}/catalogue-orders`} />
+              <XlsxButton href={`/api/reports/${showId}/catalogue-orders-xlsx`} filename={`Pre-booked-Catalogues-${showId}.xlsx`} />
+            </DocRow>
+            <DocRow icon={<BarChart3 className="size-4" />} label="Class Breakdown" description="Entry counts and revenue per class">
+              <PdfViewerButton icon={<BarChart3 className="size-4" />} label="View" url={`/api/reports/${showId}/class-breakdown`} />
+              <XlsxButton href={`/api/reports/${showId}/class-breakdown-xlsx`} filename={`Class-Breakdown-${showId}.xlsx`} />
+            </DocRow>
+            <DocRow icon={<FileSpreadsheet className="size-4" />} label="Entry Report (CSV)" description="Every entry — exhibitor, dog, classes and fee, one row each">
+              <CsvButton label="Download CSV" onGenerate={exportEntryReportCsv} />
+            </DocRow>
+          </DocSection>
+
+          {documentRowVisible('ring-numbers', docCtx) && (
+          <DocSection title="Ring & Show Day Materials" description="Print these ahead of time to have ready on the day" icon={Hash}>
+            <DocRow icon={<Hash className="size-4" />} label="Ring Numbers" description="6 cards per A4 page for home printing, or one per page for professional printing">
+              <Select value={ringNumberFormat} onValueChange={(v) => setRingNumberFormat(v as 'grid' | 'single')}>
+                <SelectTrigger className="w-full min-h-[2.75rem] sm:w-40">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent position="popper">
+                  <SelectItem value="grid">Grid (6 per page)</SelectItem>
+                  <SelectItem value="single">Single (1 per page)</SelectItem>
+                </SelectContent>
+              </Select>
+              <PdfViewerButton icon={<Hash className="size-4" />} label="View" url={ringNumbersHref} />
+            </DocRow>
+            {documentRowVisible('ring-board', docCtx) && (
+              <DocRow icon={<Map className="size-4" />} label="Ring Board" description="Ring assignments showing judges, breeds, and classes with entry counts">
+                <PdfViewerButton icon={<Map className="size-4" />} label="View" url={`/api/ring-board/${showId}`} />
+              </DocRow>
+            )}
+            {documentRowVisible('award-board', docCtx) && (
+              <DocRow icon={<Award className="size-4" />} label="Award Board" description="A4 landscape wipe-clean grid — laminate and re-use to record placements and best-of awards on the day">
+                <PdfViewerButton icon={<Award className="size-4" />} label="View" url={`/api/award-board/${showId}`} />
+              </DocRow>
+            )}
+            {documentRowVisible('prize-cards', docCtx) && (
+              <DocRow
+                icon={<Award className="size-4" />}
+                label="Prize Cards"
+                description="Official A5 template for 1st, 2nd, 3rd and Reserve, with your club, show and judge details printed on. Print single-sided — turn off two-sided in your print box."
+                extra={prizeCardCountsLine}
               >
-                {p.label}
-              </div>
-            ))}
-            <p className="self-center text-xs text-muted-foreground">
-              Colour scheme preview
-            </p>
-          </div>
-        </CardContent>
-      </Card>
-      )}
+                {/* Download is the primary action — this is the real PDF
+                    (non-preview, so Content-Disposition: attachment), the
+                    file Mandy uploads to Doxzoo for printing. */}
+                {downloadingKey === 'prize-cards' ? (
+                  <Button disabled className="min-h-[2.75rem]"><Loader2 className="size-4 animate-spin" />Downloading…</Button>
+                ) : (
+                  <Button className="min-h-[2.75rem]" onClick={() => handleDownload('prize-cards', prizeCardHref, 'Prize-Cards.pdf')}>
+                    <Download className="size-4" />Download
+                  </Button>
+                )}
+                {/* Print opens the mobile-print HTML wrapper in a new tab —
+                    it is NOT a PDF, so it must never go through
+                    handleDownload/blob-download (that saved the HTML bytes
+                    with a .pdf extension, giving Mandy a blank page). The
+                    wrapper embeds the real PDF in an iframe and auto-opens
+                    the browser print dialog. */}
+                <Button
+                  variant="outline"
+                  className="min-h-[2.75rem]"
+                  onClick={() => window.open(prizeCardPrintHref, '_blank')}
+                >
+                  <Printer className="size-4" />Print
+                </Button>
+                <PdfViewerButton icon={<Award className="size-4" />} label="Preview" url={prizeCardHref} variant="outline" />
+              </DocRow>
+            )}
+          </DocSection>
+          )}
+        </div>
+      </div>
+
+      {/* ─────────────────────── After the Show ─────────────────────── */}
+      <div>
+        <h2 className="mb-3 text-sm font-semibold uppercase tracking-wider text-muted-foreground">
+          After the Show
+        </h2>
+        <DocSection title="Results & Returns" description="Documents for RKC submission and show records after judging is complete" icon={Trophy}>
+          {documentRowVisible('judge-critiques', docCtx) && (
+            <DocRow
+              icon={<MessageSquare className="size-4" />}
+              label="Judge critiques"
+              description="Invite the judge to send their critiques, check them, and publish to the results page"
+            >
+              <Button className="min-h-[2.75rem]" asChild>
+                <Link href={`/secretary/shows/${showId}/critiques`}>
+                  <MessageSquare className="size-4" />
+                  Open
+                </Link>
+              </Button>
+            </DocRow>
+          )}
+          {documentRowVisible('marked-catalogue', docCtx) && (
+            <DocRow
+              icon={<CheckSquare className="size-4" />}
+              label="Marked Catalogue"
+              description="Full catalogue with results, placements, absentees, and awards annotated — required by the RKC within 14 days for championship shows"
+              note={!resultsFinalised ? 'Will be empty until results are published' : undefined}
+            >
+              <CatalogueJobButton icon={<CheckSquare className="size-4" />} label="View" showId={showId} format="marked" />
+            </DocRow>
+          )}
+          <DocRow
+            icon={<UserX className="size-4" />}
+            label="Absentees (Catalogue PDF)"
+            description="Dogs marked absent on paid entries — matches your printed catalogue, excludes Junior Handling"
+          >
+            <CatalogueJobButton icon={<UserX className="size-4" />} label="View" showId={showId} format="absentees" />
+            <XlsxButton href={`/api/reports/${showId}/absentee-catalogue-xlsx`} filename={`Absentees-${showId}.xlsx`} />
+          </DocRow>
+          <DocRow
+            icon={<FileSpreadsheet className="size-4" />}
+            label="Absentees (CSV)"
+            description="Every dog marked absent, including entries from unpaid orders — excludes Junior Handling"
+          >
+            <CsvButton
+              label="Download CSV"
+              onGenerate={() => downloadBlob(`/api/absentee-report/${showId}`, `Absentee-Report-${showId}.csv`)}
+            />
+            <XlsxButton href={`/api/reports/${showId}/absentee-report-xlsx`} filename={`Absentee-Report-${showId}.xlsx`} />
+          </DocRow>
+          <DocRow
+            icon={<FileSpreadsheet className="size-4" />}
+            label="Withdrawn & Absent (CSV)"
+            description="Every withdrawn or absent entry on a paid order, including Junior Handling"
+          >
+            <CsvButton label="Download CSV" onGenerate={exportWithdrawnAndAbsentCsv} />
+            <XlsxButton href={`/api/reports/${showId}/withdrawn-absent-xlsx`} filename={`Withdrawn-And-Absent-${showId}.xlsx`} />
+          </DocRow>
+          {isKcChampionship && (
+            <DocRow icon={<UserX className="size-4" />} label="RKC SH01 Return" description="Championship show absentee return for RKC submission">
+              <PdfViewerButton icon={<UserX className="size-4" />} label="View" url={`/api/reports/${showId}/sh01`} />
+              <XlsxButton href={`/api/reports/${showId}/sh01-xlsx`} filename={`KC-Absentee-Report-SH01-${showId}.xlsx`} />
+            </DocRow>
+          )}
+          {isWusvShow && (
+            <>
+              <DocRow
+                icon={<Trophy className="size-4" />}
+                label="SV Graded Results"
+                description="Graded results by coat and class — V/SG/G grades, placings, absentees kept in, with Best Male/Female, Most Promising, and Junior Handling"
+              >
+                <PdfViewerButton icon={<Trophy className="size-4" />} label="View" url={`/api/reports/${showId}/sv-results`} />
+              </DocRow>
+              <DocRow
+                icon={<FileSpreadsheet className="size-4" />}
+                label="SV Results Spreadsheet"
+                description="One row per dog with full pedigree, grading and placing — the SV records format for the regional group"
+              >
+                {downloadingKey === 'sv-results-xlsx' ? (
+                  <Button disabled className="min-h-[2.75rem]">
+                    <Loader2 className="size-4 animate-spin" />Downloading…
+                  </Button>
+                ) : (
+                  <Button
+                    variant="outline"
+                    className="min-h-[2.75rem]"
+                    onClick={() =>
+                      handleDownload(
+                        'sv-results-xlsx',
+                        `/api/reports/${showId}/sv-results-xlsx`,
+                        `SV-Results-${showId}.xlsx`,
+                      )
+                    }
+                  >
+                    <Download className="size-4" />Download
+                  </Button>
+                )}
+              </DocRow>
+            </>
+          )}
+        </DocSection>
+
+        {/* Money and orders — pulled once the show has run and the takings are
+            settled, which is why they sit here rather than with the entry
+            lists (Mandy's rule: group by when you PRODUCE it). */}
+        <DocSection title="Money & Orders" description="Records for the club's books, once entries are paid and the show has run" icon={PoundSterling}>
+          <DocRow icon={<PoundSterling className="size-4" />} label="Full Financial Statement (CSV)" description="Every entry with its fee and catalogue-order status, for club records">
+            <CsvButton label="Download CSV" onGenerate={exportFinancialStatementCsv} />
+            <XlsxButton href={`/api/reports/${showId}/financial-statement-xlsx`} filename={`Financial-Statement-${showId}.xlsx`} />
+          </DocRow>
+          <DocRow icon={<FileSpreadsheet className="size-4" />} label="Payment Report (CSV)" description="Entry fees, add-ons and payment status per order">
+            <CsvButton label="Download CSV" onGenerate={exportPaymentReportCsv} />
+          </DocRow>
+          <DocRow icon={<FileSpreadsheet className="size-4" />} label="Catalogue Order List (CSV)" description="Printed and online catalogue orders with quantities">
+            <CsvButton label="Download CSV" onGenerate={exportCatalogueOrdersCsv} />
+          </DocRow>
+          <DocRow icon={<FileSpreadsheet className="size-4" />} label="Extras Summary (CSV)" description="Sundry item buyers and sponsors">
+            <CsvButton label="Download CSV" onGenerate={exportExtrasSummaryCsv} />
+          </DocRow>
+        </DocSection>
+      </div>
     </div>
   );
 }

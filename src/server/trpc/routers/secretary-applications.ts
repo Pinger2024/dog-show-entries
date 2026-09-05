@@ -13,6 +13,7 @@ import {
   users,
 } from '@/server/db/schema';
 import { generateToken, getBaseUrl, assignRole } from '@/server/lib/utils';
+import { BRAND } from '@/lib/brand';
 
 const resend = process.env.RESEND_API_KEY
   ? new Resend(process.env.RESEND_API_KEY)
@@ -29,6 +30,7 @@ export const secretaryApplicationsRouter = createTRPCRouter({
       z.object({
         organisationName: z.string().min(1, 'Organisation name is required'),
         clubType: z.enum(clubTypeEnum.enumValues),
+        showRuleset: z.enum(['rkc', 'wusv']).default('rkc'),
         breedOrGroup: z.string().optional(),
         breedId: z.string().uuid().optional(),
         kcRegNumber: z.string().optional(),
@@ -67,6 +69,7 @@ export const secretaryApplicationsRouter = createTRPCRouter({
         .values({
           name: input.organisationName,
           type: input.clubType,
+          showRuleset: input.showRuleset,
           breedId: input.clubType === 'single_breed' ? input.breedId ?? null : null,
           kcRegNumber: input.kcRegNumber ?? null,
           contactEmail: input.contactEmail,
@@ -108,25 +111,27 @@ export const secretaryApplicationsRouter = createTRPCRouter({
               .filter((e): e is string => !!e);
             if (adminEmails.length === 0) return;
 
-            resend.emails.send({
+            return resend.emails.send({
               from: 'Remi <noreply@remishowmanager.co.uk>',
               to: adminEmails,
               replyTo: 'feedback@remishowmanager.co.uk',
               subject: `New Secretary Registered: ${input.organisationName}`,
               html: `
-                <div style="font-family: Georgia, serif; max-width: 560px; margin: 0 auto;">
-                  <h1 style="font-size: 24px; color: #2D5F3F;">Remi</h1>
+                <div style="font-family: 'Hanken Grotesk', -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 560px; margin: 0 auto; background-color: ${BRAND.paper}; padding: 28px 24px; color: ${BRAND.ink}; border: 1px solid ${BRAND.line}; border-radius: 14px;">
+                  <h1 style="margin: 0 0 16px; font-size: 22px; font-weight: 800; letter-spacing: -0.015em; color: ${BRAND.green};">Remi<span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:${BRAND.fresh};margin-left:3px;"></span></h1>
                   <p>A new secretary has registered on Remi.</p>
-                  <div style="padding: 16px; background: #f9fafb; border-radius: 8px; border-left: 3px solid #2D5F3F; margin: 16px 0;">
+                  <div style="padding: 16px; background: ${BRAND.paper}; border-radius: 8px; border-left: 3px solid ${BRAND.green}; margin: 16px 0;">
                     <p style="margin: 0 0 8px;"><strong>Secretary:</strong> ${ctx.session.user.name ?? 'Unknown'} (${ctx.session.user.email})</p>
                     <p style="margin: 0 0 8px;"><strong>Organisation:</strong> ${input.organisationName}</p>
                     <p style="margin: 0 0 8px;"><strong>Club Type:</strong> ${CLUB_TYPE_LABELS[input.clubType] ?? input.clubType}</p>
                     ${input.breedOrGroup ? `<p style="margin: 0 0 8px;"><strong>Breed/Group:</strong> ${input.breedOrGroup}</p>` : ''}
                     ${input.details ? `<p style="margin: 0;"><strong>Details:</strong> ${input.details}</p>` : ''}
                   </div>
-                  <p style="color: #6b7280; font-size: 14px;">Their account has been automatically set up — no action required.</p>
+                  <p style="color: ${BRAND.ink2}; font-size: 14px;">Their account has been automatically set up — no action required.</p>
                 </div>
               `,
+            }).then((r) => {
+              if (r.error) console.error('[secretary-applications] admin notification rejected by Resend:', r.error);
             }).catch((err) => {
               console.error('[secretary-applications] failed to send admin notification:', err);
             });
@@ -279,35 +284,44 @@ export const secretaryApplicationsRouter = createTRPCRouter({
           });
         }
 
-        // Send approval email (fire-and-forget)
+        // Send approval email — it carries the activation link, so the
+        // admin must know if it can't be delivered.
         if (resend) {
           const acceptUrl = `${getBaseUrl()}/invite/${token}`;
 
-          resend.emails.send({
+          const approvalResult = await resend.emails.send({
             from: 'Remi <noreply@remishowmanager.co.uk>',
             to: [application.contactEmail],
             replyTo: 'feedback@remishowmanager.co.uk',
             subject: `Your Remi Secretary Application Has Been Approved!`,
             html: `
-              <div style="font-family: Georgia, serif; max-width: 560px; margin: 0 auto;">
-                <h1 style="font-size: 24px; color: #2D5F3F;">Remi</h1>
+              <div style="font-family: 'Hanken Grotesk', -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 560px; margin: 0 auto; background-color: ${BRAND.paper}; padding: 28px 24px; color: ${BRAND.ink}; border: 1px solid ${BRAND.line}; border-radius: 14px;">
+                <h1 style="margin: 0 0 16px; font-size: 22px; font-weight: 800; letter-spacing: -0.015em; color: ${BRAND.green};">Remi<span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:${BRAND.fresh};margin-left:3px;"></span></h1>
                 <p>Hi ${application.user.name?.split(' ')[0] ?? 'there'},</p>
                 <p>Great news! Your application to become a show secretary for <strong>${application.organisationName}</strong> has been approved.</p>
-                ${input.notes ? `<p style="padding: 12px 16px; background: #f9fafb; border-radius: 8px; border-left: 3px solid #2D5F3F;"><em>"${input.notes}"</em></p>` : ''}
+                ${input.notes ? `<p style="padding: 12px 16px; background: ${BRAND.paper}; border-radius: 8px; border-left: 3px solid ${BRAND.green};"><em>"${input.notes}"</em></p>` : ''}
                 <p>Click the button below to activate your secretary account. You'll then be able to create and manage shows on Remi.</p>
                 <p style="margin: 24px 0;">
-                  <a href="${acceptUrl}" style="display: inline-block; background: #2D5F3F; color: white; padding: 12px 24px; border-radius: 8px; text-decoration: none; font-weight: 600;">
+                  <a href="${acceptUrl}" style="display: inline-block; background: ${BRAND.green}; color: ${BRAND.cream}; padding: 12px 24px; border-radius: 13px; text-decoration: none; font-weight: 700;">
                     Activate Secretary Access
                   </a>
                 </p>
-                <p style="color: #6b7280; font-size: 14px;">
+                <p style="color: ${BRAND.ink2}; font-size: 14px;">
                   This link expires in 30 days. If you have any questions, just reply to this email.
                 </p>
               </div>
             `,
-          }).catch((err) => {
-            console.error('[secretary-applications] failed to send approval email:', err);
-          });
+          }).catch((err: unknown) => ({
+            data: null,
+            error: { message: err instanceof Error ? err.message : String(err) },
+          }));
+          if (approvalResult.error) {
+            console.error('[secretary-applications] approval email failed:', approvalResult.error);
+            throw new TRPCError({
+              code: 'INTERNAL_SERVER_ERROR',
+              message: `The application was approved, but the email with their activation link could not be delivered (${approvalResult.error.message ?? 'provider error'}). Check the address and approve again, or send the link manually.`,
+            });
+          }
         }
 
         return { success: true, action: 'approved' as const };
@@ -334,29 +348,37 @@ export const secretaryApplicationsRouter = createTRPCRouter({
           });
         }
 
-        // Send rejection email (fire-and-forget)
+        // Send rejection email
         if (resend) {
-          resend.emails.send({
+          const rejectionResult = await resend.emails.send({
             from: 'Remi <noreply@remishowmanager.co.uk>',
             to: [application.contactEmail],
             replyTo: 'feedback@remishowmanager.co.uk',
             subject: `Update on Your Remi Secretary Application`,
             html: `
-              <div style="font-family: Georgia, serif; max-width: 560px; margin: 0 auto;">
-                <h1 style="font-size: 24px; color: #2D5F3F;">Remi</h1>
+              <div style="font-family: 'Hanken Grotesk', -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 560px; margin: 0 auto; background-color: ${BRAND.paper}; padding: 28px 24px; color: ${BRAND.ink}; border: 1px solid ${BRAND.line}; border-radius: 14px;">
+                <h1 style="margin: 0 0 16px; font-size: 22px; font-weight: 800; letter-spacing: -0.015em; color: ${BRAND.green};">Remi<span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:${BRAND.fresh};margin-left:3px;"></span></h1>
                 <p>Hi ${application.user.name?.split(' ')[0] ?? 'there'},</p>
                 <p>Thank you for your interest in running shows on Remi. After reviewing your application for <strong>${application.organisationName}</strong>, we're unable to approve it at this time.</p>
-                ${input.notes ? `<p style="padding: 12px 16px; background: #f9fafb; border-radius: 8px; border-left: 3px solid #2D5F3F;"><em>"${input.notes}"</em></p>` : ''}
+                ${input.notes ? `<p style="padding: 12px 16px; background: ${BRAND.paper}; border-radius: 8px; border-left: 3px solid ${BRAND.green};"><em>"${input.notes}"</em></p>` : ''}
                 <p>This doesn't have to be the end of the road — we'd love to help you get set up. If you have additional information to share or would like to discuss your application, simply reply to this email.</p>
                 <p>You're also welcome to submit a new application at any time.</p>
-                <p style="margin-top: 24px; color: #6b7280; font-size: 14px;">
+                <p style="margin-top: 24px; color: ${BRAND.ink2}; font-size: 14px;">
                   Best wishes,<br />The Remi Team
                 </p>
               </div>
             `,
-          }).catch((err) => {
-            console.error('[secretary-applications] failed to send rejection email:', err);
-          });
+          }).catch((err: unknown) => ({
+            data: null,
+            error: { message: err instanceof Error ? err.message : String(err) },
+          }));
+          if (rejectionResult.error) {
+            console.error('[secretary-applications] rejection email failed:', rejectionResult.error);
+            throw new TRPCError({
+              code: 'INTERNAL_SERVER_ERROR',
+              message: `The application was rejected, but the notification email could not be delivered (${rejectionResult.error.message ?? 'provider error'}). The applicant has NOT been told — contact them directly.`,
+            });
+          }
         }
 
         return { success: true, action: 'rejected' as const };

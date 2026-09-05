@@ -16,6 +16,8 @@ import {
   stewardAssignments,
   orders,
   payments,
+  sundryItems,
+  orderSundryItems,
   judges,
   judgeAssignments,
   achievements,
@@ -42,6 +44,14 @@ let counter = 0;
 const seq = () => ++counter;
 const shortId = (len = 8) => randomUUID().slice(0, len);
 
+/** YYYY-MM-DD string `days` from today (negative = past). Several test
+ *  files need a relative show date; use this instead of a local copy. */
+export function dateStr(days: number): string {
+  const d = new Date();
+  d.setDate(d.getDate() + days);
+  return d.toISOString().slice(0, 10);
+}
+
 export async function makeUser(opts: Partial<typeof users.$inferInsert> = {}) {
   const n = seq();
   const [row] = await testDb
@@ -58,10 +68,17 @@ export async function makeUser(opts: Partial<typeof users.$inferInsert> = {}) {
 
 export async function makeOrg(opts: Partial<typeof organisations.$inferInsert> = {}) {
   const n = seq();
+  // Factories default the org to payment-ready — payout bank details set —
+  // so existing payment journey tests don't all need to opt in. Tests that
+  // specifically exercise the no-bank-details path should pass `null` for
+  // these fields explicitly.
   const [row] = await testDb
     .insert(organisations)
     .values({
       name: opts.name ?? `Test Club ${n}`,
+      payoutAccountName: opts.payoutAccountName ?? `Test Club ${n}`,
+      payoutSortCode: opts.payoutSortCode ?? '10-88-00',
+      payoutAccountNumber: opts.payoutAccountNumber ?? '00012345',
       ...opts,
     })
     .returning();
@@ -144,15 +161,14 @@ export async function makeShowClass(opts: {
   classDefinitionId?: string;
   entryFee?: number;
   breedId?: string;
-}) {
+} & Partial<typeof showClasses.$inferInsert>) {
   const classDefinitionId = opts.classDefinitionId ?? (await makeClassDef()).id;
   const [row] = await testDb
     .insert(showClasses)
     .values({
-      showId: opts.showId,
-      classDefinitionId,
-      breedId: opts.breedId,
-      entryFee: opts.entryFee ?? 500, // pence
+      entryFee: 500, // pence, default — opts.entryFee below overrides if given
+      ...opts,
+      classDefinitionId, // always the resolved id, never opts' possibly-undefined one
     })
     .returning();
   return row;
@@ -169,6 +185,15 @@ export async function makeDog(opts: Partial<typeof dogs.$inferInsert> & { ownerI
       sex: opts.sex ?? 'dog',
       dateOfBirth: opts.dateOfBirth ?? '2022-01-01',
       ownerId: opts.ownerId,
+      // A complete pedigree by default — sire, dam, breeder and colour are
+      // required to enter a show (orders.checkout), so a fixture dog without
+      // them can't be checked out and every unrelated test that pays for an
+      // entry would fail for a reason it isn't testing. Pass an explicit null
+      // to build a deliberately-incomplete dog.
+      sireName: 'Test Sire',
+      damName: 'Test Dam',
+      breederName: 'Test Breeder',
+      colour: 'Black & Tan',
       ...opts,
     })
     .returning();
@@ -179,8 +204,14 @@ export async function makeEntry(opts: {
   showId: string;
   dogId: string;
   exhibitorId: string;
+  orderId?: string;
   status?: EntryStatus;
   totalFee?: number;
+  isNfc?: boolean;
+  entryType?: 'standard' | 'junior_handler';
+  naf?: boolean;
+  taf?: boolean;
+  cnaf?: boolean;
 }) {
   const [row] = await testDb
     .insert(entries)
@@ -188,8 +219,14 @@ export async function makeEntry(opts: {
       showId: opts.showId,
       dogId: opts.dogId,
       exhibitorId: opts.exhibitorId,
+      orderId: opts.orderId,
       status: opts.status ?? 'confirmed',
       totalFee: opts.totalFee ?? 500,
+      isNfc: opts.isNfc ?? false,
+      entryType: opts.entryType ?? 'standard',
+      naf: opts.naf ?? false,
+      taf: opts.taf ?? false,
+      cnaf: opts.cnaf ?? false,
     })
     .returning();
   return row;
@@ -199,6 +236,7 @@ export async function makeEntryClass(opts: {
   entryId: string;
   showClassId: string;
   fee?: number;
+  absent?: boolean;
 }) {
   const [row] = await testDb
     .insert(entryClasses)
@@ -206,6 +244,7 @@ export async function makeEntryClass(opts: {
       entryId: opts.entryId,
       showClassId: opts.showClassId,
       fee: opts.fee ?? 500,
+      absent: opts.absent ?? false,
     })
     .returning();
   return row;
@@ -247,6 +286,8 @@ export async function makeJudgeAssignment(opts: {
   judgeId: string;
   breedId?: string;
   sex?: 'dog' | 'bitch' | null;
+  ringId?: string;
+  isSpecialAwardsClassesJudge?: boolean;
 }) {
   const [row] = await testDb
     .insert(judgeAssignments)
@@ -255,6 +296,8 @@ export async function makeJudgeAssignment(opts: {
       judgeId: opts.judgeId,
       breedId: opts.breedId,
       sex: opts.sex,
+      ringId: opts.ringId,
+      isSpecialAwardsClassesJudge: opts.isSpecialAwardsClassesJudge,
     })
     .returning();
   return row;
@@ -355,7 +398,19 @@ export async function makeOrder(opts: {
   exhibitorId: string;
   status?: OrderStatus;
   totalAmount?: number;
-  stripePaymentIntentId?: string;
+  donationPence?: number;
+  // Every real Stripe checkout has this set from the moment the
+  // PaymentIntent is created — show-metrics treats "paid + no
+  // stripePaymentIntentId" as an offline (postal/cash/direct-to-club)
+  // order collected outside Remi entirely. Most tests model a normal
+  // online checkout and never cared about this field, so the default
+  // below auto-generates a fake Stripe id to preserve that behaviour.
+  // Pass `stripePaymentIntentId: null` explicitly to model an offline
+  // (manual/postal/cash) order instead.
+  stripePaymentIntentId?: string | null;
+  regionalMembership?: string;
+  regionalMembershipNumber?: string;
+  discountGroupId?: string;
 }) {
   const [row] = await testDb
     .insert(orders)
@@ -364,7 +419,14 @@ export async function makeOrder(opts: {
       exhibitorId: opts.exhibitorId,
       status: opts.status ?? 'pending_payment',
       totalAmount: opts.totalAmount ?? 1000,
-      stripePaymentIntentId: opts.stripePaymentIntentId,
+      donationPence: opts.donationPence ?? 0,
+      stripePaymentIntentId:
+        opts.stripePaymentIntentId === null
+          ? null
+          : opts.stripePaymentIntentId ?? `pi_test_${randomUUID()}`,
+      regionalMembership: opts.regionalMembership,
+      regionalMembershipNumber: opts.regionalMembershipNumber,
+      discountGroupId: opts.discountGroupId,
     })
     .returning();
   return row;
@@ -376,6 +438,9 @@ export async function makePayment(opts: {
   stripePaymentId: string;
   amount?: number;
   status?: PaymentStatus;
+  type?: 'initial' | 'adjustment' | 'refund';
+  feePence?: number | null;
+  refundAmount?: number | null;
 }) {
   const [row] = await testDb
     .insert(payments)
@@ -385,6 +450,44 @@ export async function makePayment(opts: {
       stripePaymentId: opts.stripePaymentId,
       amount: opts.amount ?? 1000,
       status: opts.status ?? 'pending',
+      type: opts.type ?? 'initial',
+      feePence: opts.feePence,
+      refundAmount: opts.refundAmount,
+    })
+    .returning();
+  return row;
+}
+
+export async function makeSundryItem(opts: {
+  showId: string;
+  name?: string;
+  priceInPence?: number;
+}) {
+  const n = seq();
+  const [row] = await testDb
+    .insert(sundryItems)
+    .values({
+      showId: opts.showId,
+      name: opts.name ?? `Sundry ${n}`,
+      priceInPence: opts.priceInPence ?? 400,
+    })
+    .returning();
+  return row;
+}
+
+export async function makeOrderSundryItem(opts: {
+  orderId: string;
+  sundryItemId: string;
+  quantity?: number;
+  unitPrice: number;
+}) {
+  const [row] = await testDb
+    .insert(orderSundryItems)
+    .values({
+      orderId: opts.orderId,
+      sundryItemId: opts.sundryItemId,
+      quantity: opts.quantity ?? 1,
+      unitPrice: opts.unitPrice,
     })
     .returning();
   return row;

@@ -47,10 +47,12 @@ import {
 const COMMON_SUNDRY_PRESETS = [
   { name: 'Printed Catalogue', description: 'Receive a printed show catalogue on the day', maxPerOrder: 1 },
   { name: 'Online Catalogue', description: 'Access to the digital show catalogue', maxPerOrder: 1 },
+  { name: 'Pre-paid Parking Pass', description: 'Car parking at the venue. Your pass is emailed a week before the show.', maxPerOrder: 1 },
   { name: 'Donation', description: 'Support the club with a voluntary donation' },
   { name: 'Club Membership — Sole', description: 'Annual single membership', maxPerOrder: 1 },
   { name: 'Club Membership — Joint', description: 'Annual joint membership', maxPerOrder: 1 },
   { name: 'Club Membership — Family', description: 'Annual family membership', maxPerOrder: 1 },
+  { name: 'Club Membership — Junior', description: 'Annual membership for under-16s', maxPerOrder: 1 },
 ];
 
 function PresetPicker({
@@ -373,12 +375,12 @@ export function SundryItemManager({ showId }: { showId: string }) {
                   return (
                     <div key={item.id} className={cn(
                       'flex items-center justify-between gap-3 rounded-lg border p-3',
-                      needsPrice && 'border-amber-300 bg-amber-50/50 dark:border-amber-700 dark:bg-amber-950/20',
+                      needsPrice && 'border-se-honey-line bg-se-honey-soft',
                     )}>
                       <div className="min-w-0 flex-1">
                         <p className="font-medium truncate">{item.name}</p>
                         {needsPrice ? (
-                          <p className="flex items-center gap-1 text-xs font-medium text-amber-600 dark:text-amber-400">
+                          <p className="flex items-center gap-1 text-xs font-medium text-se-honey-deep">
                             <AlertCircle className="size-3" />
                             Set a price
                           </p>
@@ -451,7 +453,7 @@ export function SundryItemManager({ showId }: { showId: string }) {
                     {enabledItems.map((item) => {
                       const needsPrice = item.priceInPence === 0;
                       return (
-                        <TableRow key={item.id} className={needsPrice ? 'bg-amber-50/50 dark:bg-amber-950/20' : undefined}>
+                        <TableRow key={item.id} className={needsPrice ? 'bg-se-honey-soft' : undefined}>
                           <TableCell>
                             <div>
                               <p className="font-medium">{item.name}</p>
@@ -462,7 +464,7 @@ export function SundryItemManager({ showId }: { showId: string }) {
                           </TableCell>
                           <TableCell>
                             {needsPrice ? (
-                              <span className="flex items-center gap-1 text-sm font-medium text-amber-600 dark:text-amber-400">
+                              <span className="flex items-center gap-1 text-sm font-medium text-se-honey-deep">
                                 <AlertCircle className="size-3.5" />
                                 Set price
                               </span>

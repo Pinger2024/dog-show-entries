@@ -22,12 +22,16 @@ import {
 import { toast } from 'sonner';
 import { trpc } from '@/lib/trpc';
 import { uploadImage } from '@/lib/upload';
+import { cn } from '@/lib/utils';
 import {
   getPlacementLabel,
   placementColors,
   achievementLabels,
   type AchievementType,
 } from '@/lib/placements';
+import { svCoatDisplayName } from '@/lib/class-labels';
+import { SE_H } from '@/components/show-experience/tokens';
+import { resolveTopAwards, buildPlacementIndex, eligibleCandidates, isPuppyOnShowDate } from '@/lib/top-awards';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
@@ -155,7 +159,7 @@ function WinnerPhotoButton({
       <input
         ref={fileRef}
         type="file"
-        accept="image/*"
+        accept="image/jpeg,image/png,image/webp"
         className="hidden"
         onChange={(e) => {
           const file = e.target.files?.[0];
@@ -246,6 +250,7 @@ function BestAwardsSection({
   showId,
   showDate,
   showType,
+  customAwards,
   confirmedDogs,
   existingAchievements,
   classResults,
@@ -253,7 +258,8 @@ function BestAwardsSection({
   showId: string;
   showDate: string;
   showType: string;
-  classResults?: { breedName: string; classes: { className: string; sex: string | null; results: { dogId: string | null; placement: number | null }[] }[] }[];
+  customAwards?: string[];
+  classResults?: { breedName: string; classes: { className: string; sex: string | null; results: { dogId: string | null; placement: number | null; dogDateOfBirth?: string | null }[] }[] }[];
   confirmedDogs: {
     dogId: string;
     registeredName: string;
@@ -277,23 +283,31 @@ function BestAwardsSection({
   const utils = trpc.useUtils();
   const isChampionship = showType === 'championship';
 
-  // Derive puppy/veteran class winner dogIds from live results for filtering
+  // Derive puppy/veteran class winner dogIds from live results for filtering.
+  // Prefers AGE on the show's start date when a result's DOB is known — the
+  // RKC puppy band ("six and not exceeding twelve calendar months", see
+  // isPuppyOnShowDate) is authoritative regardless of which class the dog
+  // actually ran in (Scotland 30 Aug 2026: a 12-month-old winner ran "Junior
+  // Bitch", not anything named "Puppy"). DOB missing falls back to the
+  // previous class-name inference — never silently widening who counts.
   const puppyClassWinnerIds = useMemo(() => {
     if (!classResults) return new Set<string>();
     const ids = new Set<string>();
     for (const group of classResults) {
       for (const cls of group.classes) {
         const name = cls.className.toLowerCase();
-        const isPuppy = (name.includes('puppy') || name.includes('minor')) && !name.includes('post');
-        if (isPuppy) {
-          for (const r of cls.results) {
-            if (r.dogId) ids.add(r.dogId);
-          }
+        const isPuppyClassName = (name.includes('puppy') || name.includes('minor')) && !name.includes('post');
+        for (const r of cls.results) {
+          if (!r.dogId) continue;
+          const isPuppy = r.dogDateOfBirth != null
+            ? isPuppyOnShowDate(r.dogDateOfBirth, showDate)
+            : isPuppyClassName;
+          if (isPuppy) ids.add(r.dogId);
         }
       }
     }
     return ids;
-  }, [classResults]);
+  }, [classResults, showDate]);
 
   const recordMut = trpc.secretary.recordAchievement.useMutation({
     onSuccess: () => {
@@ -339,13 +353,13 @@ function BestAwardsSection({
   const hasAnyAwards = existingAchievements.length > 0;
 
   return (
-    <div className="rounded-lg border border-amber-200 bg-gradient-to-b from-amber-50/80 to-amber-50/30">
+    <div className="rounded-lg border border-se-honey-line bg-gradient-to-b from-se-honey-soft/80 to-se-honey-soft/30">
       <button
         onClick={() => setExpanded(!expanded)}
         className="flex w-full items-center gap-2 p-3 sm:p-4 min-h-[2.75rem]"
       >
-        <Trophy className="size-5 text-amber-600" />
-        <h3 className="flex-1 text-left font-serif text-base font-semibold text-amber-900">
+        <Trophy className="size-5 text-se-honey-deep" />
+        <h3 className="flex-1 text-left font-serif text-base font-semibold text-se-honey-ink">
           Best Awards
         </h3>
         {hasAnyAwards && (
@@ -354,17 +368,67 @@ function BestAwardsSection({
           </Badge>
         )}
         {expanded ? (
-          <ChevronUp className="size-4 text-amber-600" />
+          <ChevronUp className="size-4 text-se-honey-deep" />
         ) : (
-          <ChevronDown className="size-4 text-amber-600" />
+          <ChevronDown className="size-4 text-se-honey-deep" />
         )}
       </button>
 
       {expanded && (
-        <div className="space-y-4 border-t border-amber-200 p-3 sm:p-4">
+        <div className="space-y-4 border-t border-se-honey-line p-3 sm:p-4">
+          {/* Single-breed shows (#98): drive the recordable Top Awards off the
+              show's OWN configured Best Awards list — matches what the show
+              actually gives (BAGSD: Best Dog/Bitch + reserves + Best Puppy in
+              Show + Best Long Coat in Show, not CCs). */}
+          {breedNames.length === 1 && (() => {
+            const topAwards = resolveTopAwards(showType, customAwards);
+            if (topAwards.length === 0) return null;
+
+            // Eligibility (#98 — the RKC "beaten" rule) runs through the shared
+            // engine in lib/top-awards so this page and the steward ringside page
+            // provably agree. A dog is eligible unless an in-category rival (same
+            // sex / age band) beat it in a shared class; reserve awards keep the
+            // runners-up. A puppy 4th in Junior behind ADULTS stays eligible
+            // (adults aren't puppies); two puppies who each beat the other across
+            // Minor Puppy/Puppy are both out (neither is unbeaten by a puppy).
+            const index = buildPlacementIndex(
+              (classResults ?? []).flatMap((g) =>
+                g.classes.map((c) => ({
+                  key: `${g.breedName}|${c.className}`,
+                  className: c.className,
+                  results: c.results,
+                })),
+              ),
+              showDate,
+            );
+
+            return (
+              <div className="space-y-2">
+                <h4 className="text-xs font-semibold uppercase tracking-wider text-se-honey-deep">
+                  Top Awards
+                </h4>
+                {topAwards.map((award) => {
+                  const candidates = eligibleCandidates(award, confirmedDogs, index);
+                  return (
+                    <AwardRow
+                      key={award.type}
+                      label={award.name}
+                      type={award.type}
+                      existing={getExisting(award.type)}
+                      candidates={candidates}
+                      isPending={isPending}
+                      onSelect={(dogId) => handleAwardChange(award.type, dogId)}
+                    />
+                  );
+                })}
+              </div>
+            );
+          })()}
+          {breedNames.length > 1 && (
+          <>
           {/* Show-level awards — candidates cascade from breed-level achievements */}
           <div className="space-y-2">
-            <h4 className="text-xs font-semibold uppercase tracking-wider text-amber-700">
+            <h4 className="text-xs font-semibold uppercase tracking-wider text-se-honey-deep">
               Show Awards
             </h4>
             {SHOW_LEVEL_AWARDS
@@ -399,7 +463,7 @@ function BestAwardsSection({
             );
 
             return (
-              <div key={breedName} className="space-y-2 border-t border-amber-100 pt-3">
+              <div key={breedName} className="space-y-2 border-t border-se-honey-line pt-3">
                 <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                   {breedName}
                 </h4>
@@ -447,6 +511,8 @@ function BestAwardsSection({
               </div>
             );
           })}
+          </>
+          )}
         </div>
       )}
     </div>
@@ -454,7 +520,7 @@ function BestAwardsSection({
 }
 
 /** Single award row with label + select dropdown */
-function AwardRow({
+export function AwardRow({
   label,
   type,
   existing,
@@ -477,6 +543,22 @@ function AwardRow({
   isPending: boolean;
   onSelect: (dogId: string) => void;
 }) {
+  // A recorded holder can fall out of `candidates` (a class re-judge, class
+  // order edit, …). Without this the Select's `value` has no matching item
+  // and Radix renders an empty box — Mandy could neither see nor publish the
+  // recorded award, and once deleted one believing it was unset. Show them
+  // as a visible, labelled option instead of silently dropping them.
+  const holderMissing = !!existing && !candidates.some((c) => c.dogId === existing.dogId);
+  const options = holderMissing
+    ? [
+        ...candidates,
+        {
+          dogId: existing!.dogId,
+          registeredName: `${existing!.dog?.registeredName ?? 'Recorded dog'} (recorded)`,
+          catalogueNumber: null,
+        },
+      ]
+    : candidates;
   return (
     <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:gap-3">
       <span className="text-xs sm:text-sm font-medium w-full sm:w-44 shrink-0 truncate" title={label}>
@@ -492,7 +574,7 @@ function AwardRow({
         </SelectTrigger>
         <SelectContent>
           <SelectItem value="none">-- None --</SelectItem>
-          {candidates.map((d) => (
+          {options.map((d) => (
             <SelectItem key={d.dogId} value={d.dogId}>
               {d.catalogueNumber ? `#${d.catalogueNumber} ` : ''}{d.registeredName}
             </SelectItem>
@@ -606,10 +688,11 @@ export default function SecretaryResultsPage() {
   const total = summary?.totalClasses ?? 0;
   const progress = total > 0 ? Math.round((judged / total) * 100) : 0;
 
-  const showLevelTypes = ['best_in_show', 'reserve_best_in_show', 'best_puppy_in_show', 'best_long_coat_in_show'];
+  const showLevelTypes = ['best_in_show', 'reserve_best_in_show', 'best_puppy_in_show', 'best_veteran_in_show', 'reserve_best_veteran_in_show', 'best_long_coat_in_show'];
   const breedLevelTypes = [
     'best_of_breed', 'best_puppy_in_breed', 'best_veteran_in_breed',
     'dog_cc', 'reserve_dog_cc', 'bitch_cc', 'reserve_bitch_cc',
+    'best_dog', 'best_bitch', 'reserve_best_dog', 'reserve_best_bitch',
     'best_puppy_dog', 'best_puppy_bitch',
     'best_long_coat_dog', 'best_long_coat_bitch',
     'cc', 'reserve_cc',
@@ -642,30 +725,30 @@ export default function SecretaryResultsPage() {
     <div className="space-y-6">
       {/* Publication Status Banner */}
       {published ? (
-        <div className="flex items-start gap-3 rounded-lg border border-green-200 bg-green-50 p-4">
-          <Globe className="mt-0.5 size-5 shrink-0 text-green-600" />
+        <div className="flex items-start gap-3 rounded-lg border border-se-fresh-line bg-se-fresh-soft p-4">
+          <Globe className="mt-0.5 size-5 shrink-0 text-se-fresh-deep" />
           <div className="flex-1">
-            <p className="font-medium text-green-800">Results Published</p>
+            <p className="font-medium text-se-fresh-deep">Results Published</p>
             {publishedAt && (
-              <p className="mt-0.5 text-xs text-green-600">
+              <p className="mt-0.5 text-xs text-se-fresh-deep">
                 Published {new Date(publishedAt).toLocaleString('en-GB', {
                   day: 'numeric', month: 'short', year: 'numeric',
                   hour: '2-digit', minute: '2-digit',
                 })}
               </p>
             )}
-            <p className="mt-1 text-xs text-green-700">
+            <p className="mt-1 text-xs text-se-fresh-deep">
               <Lock className="mr-0.5 inline size-3" />
               Stewards cannot edit results while published
             </p>
           </div>
         </div>
       ) : (
-        <div className="flex items-start gap-3 rounded-lg border border-amber-200 bg-amber-50 p-4">
-          <Unlock className="mt-0.5 size-5 shrink-0 text-amber-600" />
+        <div className="flex items-start gap-3 rounded-lg border border-se-honey-line bg-se-honey-soft p-4">
+          <Unlock className="mt-0.5 size-5 shrink-0 text-se-honey-deep" />
           <div>
-            <p className="font-medium text-amber-800">Results Not Published</p>
-            <p className="mt-0.5 text-xs text-amber-700">
+            <p className="font-medium text-se-honey-ink">Results Not Published</p>
+            <p className="mt-0.5 text-xs text-se-honey-deep">
               Results are only visible to stewards, secretaries, and admins.
             </p>
           </div>
@@ -678,18 +761,18 @@ export default function SecretaryResultsPage() {
           <div className="flex items-center gap-3">
             <div className="flex gap-1.5">
               <Badge variant="secondary" className="gap-1 text-xs">
-                <CheckCircle2 className="size-3 text-green-500" />
+                <CheckCircle2 className="size-3 text-se-fresh-deep" />
                 {pubStatus.approvals.approved} approved
               </Badge>
               {pubStatus.approvals.pending > 0 && (
                 <Badge variant="secondary" className="gap-1 text-xs">
-                  <Clock className="size-3 text-amber-500" />
+                  <Clock className="size-3 text-se-honey-deep" />
                   {pubStatus.approvals.pending} pending
                 </Badge>
               )}
               {pubStatus.approvals.declined > 0 && (
                 <Badge variant="secondary" className="gap-1 text-xs">
-                  <XCircle className="size-3 text-red-500" />
+                  <XCircle className="size-3 text-destructive" />
                   {pubStatus.approvals.declined} queried
                 </Badge>
               )}
@@ -706,7 +789,7 @@ export default function SecretaryResultsPage() {
                 <Button
                   variant="outline"
                   size="sm"
-                  className="min-h-[2.75rem] border-red-200 text-red-700 hover:bg-red-50"
+                  className="min-h-[2.75rem] border-destructive/30 text-destructive hover:bg-destructive/10"
                   disabled={unpublishMutation.isPending}
                 >
                   <Unlock className="mr-1 size-3" />
@@ -724,7 +807,7 @@ export default function SecretaryResultsPage() {
                   <AlertDialogCancel>Cancel</AlertDialogCancel>
                   <AlertDialogAction
                     onClick={() => unpublishMutation.mutate({ showId })}
-                    className="bg-red-600 hover:bg-red-700"
+                    className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
                   >
                     Unpublish
                   </AlertDialogAction>
@@ -736,7 +819,7 @@ export default function SecretaryResultsPage() {
               <AlertDialogTrigger asChild>
                 <Button
                   size="sm"
-                  className="min-h-[2.75rem] bg-green-700 hover:bg-green-800"
+                  className="min-h-[2.75rem] bg-se-fresh-deep hover:bg-se-fresh-deep/90"
                   disabled={!canPublish || publishMutation.isPending}
                 >
                   <Globe className="mr-1 size-3" />
@@ -756,7 +839,7 @@ export default function SecretaryResultsPage() {
                     id="send-notifs-results"
                     checked={sendNotifications}
                     onChange={(e) => setSendNotifications(e.target.checked)}
-                    className="size-4 rounded border-gray-300"
+                    className="size-4 rounded border-input"
                   />
                   <label htmlFor="send-notifs-results" className="text-sm">
                     Send notification emails
@@ -766,7 +849,7 @@ export default function SecretaryResultsPage() {
                   <AlertDialogCancel>Cancel</AlertDialogCancel>
                   <AlertDialogAction
                     onClick={() => publishMutation.mutate({ showId, sendNotifications })}
-                    className="bg-green-700 hover:bg-green-800"
+                    className="bg-se-fresh-deep hover:bg-se-fresh-deep/90"
                   >
                     Publish
                   </AlertDialogAction>
@@ -781,9 +864,9 @@ export default function SecretaryResultsPage() {
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <div className="flex items-center gap-2">
-            <h2 className="font-serif text-lg font-semibold sm:text-xl">Results</h2>
+            <h2 className={cn(SE_H, 'font-serif text-lg sm:text-xl')}>Results</h2>
             {isLive && (
-              <Badge className="bg-green-600 text-xs">
+              <Badge className="bg-se-fresh-deep text-xs">
                 <span className="relative mr-1.5 flex size-2">
                   <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-white opacity-75" />
                   <span className="relative inline-flex size-2 rounded-full bg-white" />
@@ -830,6 +913,10 @@ export default function SecretaryResultsPage() {
           showId={showId}
           showDate={showData.startDate}
           showType={showData.showType}
+          customAwards={
+            (showData as { scheduleData?: { bestAwards?: string[] } | null })
+              .scheduleData?.bestAwards ?? []
+          }
           confirmedDogs={confirmedDogs}
           existingAchievements={secAchievements ?? []}
           classResults={breedGroups}
@@ -848,17 +935,17 @@ export default function SecretaryResultsPage() {
         <div className="space-y-6">
           {/* Show-level awards (read-only display from public achievements) */}
           {showAwards.length > 0 && (
-            <div className="rounded-lg border border-green-200 bg-gradient-to-b from-green-50/80 to-green-50/30 p-3 sm:p-4">
+            <div className="rounded-lg border border-se-fresh-line bg-gradient-to-b from-se-fresh-soft/80 to-se-fresh-soft/30 p-3 sm:p-4">
               <div className="mb-3 flex items-center gap-2">
-                <Trophy className="size-5 text-green-600" />
-                <h3 className="font-serif text-base font-semibold text-green-900">
+                <Trophy className="size-5 text-se-fresh-deep" />
+                <h3 className="font-serif text-base font-semibold text-se-fresh-deep">
                   Recorded Show Awards
                 </h3>
               </div>
               <div className="space-y-2">
                 {showAwards.map((a) => (
                   <div key={a.id} className="flex flex-wrap items-center gap-1.5 sm:gap-3">
-                    <Badge className="bg-green-100 text-green-800 border-green-300 text-xs font-semibold whitespace-nowrap">
+                    <Badge className="bg-se-fresh-soft text-se-fresh-deep border-se-fresh-line text-xs font-semibold whitespace-nowrap">
                       {achievementLabels[a.type] ?? a.type}
                     </Badge>
                     <span className="font-medium text-sm">
@@ -887,7 +974,7 @@ export default function SecretaryResultsPage() {
                 <div className="mb-3 flex flex-wrap gap-x-4 gap-y-1.5">
                   {breedAwardsByBreed.get(group.breedName)!.map((a) => (
                     <div key={a.id} className="flex items-center gap-1.5 text-sm">
-                      <Award className="size-4 text-amber-500" />
+                      <Award className="size-4 text-se-honey-deep" />
                       <span className="text-xs font-medium text-muted-foreground">
                         {achievementLabels[a.type] ?? a.type}:
                       </span>
@@ -906,9 +993,11 @@ export default function SecretaryResultsPage() {
                     className="rounded-lg border bg-white p-3"
                   >
                     <div className="mb-2 flex items-center gap-2">
-                      {cls.classNumber != null && (
+                      {/* Label-first guard — a Junior Handling class has no
+                          class_number but does have a canonical label. */}
+                      {(cls.classLabel || cls.classNumber != null) && (
                         <span className="text-xs font-bold text-muted-foreground">
-                          #{cls.classNumber}
+                          #{cls.classLabel || cls.classNumber}
                         </span>
                       )}
                       <h4 className="font-semibold text-sm">
@@ -919,8 +1008,13 @@ export default function SecretaryResultsPage() {
                           {cls.sex}
                         </Badge>
                       )}
+                      {svCoatDisplayName(cls.svCoatType) && (
+                        <Badge variant="outline" className="text-xs">
+                          {svCoatDisplayName(cls.svCoatType)}
+                        </Badge>
+                      )}
                       <span className="text-xs text-muted-foreground">
-                        {cls.entriesCount} entered · {cls.dogsForward} forward
+                        {cls.dogsForward} presented / {cls.entriesCount} entered
                       </span>
                       {cls.results.length > 0 && (
                         <ClassPublishButton showId={showId} showClassId={cls.classId} results={cls.results} />
@@ -944,14 +1038,14 @@ export default function SecretaryResultsPage() {
                               ) : result.placementStatus === 'withheld' ? (
                                 <Badge
                                   variant="outline"
-                                  className="text-xs font-semibold whitespace-nowrap bg-amber-50 text-amber-700 border-amber-200"
+                                  className="text-xs font-semibold whitespace-nowrap bg-se-honey-soft text-se-honey-deep border-se-honey-line"
                                 >
                                   Withheld
                                 </Badge>
                               ) : result.placementStatus === 'unplaced' ? (
                                 <Badge
                                   variant="outline"
-                                  className="text-xs font-semibold whitespace-nowrap bg-slate-50 text-slate-600 border-slate-200"
+                                  className="text-xs font-semibold whitespace-nowrap bg-muted text-muted-foreground border-border"
                                 >
                                   Unplaced
                                 </Badge>
@@ -965,7 +1059,7 @@ export default function SecretaryResultsPage() {
                               {result.specialAward && (
                                 <Badge
                                   variant="secondary"
-                                  className="shrink-0 text-xs bg-amber-50 text-amber-700"
+                                  className="shrink-0 text-xs bg-se-honey-soft text-se-honey-deep"
                                 >
                                   <Award className="mr-0.5 size-3" />
                                   {result.specialAward}

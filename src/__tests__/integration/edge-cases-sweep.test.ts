@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { eq } from 'drizzle-orm';
-import { dogPhotos, achievements } from '@/server/db/schema';
+import { dogPhotos, achievements, dogOwners } from '@/server/db/schema';
 
 vi.mock('@/server/services/storage', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/server/services/storage')>();
@@ -82,6 +82,31 @@ describe('orders.checkout edge cases', () => {
     ).rejects.toThrow(/judge at this show/);
   });
 
+  // Amanda 2026-06-01: a Junior Handling judge assesses the handler, not the
+  // dog, so they may exhibit dogs in breed classes at the same show. The
+  // judge-conflict block must NOT fire for a JH-only assignment (breed null +
+  // sex null). Mirrors her real case: judging JH at her own South Western show.
+  it('allows entry when the matching judge is Junior-Handling-only', async () => {
+    const exhibitor = await makeUser({ role: 'exhibitor', name: 'Jo Handler' });
+    const org = await makeOrg();
+    const breed = await makeBreed();
+    const show = await makeShow({
+      organisationId: org.id, breedId: breed.id, status: 'entries_open', firstEntryFee: 500,
+    });
+    const showClass = await makeShowClass({ showId: show.id, breedId: breed.id });
+    const dog = await makeDog({ ownerId: exhibitor.id, breedId: breed.id });
+    // Same-named judge, but assigned ONLY as a Junior Handling judge — the
+    // JH shape is no breed + no sex (and not the Special Awards judge).
+    const judge = await makeJudge({ name: 'Jo Handler' });
+    await makeJudgeAssignment({ showId: show.id, judgeId: judge.id });
+
+    const res = await createTestCaller(exhibitor).orders.checkout({
+      showId: show.id,
+      entries: [{ entryType: 'standard', dogId: dog.id, classIds: [showClass.id], isNfc: false }],
+    });
+    expect(res.orderId).toBeTruthy();
+  });
+
   it('rejects checkout when caller does not own one of the dogs', async () => {
     const exhibitor = await makeUser({ role: 'exhibitor' });
     const otherUser = await makeUser({ role: 'exhibitor' });
@@ -98,6 +123,40 @@ describe('orders.checkout edge cases', () => {
         entries: [{ entryType: 'standard', dogId: otherDog.id, classIds: [showClass.id], isNfc: false }],
       }),
     ).rejects.toThrow(/not owned by you/);
+  });
+
+  // Amanda 2026-04-24: live-site bug. Cart with one NFC entry (no classes)
+  // plus a £5 donation sundry crashed checkout with "values() must be called
+  // with at least one value" — the entryClasses insert was called with an
+  // empty array because NFC entries legitimately carry zero classes.
+  it('accepts a cart of NFC-only entry + sundry item (no classes)', async () => {
+    const exhibitor = await makeUser({ role: 'exhibitor' });
+    const org = await makeOrg();
+    const breed = await makeBreed();
+    const show = await makeShow({
+      organisationId: org.id, breedId: breed.id, status: 'entries_open',
+      firstEntryFee: 1000, nfcEntryFee: 0,
+    });
+    const dog = await makeDog({ ownerId: exhibitor.id, breedId: breed.id });
+    const { sundryItems: sundryItemsTable } = await import('@/server/db/schema');
+    const [donation] = await testDb.insert(sundryItemsTable).values({
+      showId: show.id,
+      name: 'Voluntary donation',
+      priceInPence: 500,
+      sortOrder: 0,
+    }).returning();
+
+    const res = await createTestCaller(exhibitor).orders.checkout({
+      showId: show.id,
+      entries: [{ entryType: 'standard', dogId: dog.id, classIds: [], isNfc: true }],
+      sundryItems: [{ sundryItemId: donation!.id, quantity: 1 }],
+    });
+
+    const { orders: ordersTable } = await import('@/server/db/schema');
+    const order = await testDb.query.orders.findFirst({
+      where: eq(ordersTable.id, res.orderId),
+    });
+    expect(order?.totalAmount).toBe(500);
   });
 });
 
@@ -194,6 +253,31 @@ describe('POST /api/upload/dog-photo', () => {
     const file = new File([new Uint8Array(100)], 'photo.jpg', { type: 'image/jpeg' });
     const res = await dogPhotoPOST(postForm({ file, dogId: dog.id }) as never);
     expect(res.status).toBe(404);
+  });
+
+  // Rafaye Kanto incident, 2026-08-12: a linked co-owner (dog_owners.user_id)
+  // must get the same upload rights as the account holder — not a 404.
+  it('returns 200 for a linked co-owner (dog_owners.user_id, not dogs.owner_id)', async () => {
+    const owner = await makeUser({ role: 'exhibitor' });
+    const coOwner = await makeUser({ role: 'exhibitor' });
+    const dog = await makeDog({ ownerId: owner.id });
+    await testDb.insert(dogOwners).values({
+      dogId: dog.id,
+      userId: coOwner.id,
+      ownerName: 'Co Owner',
+      ownerAddress: '2 Low St',
+      ownerEmail: 'co-owner@test.local',
+      isPrimary: false,
+      sortOrder: 1,
+    });
+    vi.mocked(auth).mockResolvedValueOnce({
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      user: { id: coOwner.id, email: coOwner.email, name: coOwner.name, role: coOwner.role } as any,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    } as any);
+    const file = new File([new Uint8Array(100)], 'photo.jpg', { type: 'image/jpeg' });
+    const res = await dogPhotoPOST(postForm({ file, dogId: dog.id }) as never);
+    expect(res.status).toBe(200);
   });
 
   it('uploads to R2 + inserts dogPhotos row, marking first photo as primary', async () => {

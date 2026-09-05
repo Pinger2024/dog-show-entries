@@ -44,10 +44,10 @@ describe('validateUpload', () => {
     });
   });
 
-  it('rejects images over 5MB', () => {
-    const result = validateUpload('image/jpeg', 5 * 1024 * 1024 + 1);
+  it('rejects images over 15MB', () => {
+    const result = validateUpload('image/jpeg', 15 * 1024 * 1024 + 1);
     expect(result.valid).toBe(false);
-    expect(result.error).toContain('5MB');
+    expect(result.error).toContain('15MB');
   });
 
   it('rejects unsupported file types', () => {

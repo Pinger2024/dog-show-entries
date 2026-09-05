@@ -4,6 +4,8 @@ import { hash } from 'bcryptjs';
 import { Resend } from 'resend';
 import { db } from '@/server/db';
 import { users, passwordResetTokens } from '@/server/db/schema';
+import { emailHeader } from './email';
+import { BRAND } from '@/lib/brand';
 
 const resend = new Resend(process.env.RESEND_API_KEY);
 const FROM = process.env.EMAIL_FROM ?? 'Remi <noreply@remishowmanager.co.uk>';
@@ -60,7 +62,7 @@ export async function requestPasswordReset(email: string) {
 
   const resetUrl = `${APP_URL}/reset-password?token=${token}`;
 
-  await resend.emails.send({
+  const result = await resend.emails.send({
     from: FROM,
     to: user.email,
     replyTo: process.env.FEEDBACK_EMAIL ?? 'feedback@remishowmanager.co.uk',
@@ -81,45 +83,43 @@ export async function requestPasswordReset(email: string) {
     html: `<!DOCTYPE html>
 <html>
 <head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
-<body style="margin: 0; padding: 0; background-color: #f5f3ef; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
+<body style="margin: 0; padding: 0; background-color: ${BRAND.paper}; font-family: 'Hanken Grotesk', -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
   <div style="max-width: 500px; margin: 0 auto; padding: 32px 16px;">
 
-    <div style="text-align: center; padding: 20px 0;">
-      <h1 style="margin: 0; font-family: Georgia, 'Times New Roman', serif; font-size: 28px; color: #2D5F3F; letter-spacing: -0.5px;">Remi</h1>
-    </div>
+    ${emailHeader()}
 
-    <div style="background: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
-      <div style="background: #2D5F3F; padding: 24px; text-align: center;">
-        <h2 style="margin: 0; color: #ffffff; font-size: 20px; font-weight: 700;">Reset Your Password</h2>
+    <div style="background: #ffffff; border: 1px solid ${BRAND.line}; border-radius: 14px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+      <div style="background: ${BRAND.deep}; padding: 24px; text-align: center;">
+        <h2 style="margin: 0; color: ${BRAND.cream}; font-size: 20px; font-weight: 700;">Reset Your Password</h2>
       </div>
 
       <div style="padding: 28px 24px; text-align: center;">
-        <p style="margin: 0 0 8px; font-size: 15px; color: #333; line-height: 1.5;">
+        <p style="margin: 0 0 8px; font-size: 15px; color: ${BRAND.ink}; line-height: 1.5;">
           Click the button below to set a new password. This link will expire in 1 hour.
         </p>
-        <p style="margin: 0 0 24px; font-size: 13px; color: #888;">
-          Resetting password for <strong style="color: #333;">${user.email}</strong>
+        <p style="margin: 0 0 24px; font-size: 13px; color: ${BRAND.ink2};">
+          Resetting password for <strong style="color: ${BRAND.ink};">${user.email}</strong>
         </p>
 
-        <a href="${resetUrl}" style="display: inline-block; padding: 14px 36px; background: #2D5F3F; color: #ffffff; text-decoration: none; border-radius: 8px; font-size: 15px; font-weight: 600;">Reset Password</a>
+        <a href="${resetUrl}" style="display: inline-block; padding: 14px 36px; background: ${BRAND.green}; color: ${BRAND.cream}; text-decoration: none; border-radius: 13px; font-size: 15px; font-weight: 700;">Reset Password</a>
 
-        <p style="margin: 24px 0 0; font-size: 12px; color: #999; line-height: 1.5;">
+        <p style="margin: 24px 0 0; font-size: 12px; color: ${BRAND.ink2}; line-height: 1.5;">
           If the button doesn\u2019t work, copy and paste this link into your browser:<br>
-          <a href="${resetUrl}" style="color: #2D5F3F; word-break: break-all;">${resetUrl}</a>
+          <a href="${resetUrl}" style="color: ${BRAND.green}; word-break: break-all;">${resetUrl}</a>
         </p>
       </div>
 
-      <div style="padding: 16px 24px; border-top: 1px solid #e5e5e5; text-align: center;">
-        <p style="margin: 0; font-size: 12px; color: #999; line-height: 1.5;">
+      <div style="padding: 16px 24px; border-top: 1px solid ${BRAND.line}; text-align: center;">
+        <p style="margin: 0; font-size: 12px; color: ${BRAND.ink2}; line-height: 1.5;">
           If you did not request this email, you can safely ignore it.
           <br>Your password will not be changed.
         </p>
       </div>
     </div>
 
-    <div style="text-align: center; padding: 20px 16px; font-size: 12px; color: #999;">
+    <div style="text-align: center; padding: 20px 16px; font-size: 12px; color: ${BRAND.ink2};">
       <p style="margin: 0;">
-        <a href="${APP_URL}" style="color: #2D5F3F; text-decoration: none; font-weight: 600;">Remi</a>
+        <a href="${APP_URL}" style="color: ${BRAND.green}; text-decoration: none; font-weight: 600;">Remi</a>
         &mdash; Dog show entries made simple.
       </p>
     </div>
@@ -127,6 +127,13 @@ export async function requestPasswordReset(email: string) {
 </body>
 </html>`,
   });
+  // The public forgot-password flow must answer identically whether or not
+  // the account exists (anti-enumeration), so a Resend rejection can't be
+  // surfaced to the caller — but it MUST be loud in the logs: a suppressed
+  // address here means the user can never reset their password.
+  if (result.error) {
+    console.error(`[password-reset] Resend rejected reset email to ${user.email}:`, result.error);
+  }
 }
 
 /**

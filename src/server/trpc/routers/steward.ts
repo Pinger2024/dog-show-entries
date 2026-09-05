@@ -1,10 +1,12 @@
 import { z } from 'zod';
 import { TRPCError } from '@trpc/server';
-import { and, eq, isNull, isNotNull, asc } from 'drizzle-orm';
+import { and, eq, ne, isNull, isNotNull, asc, sql, inArray } from 'drizzle-orm';
 import { stewardProcedure, publicProcedure } from '../procedures';
 import { createTRPCRouter } from '../init';
 import type { Database } from '@/server/db';
-import { ACHIEVEMENT_TYPES } from '@/lib/placements';
+import { ACHIEVEMENT_TYPES, getPlacementLabel, type AchievementType } from '@/lib/placements';
+import { isShowDayReached } from '@/lib/date-utils';
+import { resolveTopAwards } from '@/lib/top-awards';
 import {
   shows,
   entries,
@@ -18,9 +20,15 @@ import {
   dogs,
   judges,
   judgeAssignments,
+  memberships,
+  critiqueDocuments,
 } from '@/server/db/schema';
 import { isUuid } from '@/lib/slugify';
+import { buildJudgeBreedAndClassification } from '@/lib/judge-breed-classification';
+import { buildClassLabelMap, svDisplayAge } from '@/lib/class-labels';
+import { publicOrgColumns } from '../public-org-columns';
 import { sendJudgeApprovalRequestEmail } from '@/server/services/email';
+import { deriveTopAwardJudge } from '@/server/services/derive-award-judge';
 
 /** Resolve a show slug or UUID to a UUID */
 async function resolveShowId(db: Database, idOrSlug: string): Promise<string> {
@@ -31,6 +39,57 @@ async function resolveShowId(db: Database, idOrSlug: string): Promise<string> {
   });
   if (!show) throw new TRPCError({ code: 'NOT_FOUND', message: 'Show not found' });
   return show.id;
+}
+
+/**
+ * May this caller see exhibitor identities BEFORE show day?
+ *
+ * The lock itself is Amanda 2026-05-28: stewards meet the entry list for the
+ * first time when they arrive on the day.
+ *
+ * Mandy 2026-08-21: "only me, Michael and the show secretary … I don't want any
+ * of the other committee to be able to see who has entered at all."
+ *
+ * This used to pass ANY active member of the host organisation. That matched her
+ * intent only by accident — the sole membership rows in existence were staff. A
+ * membership is a CLUB membership (it carries an expiry, and drives the members'
+ * entry discount), so the moment a club adds real members every one of them would
+ * have silently gained an early view of the entry list, with nothing to announce
+ * it.
+ *
+ * Who now gets through:
+ *  - the founders (admin);
+ *  - the show's named secretary (`shows.secretary_user_id`);
+ *  - co-secretaries — the secretary ROLE plus an active membership of the host
+ *    club. That is how a shared secretaryship is represented: South Western ran
+ *    Denise Hensley (the show's secretary_user_id) alongside Ann Swift, who is a
+ *    secretary-role member of the club and nothing else. Mandy confirmed that
+ *    arrangement stays.
+ *
+ * Committee members and ordinary club members hold a membership but not the
+ * secretary role, so the role check is what separates them. Verified against
+ * live data before the change: nobody currently relying on the old rule lost
+ * access.
+ */
+async function callerCanBypassShowDayLock(
+  db: Database,
+  userId: string,
+  role: string,
+  organisationId: string,
+  showSecretaryUserId: string | null,
+): Promise<boolean> {
+  if (role === 'admin') return true;
+  if (showSecretaryUserId && showSecretaryUserId === userId) return true;
+  if (role !== 'secretary') return false;
+  const membership = await db.query.memberships.findFirst({
+    where: and(
+      eq(memberships.userId, userId),
+      eq(memberships.organisationId, organisationId),
+      eq(memberships.status, 'active'),
+    ),
+    columns: { id: true },
+  });
+  return !!membership;
 }
 
 async function verifyStewardAssignment(
@@ -67,6 +126,48 @@ async function assertResultsNotLocked(db: Database, showId: string) {
   }
 }
 
+/**
+ * Non-throwing privilege check for the PUBLIC results procedures (getLiveResults,
+ * getPublicShowAchievements). "Privileged" means the caller may see UNPUBLISHED
+ * results/achievements. It must be: an admin, a steward ASSIGNED to this show, or
+ * a secretary who is an active member of the show's org — NOT merely anyone
+ * holding the steward/secretary role globally. Otherwise a steward/secretary of
+ * club A could read club B's unpublished placements + BOB/BIS before they're
+ * published (a pre-judging confidentiality leak). Returns false rather than
+ * throwing, because these are public procedures: a logged-in steward viewing
+ * another club's PUBLIC results page must still see the published results, just
+ * not the unpublished ones.
+ */
+async function callerIsPrivilegedForShow(
+  db: Database,
+  userId: string | undefined,
+  role: string | undefined,
+  showId: string,
+  organisationId: string,
+): Promise<boolean> {
+  if (role === 'admin') return true;
+  if (!userId) return false;
+  if (role === 'steward') {
+    const assignment = await db.query.stewardAssignments.findFirst({
+      where: and(eq(stewardAssignments.userId, userId), eq(stewardAssignments.showId, showId)),
+      columns: { id: true },
+    });
+    return !!assignment;
+  }
+  if (role === 'secretary') {
+    const membership = await db.query.memberships.findFirst({
+      where: and(
+        eq(memberships.userId, userId),
+        eq(memberships.organisationId, organisationId),
+        eq(memberships.status, 'active'),
+      ),
+      columns: { id: true },
+    });
+    return !!membership;
+  }
+  return false;
+}
+
 export const stewardRouter = createTRPCRouter({
   // ── Steward's assigned shows ──────────────────────────────
   getMyShows: stewardProcedure.query(async ({ ctx }) => {
@@ -75,7 +176,7 @@ export const stewardRouter = createTRPCRouter({
       with: {
         show: {
           with: {
-            organisation: true,
+            organisation: { columns: publicOrgColumns },
             venue: true,
           },
         },
@@ -127,7 +228,7 @@ export const stewardRouter = createTRPCRouter({
           entryClasses: {
             with: {
               entry: {
-                columns: { id: true, status: true, deletedAt: true, absent: true },
+                columns: { id: true, status: true, deletedAt: true },
               },
               result: true,
             },
@@ -136,20 +237,29 @@ export const stewardRouter = createTRPCRouter({
         orderBy: [asc(showClasses.sortOrder)],
       });
 
-      // Filter to assigned breeds if applicable
+      // Filter to assigned breeds if applicable. Breed-null classes (Junior
+      // Handling, Stakes, any-breed special awards) belong to no single breed, so
+      // a breed-scoped steward must still see them — otherwise a steward assigned
+      // to a breed would never see the show's JH classes.
       const filtered = assignedBreedIds
-        ? classes.filter((sc) => sc.breedId && assignedBreedIds.includes(sc.breedId))
+        ? classes.filter((sc) => !sc.breedId || assignedBreedIds.includes(sc.breedId))
         : classes;
 
       return filtered.map((sc) => {
         const confirmedEntries = sc.entryClasses.filter(
           (ec) => ec.entry.status === 'confirmed' && !ec.entry.deletedAt
         );
-        const resultsCount = confirmedEntries.filter(
-          (ec) => ec.result !== null
-        ).length;
+        const resultsRows = confirmedEntries
+          .map((ec) => ec.result)
+          .filter((r): r is NonNullable<typeof r> => r !== null);
+        const resultsCount = resultsRows.length;
+        const publishedResults = resultsRows.filter((r) => r.publishedAt !== null);
+        // Per-class attendance (Mandy 2026-08-12): a dog absent from THIS
+        // class still counts as forward in any other class she's entered in
+        // (e.g. a Special Award), so this reads the entry_class row's own
+        // flag, not the whole-entry roll-up.
         const absentCount = confirmedEntries.filter(
-          (ec) => ec.entry.absent
+          (ec) => ec.absent
         ).length;
 
         return {
@@ -163,6 +273,11 @@ export const stewardRouter = createTRPCRouter({
           absentCount,
           resultsCount,
           hasResults: resultsCount > 0,
+          // Publish status: published when every current result is live,
+          // partially published when some are live, and "dirty" when new
+          // results have been added since the steward last published.
+          isPublished: resultsCount > 0 && publishedResults.length === resultsCount,
+          hasUnpublishedChanges: publishedResults.length > 0 && publishedResults.length < resultsCount,
         };
       });
     }),
@@ -190,11 +305,52 @@ export const stewardRouter = createTRPCRouter({
         showClass.showId
       );
 
-      // Fetch show scope for placement rules
+      // Fetch show scope and ruleset for placement rules, plus the bits we
+      // need for the show-day lock (Amanda 2026-05-28): startDate determines
+      // when exhibits unlock; organisationId determines who bypasses.
       const show = await ctx.db.query.shows.findFirst({
         where: eq(shows.id, showClass.showId),
-        columns: { showScope: true },
+        columns: {
+          showScope: true,
+          showRuleset: true,
+          startDate: true,
+          organisationId: true,
+          secretaryUserId: true,
+        },
       });
+
+      // Lock exhibitor identities until the morning of the show. Host-club
+      // secretaries and admins always bypass; stewards see the entry list
+      // for the first time when they arrive on the day.
+      if (show) {
+        const dayReached = isShowDayReached(show.startDate);
+        const canBypass = await callerCanBypassShowDayLock(
+          ctx.db,
+          ctx.session.user.id,
+          ctx.session.user.role,
+          show.organisationId,
+          show.secretaryUserId ?? null,
+        );
+        if (!dayReached && !canBypass) {
+          return {
+            showClass: {
+              id: showClass.id,
+              showId: showClass.showId,
+              classDefinition: showClass.classDefinition,
+              breed: showClass.breed,
+              sex: showClass.sex,
+              showScope: show.showScope,
+              showRuleset: show.showRuleset,
+              isPublished: false,
+              hasUnpublishedChanges: false,
+            },
+            judgeName: null,
+            entries: [],
+            lockedUntilShowDay: true,
+            showStartDate: show.startDate,
+          };
+        }
+      }
 
       // Fetch judge for this class's breed to check breeder conflicts
       let judgeName: string | null = null;
@@ -230,6 +386,12 @@ export const stewardRouter = createTRPCRouter({
         (ec) => ec.entry.status === 'confirmed' && !ec.entry.deletedAt
       );
 
+      // Publish status — derived from per-result publishedAt timestamps.
+      const allResults = confirmed.map((ec) => ec.result).filter((r): r is NonNullable<typeof r> => r != null);
+      const publishedResults = allResults.filter((r) => r.publishedAt !== null);
+      const isPublished = allResults.length > 0 && publishedResults.length === allResults.length;
+      const hasUnpublishedChanges = publishedResults.length > 0 && publishedResults.length < allResults.length;
+
       return {
         showClass: {
           id: showClass.id,
@@ -238,8 +400,13 @@ export const stewardRouter = createTRPCRouter({
           breed: showClass.breed,
           sex: showClass.sex,
           showScope: show?.showScope ?? 'general',
+          showRuleset: show?.showRuleset ?? 'rkc',
+          isPublished,
+          hasUnpublishedChanges,
         },
         judgeName,
+        lockedUntilShowDay: false as const,
+        showStartDate: show?.startDate ?? null,
         entries: confirmed
           .sort((a, b) => {
             const aCat = Number(a.entry.catalogueNumber) || 9999;
@@ -272,7 +439,9 @@ export const stewardRouter = createTRPCRouter({
               // so the steward knows who to talk to. For dog entries
               // it's the entering user as before.
               exhibitorName: ec.entry.exhibitor.name,
-              absent: ec.entry.absent,
+              // Per-class attendance (Mandy 2026-08-12) — this entry_class
+              // row's own flag, not the whole-entry roll-up.
+              absent: ec.absent,
               result: ec.result
                 ? {
                     id: ec.result.id,
@@ -280,6 +449,7 @@ export const stewardRouter = createTRPCRouter({
                     placementStatus: ec.result.placementStatus,
                     specialAward: ec.result.specialAward,
                     critiqueText: ec.result.critiqueText,
+                    svGrade: ec.result.svGrade,
                   }
                 : null,
             };
@@ -293,14 +463,19 @@ export const stewardRouter = createTRPCRouter({
       z.object({
         entryClassId: z.string().uuid(),
         // `placement` and `placementStatus` are mutually exclusive — an
-        // entry is either numerically placed (1-7) OR has a non-numeric
-        // status ('withheld' / 'unplaced'), never both.
-        placement: z.number().int().min(1).max(7).nullable(),
+        // entry is either numerically placed OR has a non-numeric
+        // status ('withheld' / 'unplaced'), never both. Max 50 to allow
+        // GSD-style "place every dog in the class" judging.
+        placement: z.number().int().min(1).max(50).nullable(),
         placementStatus: z.enum(['withheld', 'unplaced']).nullable().optional(),
         specialAward: z.string().nullable().optional(),
         critiqueText: z.string().nullable().optional(),
         winnerPhotoUrl: z.string().nullable().optional(),
         winnerPhotoStorageKey: z.string().nullable().optional(),
+        svGrade: z
+          .enum(['v', 'sg', 'g', 'a', 'm', 'u', 'vp', 'p', 'wv', 'disqualified'])
+          .nullable()
+          .optional(),
       })
     )
     .mutation(async ({ ctx, input }) => {
@@ -309,7 +484,7 @@ export const stewardRouter = createTRPCRouter({
         where: eq(entryClasses.id, input.entryClassId),
         with: {
           showClass: true,
-          entry: { columns: { status: true, deletedAt: true, absent: true } },
+          entry: { columns: { status: true, deletedAt: true } },
         },
       });
 
@@ -327,6 +502,20 @@ export const stewardRouter = createTRPCRouter({
         });
       }
 
+      // Dogs marked absent shouldn't receive placements. The UI dims
+      // absent rows but that's CSS-only — a direct API call with the
+      // entryClassId still lands here, so we need a server-side guard
+      // to prevent ghost placements for no-shows. Per-class (Mandy
+      // 2026-08-12): a dog absent from her breed class can still be placed
+      // in a Special Award class at the same show, so this checks THIS
+      // class's own flag, not the whole-entry roll-up.
+      if (ec.absent) {
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: 'Cannot record a placement for an absent entry',
+        });
+      }
+
       await verifyStewardAssignment(
         ctx.db,
         ctx.session.user.id,
@@ -334,6 +523,34 @@ export const stewardRouter = createTRPCRouter({
       );
 
       await assertResultsNotLocked(ctx.db, ec.showClass.showId);
+
+      // Guard against two dogs landing in the same placement slot. Rapid taps
+      // on one phone, or two stewards recording the same class at once, can both
+      // write e.g. placement=1 — and the ladder renders one dog per slot, so the
+      // loser silently vanishes. Reject a numeric placement that another entry in
+      // THIS class already holds, in plain English the steward can act on.
+      if (input.placement != null) {
+        const clash = await ctx.db
+          .select({ catalogueNumber: entries.catalogueNumber })
+          .from(results)
+          .innerJoin(entryClasses, eq(entryClasses.id, results.entryClassId))
+          .innerJoin(entries, eq(entries.id, entryClasses.entryId))
+          .where(
+            and(
+              eq(entryClasses.showClassId, ec.showClassId),
+              ne(entryClasses.id, input.entryClassId),
+              eq(results.placement, input.placement),
+            ),
+          )
+          .limit(1);
+        if (clash.length > 0) {
+          const cat = clash[0]!.catalogueNumber;
+          throw new TRPCError({
+            code: 'BAD_REQUEST',
+            message: `${getPlacementLabel(input.placement)} is already taken by #${cat ?? '—'} — clear it first.`,
+          });
+        }
+      }
 
       // Upsert the result
       const [result] = await ctx.db
@@ -346,6 +563,7 @@ export const stewardRouter = createTRPCRouter({
           critiqueText: input.critiqueText ?? null,
           winnerPhotoUrl: input.winnerPhotoUrl ?? null,
           winnerPhotoStorageKey: input.winnerPhotoStorageKey ?? null,
+          svGrade: input.svGrade ?? null,
           recordedBy: ctx.session.user.id,
           recordedAt: new Date(),
         })
@@ -358,13 +576,100 @@ export const stewardRouter = createTRPCRouter({
             critiqueText: input.critiqueText ?? null,
             winnerPhotoUrl: input.winnerPhotoUrl ?? null,
             winnerPhotoStorageKey: input.winnerPhotoStorageKey ?? null,
+            svGrade: input.svGrade ?? null,
             recordedBy: ctx.session.user.id,
             recordedAt: new Date(),
           },
         })
         .returning();
 
+      // Auto-start the show. The first placing recorded on show day flips an
+      // entries_closed show to in_progress, so a remote secretary never has to
+      // remember to "start" it — and the end-of-day Publish Results (which needs
+      // in_progress) just works. The steward fairness lock already blocks
+      // recording before show day, but we guard on BOTH the date and the status
+      // so this is the only transition ever made: entries_closed → in_progress,
+      // never backwards, and draft/completed/cancelled are left untouched. The
+      // status condition in the WHERE keeps it idempotent and race-safe.
+      const showForStart = await ctx.db.query.shows.findFirst({
+        where: eq(shows.id, ec.showClass.showId),
+        columns: { status: true, startDate: true },
+      });
+      if (showForStart?.status === 'entries_closed' && isShowDayReached(showForStart.startDate)) {
+        await ctx.db
+          .update(shows)
+          .set({ status: 'in_progress' })
+          .where(and(eq(shows.id, ec.showClass.showId), eq(shows.status, 'entries_closed')));
+      }
+
       return result!;
+    }),
+
+  // ── Publish / unpublish a single class's results (steward-side) ──
+  publishClassResults: stewardProcedure
+    .input(
+      z.object({
+        showId: z.string().uuid(),
+        showClassId: z.string().uuid(),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      await verifyStewardAssignment(ctx.db, ctx.session.user.id, input.showId);
+      await assertResultsNotLocked(ctx.db, input.showId);
+
+      const now = new Date();
+      try {
+        await ctx.db.execute(sql`
+          UPDATE results r
+          SET published_at = ${now.toISOString()}::timestamptz
+          FROM entry_classes ec
+          JOIN entries e ON ec.entry_id = e.id
+          WHERE r.entry_class_id = ec.id
+            AND e.show_id = ${input.showId}
+            AND ec.show_class_id = ${input.showClassId}
+            AND r.published_at IS NULL
+        `);
+      } catch (error) {
+        console.error('[steward.publishClassResults] SQL error:', error);
+        throw new TRPCError({
+          code: 'INTERNAL_SERVER_ERROR',
+          message: 'Failed to publish class results. Please try again.',
+        });
+      }
+
+      return { published: true, classId: input.showClassId };
+    }),
+
+  unpublishClassResults: stewardProcedure
+    .input(
+      z.object({
+        showId: z.string().uuid(),
+        showClassId: z.string().uuid(),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      await verifyStewardAssignment(ctx.db, ctx.session.user.id, input.showId);
+      await assertResultsNotLocked(ctx.db, input.showId);
+
+      try {
+        await ctx.db.execute(sql`
+          UPDATE results r
+          SET published_at = NULL
+          FROM entry_classes ec
+          JOIN entries e ON ec.entry_id = e.id
+          WHERE r.entry_class_id = ec.id
+            AND e.show_id = ${input.showId}
+            AND ec.show_class_id = ${input.showClassId}
+        `);
+      } catch (error) {
+        console.error('[steward.unpublishClassResults] SQL error:', error);
+        throw new TRPCError({
+          code: 'INTERNAL_SERVER_ERROR',
+          message: 'Failed to unpublish results. Please try again.',
+        });
+      }
+
+      return { unpublished: true, classId: input.showClassId };
     }),
 
   // ── Update winner photo only (no data loss) ──────────────
@@ -428,40 +733,124 @@ export const stewardRouter = createTRPCRouter({
       return { removed: true };
     }),
 
-  // ── Mark entry absent/present ──────────────────────────
+  // ── Bulk-set the SV grade for every recorded dog in a class ──────
+  // SV stewards often grade most of a class the same (e.g. all SG) then
+  // tweak the odd one (Amanda 2026-05-28). Sets svGrade on every result
+  // already recorded in the class; placements are left untouched.
+  setClassGrades: stewardProcedure
+    .input(
+      z.object({
+        showClassId: z.string().uuid(),
+        svGrade: z
+          .enum(['v', 'sg', 'g', 'a', 'm', 'u', 'vp', 'p', 'wv', 'disqualified'])
+          .nullable(),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      const sc = await ctx.db.query.showClasses.findFirst({
+        where: eq(showClasses.id, input.showClassId),
+        columns: { id: true, showId: true },
+      });
+      if (!sc) throw new TRPCError({ code: 'NOT_FOUND', message: 'Class not found' });
+      await verifyStewardAssignment(ctx.db, ctx.session.user.id, sc.showId);
+      await assertResultsNotLocked(ctx.db, sc.showId);
+
+      const ecRows = await ctx.db.query.entryClasses.findMany({
+        where: eq(entryClasses.showClassId, input.showClassId),
+        columns: { id: true },
+      });
+      const ecIds = ecRows.map((r) => r.id);
+      if (ecIds.length === 0) return { updated: 0 };
+
+      const updated = await ctx.db
+        .update(results)
+        .set({ svGrade: input.svGrade })
+        .where(inArray(results.entryClassId, ecIds))
+        .returning({ id: results.id });
+      return { updated: updated.length };
+    }),
+
+  // ── Mark a class attendance absent/present ──────────────
+  // Attendance is per CLASS, not per entry (Mandy 2026-08-12, real incident):
+  // a dog can be absent from her breed class but shown — and placed — in a
+  // Special Award class at the same show. `entryClasses.absent` is now the
+  // authoritative flag; `entries.absent` is kept as a whole-show roll-up
+  // (true only once every one of the entry's classes is absent) so
+  // entry-level readers (financial counts, refund UIs, the RKC SH01 dog
+  // count) keep today's meaning unchanged.
   markAbsent: stewardProcedure
     .input(
       z.object({
-        entryId: z.string().uuid(),
+        entryClassId: z.string().uuid(),
         absent: z.boolean(),
       })
     )
     .mutation(async ({ ctx, input }) => {
-      const entry = await ctx.db.query.entries.findFirst({
-        where: eq(entries.id, input.entryId),
-        with: { show: { columns: { status: true } } },
+      const ec = await ctx.db.query.entryClasses.findFirst({
+        where: eq(entryClasses.id, input.entryClassId),
+        with: {
+          showClass: { columns: { showId: true } },
+          entry: { columns: { id: true } },
+        },
       });
 
-      if (!entry) {
-        throw new TRPCError({ code: 'NOT_FOUND', message: 'Entry not found' });
+      if (!ec) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'Entry class not found' });
       }
 
-      if (['completed', 'cancelled'].includes(entry.show.status)) {
+      const showId = ec.showClass.showId;
+      const show = await ctx.db.query.shows.findFirst({
+        where: eq(shows.id, showId),
+        columns: { status: true },
+      });
+      if (!show) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'Show not found' });
+      }
+
+      // A cancelled show never happened — attendance is meaningless. A
+      // COMPLETED show, though, is exactly the case that motivated this
+      // change: a secretary discovers after the fact (an RKC query, a
+      // steward's note) that attendance was recorded wrong for one class,
+      // and needs to fix it — as long as results aren't published+locked
+      // (checked below), which is the real "no more changes" gate.
+      if (show.status === 'cancelled') {
         throw new TRPCError({
           code: 'BAD_REQUEST',
-          message: 'Cannot modify attendance for a completed or cancelled show',
+          message: 'Cannot modify attendance for a cancelled show',
         });
       }
 
-      await verifyStewardAssignment(ctx.db, ctx.session.user.id, entry.showId);
+      await verifyStewardAssignment(ctx.db, ctx.session.user.id, showId);
+      await assertResultsNotLocked(ctx.db, showId);
 
-      const [updated] = await ctx.db
-        .update(entries)
-        .set({ absent: input.absent })
-        .where(eq(entries.id, input.entryId))
-        .returning();
+      const updated = await ctx.db.transaction(async (tx) => {
+        const [updatedEntryClass] = await tx
+          .update(entryClasses)
+          .set({ absent: input.absent })
+          .where(eq(entryClasses.id, input.entryClassId))
+          .returning();
 
-      return updated!;
+        // Roll up to the whole-entry flag: absent only once EVERY class
+        // for this entry is absent — one dog left present in one class
+        // (e.g. the Special Award she still walked) means she's not a
+        // whole-show absentee.
+        const siblingClasses = await tx.query.entryClasses.findMany({
+          where: eq(entryClasses.entryId, ec.entry.id),
+          columns: { absent: true },
+        });
+        const allClassesAbsent =
+          siblingClasses.length > 0 && siblingClasses.every((sc) => sc.absent);
+
+        const [updatedEntry] = await tx
+          .update(entries)
+          .set({ absent: allClassesAbsent })
+          .where(eq(entries.id, ec.entry.id))
+          .returning();
+
+        return { entryClass: updatedEntryClass!, entry: updatedEntry! };
+      });
+
+      return updated;
     }),
 
   // ── BOB / BIS / Group achievements ──────────────────────
@@ -513,17 +902,25 @@ export const stewardRouter = createTRPCRouter({
         }
       }
 
-      // Upsert: remove existing same type for this show + dog, then insert
+      // A show-level achievement (BIS, BOB, a CC, …) can be held by only ONE
+      // dog per show, so assigning it must remove any previous holder — not
+      // just a prior assignment to the SAME dog. Deleting by (show, dog, type)
+      // let two different dogs both hold e.g. Best in Show (bug hunt #14).
+      // (Multi-breed per-breed BOB/CC scoping is separate future work —
+      // achievements aren't breed-scoped yet; current shows are single-breed.)
       await ctx.db
         .delete(achievements)
         .where(
           and(
             eq(achievements.showId, input.showId),
-            eq(achievements.dogId, input.dogId),
             eq(achievements.type, input.type)
           )
         );
 
+      // Capture the judge who awarded it (derived from the show's breed-level
+      // judge assignments) so a CC credits the right judge toward the Champion
+      // "3 different judges" rule (Mandy 2026-07-09).
+      const judgeId = await deriveTopAwardJudge(ctx.db, input.showId, input.type);
       const [achievement] = await ctx.db
         .insert(achievements)
         .values({
@@ -531,6 +928,7 @@ export const stewardRouter = createTRPCRouter({
           dogId: input.dogId,
           type: input.type,
           date: input.date,
+          judgeId,
         })
         .returning();
 
@@ -562,23 +960,84 @@ export const stewardRouter = createTRPCRouter({
       return { removed: true };
     }),
 
+  /** Publish a single top-level achievement to the public results page.
+   *  Per Amanda 2026-05-28: stewards release awards class-by-class, e.g.
+   *  Dog CC + Reserve + Best Puppy Dog right after the male classes. */
+  publishAchievement: stewardProcedure
+    .input(
+      z.object({
+        showId: z.string().uuid(),
+        dogId: z.string().uuid(),
+        type: z.enum(ACHIEVEMENT_TYPES),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      await verifyStewardAssignment(ctx.db, ctx.session.user.id, input.showId);
+      await assertResultsNotLocked(ctx.db, input.showId);
+
+      await ctx.db
+        .update(achievements)
+        .set({ publishedAt: new Date() })
+        .where(
+          and(
+            eq(achievements.showId, input.showId),
+            eq(achievements.dogId, input.dogId),
+            eq(achievements.type, input.type),
+          ),
+        );
+
+      return { published: true };
+    }),
+
+  /** Pull a published achievement back to draft. */
+  unpublishAchievement: stewardProcedure
+    .input(
+      z.object({
+        showId: z.string().uuid(),
+        dogId: z.string().uuid(),
+        type: z.enum(ACHIEVEMENT_TYPES),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      await verifyStewardAssignment(ctx.db, ctx.session.user.id, input.showId);
+      await assertResultsNotLocked(ctx.db, input.showId);
+
+      await ctx.db
+        .update(achievements)
+        .set({ publishedAt: null })
+        .where(
+          and(
+            eq(achievements.showId, input.showId),
+            eq(achievements.dogId, input.dogId),
+            eq(achievements.type, input.type),
+          ),
+        );
+
+      return { unpublished: true };
+    }),
+
   getPublicShowAchievements: publicProcedure
     .input(z.object({ showId: z.string().min(1) }))
     .query(async ({ ctx, input }) => {
       const showId = await resolveShowId(ctx.db, input.showId);
 
-      // Check publication status for non-privileged users
-      const userRole = ctx.session?.user?.role;
-      const isPrivileged = userRole && ['secretary', 'steward', 'admin'].includes(userRole);
-      if (!isPrivileged) {
-        const show = await ctx.db.query.shows.findFirst({
-          where: eq(shows.id, showId),
-          columns: { resultsPublishedAt: true },
-        });
-        if (!show?.resultsPublishedAt) return [];
-      }
+      // Per-achievement publication (Amanda 2026-05-28): stewards release
+      // top awards as the day progresses. Non-privileged callers only see
+      // achievements that have been explicitly published; admins, the show's
+      // own stewards, and its host-org secretaries see the full picture for
+      // editing — scoped to THIS show, not by global role (else a rival club's
+      // secretary/steward could read unpublished BOB/BIS before publication).
+      const achShow = await ctx.db.query.shows.findFirst({
+        where: eq(shows.id, showId),
+        columns: { organisationId: true, showType: true, scheduleData: true },
+      });
+      const isPrivileged = achShow
+        ? await callerIsPrivilegedForShow(
+            ctx.db, ctx.session?.user?.id, ctx.session?.user?.role, showId, achShow.organisationId,
+          )
+        : false;
 
-      return ctx.db.query.achievements.findMany({
+      const rows = await ctx.db.query.achievements.findMany({
         where: eq(achievements.showId, showId),
         with: {
           dog: {
@@ -586,6 +1045,26 @@ export const stewardRouter = createTRPCRouter({
           },
         },
       });
+
+      const visible = isPrivileged ? rows : rows.filter((a) => a.publishedAt !== null);
+
+      // The secretary's configured Best Awards list is the source of truth for
+      // ORDER and DISPLAY NAME — mirrors resolveTopAwards, used by the secretary
+      // results page and steward ringside page, so all three surfaces agree
+      // (Mandy 2026-07-27: same disease as the catalogue/judges-book, 9a6a475).
+      // Types outside the configured list are NEVER dropped — grouping is
+      // labelling only, never gating — they just sort after the configured ones.
+      const topAwards = resolveTopAwards(achShow?.showType, achShow?.scheduleData?.bestAwards ?? []);
+      const orderByType = new Map(topAwards.map((a, i) => [a.type, i]));
+      const nameByType = new Map(topAwards.map((a) => [a.type, a.name]));
+
+      return [...visible]
+        .map((a) => ({ ...a, awardName: nameByType.get(a.type as AchievementType) ?? null }))
+        .sort((a, b) => {
+          const ai = orderByType.get(a.type as AchievementType) ?? Number.MAX_SAFE_INTEGER;
+          const bi = orderByType.get(b.type as AchievementType) ?? Number.MAX_SAFE_INTEGER;
+          return ai - bi;
+        });
     }),
 
   // ── Public: live results for a show ─────────────────────
@@ -595,19 +1074,24 @@ export const stewardRouter = createTRPCRouter({
       const showId = await resolveShowId(ctx.db, input.showId);
       const show = await ctx.db.query.shows.findFirst({
         where: eq(shows.id, showId),
-        with: { organisation: true, venue: true },
+        with: { organisation: { columns: publicOrgColumns }, venue: true },
       });
 
       if (!show) {
         throw new TRPCError({ code: 'NOT_FOUND', message: 'Show not found' });
       }
 
-      // Check if caller is privileged (secretary/steward/admin)
-      const userRole = ctx.session?.user?.role;
-      const isPrivileged = userRole && ['secretary', 'steward', 'admin'].includes(userRole);
+      // Check if caller is privileged for THIS show (admin, an assigned steward,
+      // or the host-org secretary) — scoped, not by global role, so a rival
+      // club's steward/secretary can't read unpublished results before they're
+      // published. Non-privileged callers (incl. logged-in stewards of OTHER
+      // shows) see published results only, exactly like the public.
+      const isPrivileged = await callerIsPrivilegedForShow(
+        ctx.db, ctx.session?.user?.id, ctx.session?.user?.role, showId, show.organisationId,
+      );
 
       // Per-result publication: public users only see results with publishedAt set.
-      // Privileged users (secretary/steward/admin) see all results.
+      // Privileged users see all results.
 
       const classes = await ctx.db.query.showClasses.findMany({
         where: eq(showClasses.showId, showId),
@@ -623,12 +1107,11 @@ export const stewardRouter = createTRPCRouter({
                   status: true,
                   deletedAt: true,
                   dogId: true,
-                  absent: true,
                   entryType: true,
                 },
                 with: {
                   dog: {
-                    columns: { id: true, registeredName: true, sex: true },
+                    columns: { id: true, registeredName: true, sex: true, dateOfBirth: true },
                     with: { breed: true },
                   },
                   exhibitor: { columns: { name: true } },
@@ -642,6 +1125,14 @@ export const stewardRouter = createTRPCRouter({
         orderBy: [asc(showClasses.sortOrder)],
       });
 
+      // Canonical per-class label ("11a"/"11b" on wusv shows, plain
+      // classNumber on RKC) — single source of truth shared with the
+      // schedule/catalogue/judges-book/prize-cards/ring-board/reports.
+      // Also carries the coat type so a wusv show's two same-age/sex
+      // classes (Long Coat / Short Coat) are visibly distinct on results
+      // (Mandy, NE Regional 5 Sept 2026 — two identical-looking cards).
+      const classLabelMap = buildClassLabelMap(classes, show.showRuleset);
+
       // Build results grouped by breed → class
       const breedGroups = new Map<
         string,
@@ -651,6 +1142,8 @@ export const stewardRouter = createTRPCRouter({
             classId: string;
             className: string;
             classNumber: number | null;
+            classLabel: string;
+            svCoatType: 'stock' | 'long_stock' | null;
             sex: string | null;
             entriesCount: number;
             dogsForward: number;
@@ -658,6 +1151,7 @@ export const stewardRouter = createTRPCRouter({
               entryClassId: string;
               placement: number | null;
               placementStatus: 'withheld' | 'unplaced' | null;
+              svGrade: string | null;
               specialAward: string | null;
               critiqueText: string | null;
               winnerPhotoUrl: string | null;
@@ -677,12 +1171,14 @@ export const stewardRouter = createTRPCRouter({
           breedGroups.set(breedName, { breedName, classes: [] });
         }
 
-        // Count confirmed entries and dogs forward (present, not absent)
+        // Count confirmed entries and dogs forward (present, not absent).
+        // Per-class (Mandy 2026-08-12): a dog absent from THIS class still
+        // counts forward in any other class she's entered in.
         const confirmedEntries = sc.entryClasses.filter(
           (ec) => ec.entry.status === 'confirmed' && !ec.entry.deletedAt
         );
         const dogsForward = confirmedEntries.filter(
-          (ec) => !ec.entry.absent
+          (ec) => !ec.absent
         ).length;
 
         const classResults = sc.entryClasses
@@ -691,6 +1187,10 @@ export const stewardRouter = createTRPCRouter({
               ec.result !== null &&
               ec.entry.status === 'confirmed' &&
               !ec.entry.deletedAt &&
+              // An absent dog is never placed — if a placement was recorded and
+              // then the dog marked absent, the stale result must not surface as
+              // a winner on public/live results.
+              !ec.absent &&
               // Public users only see published results
               (isPrivileged || ec.result!.publishedAt !== null)
           )
@@ -701,6 +1201,7 @@ export const stewardRouter = createTRPCRouter({
               ec.result!.placementStatus === 'withheld' || ec.result!.placementStatus === 'unplaced'
                 ? (ec.result!.placementStatus as 'withheld' | 'unplaced')
                 : null,
+            svGrade: ec.result!.svGrade ?? null,
             specialAward: ec.result!.specialAward,
             critiqueText: ec.result!.critiqueText,
             winnerPhotoUrl: ec.result!.winnerPhotoUrl,
@@ -710,6 +1211,7 @@ export const stewardRouter = createTRPCRouter({
               ? (ec.entry.juniorHandlerDetails?.handlerName ?? ec.entry.exhibitor?.name ?? 'Unknown Handler')
               : (ec.entry.dog?.registeredName ?? 'Unknown'),
             dogSex: ec.entry.dog?.sex ?? null,
+            dogDateOfBirth: ec.entry.dog?.dateOfBirth ?? null,
             exhibitorName: ec.entry.exhibitor?.name ?? '',
           }))
           // Sort numeric placements ascending (1st, 2nd, 3rd...), then
@@ -719,8 +1221,16 @@ export const stewardRouter = createTRPCRouter({
         if (classResults.length > 0) {
           breedGroups.get(breedName)!.classes.push({
             classId: sc.id,
-            className: sc.classDefinition.name,
+            // Strip the "SV " disambiguation prefix some sv_age defs carry
+            // ("SV Yearling", "SV Junior") — the catalogue/schedule/judges-
+            // book already do this via the same helper; results were the one
+            // surface left printing "SV Yearling" next to a plain "Adult"
+            // (Mandy, NE Regional 5 Sept 2026 screenshot). No-op for any
+            // name without the prefix, so RKC classes are unaffected.
+            className: svDisplayAge(sc.classDefinition.name),
             classNumber: sc.classNumber,
+            classLabel: classLabelMap.get(sc.id) ?? (sc.classNumber != null ? String(sc.classNumber) : ''),
+            svCoatType: sc.svCoatType ?? null,
             sex: sc.sex,
             entriesCount: confirmedEntries.length,
             dogsForward,
@@ -743,6 +1253,21 @@ export const stewardRouter = createTRPCRouter({
         a.breedName.localeCompare(b.breedName)
       );
 
+      // Published judge critique overviews ("opening remarks") — the
+      // secretary's Publish Critiques action IS the public-visibility gate
+      // here (a separate document per judge, published independently of the
+      // steward's own results-publish flow). Per-placement critique text
+      // rides the existing results.publishedAt gate above and needs no
+      // change. No organisation columns — this is a public procedure.
+      const publishedCritiqueDocs = await ctx.db.query.critiqueDocuments.findMany({
+        where: and(eq(critiqueDocuments.showId, showId), eq(critiqueDocuments.status, 'published')),
+        columns: { overviewText: true },
+        with: { judge: { columns: { name: true } } },
+      });
+      const critiqueOverviews = publishedCritiqueDocs
+        .filter((d) => d.overviewText?.trim())
+        .map((d) => ({ judgeName: d.judge.name, overviewText: d.overviewText!.trim() }));
+
       // For public users: if no results are visible, show unpublished message
       const hasVisibleResults = sortedGroups.some((g) => g.classes.length > 0);
       if (!isPrivileged && !hasVisibleResults) {
@@ -753,12 +1278,16 @@ export const stewardRouter = createTRPCRouter({
             startDate: show.startDate,
             endDate: show.endDate,
             status: show.status,
+            showRuleset: show.showRuleset,
             organisation: show.organisation,
             venue: show.venue,
             resultsPublishedAt: show.resultsPublishedAt,
           },
           breedGroups: [],
           achievements: [],
+          // A judge's opening remarks can name winners — they must never
+          // show to the public before the results themselves are published.
+          critiqueOverviews: [],
           unpublished: true as const,
         };
       }
@@ -770,18 +1299,24 @@ export const stewardRouter = createTRPCRouter({
           startDate: show.startDate,
           endDate: show.endDate,
           status: show.status,
+          showRuleset: show.showRuleset,
           organisation: show.organisation,
           venue: show.venue,
           resultsPublishedAt: show.resultsPublishedAt,
         },
         breedGroups: sortedGroups,
-        achievements: showAchievements.map((a) => ({
-          id: a.id,
-          type: a.type,
-          dogId: a.dogId,
-          dogName: a.dog?.registeredName ?? 'Unknown',
-          details: a.details as Record<string, unknown> | null,
-        })),
+        achievements: showAchievements
+          // Mirror getPublicShowAchievements: non-privileged callers only see
+          // achievements the steward has explicitly published.
+          .filter((a) => isPrivileged || a.publishedAt !== null)
+          .map((a) => ({
+            id: a.id,
+            type: a.type,
+            dogId: a.dogId,
+            dogName: a.dog?.registeredName ?? 'Unknown',
+            details: a.details as Record<string, unknown> | null,
+          })),
+        critiqueOverviews,
         unpublished: false as const,
       };
     }),
@@ -856,6 +1391,7 @@ export const stewardRouter = createTRPCRouter({
           eq(judgeAssignments.showId, input.showId),
           eq(judgeAssignments.judgeId, input.judgeId)
         ),
+        with: { breed: true },
       });
 
       if (assignments.length === 0) {
@@ -877,10 +1413,28 @@ export const stewardRouter = createTRPCRouter({
         });
       }
 
+      // Don't fire an approval email before anything has been judged — the button
+      // is live from first page load, and one accidental tap at 9am would ask the
+      // judge to confirm an empty result sheet. Guard at show level (the target is
+      // single-judge shows where the judge judges everything); per-judge scoping
+      // for breed-null classes is deferred (see H6).
+      const [resultCount] = await ctx.db
+        .select({ n: sql<number>`count(*)::int` })
+        .from(results)
+        .innerJoin(entryClasses, eq(entryClasses.id, results.entryClassId))
+        .innerJoin(entries, eq(entries.id, entryClasses.entryId))
+        .where(and(eq(entries.showId, input.showId), eq(entries.status, 'confirmed')));
+      if ((resultCount?.n ?? 0) === 0) {
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: 'Record at least one result before submitting for the judge’s approval.',
+        });
+      }
+
       // Get show details for the email
       const show = await ctx.db.query.shows.findFirst({
         where: eq(shows.id, input.showId),
-        with: { organisation: true, venue: true },
+        with: { organisation: true, venue: true, breed: true },
       });
 
       if (!show) {
@@ -891,7 +1445,39 @@ export const stewardRouter = createTRPCRouter({
       const crypto = await import('crypto');
       const sharedToken = crypto.randomUUID();
 
-      // Update all assignment rows with the shared token
+      // One builder for what a judge judges — a breed-id filter here told a
+      // Junior Handling judge (breed-null assignment) they judged "All
+      // breeds" (Mandy, 2026-08-03).
+      const { breedLine, classificationLine } = buildJudgeBreedAndClassification(
+        assignments,
+        show.breed ? [show.breed.name] : [],
+        show.name,
+      );
+
+      // Send approval email FIRST — if it fails, DB stays clean and steward can retry
+      try {
+        await sendJudgeApprovalRequestEmail({
+          judge: { name: judge.name, email: judge.contactEmail },
+          show: {
+            name: show.name,
+            startDate: show.startDate,
+            slug: show.slug,
+            id: show.id,
+            organisation: show.organisation,
+          },
+          approvalToken: sharedToken,
+          breedLine,
+          classificationLine,
+        });
+      } catch (error) {
+        throw new TRPCError({
+          code: 'INTERNAL_SERVER_ERROR',
+          message: `Could not send approval email to ${judge.contactEmail}. Please check the address and try again.`,
+          cause: error,
+        });
+      }
+
+      // Email went out — record it
       await ctx.db
         .update(judgeAssignments)
         .set({
@@ -905,22 +1491,6 @@ export const stewardRouter = createTRPCRouter({
             eq(judgeAssignments.judgeId, input.judgeId)
           )
         );
-
-      // Send approval email
-      await sendJudgeApprovalRequestEmail({
-        judge: { name: judge.name, email: judge.contactEmail },
-        show: {
-          name: show.name,
-          startDate: show.startDate,
-          slug: show.slug,
-          id: show.id,
-          organisation: show.organisation,
-        },
-        approvalToken: sharedToken,
-        breeds: assignments
-          .filter((a) => a.breedId)
-          .map((a) => a.breedId!),
-      });
 
       return { sent: true, judgeEmail: judge.contactEmail };
     }),

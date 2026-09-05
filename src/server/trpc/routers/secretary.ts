@@ -1,12 +1,20 @@
 import { z } from 'zod';
 import { TRPCError } from '@trpc/server';
-import { and, eq, sql, isNull, inArray, asc, desc, ilike } from 'drizzle-orm';
+import { and, eq, sql, isNull, isNotNull, inArray, asc, desc, ilike } from 'drizzle-orm';
 import { secretaryProcedure, publicProcedure } from '../procedures';
 import { createTRPCRouter } from '../init';
 import { verifyShowAccess } from '../verify-show-access';
+import type { Database } from '@/server/db';
 import { verifyOrgAccess } from '../verify-org-access';
+import { fetchClubImage } from '@/lib/safe-image-fetch';
 import { getBaseUrl } from '@/server/lib/utils';
 import { ACHIEVEMENT_TYPES } from '@/lib/placements';
+import { computeOrderFees, type FeeContext } from '@/lib/fee-calc';
+import { formatAtcNumber } from '@/lib/registration-flags';
+import { computePrizeCardCounts } from '@/lib/prize-card-counts';
+import { BRAND } from '@/lib/brand';
+import { checkOwnerRecord, type OwnerCheckIssue } from '@/lib/catalogue-data-checks';
+import { SV_CLASS_AUTO_CREATE_COMBOS } from '@/lib/class-labels';
 import {
   shows,
   entries,
@@ -16,6 +24,7 @@ import {
   classDefinitions,
   memberships,
   showClasses,
+  showBreeds,
   payments,
   dogOwners,
   dogs,
@@ -37,16 +46,70 @@ import {
   classSponsorships,
   organisationPeople,
   achievements,
+  judgeRoles,
+  breedGroups,
+  catalogueAdverts,
+  showDiscountGroups,
+  showDonations,
+  catalogueNumberAsc,
 } from '@/server/db/schema';
 import {
   DEFAULT_CHECKLIST_ITEMS,
   calculateDueDate,
 } from '@/lib/default-checklist';
 import { getStripe } from '@/server/services/stripe';
+import { executeStripeRefund } from '@/server/services/stripe-refunds';
+import { deriveTopAwardJudge } from '@/server/services/derive-award-judge';
 import { penceToPoundsString } from '@/lib/date-utils';
 import { Resend } from 'resend';
 import { searchKcJudges, fetchKcJudgeProfile } from '@/server/services/kc-judges';
-import { CATALOGUE_NAME_PATTERN } from '@/lib/catalogue-utils';
+import { syncCatalogueNumbers, resortCatalogueNumbers } from '@/server/services/catalogue-numbering';
+import { scheduleCatalogueRefresh } from '@/server/services/catalogue-jobs';
+import { generateJudgeContractPdf } from '@/server/services/judge-contract-pdf';
+import { normaliseOfficers } from '@/components/schedule/shared/officers';
+import {
+  aggregateShowMetrics,
+  computeShowMetrics,
+  computeShowsMetrics,
+  getPaidOrderIdsForShow,
+  shapeDogsEnteredFields,
+} from '@/server/services/show-metrics';
+import {
+  loadAbsenteeLikeEntries,
+  loadEntryReportEntries,
+  loadCatalogueOrdersSplit,
+  withdrawnOrAbsentPaidWhere,
+} from '@/server/services/report-queries';
+import { validateRkcSchedule } from '@/lib/rkc-schedule-compliance';
+
+/**
+ * True if this judge has assignments with any organisation outside the
+ * caller's own active memberships. Judges are a shared pool and contract
+ * offers are emailed to judges.contactEmail — a secretary at club A must
+ * not be able to redirect or break club B's judge correspondence, on ANY
+ * write path that touches judge contact details.
+ */
+async function judgeEngagedOutsideCallerOrgs(
+  db: Database,
+  userId: string,
+  judgeId: string,
+): Promise<boolean> {
+  const engagements = await db
+    .selectDistinct({ organisationId: shows.organisationId })
+    .from(judgeAssignments)
+    .innerJoin(shows, eq(judgeAssignments.showId, shows.id))
+    .where(eq(judgeAssignments.judgeId, judgeId));
+  if (engagements.length === 0) return false;
+  const callerOrgs = await db.query.memberships.findMany({
+    where: and(
+      eq(memberships.userId, userId),
+      eq(memberships.status, 'active'),
+    ),
+    columns: { organisationId: true },
+  });
+  const callerOrgIds = new Set(callerOrgs.map((m) => m.organisationId));
+  return engagements.some((e) => !callerOrgIds.has(e.organisationId));
+}
 
 /** Build human-readable breed text for judge offer emails.
  *  When assignments have breedId=null, falls back to showBreedNames, then showName. */
@@ -67,20 +130,65 @@ function buildJudgeBreedText(
   return [...new Set(parts)].join(', ') || 'All breeds';
 }
 
+import { buildJudgeBreedAndClassification } from '@/lib/judge-breed-classification';
+
+/**
+ * Derive a sundry row's status from the entries in the same order
+ * rather than the order's payment status. The order might be
+ * 'pending_payment' because the exhibitor abandoned checkout, but
+ * if the entry itself was withdrawn the sundries were withdrawn
+ * with it — showing "Pending" would misrepresent the state.
+ * Preference: confirmed > withdrawn > pending.
+ */
+function statusFromEntries(orderEntries: ReadonlyArray<{ status: string }>): string {
+  if (orderEntries.some((e) => e.status === 'confirmed')) return 'confirmed';
+  if (orderEntries.every((e) => e.status === 'withdrawn')) return 'withdrawn';
+  return orderEntries[0]?.status ?? 'pending';
+}
+
+/**
+ * RKC show licences count only breed classes. Junior Handler classes (rendered
+ * JHA, JHB, …) and Special Award Classes (rendered A, B, C, …) sit outside the
+ * licensed count and must carry classNumber = null. Single source of truth for
+ * every class-numbering path (autoAssign / reorder / resort / bulkCreate) so
+ * they can't drift apart and start numbering JH/SAC classes (bug hunt #5).
+ */
+function isUnnumberedClassDef(
+  cd?: { type?: string | null; name?: string | null } | null
+): boolean {
+  return (
+    cd?.type === 'junior_handler' ||
+    (cd?.type === 'special' && (cd?.name?.startsWith('Special Award Class') ?? false))
+  );
+}
+
 export const secretaryRouter = createTRPCRouter({
   getDashboard: secretaryProcedure.query(async ({ ctx }) => {
-    // Get organisations the user is a member of
-    const userMemberships = await ctx.db.query.memberships.findMany({
-      where: and(
-        eq(memberships.userId, ctx.session.user.id),
-        eq(memberships.status, 'active')
-      ),
-      with: { organisation: true },
-    });
+    // Platform admins monitor every club's shows without needing a
+    // membership row in each one — mirrors the bypass verifyShowAccess
+    // already grants admins on individual show reads (see also
+    // admin.listAllShows, the read-only reporting equivalent of this).
+    // Excludes impersonation: while impersonating a secretary, the
+    // dashboard must show exactly what THAT secretary sees (their orgs
+    // only) — ctx.callerIsAdmin deliberately survives the session swap
+    // (see init.ts) so it alone isn't enough to tell "browsing as admin"
+    // from "impersonating a non-admin". Non-admins (and impersonated
+    // sessions) keep the existing membership-scoped behaviour untouched:
+    // `organisationScope` stays null only for a genuine admin browsing
+    // as themselves, and every query below shares the same code path
+    // either way.
+    const isRealAdmin = ctx.callerIsAdmin && !ctx.impersonating;
+    const organisationScope = isRealAdmin
+      ? null
+      : await ctx.db.query.memberships.findMany({
+          where: and(
+            eq(memberships.userId, ctx.session.user.id),
+            eq(memberships.status, 'active')
+          ),
+          with: { organisation: true },
+        });
 
-    const orgIds = userMemberships.map((m) => m.organisationId);
-
-    if (orgIds.length === 0) {
+    if (organisationScope && organisationScope.length === 0) {
       return {
         organisations: [],
         activeShows: [],
@@ -93,9 +201,12 @@ export const secretaryRouter = createTRPCRouter({
       };
     }
 
-    // Get all shows for the user's organisations
+    const orgIds = organisationScope?.map((m) => m.organisationId);
+
+    // Get all shows for the user's organisations — or every show on the
+    // platform when the caller is an admin.
     const orgShows = await ctx.db.query.shows.findMany({
-      where: inArray(shows.organisationId, orgIds),
+      where: orgIds ? inArray(shows.organisationId, orgIds) : undefined,
       with: {
         organisation: true,
         venue: true,
@@ -112,79 +223,66 @@ export const secretaryRouter = createTRPCRouter({
       inactiveStatuses.includes(s.status)
     );
 
-    // Get entries/revenue for active shows only
+    // Canonical metrics for all org shows — one batched call, paid-only
+    // revenue (sundries included, net of refunds).
     const activeShowIds = activeShows.map((s) => s.id);
     const allShowIds = orgShows.map((s) => s.id);
+    const metricsByShow = await computeShowsMetrics(ctx.db, allShowIds);
+
+    // Dashboard revenue is "how much has this show/club earned" — a general
+    // performance figure, not a "what's due from Remi" one — so it's the
+    // combined total across both channels (totalClubRevenuePence), not
+    // clubReceivablePence alone. Otherwise a show with lots of manually
+    // recorded postal/cash entries would look like it earned nothing.
     let totalEntries = 0;
     let activeRevenue = 0;
     let totalRevenue = 0;
-
-    if (allShowIds.length > 0) {
-      const allStats = await ctx.db
-        .select({
-          count: sql<number>`count(*)`,
-          revenue: sql<number>`coalesce(sum(${entries.totalFee}), 0)`,
-        })
-        .from(entries)
-        .where(
-          and(inArray(entries.showId, allShowIds), isNull(entries.deletedAt))
-        );
-
-      totalEntries = Number(allStats[0]?.count ?? 0);
-      totalRevenue = Number(allStats[0]?.revenue ?? 0);
-    }
-
-    if (activeShowIds.length > 0) {
-      const activeStats = await ctx.db
-        .select({
-          revenue: sql<number>`coalesce(sum(${entries.totalFee}), 0)`,
-        })
-        .from(entries)
-        .where(
-          and(
-            inArray(entries.showId, activeShowIds),
-            isNull(entries.deletedAt)
-          )
-        );
-
-      activeRevenue = Number(activeStats[0]?.revenue ?? 0);
-    }
-
-    // Per-show entry counts (single query, grouped)
-    const perShowStats: Record<string, { entryCount: number; revenue: number }> = {};
-    if (allShowIds.length > 0) {
-      const perShow = await ctx.db
-        .select({
-          showId: entries.showId,
-          entryCount: sql<number>`count(*)`,
-          revenue: sql<number>`coalesce(sum(${entries.totalFee}), 0)`,
-        })
-        .from(entries)
-        .where(
-          and(
-            inArray(entries.showId, allShowIds),
-            isNull(entries.deletedAt),
-            inArray(entries.status, ['pending', 'confirmed'])
-          )
-        )
-        .groupBy(entries.showId);
-
-      for (const row of perShow) {
-        perShowStats[row.showId] = {
-          entryCount: Number(row.entryCount),
-          revenue: Number(row.revenue),
-        };
+    for (const showId of allShowIds) {
+      const m = metricsByShow.get(showId);
+      if (!m) continue;
+      // CLASS ENTRIES — the same figure the show's own Entries tile leads with,
+      // and the number a club announces. This used to be confirmed + pending
+      // ENTRY ROWS, so South Western read 91 on the dashboard while its own
+      // page read 110 (Mandy 2026-07-27: "We missed an update on the figures ..
+      // 91 still showing here"). Three definitions of "entries" across three
+      // screens is the whole of today's bug list in miniature.
+      const entryCount = m.classEntryCount;
+      totalEntries += entryCount;
+      totalRevenue += m.totalClubRevenuePence;
+      if (activeShowIds.includes(showId)) {
+        activeRevenue += m.totalClubRevenuePence;
       }
     }
 
-    const enrichShow = (s: (typeof orgShows)[number]) => ({
-      ...s,
-      entryCount: perShowStats[s.id]?.entryCount ?? 0,
-      showRevenue: perShowStats[s.id]?.revenue ?? 0,
-    });
+    const enrichShow = (s: (typeof orgShows)[number]) => {
+      const m = metricsByShow.get(s.id);
+      return {
+        ...s,
+        entryCount: m?.classEntryCount ?? 0,
+        // Awaiting payment is no longer folded silently into the headline —
+        // it's surfaced separately so an open show still shows what's in flight.
+        pendingEntryCount: m?.pendingEntryCount ?? 0,
+        showRevenue: m?.totalClubRevenuePence ?? 0,
+      };
+    };
+
+    // For admins there's no membership list to read club names off, so
+    // derive the distinct set of organisations from the shows themselves —
+    // this is what feeds the club switcher and the "create show" org picker.
+    let organisations = organisationScope?.map((m) => m.organisation) ?? [];
+    if (!organisationScope) {
+      const seenOrgIds = new Set<string>();
+      organisations = [];
+      for (const s of orgShows) {
+        if (s.organisation && !seenOrgIds.has(s.organisation.id)) {
+          seenOrgIds.add(s.organisation.id);
+          organisations.push(s.organisation);
+        }
+      }
+    }
 
     return {
-      organisations: userMemberships.map((m) => m.organisation),
+      organisations,
       activeShows: activeShows.map(enrichShow),
       pastShows: pastShows.map(enrichShow),
       totalShows: orgShows.length,
@@ -195,16 +293,33 @@ export const secretaryRouter = createTRPCRouter({
     };
   }),
 
-  getOrganisation: secretaryProcedure.query(async ({ ctx }) => {
-    const membership = await ctx.db.query.memberships.findFirst({
-      where: and(
-        eq(memberships.userId, ctx.session.user.id),
-        eq(memberships.status, 'active')
-      ),
-      with: { organisation: true },
-    });
-    return membership?.organisation ?? null;
-  }),
+  getOrganisation: secretaryProcedure
+    .input(z.object({ organisationId: z.string().uuid().optional() }).optional())
+    .query(async ({ ctx, input }) => {
+      // If an explicit org id is passed, return that one (gated on
+      // active membership). Otherwise fall back to the user's first
+      // active membership — legacy behaviour for callers that haven't
+      // been migrated to pass the active-org id yet.
+      if (input?.organisationId) {
+        const membership = await ctx.db.query.memberships.findFirst({
+          where: and(
+            eq(memberships.userId, ctx.session.user.id),
+            eq(memberships.organisationId, input.organisationId),
+            eq(memberships.status, 'active')
+          ),
+          with: { organisation: true },
+        });
+        return membership?.organisation ?? null;
+      }
+      const membership = await ctx.db.query.memberships.findFirst({
+        where: and(
+          eq(memberships.userId, ctx.session.user.id),
+          eq(memberships.status, 'active')
+        ),
+        with: { organisation: true },
+      });
+      return membership?.organisation ?? null;
+    }),
 
   /** List active members of an organisation (for secretary picker, etc.) */
   orgMembers: secretaryProcedure
@@ -242,6 +357,16 @@ export const secretaryRouter = createTRPCRouter({
     }))
     .mutation(async ({ ctx, input }) => {
       const { userId, ...updates } = input;
+      // Cross-tenant write guard: the UI only ever edits the caller's OWN
+      // record. Without this, any user with the 'secretary' role could
+      // overwrite ANY user's name/phone/address/postcode by passing an
+      // arbitrary userId.
+      if (userId !== ctx.session.user.id) {
+        throw new TRPCError({
+          code: 'FORBIDDEN',
+          message: 'You can only update your own details.',
+        });
+      }
       const setData: Record<string, string | null> = {};
       if (updates.name !== undefined) setData.name = updates.name;
       if (updates.phone !== undefined) setData.phone = updates.phone;
@@ -260,32 +385,59 @@ export const secretaryRouter = createTRPCRouter({
     .query(async ({ ctx, input }) => {
       await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId, { callerIsAdmin: ctx.callerIsAdmin });
 
-      const entryCounts = await ctx.db
-        .select({
-          count: sql<number>`count(*)`,
-          revenue: sql<number>`coalesce(sum(${entries.totalFee}), 0)`,
-          confirmed: sql<number>`count(*) filter (where ${entries.status} = 'confirmed')`,
-          pending: sql<number>`count(*) filter (where ${entries.status} = 'pending')`,
-        })
-        .from(entries)
-        .where(
-          and(
-            eq(entries.showId, input.showId),
-            isNull(entries.deletedAt)
-          )
-        );
+      const [metrics, classCount, showRow] = await Promise.all([
+        computeShowMetrics(ctx.db, input.showId),
+        ctx.db
+          .select({ count: sql<number>`count(*)` })
+          .from(showClasses)
+          .where(eq(showClasses.showId, input.showId)),
+        ctx.db
+          .select({ showRuleset: shows.showRuleset })
+          .from(shows)
+          .where(eq(shows.id, input.showId)),
+      ]);
 
-      const classCount = await ctx.db
-        .select({ count: sql<number>`count(*)` })
-        .from(showClasses)
-        .where(eq(showClasses.showId, input.showId));
-
+      // "Active" revenue is paid-orders-only, net of refunds, INCLUDING
+      // sundry items (catalogues, donations, sponsorships). See the
+      // show-metrics service for the canonical definition.
       return {
-        totalEntries: Number(entryCounts[0]?.count ?? 0),
-        totalRevenue: Number(entryCounts[0]?.revenue ?? 0),
-        confirmedEntries: Number(entryCounts[0]?.confirmed ?? 0),
-        pendingEntries: Number(entryCounts[0]?.pending ?? 0),
+        // Revenue (paid only, sundry-inclusive)
+        // clubReceivablePence = what Remi owes the club (Stripe-collected
+        // only). offlineCollectedPence = what the club already holds from
+        // postal/cash/direct-to-club entries. totalClubRevenuePence is the
+        // sum — the Financial page's "Total Income" headline.
+        clubReceivablePence: metrics.clubReceivablePence,
+        offlineCollectedPence: metrics.offlineCollectedPence,
+        totalClubRevenuePence: metrics.totalClubRevenuePence,
+        paidEntryFeesPence: metrics.paidEntryFeesPence,
+        paidSundryRevenuePence: metrics.paidSundryRevenuePence,
+        paidPlatformFeePence: metrics.paidPlatformFeePence,
+        grossChargedPence: metrics.grossChargedPence,
+        refundedPence: metrics.refundedPence,
+        pendingClubReceivablePence: metrics.pendingClubReceivablePence,
+        pendingPlatformFeePence: metrics.pendingPlatformFeePence,
+        // Entry counts
+        confirmedEntries: metrics.confirmedEntryCount,
+        pendingEntries: metrics.pendingEntryCount,
+        withdrawnEntries: metrics.withdrawnEntryCount,
+        totalEntries: metrics.confirmedEntryCount + metrics.pendingEntryCount + metrics.withdrawnEntryCount,
+        // Catalogue counts (paid only)
+        paidPrintedCatalogueCount: metrics.paidPrintedCatalogueCount,
+        paidOnlineCatalogueCount: metrics.paidOnlineCatalogueCount,
+        // Class count
         totalClasses: Number(classCount[0]?.count ?? 0),
+        // Regional (SV/WUSV) eligibility gate for the SV-graded Results report
+        showRuleset: showRow[0]?.showRuleset ?? 'rkc',
+        // Back-compat alias — total revenue across both channels (was
+        // "club receivable, paid-only" before the offline-order split).
+        totalRevenue: metrics.totalClubRevenuePence,
+
+        // ── "Dogs entered" canonical breakdown (financial-clarity redesign) ──
+        // One headline number everywhere + the parts it's made of, so the
+        // Financial page's reconciliation strip and tables always add up.
+        // Shared with getShowEntryStats via shapeDogsEnteredFields so the
+        // two field lists can't drift apart. See show-metrics.ts.
+        ...shapeDogsEnteredFields(metrics),
       };
     }),
 
@@ -451,6 +603,55 @@ export const secretaryRouter = createTRPCRouter({
     .mutation(async ({ ctx, input }) => {
       await verifyOrgAccess(ctx.db, ctx.session.user.id, input.organisationId);
 
+      // If the logo URL changed (or the org doesn't have extracted colours
+      // yet) we re-run node-vibrant so the SV schedule's tonal wash
+      // updates to the new branding. Runs synchronously here — Vibrant
+      // is fast on a typical logo (~200ms) and we only do it on update.
+      const existing = await ctx.db.query.organisations.findFirst({
+        where: eq(organisations.id, input.organisationId),
+        columns: { logoUrl: true, logoColorPrimary: true, logoMonochrome: true },
+      });
+      const newLogoUrl = input.logoUrl ?? null;
+      const logoChanged = newLogoUrl !== (existing?.logoUrl ?? null);
+      const needsExtraction =
+        newLogoUrl &&
+        (logoChanged || (!existing?.logoColorPrimary && !existing?.logoMonochrome));
+
+      let colorPatch: {
+        logoColorPrimary: string | null;
+        logoColorSecondary: string | null;
+        logoMonochrome: boolean;
+      } | null = null;
+      if (needsExtraction) {
+        try {
+          // Guarded — this input is the secretary's own `z.string().url()`,
+          // so a bare fetch() here is an SSRF sink that fires on SAVE, with
+          // no document needed. See lib/safe-image-fetch.ts.
+          const buf = await fetchClubImage(newLogoUrl);
+          if (buf) {
+            const { extractBrandColors } = await import(
+              '@/server/services/extract-brand-colors'
+            );
+            const colors = await extractBrandColors(buf);
+            colorPatch = {
+              logoColorPrimary: colors.primary,
+              logoColorSecondary: colors.secondary,
+              logoMonochrome: colors.monochrome,
+            };
+          }
+        } catch (err) {
+          console.warn('[updateOrganisation] brand-colour extraction failed:', err);
+          // Non-fatal: the schedule will fall back to defaults.
+        }
+      } else if (!newLogoUrl && (existing?.logoColorPrimary || existing?.logoMonochrome)) {
+        // Logo removed → wipe extracted colours so the wash falls back.
+        colorPatch = {
+          logoColorPrimary: null,
+          logoColorSecondary: null,
+          logoMonochrome: false,
+        };
+      }
+
       const [updated] = await ctx.db
         .update(organisations)
         .set({
@@ -458,11 +659,103 @@ export const secretaryRouter = createTRPCRouter({
           contactEmail: input.contactEmail ?? null,
           contactPhone: input.contactPhone ?? null,
           website: input.website ?? null,
-          logoUrl: input.logoUrl ?? null,
+          logoUrl: newLogoUrl,
+          ...(colorPatch ?? {}),
         })
         .where(eq(organisations.id, input.organisationId))
         .returning();
       return updated!;
+    }),
+
+  /**
+   * Dedicated mutation for changing the club's show ruleset (RKC ↔ SV).
+   * Lives separate from updateOrganisation so the My Club page can flip
+   * the ruleset without having to re-send name/email/phone/website on
+   * every change.
+   */
+  updateOrgRuleset: secretaryProcedure
+    .input(
+      z.object({
+        organisationId: z.string().uuid(),
+        showRuleset: z.enum(['rkc', 'wusv']),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      await verifyOrgAccess(ctx.db, ctx.session.user.id, input.organisationId);
+      const [updated] = await ctx.db
+        .update(organisations)
+        .set({ showRuleset: input.showRuleset })
+        .where(eq(organisations.id, input.organisationId))
+        .returning({ id: organisations.id, showRuleset: organisations.showRuleset });
+      return updated!;
+    }),
+
+  /**
+   * Get the club's current payout bank details. Returned as the full
+   * sort code + account number — the secretary is a member of the club
+   * and is authorised to see these (auth check via verifyOrgAccess).
+   * If you ever expose this outside the secretary context, mask the
+   * middle of the account number.
+   */
+  getPayoutDetails: secretaryProcedure
+    .input(z.object({ organisationId: z.string().uuid() }))
+    .query(async ({ ctx, input }) => {
+      await verifyOrgAccess(ctx.db, ctx.session.user.id, input.organisationId);
+      const org = await ctx.db.query.organisations.findFirst({
+        where: eq(organisations.id, input.organisationId),
+        columns: {
+          payoutAccountName: true,
+          payoutSortCode: true,
+          payoutAccountNumber: true,
+        },
+      });
+      return {
+        accountName: org?.payoutAccountName ?? null,
+        sortCode: org?.payoutSortCode ?? null,
+        accountNumber: org?.payoutAccountNumber ?? null,
+      };
+    }),
+
+  /**
+   * Save the club's payout bank details. We validate the shape (UK sort
+   * code 6 digits, account number 8 digits) but don't verify the account
+   * exists — that gets confirmed the first time we send a payment and
+   * it either lands or bounces.
+   *
+   * All three fields must be provided together. Partial updates don't
+   * make sense for bank details — you either have a full set or you
+   * don't.
+   */
+  updatePayoutDetails: secretaryProcedure
+    .input(
+      z.object({
+        organisationId: z.string().uuid(),
+        accountName: z.string().min(1).max(140),
+        sortCode: z
+          .string()
+          .regex(/^\d{2}-?\d{2}-?\d{2}$/, 'Sort code must be 6 digits (e.g. 10-88-00)'),
+        accountNumber: z
+          .string()
+          .regex(/^\d{8}$/, 'Account number must be exactly 8 digits'),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      await verifyOrgAccess(ctx.db, ctx.session.user.id, input.organisationId);
+      // Normalise the sort code to hyphenated form so storage matches
+      // what we render back.
+      const digits = input.sortCode.replace(/-/g, '');
+      const normalisedSortCode = `${digits.slice(0, 2)}-${digits.slice(2, 4)}-${digits.slice(4, 6)}`;
+
+      await ctx.db
+        .update(organisations)
+        .set({
+          payoutAccountName: input.accountName,
+          payoutSortCode: normalisedSortCode,
+          payoutAccountNumber: input.accountNumber,
+        })
+        .where(eq(organisations.id, input.organisationId));
+
+      return { success: true };
     }),
 
   // ── Catalogue number assignment ────────────────────────────
@@ -472,70 +765,43 @@ export const secretaryRouter = createTRPCRouter({
     .mutation(async ({ ctx, input }) => {
       await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId, { callerIsAdmin: ctx.callerIsAdmin });
 
-      // Fetch all confirmed entries with breed + class info for ordering
-      const confirmedEntries = await ctx.db.query.entries.findMany({
-        where: and(
-          eq(entries.showId, input.showId),
-          eq(entries.status, 'confirmed'),
-          isNull(entries.deletedAt)
-        ),
-        with: {
-          dog: {
-            with: {
-              breed: { with: { group: true } },
-            },
-          },
-          entryClasses: {
-            with: {
-              showClass: true,
-            },
-          },
-        },
-        orderBy: [asc(entries.entryDate)],
-      });
+      // Full class-first re-sort (breed → Junior Handlers → NFC). Shared with
+      // the auto-resort that runs on every provisional add/remove so the button
+      // and the automatic path can never disagree.
+      //
+      // Lock-aware since 2026-07-27: the catalogue page now fires this whenever
+      // ANY entry is missing a number (not just when none has one), and on a
+      // locked show that must fill the blanks rather than shift printed numbers.
+      return syncCatalogueNumbers(ctx.db, input.showId);
+    }),
 
-      // Sort by: lowest class number → group → breed → sex → entry date
-      // This ensures catalogue numbers follow class order in the catalogue
-      const sorted = [...confirmedEntries].sort((a, b) => {
-        // First: sort by the entry's lowest class number
-        const aMinClass = Math.min(
-          ...a.entryClasses.map((ec) => ec.showClass?.classNumber ?? ec.showClass?.sortOrder ?? 999)
-        );
-        const bMinClass = Math.min(
-          ...b.entryClasses.map((ec) => ec.showClass?.classNumber ?? ec.showClass?.sortOrder ?? 999)
-        );
-        if (aMinClass !== bMinClass) return aMinClass - bMinClass;
+  // Lock catalogue numbers for printing. After this, late entries append at the
+  // end instead of re-sorting, so a printed catalogue's numbers never shift.
+  lockCatalogueNumbers: secretaryProcedure
+    .input(z.object({ showId: z.string().uuid() }))
+    .mutation(async ({ ctx, input }) => {
+      await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId, { callerIsAdmin: ctx.callerIsAdmin });
+      // Make sure numbers exist + are in order before we freeze them.
+      await syncCatalogueNumbers(ctx.db, input.showId);
+      await ctx.db
+        .update(shows)
+        .set({ catalogueNumbersLockedAt: new Date(), updatedAt: new Date() })
+        .where(eq(shows.id, input.showId));
+      return { locked: true };
+    }),
 
-        // Then: group → breed → sex → entry date (as before)
-        const aGroup = a.dog?.breed?.group?.sortOrder ?? 99;
-        const bGroup = b.dog?.breed?.group?.sortOrder ?? 99;
-        if (aGroup !== bGroup) return aGroup - bGroup;
-
-        const aBreed = a.dog?.breed?.name ?? '';
-        const bBreed = b.dog?.breed?.name ?? '';
-        if (aBreed !== bBreed) return aBreed.localeCompare(bBreed);
-
-        const sexOrder = { dog: 0, bitch: 1 };
-        const aSex = a.dog?.sex ? sexOrder[a.dog.sex] : 2;
-        const bSex = b.dog?.sex ? sexOrder[b.dog.sex] : 2;
-        if (aSex !== bSex) return aSex - bSex;
-
-        return new Date(a.entryDate).getTime() - new Date(b.entryDate).getTime();
-      });
-
-      // Assign sequential catalogue numbers
-      if (sorted.length > 0) {
-        await ctx.db.transaction(async (tx) => {
-          for (let i = 0; i < sorted.length; i++) {
-            await tx
-              .update(entries)
-              .set({ catalogueNumber: String(i + 1), updatedAt: new Date() })
-              .where(eq(entries.id, sorted[i].id));
-          }
-        });
-      }
-
-      return { assigned: sorted.length };
+  // Unlock catalogue numbers and re-sort, so any entries that were appended
+  // while locked drop back into their class order.
+  unlockCatalogueNumbers: secretaryProcedure
+    .input(z.object({ showId: z.string().uuid() }))
+    .mutation(async ({ ctx, input }) => {
+      await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId, { callerIsAdmin: ctx.callerIsAdmin });
+      await ctx.db
+        .update(shows)
+        .set({ catalogueNumbersLockedAt: null, updatedAt: new Date() })
+        .where(eq(shows.id, input.showId));
+      await resortCatalogueNumbers(ctx.db, input.showId);
+      return { locked: false };
     }),
 
   // ── Catalogue data ─────────────────────────────────────────
@@ -544,6 +810,12 @@ export const secretaryRouter = createTRPCRouter({
     .input(z.object({ showId: z.string().uuid() }))
     .query(async ({ ctx, input }) => {
       await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId, { callerIsAdmin: ctx.callerIsAdmin });
+
+      // Auto-assign catalogue numbers in class order the first time the
+      // secretary opens the catalogue page, so they don't have to hunt
+      // for a button. Fills blanks only — viewing the page must never
+      // renumber a show someone is mid-print on.
+      await syncCatalogueNumbers(ctx.db, input.showId, { allowResort: false });
 
       const show = await ctx.db.query.shows.findFirst({
         where: eq(shows.id, input.showId),
@@ -576,10 +848,98 @@ export const secretaryRouter = createTRPCRouter({
             },
           },
         },
-        orderBy: [asc(entries.catalogueNumber)],
+        orderBy: [catalogueNumberAsc()],
       });
 
       return { show, entries: catalogueEntries };
+    }),
+
+  // "Check before print" — a glance-list of owner records worth a second
+  // look, surfaced on the catalogue page BEFORE printing. Deliberately not a
+  // gate at entry time (Mandy: no new friction) — see catalogue-data-checks.ts
+  // for the rules and the real incident that prompted this.
+  catalogueDataChecks: secretaryProcedure
+    .input(z.object({ showId: z.string().uuid() }))
+    .query(async ({ ctx, input }) => {
+      await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId, { callerIsAdmin: ctx.callerIsAdmin });
+
+      const catalogueEntries = await ctx.db.query.entries.findMany({
+        where: and(
+          eq(entries.showId, input.showId),
+          eq(entries.status, 'confirmed'),
+          isNull(entries.deletedAt)
+        ),
+        columns: {
+          catalogueNumber: true,
+          // Withheld entries never print an address (catalogue render
+          // substitutes "address withheld") — the flag lives on the entry,
+          // not the owner, since one person can hold entries with different
+          // publication choices.
+          withholdFromPublication: true,
+        },
+        with: {
+          dog: {
+            columns: { registeredName: true },
+            with: {
+              owners: { orderBy: [asc(dogOwners.sortOrder)] },
+            },
+          },
+        },
+        orderBy: [catalogueNumberAsc()],
+      });
+
+      interface FlaggedOwnerRow {
+        dogName: string;
+        catalogueNumber: string | null;
+        ownerName: string | null;
+        ownerAddress: string | null;
+        issues: OwnerCheckIssue[];
+        dogCount: number;
+      }
+
+      // Same owner can appear on several dogs (a member entering more than
+      // one dog) — collapse to one row with a dog count rather than repeating
+      // the same person down the list. Prefer the linked user account as the
+      // identity key when there is one; fall back to the name+address text
+      // for guest/legacy owner rows with no `userId`.
+      const flaggedByOwner = new Map<string, FlaggedOwnerRow>();
+
+      for (const entry of catalogueEntries) {
+        const dogName = entry.dog?.registeredName;
+        if (!dogName) continue; // Junior Handling entries have no dog.
+
+        for (const owner of entry.dog?.owners ?? []) {
+          const issues = checkOwnerRecord({
+            ownerName: owner.ownerName,
+            ownerAddress: owner.ownerAddress,
+            addressWithheld: entry.withholdFromPublication,
+          });
+          if (issues.length === 0) continue;
+
+          const key = owner.userId
+            ? `user:${owner.userId}`
+            : `text:${(owner.ownerName ?? '').trim().toLowerCase()}|${(owner.ownerAddress ?? '').trim().toLowerCase()}`;
+
+          const existing = flaggedByOwner.get(key);
+          if (existing) {
+            existing.dogCount += 1;
+            for (const issue of issues) {
+              if (!existing.issues.includes(issue)) existing.issues.push(issue);
+            }
+          } else {
+            flaggedByOwner.set(key, {
+              dogName,
+              catalogueNumber: entry.catalogueNumber,
+              ownerName: owner.ownerName,
+              ownerAddress: owner.ownerAddress,
+              issues,
+              dogCount: 1,
+            });
+          }
+        }
+      }
+
+      return Array.from(flaggedByOwner.values());
     }),
 
   getAbsenteeList: secretaryProcedure
@@ -587,28 +947,15 @@ export const secretaryRouter = createTRPCRouter({
     .query(async ({ ctx, input }) => {
       await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId, { callerIsAdmin: ctx.callerIsAdmin });
 
-      return ctx.db.query.entries.findMany({
-        where: and(
-          eq(entries.showId, input.showId),
-          sql`(${entries.status} = 'withdrawn' OR ${entries.absent} = true)`,
-          isNull(entries.deletedAt)
-        ),
-        with: {
-          dog: {
-            with: {
-              breed: true,
-              owners: { orderBy: [asc(dogOwners.sortOrder)] },
-            },
-          },
-          exhibitor: true,
-          entryClasses: {
-            with: {
-              showClass: { with: { classDefinition: true } },
-            },
-          },
-        },
-        orderBy: [asc(entries.catalogueNumber)],
-      });
+      // An absentee is only meaningful for entries that were actually paid
+      // for. Withdrawn entries from abandoned checkouts (order still in
+      // pending_payment) never made the catalogue. Query shared with this
+      // list's xlsx twin (see the Documents & Reports page) via
+      // report-queries.ts so the two can't disagree.
+      const paidOrderIds = await getPaidOrderIdsForShow(ctx.db, input.showId);
+      if (paidOrderIds.length === 0) return [];
+
+      return loadAbsenteeLikeEntries(ctx.db, withdrawnOrAbsentPaidWhere(input.showId, paidOrderIds));
     }),
 
   // ── Reports ────────────────────────────────────────────────
@@ -618,28 +965,91 @@ export const secretaryRouter = createTRPCRouter({
     .query(async ({ ctx, input }) => {
       await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId, { callerIsAdmin: ctx.callerIsAdmin });
 
-      return ctx.db.query.entries.findMany({
-        where: and(
-          eq(entries.showId, input.showId),
+      // Only entries on paid orders belong in reports — abandoned
+      // pending_payment checkouts produce ghost entries that inflate
+      // "Total Entries" and leak non-paying exhibitors into the tally.
+      // Query shared with the Financial Statement xlsx via report-queries.ts
+      // so the CSV and the spreadsheet can't disagree.
+      const paidOrderIds = await getPaidOrderIdsForShow(ctx.db, input.showId);
+      return loadEntryReportEntries(ctx.db, input.showId, paidOrderIds);
+    }),
+
+  // Entry set for the Financial page's "Entries by Class" card. Unlike
+  // getEntryReport (paid-via-Remi only), this counts the TRUE ring numbers:
+  // every confirmed catalogue entry regardless of how it was paid — including
+  // entries a secretary added that were settled directly to the club (no Remi
+  // order) — plus NFC entries. Same entry set the catalogue + its headline
+  // count use (status='confirmed', not deleted; NOT scoped to paid orders), so
+  // the per-class total reconciles to the catalogue. (Mandy, BAGSD 2026-06-17.)
+  // The money tables on the Financial page stay on getEntryReport.
+  getClassBreakdownReport: secretaryProcedure
+    .input(z.object({ showId: z.string().uuid() }))
+    .query(async ({ ctx, input }) => {
+      await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId, { callerIsAdmin: ctx.callerIsAdmin });
+
+      // `classes` is the show's full scheduled class list, independent of
+      // whether anyone has entered — computeClassBreakdown uses it to seed a
+      // zero-entry row for a scheduled class nobody entered (e.g. Baby Puppy
+      // Dog/Bitch), matching what the PDF class-breakdown report already
+      // does from `orderedClasses` (Mandy 2026-07-27).
+      const [entryRows, classRows] = await Promise.all([
+        ctx.db.query.entries.findMany({
+          where: and(
+            eq(entries.showId, input.showId),
+            eq(entries.status, 'confirmed'),
+            isNull(entries.deletedAt)
+          ),
+          columns: { id: true, status: true, isNfc: true, totalFee: true },
+          with: {
+            entryClasses: {
+              columns: { fee: true },
+              with: {
+                showClass: {
+                  columns: { sex: true, svCoatType: true, sortOrder: true, classNumber: true },
+                  with: { classDefinition: { columns: { name: true, type: true } } },
+                },
+              },
+            },
+          },
+          orderBy: [asc(entries.entryDate)],
+        }),
+        ctx.db.query.showClasses.findMany({
+          where: eq(showClasses.showId, input.showId),
+          columns: { sex: true, svCoatType: true, sortOrder: true },
+          with: { classDefinition: { columns: { name: true, type: true } } },
+        }),
+      ]);
+
+      return { entries: entryRows, classes: classRows };
+    }),
+
+  // "Prize cards needed" counts for the Documents page (Mandy 2026-07-30) —
+  // how many 1st/2nd/3rd/Reserve cards to actually order, instead of a full
+  // suite per class. Per show_class, count CONFIRMED (and non-deleted, same
+  // "true catalogue entry" filter as getClassBreakdownReport) entry_classes
+  // rows, then feed the per-class counts into computePrizeCardCounts, which
+  // owns the whole counting rule (min(entries, 4) per class; see that file
+  // for why 5th/VHC and Best-award cards are deliberately excluded). A
+  // show_class with zero confirmed entries never appears in these rows —
+  // computePrizeCardCounts treats an absent class the same as an explicit 0.
+  getPrizeCardCounts: secretaryProcedure
+    .input(z.object({ showId: z.string().uuid() }))
+    .query(async ({ ctx, input }) => {
+      await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId, { callerIsAdmin: ctx.callerIsAdmin });
+
+      const rows = await ctx.db
+        .select({ showClassId: entryClasses.showClassId, count: sql<number>`COUNT(*)` })
+        .from(entryClasses)
+        .innerJoin(entries, eq(entryClasses.entryId, entries.id))
+        .innerJoin(showClasses, eq(entryClasses.showClassId, showClasses.id))
+        .where(and(
+          eq(showClasses.showId, input.showId),
+          eq(entries.status, 'confirmed'),
           isNull(entries.deletedAt)
-        ),
-        with: {
-          dog: {
-            with: {
-              breed: { with: { group: true } },
-              owners: true,
-            },
-          },
-          exhibitor: true,
-          entryClasses: {
-            with: {
-              showClass: { with: { classDefinition: true, breed: true } },
-            },
-          },
-          payments: true,
-        },
-        orderBy: [asc(entries.entryDate)],
-      });
+        ))
+        .groupBy(entryClasses.showClassId);
+
+      return computePrizeCardCounts(rows.map((r) => Number(r.count)));
     }),
 
   getPaymentReport: secretaryProcedure
@@ -647,54 +1057,213 @@ export const secretaryRouter = createTRPCRouter({
     .query(async ({ ctx, input }) => {
       await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId, { callerIsAdmin: ctx.callerIsAdmin });
 
-      const showEntries = await ctx.db.query.entries.findMany({
-        where: and(
-          eq(entries.showId, input.showId),
-          isNull(entries.deletedAt)
-        ),
-        with: {
-          payments: true,
-          exhibitor: true,
-          dog: true,
-        },
-      });
-
-      // Compute sundry totals per order so we can include them in per-entry totals
-      const orderIds = showEntries.map((e) => e.orderId).filter(Boolean) as string[];
-      const sundryTotalsMap = new Map<string, number>();
-      if (orderIds.length > 0) {
-        const sundryTotals = await ctx.db
+      const [showEntries, orderRows, sundryLines, paymentRefundRows] = await Promise.all([
+        // Exclude entries on refunded orders — they'd otherwise show up
+        // as "cancelled" ghost rows in the report. Refund history lives
+        // on the Financial tab's refund UI.
+        ctx.db.query.entries.findMany({
+          where: and(
+            eq(entries.showId, input.showId),
+            isNull(entries.deletedAt),
+            sql`(${entries.orderId} IS NULL OR ${entries.orderId} NOT IN (
+              SELECT id FROM ${orders} WHERE show_id = ${input.showId} AND status = 'refunded'
+            ))`
+          ),
+          with: { payments: true, exhibitor: true, dog: true },
+        }),
+        ctx.db.query.orders.findMany({
+          where: eq(orders.showId, input.showId),
+          with: { exhibitor: true, payments: true },
+        }),
+        ctx.db
           .select({
             orderId: orderSundryItems.orderId,
-            total: sql<number>`sum(${orderSundryItems.quantity} * ${orderSundryItems.unitPrice})`,
+            itemName: sundryItems.name,
+            quantity: orderSundryItems.quantity,
+            unitPrice: orderSundryItems.unitPrice,
           })
           .from(orderSundryItems)
-          .where(inArray(orderSundryItems.orderId, orderIds))
-          .groupBy(orderSundryItems.orderId);
-        for (const row of sundryTotals) {
-          sundryTotalsMap.set(row.orderId, Number(row.total));
+          .innerJoin(orders, eq(orderSundryItems.orderId, orders.id))
+          .innerJoin(sundryItems, eq(orderSundryItems.sundryItemId, sundryItems.id))
+          .where(eq(orders.showId, input.showId)),
+        ctx.db
+          .select({
+            orderId: payments.orderId,
+            refundAmount: payments.refundAmount,
+          })
+          .from(payments)
+          .innerJoin(orders, eq(payments.orderId, orders.id))
+          .where(and(eq(orders.showId, input.showId), isNotNull(payments.refundAmount))),
+      ]);
+
+      // Aggregate sundries per order (one "Sundry items" row per order,
+      // not per line item — matches what secretaries reconcile against
+      // their bank).
+      const sundryTotalsByOrder = new Map<string, number>();
+      const sundryBreakdownByOrder = new Map<string, string[]>();
+      for (const line of sundryLines) {
+        const total = line.quantity * line.unitPrice;
+        sundryTotalsByOrder.set(
+          line.orderId,
+          (sundryTotalsByOrder.get(line.orderId) ?? 0) + total
+        );
+        const arr = sundryBreakdownByOrder.get(line.orderId) ?? [];
+        arr.push(`${line.itemName}${line.quantity > 1 ? ` ×${line.quantity}` : ''}`);
+        sundryBreakdownByOrder.set(line.orderId, arr);
+      }
+
+      type ReportRow = {
+        kind: 'entry' | 'sundry';
+        id: string;
+        orderId: string | null;
+        exhibitor: { name: string | null; email: string | null } | null;
+        itemLabel: string;
+        itemDetail?: string;  // tooltip/secondary line (sundry breakdown)
+        entryFee: number;
+        addons: number;
+        total: number;
+        status: string;
+        // Payments live on the order. We attach them to the LAST row of
+        // each order group so they read as the order's single total
+        // payment in the UI rather than repeating on every line.
+        payments: Array<{ amount: number; status: string }>;
+      };
+
+      // Group visible entries by orderId so we can attach sundries and
+      // payments correctly. Orders whose entries are all deleted
+      // (cancelled & soft-deleted) never appear in showEntries and are
+      // therefore invisible here — exactly what we want: no ghost
+      // "Sundry items — Cancelled" rows for abandoned checkouts.
+      const entriesByOrder = new Map<string, typeof showEntries>();
+      for (const e of showEntries) {
+        if (!e.orderId) continue;
+        const arr = entriesByOrder.get(e.orderId) ?? [];
+        arr.push(e);
+        entriesByOrder.set(e.orderId, arr);
+      }
+
+      // Orders that are visible (i.e. have at least one non-deleted
+      // entry), in the order they first appear in showEntries. We use
+      // this ordering to group the output so each order's entries +
+      // sundry row appear contiguous on screen.
+      const visibleOrderIds: string[] = [];
+      const seen = new Set<string>();
+      for (const e of showEntries) {
+        const oid = e.orderId;
+        if (oid && !seen.has(oid)) {
+          visibleOrderIds.push(oid);
+          seen.add(oid);
         }
       }
 
-      const enrichedEntries = showEntries.map((e) => ({
-        ...e,
-        sundryTotal: (e.orderId ? sundryTotalsMap.get(e.orderId) : undefined) ?? 0,
-      }));
+      const orderById = new Map(orderRows.map((o) => [o.id, o] as const));
+      const rows: ReportRow[] = [];
 
-      const totalRevenue = enrichedEntries.reduce(
-        (sum, e) => sum + e.totalFee + e.sundryTotal,
-        0
-      );
-      const paidEntries = enrichedEntries.filter((e) => e.status === 'confirmed');
-      const pendingEntries = enrichedEntries.filter((e) => e.status === 'pending');
+      // Also include entries with no orderId (unusual) as their own
+      // rows without grouping. Preserve the historical behaviour that
+      // every non-deleted entry shows up.
+      for (const e of showEntries) {
+        if (e.orderId) continue;
+        rows.push({
+          kind: 'entry',
+          id: `entry-${e.id}`,
+          orderId: null,
+          exhibitor: e.exhibitor
+            ? { name: e.exhibitor.name, email: e.exhibitor.email }
+            : null,
+          itemLabel: e.dog?.registeredName ?? 'Junior Handler',
+          entryFee: e.totalFee,
+          addons: 0,
+          total: e.totalFee,
+          status: e.status,
+          payments: e.payments.map((p) => ({ amount: p.amount, status: p.status })),
+        });
+      }
+
+      for (const orderId of visibleOrderIds) {
+        const orderEntries = entriesByOrder.get(orderId) ?? [];
+        const order = orderById.get(orderId);
+        const sundryTotal = sundryTotalsByOrder.get(orderId) ?? 0;
+        const hasSundry = sundryTotal > 0;
+        const orderStatus = statusFromEntries(orderEntries);
+        const orderPayments = (order?.payments ?? []).map((p) => ({
+          amount: p.amount,
+          status: p.status,
+        }));
+
+        // Emit entry rows for this order. Payments are attached only
+        // to the LAST row of the group (sundry if present, otherwise
+        // the last entry).
+        orderEntries.forEach((e, idx) => {
+          const isLastRowOfGroup = !hasSundry && idx === orderEntries.length - 1;
+          rows.push({
+            kind: 'entry',
+            id: `entry-${e.id}`,
+            orderId,
+            exhibitor: e.exhibitor
+              ? { name: e.exhibitor.name, email: e.exhibitor.email }
+              : null,
+            itemLabel: e.dog?.registeredName ?? 'Junior Handler',
+            entryFee: e.totalFee,
+            addons: 0,
+            total: e.totalFee,
+            status: e.status,
+            payments: isLastRowOfGroup ? orderPayments : [],
+          });
+        });
+
+        if (hasSundry) {
+          const breakdown = sundryBreakdownByOrder.get(orderId) ?? [];
+          const firstExhibitor = orderEntries[0]?.exhibitor;
+          rows.push({
+            kind: 'sundry',
+            id: `sundry-${orderId}`,
+            orderId,
+            exhibitor: firstExhibitor
+              ? { name: firstExhibitor.name, email: firstExhibitor.email }
+              : null,
+            itemLabel: 'Sundry items',
+            itemDetail: breakdown.join(', '),
+            entryFee: 0,
+            addons: sundryTotal,
+            total: sundryTotal,
+            status: orderStatus,
+            payments: orderPayments,
+          });
+        }
+      }
+
+      const metrics = aggregateShowMetrics({
+        orders: orderRows.map((o) => ({
+          id: o.id,
+          status: o.status,
+          totalAmount: o.totalAmount,
+          platformFeePence: o.platformFeePence,
+          stripePaymentIntentId: o.stripePaymentIntentId,
+        })),
+        entries: showEntries.map((e) => ({
+          id: e.id,
+          orderId: e.orderId,
+          status: e.status,
+          totalFee: e.totalFee,
+          deletedAt: e.deletedAt,
+          isNfc: e.isNfc,
+          entryType: e.entryType,
+        })),
+        sundries: sundryLines,
+        payments: paymentRefundRows,
+      });
 
       return {
-        entries: enrichedEntries,
+        rows,
         summary: {
-          totalRevenue,
-          paidCount: paidEntries.length,
-          pendingCount: pendingEntries.length,
-          totalEntries: enrichedEntries.length,
+          // This report lists every order regardless of channel, so the
+          // headline total should be the club's full take (Stripe +
+          // offline), not just what Remi owes.
+          totalRevenue: metrics.totalClubRevenuePence,
+          paidCount: metrics.confirmedEntryCount,
+          pendingCount: metrics.pendingEntryCount,
+          totalEntries: showEntries.length,
         },
       };
     }),
@@ -704,53 +1273,9 @@ export const secretaryRouter = createTRPCRouter({
     .query(async ({ ctx, input }) => {
       await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId, { callerIsAdmin: ctx.callerIsAdmin });
 
-      // Find catalogue sundry items for this show
-      const catalogueItems = await ctx.db
-        .select({ id: sundryItems.id, name: sundryItems.name })
-        .from(sundryItems)
-        .where(
-          and(
-            eq(sundryItems.showId, input.showId),
-            ilike(sundryItems.name, CATALOGUE_NAME_PATTERN)
-          )
-        );
-
-      if (catalogueItems.length === 0) return { printed: [], online: [] };
-
-      const catalogueItemIds = catalogueItems.map((i) => i.id);
-
-      // Find all orders for these catalogue items with exhibitor info
-      const catalogueOrders = await ctx.db
-        .select({
-          itemName: sundryItems.name,
-          quantity: orderSundryItems.quantity,
-          exhibitorName: users.name,
-          exhibitorEmail: users.email,
-        })
-        .from(orderSundryItems)
-        .innerJoin(sundryItems, eq(orderSundryItems.sundryItemId, sundryItems.id))
-        .innerJoin(orders, eq(orderSundryItems.orderId, orders.id))
-        .innerJoin(users, eq(orders.exhibitorId, users.id))
-        .where(inArray(orderSundryItems.sundryItemId, catalogueItemIds));
-
-      // Split into printed vs online
-      const printed: { name: string; email: string; quantity: number }[] = [];
-      const online: { name: string; email: string; quantity: number }[] = [];
-
-      for (const row of catalogueOrders) {
-        const entry = {
-          name: row.exhibitorName ?? '—',
-          email: row.exhibitorEmail,
-          quantity: row.quantity,
-        };
-        if (row.itemName.toLowerCase().includes('print')) {
-          printed.push(entry);
-        } else {
-          online.push(entry);
-        }
-      }
-
-      return { printed, online };
+      // Query shared with the Financial Statement xlsx's catalogue-buyer
+      // check via report-queries.ts so the two can't disagree.
+      return loadCatalogueOrdersSplit(ctx.db, input.showId);
     }),
 
   // ── Dog editing (for secretary) ──────────────────────────
@@ -848,6 +1373,197 @@ export const secretaryRouter = createTRPCRouter({
         },
         orderBy: [desc(entryAuditLog.createdAt)],
       });
+    }),
+
+  /**
+   * Higham-style Extras Summary report. Groups every paid add-on
+   * purchase (sundry items: catalogues, memberships, donations etc;
+   * class sponsorships; show sponsors) by item type and lists each
+   * buyer's contact details under that section. Per Amanda's spec
+   * 2026-05-14.
+   */
+  getExtrasSummary: secretaryProcedure
+    .input(z.object({ showId: z.string().uuid() }))
+    .query(async ({ ctx, input }) => {
+      await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId, { callerIsAdmin: ctx.callerIsAdmin });
+
+      // Sundry line items on paid orders only. Refunded orders are
+      // excluded because the buyer no longer holds the item.
+      const sundryRows = await ctx.db
+        .select({
+          itemName: sundryItems.name,
+          quantity: orderSundryItems.quantity,
+          unitPrice: orderSundryItems.unitPrice,
+          buyerName: users.name,
+          buyerEmail: users.email,
+          buyerPhone: users.phone,
+        })
+        .from(orderSundryItems)
+        .innerJoin(orders, eq(orderSundryItems.orderId, orders.id))
+        .innerJoin(sundryItems, eq(orderSundryItems.sundryItemId, sundryItems.id))
+        .innerJoin(users, eq(orders.exhibitorId, users.id))
+        .where(and(eq(orders.showId, input.showId), eq(orders.status, 'paid')));
+
+      // Class sponsorships — secretary-entered, not a purchase. Still
+      // useful in the extras summary so the secretary has one list of
+      // every external contributor to the show.
+      const classSponsorRows = await ctx.db
+        .select({
+          className: classDefinitions.name,
+          sponsorName: classSponsorships.sponsorName,
+          sponsorAffix: classSponsorships.sponsorAffix,
+          trophyName: classSponsorships.trophyName,
+          trophyDonor: classSponsorships.trophyDonor,
+          prizeMoney: classSponsorships.prizeMoney,
+          prizeDescription: classSponsorships.prizeDescription,
+        })
+        .from(classSponsorships)
+        .innerJoin(showClasses, eq(classSponsorships.showClassId, showClasses.id))
+        .innerJoin(classDefinitions, eq(showClasses.classDefinitionId, classDefinitions.id))
+        .where(eq(showClasses.showId, input.showId));
+
+      // Show-level sponsors. Stored on showSponsors with optional ad/
+      // tier info. We list each one as a sponsor entry.
+      const showSponsorRows = await ctx.db
+        .select({
+          tier: showSponsors.tier,
+          customTitle: showSponsors.customTitle,
+          specialPrizes: showSponsors.specialPrizes,
+          prizeMoney: showSponsors.prizeMoney,
+          sponsorName: sponsors.name,
+          sponsorEmail: sponsors.contactEmail,
+        })
+        .from(showSponsors)
+        .innerJoin(sponsors, eq(showSponsors.sponsorId, sponsors.id))
+        .where(eq(showSponsors.showId, input.showId));
+
+      type SundryBuyer = {
+        name: string | null;
+        email: string | null;
+        phone: string | null;
+        quantity: number;
+        unitPrice: number;
+      };
+      type SponsorRow = {
+        sponsorName: string;
+        email?: string | null;
+        phone?: string | null;
+        detail: string;
+        amountPence?: number;
+      };
+
+      // Group sundry rows by item name
+      const sundryGroups = new Map<string, SundryBuyer[]>();
+      for (const r of sundryRows) {
+        const arr = sundryGroups.get(r.itemName) ?? [];
+        arr.push({
+          name: r.buyerName,
+          email: r.buyerEmail,
+          phone: r.buyerPhone,
+          quantity: r.quantity,
+          unitPrice: r.unitPrice,
+        });
+        sundryGroups.set(r.itemName, arr);
+      }
+
+      const sections = [
+        ...Array.from(sundryGroups.entries())
+          .sort((a, b) => a[0].localeCompare(b[0]))
+          .map(([label, buyers]) => ({
+            kind: 'sundry' as const,
+            label,
+            buyers: buyers.sort((a, b) => (a.name ?? '').localeCompare(b.name ?? '')),
+            totalQuantity: buyers.reduce((s, b) => s + b.quantity, 0),
+            totalPence: buyers.reduce((s, b) => s + b.quantity * b.unitPrice, 0),
+          })),
+      ];
+
+      const classSponsorEntries: SponsorRow[] = classSponsorRows
+        .filter((r) => r.sponsorName || r.trophyName || r.prizeMoney || r.prizeDescription)
+        .map((r) => {
+          const parts: string[] = [];
+          if (r.trophyName) parts.push(r.trophyName);
+          if (r.prizeMoney) parts.push(`£${(r.prizeMoney / 100).toFixed(2)}`);
+          if (r.prizeDescription) parts.push(r.prizeDescription);
+          return {
+            sponsorName: [r.sponsorName, r.sponsorAffix].filter(Boolean).join(' ') || (r.trophyDonor ?? 'Class sponsor'),
+            detail: `${r.className}${parts.length ? ' — ' + parts.join(', ') : ''}`,
+            amountPence: r.prizeMoney ?? undefined,
+          };
+        });
+
+      const showSponsorEntries: SponsorRow[] = showSponsorRows.map((r) => {
+        const parts: string[] = [];
+        if (r.customTitle) parts.push(r.customTitle);
+        if (r.specialPrizes) parts.push(r.specialPrizes);
+        if (r.prizeMoney) parts.push(`£${(r.prizeMoney / 100).toFixed(2)}`);
+        return {
+          sponsorName: r.sponsorName,
+          email: r.sponsorEmail,
+          phone: null,
+          detail: [r.tier, ...parts].filter(Boolean).join(' — '),
+          amountPence: r.prizeMoney ?? undefined,
+        };
+      });
+
+      return {
+        sundrySections: sections,
+        classSponsors: classSponsorEntries,
+        showSponsors: showSponsorEntries,
+      };
+    }),
+
+  // ── RKC registration flags (NAF/TAF/CNAF) ──────────────────
+
+  /**
+   * Set or clear a single entry's RKC registration flags. Separate from
+   * `updateDog` because these are PER SHOW, not properties of the dog —
+   * exhibitors ring up after entering to say the paperwork has come through
+   * (or hasn't), and the catalogue must reflect the position at closing date.
+   */
+  updateEntryRegistrationFlags: secretaryProcedure
+    .input(
+      z.object({
+        entryId: z.string().uuid(),
+        naf: z.boolean(),
+        taf: z.boolean(),
+        cnaf: z.boolean(),
+        atcNumber: z.string().max(32).optional(),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      const entry = await ctx.db.query.entries.findFirst({
+        where: eq(entries.id, input.entryId),
+        columns: { id: true, showId: true, deletedAt: true },
+      });
+
+      if (!entry || entry.deletedAt) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'Entry not found' });
+      }
+
+      await verifyShowAccess(ctx.db, ctx.session.user.id, entry.showId, {
+        callerIsAdmin: ctx.callerIsAdmin,
+      });
+
+      const [updated] = await ctx.db
+        .update(entries)
+        .set({
+          naf: input.naf,
+          taf: input.taf,
+          cnaf: input.cnaf,
+          atcNumber: formatAtcNumber(input.atcNumber),
+          updatedAt: new Date(),
+        })
+        .where(eq(entries.id, input.entryId))
+        .returning({
+          id: entries.id,
+          naf: entries.naf,
+          taf: entries.taf,
+          cnaf: entries.cnaf,
+          atcNumber: entries.atcNumber,
+        });
+
+      return updated;
     }),
 
   // ── Class transfer ─────────────────────────────────────────
@@ -969,12 +1685,41 @@ export const secretaryRouter = createTRPCRouter({
         showId: z.string().uuid(),
         classDefinitionId: z.string().uuid(),
         breedId: z.string().uuid().optional(),
+        classGroup: z.string().trim().min(1).max(80).optional(),
         sex: z.enum(['dog', 'bitch']).nullable().optional(),
         entryFee: z.number().int().positive(),
       })
     )
     .mutation(async ({ ctx, input }) => {
       await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId, { callerIsAdmin: ctx.callerIsAdmin });
+
+      const [targetShow, classDefinition] = await Promise.all([
+        ctx.db.query.shows.findFirst({
+          where: eq(shows.id, input.showId),
+          columns: { showScope: true, showRuleset: true, scheduleData: true },
+        }),
+        ctx.db.query.classDefinitions.findFirst({
+          where: eq(classDefinitions.id, input.classDefinitionId),
+          columns: { name: true },
+        }),
+      ]);
+      if (!targetShow || !classDefinition) throw new TRPCError({ code: 'NOT_FOUND' });
+      if (
+        targetShow.showRuleset !== 'wusv' &&
+        targetShow.showScope !== 'single_breed' &&
+        classDefinition.name.trim().toLowerCase() === 'baby puppy'
+      ) {
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: 'Baby Puppy classes may only be scheduled at breed club shows under RKC rules.',
+        });
+      }
+      const isGroupVarietyClass = /^(avnsc|avibr|any variety not separately classified|any variety imported breed register)$/i.test(classDefinition.name.trim());
+      if (isGroupVarietyClass && input.classGroup == null) {
+        if (targetShow.scheduleData?.judgedOnGroupSystem) {
+          throw new TRPCError({ code: 'BAD_REQUEST', message: 'Choose the RKC breed group for this AVNSC or AVIBR class.' });
+        }
+      }
 
       // Get max sort order for this show
       const [maxSort] = await ctx.db
@@ -988,6 +1733,7 @@ export const secretaryRouter = createTRPCRouter({
           showId: input.showId,
           classDefinitionId: input.classDefinitionId,
           breedId: input.breedId ?? null,
+          classGroup: input.classGroup ?? null,
           sex: input.sex ?? null,
           entryFee: input.entryFee,
           sortOrder: (Number(maxSort?.max) ?? -1) + 1,
@@ -1021,6 +1767,22 @@ export const secretaryRouter = createTRPCRouter({
         where: inArray(classDefinitions.id, input.classDefinitionIds),
         columns: { id: true, sortOrder: true, type: true, name: true },
       });
+
+      const targetShow = await ctx.db.query.shows.findFirst({
+        where: eq(shows.id, input.showId),
+        columns: { showScope: true, showRuleset: true },
+      });
+      if (!targetShow) throw new TRPCError({ code: 'NOT_FOUND' });
+      if (
+        targetShow.showRuleset !== 'wusv' &&
+        targetShow.showScope !== 'single_breed' &&
+        classDefRows.some((row) => row.name.trim().toLowerCase() === 'baby puppy')
+      ) {
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: 'Baby Puppy classes may only be scheduled at breed club shows under RKC rules.',
+        });
+      }
 
       // RKC type ordering: age first (but Veteran last), then achievement, special, junior_handler
       const typeOrder: Record<string, number> = {
@@ -1156,17 +1918,38 @@ export const secretaryRouter = createTRPCRouter({
       if (values.length > 0) {
         await ctx.db.insert(showClasses).values(values);
 
-        // Auto-number all classes for this show based on sort order
+        // Keep the explicit per-show breed configuration in step when a
+        // secretary adds breeds after initial show creation. Championship
+        // CC allocations default to false until the secretary confirms them.
+        const addedBreedIds = Array.from(new Set(
+          values.map((item) => item.breedId).filter((breedId): breedId is string => !!breedId),
+        ));
+        if (addedBreedIds.length > 0) {
+          await ctx.db.insert(showBreeds).values(
+            addedBreedIds.map((breedId, displayOrder) => ({
+              showId: input.showId,
+              breedId,
+              ccOffered: false,
+              displayOrder,
+            })),
+          ).onConflictDoNothing();
+        }
+
+        // Auto-number breed classes in sort order. Junior Handler + Special
+        // Award Classes stay unnumbered (classNumber=null) — they sit outside
+        // the RKC-licensed count and render as JHA/JHB and A/B/C (bug hunt #5).
         const allClasses = await ctx.db.query.showClasses.findMany({
           where: eq(showClasses.showId, input.showId),
-          columns: { id: true },
+          with: { classDefinition: true },
           orderBy: [asc(showClasses.sortOrder)],
         });
+        let numbered = 0;
         for (let i = 0; i < allClasses.length; i++) {
+          const classNumber = isUnnumberedClassDef(allClasses[i]!.classDefinition) ? null : ++numbered;
           await ctx.db
             .update(showClasses)
-            .set({ classNumber: i + 1 })
-            .where(eq(showClasses.id, allClasses[i].id));
+            .set({ classNumber })
+            .where(eq(showClasses.id, allClasses[i]!.id));
         }
       }
 
@@ -1174,6 +1957,59 @@ export const secretaryRouter = createTRPCRouter({
     }),
 
   // ── Individual class management ────────────────────────────
+
+  getShowBreedCcSettings: secretaryProcedure
+    .input(z.object({ showId: z.string().uuid() }))
+    .query(async ({ ctx, input }) => {
+      await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId, { callerIsAdmin: ctx.callerIsAdmin });
+      const [classRows, settingRows] = await Promise.all([
+        ctx.db.query.showClasses.findMany({
+          where: eq(showClasses.showId, input.showId),
+          columns: { breedId: true },
+          with: { breed: { columns: { id: true, name: true } } },
+        }),
+        ctx.db.query.showBreeds.findMany({
+          where: eq(showBreeds.showId, input.showId),
+          columns: { breedId: true, ccOffered: true },
+        }),
+      ]);
+      const ccByBreed = new Map(settingRows.map((row) => [row.breedId, row.ccOffered]));
+      const breedNames = new Map<string, string>();
+      for (const row of classRows) {
+        if (row.breedId && row.breed?.name) breedNames.set(row.breedId, row.breed.name);
+      }
+      return Array.from(breedNames, ([breedId, breedName]) => ({
+        breedId,
+        breedName,
+        ccOffered: ccByBreed.get(breedId) === true,
+      })).sort((a, b) => a.breedName.localeCompare(b.breedName));
+    }),
+
+  setShowBreedCc: secretaryProcedure
+    .input(z.object({
+      showId: z.string().uuid(),
+      breedId: z.string().uuid(),
+      ccOffered: z.boolean(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId, { callerIsAdmin: ctx.callerIsAdmin });
+      const scheduledBreed = await ctx.db.query.showClasses.findFirst({
+        where: and(eq(showClasses.showId, input.showId), eq(showClasses.breedId, input.breedId)),
+        columns: { id: true },
+      });
+      if (!scheduledBreed) {
+        throw new TRPCError({ code: 'BAD_REQUEST', message: 'That breed is not scheduled at this show.' });
+      }
+      await ctx.db.insert(showBreeds).values({
+        showId: input.showId,
+        breedId: input.breedId,
+        ccOffered: input.ccOffered,
+      }).onConflictDoUpdate({
+        target: [showBreeds.showId, showBreeds.breedId],
+        set: { ccOffered: input.ccOffered, updatedAt: new Date() },
+      });
+      return { updated: true };
+    }),
 
   updateShowClass: secretaryProcedure
     .input(
@@ -1281,49 +2117,36 @@ export const secretaryRouter = createTRPCRouter({
     .mutation(async ({ ctx, input }) => {
       await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId, { callerIsAdmin: ctx.callerIsAdmin });
 
+      // Load class types so Junior Handler + Special Award Classes stay
+      // UNnumbered (classNumber=null) — only RKC-licensed breed classes get a
+      // running number, matching autoAssignClassNumbers (bug hunt #5).
+      const classDefs = await ctx.db.query.showClasses.findMany({
+        where: and(inArray(showClasses.id, input.classIds), eq(showClasses.showId, input.showId)),
+        with: { classDefinition: true },
+      });
+      const defById = new Map(classDefs.map((c) => [c.id, c.classDefinition]));
+
       await ctx.db.transaction(async (tx) => {
+        let numbered = 0;
         await Promise.all(
-          input.classIds.map((id, i) =>
-            tx
+          input.classIds.map((id, i) => {
+            const classNumber = isUnnumberedClassDef(defById.get(id)) ? null : ++numbered;
+            return tx
               .update(showClasses)
-              .set({ sortOrder: i, classNumber: i + 1 })
+              .set({ sortOrder: i, classNumber })
               .where(
                 and(
                   eq(showClasses.id, id),
                   eq(showClasses.showId, input.showId)
                 )
-              )
-          )
+              );
+          })
         );
       });
       return { updated: input.classIds.length };
     }),
 
   // ── Class number assignment ────────────────────────────
-
-  assignClassNumbers: secretaryProcedure
-    .input(
-      z.object({
-        showId: z.string().uuid(),
-        assignments: z.array(
-          z.object({
-            classId: z.string().uuid(),
-            classNumber: z.number().int().min(1),
-          })
-        ),
-      })
-    )
-    .mutation(async ({ ctx, input }) => {
-      await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId, { callerIsAdmin: ctx.callerIsAdmin });
-
-      for (const { classId, classNumber } of input.assignments) {
-        await ctx.db
-          .update(showClasses)
-          .set({ classNumber })
-          .where(and(eq(showClasses.id, classId), eq(showClasses.showId, input.showId)));
-      }
-      return { updated: input.assignments.length };
-    }),
 
   autoAssignClassNumbers: secretaryProcedure
     .input(z.object({ showId: z.string().uuid() }))
@@ -1342,32 +2165,74 @@ export const secretaryRouter = createTRPCRouter({
         orderBy: [asc(showClasses.sortOrder)],
       });
 
-      // Sort by: breed group name → breed name → sex (dog first) → class sort order
+      // Single-breed shows often have breed_id set inconsistently across
+      // classes. Skip breed in the sort unless there are genuinely ≥3
+      // distinct breeds — otherwise a "German Shepherd Dog" value sorts
+      // before the "ZZZ" null-breed fallback and bubbles mixed-breed
+      // classes to the wrong position.
+      const distinctBreeds = new Set(classes.filter((c) => c.breed).map((c) => c.breed!.name));
+      const isMultiBreed = distinctBreeds.size >= 3;
+
+      // Sex tier for numbering order:
+      //   0 = non-JH Mixed (Veteran etc.) — class 1, rendered at the top
+      //   1 = Dog
+      //   2 = Bitch
+      //   3 = JH (excluded from numbering below)
+      // Non-JH Mixed classes go first because RKC ordering places Veteran
+      // before the per-sex classes — a Veteran-winning dog must still be
+      // eligible for the Dog Challenge, which hasn't been judged yet.
+      const sexTier = (cls: (typeof classes)[number]): number => {
+        if (cls.classDefinition?.type === 'junior_handler') return 3;
+        if (cls.sex === 'dog') return 1;
+        if (cls.sex === 'bitch') return 2;
+        return 0;
+      };
+
       const sorted = [...classes].sort((a, b) => {
-        const groupA = a.breed?.group?.name ?? 'ZZZ';
-        const groupB = b.breed?.group?.name ?? 'ZZZ';
-        if (groupA !== groupB) return groupA.localeCompare(groupB);
+        if (isMultiBreed) {
+          const groupA = a.breed?.group?.name ?? 'ZZZ';
+          const groupB = b.breed?.group?.name ?? 'ZZZ';
+          if (groupA !== groupB) return groupA.localeCompare(groupB);
 
-        const breedA = a.breed?.name ?? 'ZZZ';
-        const breedB = b.breed?.name ?? 'ZZZ';
-        if (breedA !== breedB) return breedA.localeCompare(breedB);
+          const breedA = a.breed?.name ?? 'ZZZ';
+          const breedB = b.breed?.name ?? 'ZZZ';
+          if (breedA !== breedB) return breedA.localeCompare(breedB);
+        }
 
-        // Dog before Bitch, null last
-        const sexOrder = (s: string | null) => s === 'dog' ? 0 : s === 'bitch' ? 1 : 2;
-        if (sexOrder(a.sex) !== sexOrder(b.sex)) return sexOrder(a.sex) - sexOrder(b.sex);
+        const tierA = sexTier(a);
+        const tierB = sexTier(b);
+        if (tierA !== tierB) return tierA - tierB;
 
         return a.sortOrder - b.sortOrder;
       });
 
-      // Assign sequential numbers
-      for (let i = 0; i < sorted.length; i++) {
-        await ctx.db
-          .update(showClasses)
-          .set({ classNumber: i + 1 })
-          .where(eq(showClasses.id, sorted[i]!.id));
+      // RKC show licences count only breed classes — Junior Handler and
+      // Special Award Classes sit outside the licensed count. JH classes
+      // render as JHA, JHB, … and SAC classes as A, B, C, … at display time,
+      // both with classNumber = null in the DB. Numbered sequence is
+      // reserved for the RKC-licensed breed classes.
+      const isUnnumbered = (cls: (typeof sorted)[number]) =>
+        isUnnumberedClassDef(cls.classDefinition);
+
+      let numbered = 0;
+      let skipped = 0;
+      for (const cls of sorted) {
+        if (isUnnumbered(cls)) {
+          await ctx.db
+            .update(showClasses)
+            .set({ classNumber: null })
+            .where(eq(showClasses.id, cls.id));
+          skipped++;
+        } else {
+          numbered++;
+          await ctx.db
+            .update(showClasses)
+            .set({ classNumber: numbered })
+            .where(eq(showClasses.id, cls.id));
+        }
       }
 
-      return { assigned: sorted.length };
+      return { assigned: numbered, jhSkipped: skipped };
     }),
 
   resortShowClasses: secretaryProcedure
@@ -1497,11 +2362,15 @@ export const secretaryRouter = createTRPCRouter({
         return soA - soB;
       });
 
-      // 4. Update sortOrder and classNumber sequentially
+      // 4. Update sortOrder sequentially; number only RKC-licensed breed
+      // classes. Junior Handler + Special Award Classes stay unnumbered
+      // (classNumber=null) — they render as JHA/JHB and A/B/C (bug hunt #5).
+      let numbered = 0;
       for (let i = 0; i < sorted.length; i++) {
+        const classNumber = isUnnumberedClassDef(sorted[i]!.classDefinition) ? null : ++numbered;
         await ctx.db
           .update(showClasses)
-          .set({ sortOrder: i, classNumber: i + 1 })
+          .set({ sortOrder: i, classNumber })
           .where(eq(showClasses.id, sorted[i]!.id));
       }
 
@@ -1869,8 +2738,45 @@ export const secretaryRouter = createTRPCRouter({
           judge: true,
           breed: true,
           ring: true,
+          breedGroup: true,
+          judgeRole: true,
         },
       });
+    }),
+
+  getJudgeRoles: secretaryProcedure
+    .input(z.object({ showId: z.string().uuid() }))
+    .query(async ({ ctx, input }) => {
+      await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId, { callerIsAdmin: ctx.callerIsAdmin });
+      return ctx.db.query.judgeRoles.findMany({
+        orderBy: (jr, { asc }) => [asc(jr.sortOrder), asc(jr.name)],
+      });
+    }),
+
+  assignGroupJudge: secretaryProcedure
+    .input(
+      z.object({
+        showId: z.string().uuid(),
+        judgeId: z.string().uuid(),
+        breedGroupId: z.string().uuid().nullable().optional(),
+        judgeRoleId: z.string().uuid().nullable().optional(),
+      }).refine((d) => d.breedGroupId || d.judgeRoleId, {
+        message: 'At least one of breedGroupId or judgeRoleId must be provided',
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId, { callerIsAdmin: ctx.callerIsAdmin });
+
+      const [assignment] = await ctx.db
+        .insert(judgeAssignments)
+        .values({
+          showId: input.showId,
+          judgeId: input.judgeId,
+          breedGroupId: input.breedGroupId ?? null,
+          judgeRoleId: input.judgeRoleId ?? null,
+        })
+        .returning();
+      return assignment!;
     }),
 
   assignJudge: secretaryProcedure
@@ -1985,14 +2891,32 @@ export const secretaryRouter = createTRPCRouter({
       judgeId: z.string().uuid(),
       name: z.string().min(1).max(255).optional(),
       kcNumber: z.string().max(50).optional(),
-      contactEmail: z.string().email().optional(),
+      // Allow an empty string so secretaries can clear a mis-entered
+      // email — the mutation normalises '' → null below. Non-empty values
+      // must still look like an email.
+      contactEmail: z.union([z.string().email().max(255), z.literal('')]).optional(),
       contactPhone: z.string().max(50).optional(),
       bio: z.string().max(2000).optional(),
-      photoUrl: z.string().url().max(500).optional(),
+      photoUrl: z.union([z.string().url().max(500), z.literal('')]).optional(),
       kennelClubAffix: z.string().max(100).optional(),
     }))
     .mutation(async ({ ctx, input }) => {
       const { judgeId, ...updates } = input;
+
+      // Writes are allowed while the judge is only engaged by the caller's
+      // own club(s) (or not engaged at all); once another club has
+      // assignments with this judge, edits need an admin.
+      if (
+        !ctx.callerIsAdmin &&
+        (await judgeEngagedOutsideCallerOrgs(ctx.db, ctx.session.user.id, judgeId))
+      ) {
+        throw new TRPCError({
+          code: 'FORBIDDEN',
+          message:
+            "This judge is also engaged by another club, so their details are locked. Contact the Remi team if something needs correcting.",
+        });
+      }
+
       const setValues: Record<string, unknown> = {};
       if (updates.name !== undefined) setValues.name = updates.name;
       if (updates.kcNumber !== undefined) setValues.kcNumber = updates.kcNumber || null;
@@ -2009,6 +2933,34 @@ export const secretaryRouter = createTRPCRouter({
     }),
 
   /**
+   * Flip the "subject to RKC approval" flag for every assignment a judge has
+   * at a given show. The schedule renders "(subject to RKC approval)" after
+   * the judge's name when true. Per Amanda's spec (2026-05-24), the flag is
+   * per-assignment in the schema but always applied uniformly across a
+   * judge's assignments at a show — so this mutation toggles the lot.
+   */
+  setJudgeRkcApproval: secretaryProcedure
+    .input(z.object({
+      showId: z.string().uuid(),
+      judgeId: z.string().uuid(),
+      subjectToRkcApproval: z.boolean(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId, { callerIsAdmin: ctx.callerIsAdmin });
+      const rows = await ctx.db.update(judgeAssignments)
+        .set({ subjectToRkcApproval: input.subjectToRkcApproval })
+        .where(and(
+          eq(judgeAssignments.showId, input.showId),
+          eq(judgeAssignments.judgeId, input.judgeId),
+        ))
+        .returning({ id: judgeAssignments.id });
+      if (rows.length === 0) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'No assignments found for that judge on this show' });
+      }
+      return { updated: rows.length };
+    }),
+
+  /**
    * Atomic create-or-find judge + assign to show.
    * If kcNumber is provided and a judge with that number exists, reuse them.
    * Creates assignments for each breedId+sex combination.
@@ -2019,7 +2971,11 @@ export const secretaryRouter = createTRPCRouter({
       // Judge details
       name: z.string().min(1).max(255),
       kcNumber: z.string().max(50).optional(),
-      contactEmail: z.string().email(),
+      // Required for breed-judge assignments (needed to email the offer)
+      // but optional for JH-only assignments — we don't send offers for JH.
+      // The wizard enforces the "required when breed assignment present"
+      // rule client-side; server stays tolerant of a blank string.
+      contactEmail: z.union([z.string().email(), z.literal('')]).optional(),
       contactPhone: z.string().max(50).optional(),
       kcJudgeId: z.string().max(100).optional(),
       kennelClubAffix: z.string().max(100).optional(),
@@ -2027,6 +2983,9 @@ export const secretaryRouter = createTRPCRouter({
       assignments: z.array(z.object({
         breedId: z.string().uuid().nullable(),
         sex: z.enum(['dog', 'bitch']).nullable(),
+        /** True for the lunchtime Special Awards Classes judge — breedId/sex ignored
+         *  on the schedule and they render as "Special Awards Classes" instead. */
+        isSpecialAwardsClassesJudge: z.boolean().optional(),
       })).min(1),
       ringId: z.string().uuid().nullable().optional(),
     }))
@@ -2065,13 +3024,23 @@ export const secretaryRouter = createTRPCRouter({
         }).returning();
         judge = created!;
       } else {
-        // Update email/phone/affix if provided (judge already exists, may have new info)
-        await ctx.db.update(judges).set({
-          contactEmail: input.contactEmail,
-          contactPhone: input.contactPhone ?? judge.contactPhone,
-          kcJudgeId: input.kcJudgeId ?? judge.kcJudgeId,
-          kennelClubAffix: input.kennelClubAffix ?? judge.kennelClubAffix,
-        }).where(eq(judges.id, judge.id));
+        // Update email/phone/affix if provided (judge already exists, may
+        // have new info) — but NOT when the judge is engaged by another
+        // club. Without this check, "adding" a judge by their semi-public
+        // KC number would silently overwrite the contact email a rival
+        // club's contract offers are sent to — the same hole updateJudge
+        // guards. The assignment below still proceeds either way.
+        const locked =
+          !ctx.callerIsAdmin &&
+          (await judgeEngagedOutsideCallerOrgs(ctx.db, ctx.session.user.id, judge.id));
+        if (!locked) {
+          await ctx.db.update(judges).set({
+            contactEmail: input.contactEmail,
+            contactPhone: input.contactPhone ?? judge.contactPhone,
+            kcJudgeId: input.kcJudgeId ?? judge.kcJudgeId,
+            kennelClubAffix: input.kennelClubAffix ?? judge.kennelClubAffix,
+          }).where(eq(judges.id, judge.id));
+        }
       }
 
       // Create assignments (skip duplicates via onConflictDoNothing)
@@ -2081,6 +3050,7 @@ export const secretaryRouter = createTRPCRouter({
         breedId: a.breedId,
         ringId: input.ringId ?? null,
         sex: a.sex,
+        isSpecialAwardsClassesJudge: a.isSpecialAwardsClassesJudge ?? false,
       }));
 
       const rows = await ctx.db.insert(judgeAssignments)
@@ -2123,41 +3093,63 @@ export const secretaryRouter = createTRPCRouter({
       ]);
       const assignments = assignmentRows;
 
-      // Build unique breed+sex requirements from classes
-      // Group classes by breedId+sex to get the unique combos that need judges
+      // Build unique requirements from classes. Split by:
+      //   1. breedId + sex (the original axes)
+      //   2. AND whether the class is a Special Award Class — those need
+      //      a separate "Special Awards Classes" judge per Amanda's spec
+      //      2026-05-14, and must never be lumped with the breed's
+      //      regular null-sex classes (e.g. Veteran).
       const requirementsMap = new Map<string, {
         breedId: string | null;
         breedName: string | null;
-        label: string; // Display label — breed name or class definition name (e.g. "Junior Handling")
+        label: string;
         sex: string | null;
         classCount: number;
+        isSpecialAwards: boolean;
       }>();
 
+      const isSpecialAwardClass = (sc: typeof classes[number]) =>
+        sc.classDefinition?.name?.startsWith('Special Award Class') ?? false;
+
       for (const sc of classes) {
-        const key = `${sc.breedId ?? 'all'}:${sc.sex ?? 'both'}`;
+        const sac = isSpecialAwardClass(sc);
+        const key = sac
+          ? `sac:${sc.breedId ?? 'all'}`
+          : `${sc.breedId ?? 'all'}:${sc.sex ?? 'both'}`;
         const existing = requirementsMap.get(key);
         if (existing) {
           existing.classCount++;
         } else {
           // For breed-less classes: use breed name, class name (JH), or scope-aware fallback
-          const isJuniorHandling = sc.classDefinition?.name?.toLowerCase().includes('handling');
-          const label = sc.breed?.name
-            ?? (isJuniorHandling ? 'Junior Handling'
-              : show?.showScope === 'single_breed' ? 'Breed Classes' : 'All Breeds');
+          const isJuniorHandling = sc.classDefinition?.type === 'junior_handler';
+          const label = sac
+            ? (sc.breed?.name ? `${sc.breed.name} — Special Awards Classes` : 'Special Awards Classes')
+            : (sc.breed?.name
+                ?? (isJuniorHandling ? 'Junior Handling'
+                  : show?.showScope === 'single_breed' ? 'Breed Classes' : 'All Breeds'));
           requirementsMap.set(key, {
             breedId: sc.breedId,
             breedName: sc.breed?.name ?? null,
             label,
-            sex: sc.sex,
+            sex: sac ? null : sc.sex,
             classCount: 1,
+            isSpecialAwards: sac,
           });
         }
       }
 
       // Check which requirements are covered by assignments
       const coverage = Array.from(requirementsMap.values()).map((req) => {
-        // Find ALL matching assignments, preferring sex-specific over catch-all
-        const matching = assignments.filter((a) => {
+        // SAC assignments and "regular breed-judge" assignments live in
+        // different lanes — keep them apart so a SAC assignment doesn't
+        // appear to cover Junior Handling and vice versa.
+        const lanedAssignments = req.isSpecialAwards
+          ? assignments.filter((a) => a.isSpecialAwardsClassesJudge)
+          : assignments.filter((a) => !a.isSpecialAwardsClassesJudge);
+
+        // Find ALL matching assignments. breed=null or sex=null on an
+        // assignment is treated as a catch-all — "any breed" / "any sex".
+        const matching = lanedAssignments.filter((a) => {
           const breedMatch = req.breedId
             ? a.breedId === req.breedId || a.breedId === null
             : a.breedId === null;
@@ -2167,8 +3159,17 @@ export const secretaryRouter = createTRPCRouter({
           return breedMatch && sexMatch;
         });
 
-        // Prefer exact sex match over catch-all (sex: null)
-        const exact = matching.filter((a) => a.sex === req.sex);
+        // Prefer assignments that match BOTH breed and sex exactly over
+        // catch-all matches. Without this, a null-breed null-sex assignment
+        // (e.g. Junior Handling) wrongly claims coverage of a breed-
+        // specific mixed-sex class like Veteran — they have the same
+        // shape in the DB. Exact breed + exact sex wins; catch-alls
+        // only appear when nothing more specific exists.
+        const exact = matching.filter(
+          (a) =>
+            a.sex === req.sex &&
+            (req.breedId ? a.breedId === req.breedId : a.breedId === null),
+        );
         const best = exact.length > 0 ? exact : matching;
 
         // Deduplicate by judge
@@ -2187,6 +3188,7 @@ export const secretaryRouter = createTRPCRouter({
           label: req.label,
           sex: req.sex,
           classCount: req.classCount,
+          isSpecialAwards: req.isSpecialAwards,
           covered: judges.length > 0,
           judges,
           // Keep flat fields for backwards compat
@@ -2235,6 +3237,115 @@ export const secretaryRouter = createTRPCRouter({
     }),
 
   // ─── Refund Management ────────────────────────────────
+
+  /**
+   * Every paid order on a show with the full line-item breakdown needed to
+   * render a refund card: exhibitor, entries (with dog + JH handler), sundry
+   * lines (with item names), and the original Stripe payment + refund
+   * history. Paid-only — draft/pending/cancelled orders never appear.
+   */
+  getRefundableOrders: secretaryProcedure
+    .input(z.object({ showId: z.string().uuid() }))
+    .query(async ({ ctx, input }) => {
+      await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId, { callerIsAdmin: ctx.callerIsAdmin });
+
+      return ctx.db.query.orders.findMany({
+        where: and(eq(orders.showId, input.showId), eq(orders.status, 'paid')),
+        with: {
+          exhibitor: { columns: { id: true, name: true, email: true } },
+          entries: {
+            where: isNull(entries.deletedAt),
+            with: {
+              dog: true,
+              juniorHandlerDetails: true,
+              entryClasses: {
+                with: {
+                  showClass: { with: { classDefinition: true } },
+                },
+              },
+            },
+          },
+          orderSundryItems: {
+            with: { sundryItem: true },
+          },
+          payments: true,
+        },
+        orderBy: [desc(orders.createdAt)],
+      });
+    }),
+
+  /**
+   * Full-order refund: refunds every remaining penny on the order's Stripe
+   * PaymentIntent (entry fees + sundries + platform fee all come back to the
+   * exhibitor), cancels every live entry, and marks the payment refunded.
+   *
+   * Use this when the exhibitor pulls out entirely. For "refund one entry
+   * but keep the catalogue", use issueRefund with an entryId instead.
+   */
+  refundOrder: secretaryProcedure
+    .input(
+      z.object({
+        orderId: z.string().uuid(),
+        reason: z.string().max(500).optional(),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      const order = await ctx.db.query.orders.findFirst({
+        where: eq(orders.id, input.orderId),
+      });
+      if (!order) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'Order not found' });
+      }
+      await verifyShowAccess(ctx.db, ctx.session.user.id, order.showId, { callerIsAdmin: ctx.callerIsAdmin });
+
+      if (order.status !== 'paid') {
+        throw new TRPCError({ code: 'BAD_REQUEST', message: 'Only paid orders can be refunded' });
+      }
+
+      // Match any payment that still has money to give back — succeeded AND
+      // partially_refunded both qualify. A pure 'succeeded' filter here would
+      // break after any prior entry-level partial refund flipped the status.
+      const originalPayment = await ctx.db.query.payments.findFirst({
+        where: and(
+          eq(payments.orderId, input.orderId),
+          inArray(payments.status, ['succeeded', 'partially_refunded'])
+        ),
+      });
+      if (!originalPayment?.stripePaymentId) {
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: 'No completed payment found for this order',
+        });
+      }
+
+      const alreadyRefunded = originalPayment.refundAmount ?? 0;
+      const remainingPence = originalPayment.amount - alreadyRefunded;
+      if (remainingPence <= 0) {
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: 'Order has already been fully refunded',
+        });
+      }
+
+      const result = await executeStripeRefund(ctx.db, originalPayment, {
+        amountPence: remainingPence,
+        reason: input.reason,
+      });
+
+      // Cancel every live entry on this order — exhibitor has pulled out
+      await ctx.db
+        .update(entries)
+        .set({ status: 'cancelled' })
+        .where(
+          and(
+            eq(entries.orderId, input.orderId),
+            inArray(entries.status, ['pending', 'confirmed'])
+          )
+        );
+
+      return { refunded: true, amount: result.amount };
+    }),
+
   issueRefund: secretaryProcedure
     .input(
       z.object({
@@ -2256,13 +3367,27 @@ export const secretaryRouter = createTRPCRouter({
 
       await verifyShowAccess(ctx.db, ctx.session.user.id, entry.showId, { callerIsAdmin: ctx.callerIsAdmin });
 
-      // Find the original succeeded payment with a Stripe payment ID
-      const originalPayment = await ctx.db.query.payments.findFirst({
-        where: and(
-          eq(payments.entryId, input.entryId),
-          eq(payments.status, 'succeeded'),
-        ),
-      });
+      // Payments on new (merchant-of-record) orders are linked by orderId —
+      // multiple entries share one order + one Stripe charge. Fall back to
+      // the legacy per-entry payment linkage for older test/data rows where
+      // payment.entryId is populated instead.
+      const originalPayment = entry.orderId
+        ? await ctx.db.query.payments.findFirst({
+            // succeeded AND partially_refunded both still have money to give
+            // back — a pure 'succeeded' filter breaks after a prior per-entry
+            // partial refund flips the row to 'partially_refunded' (matches
+            // refundOrder above). The maxRefundable guard prevents over-refund.
+            where: and(
+              eq(payments.orderId, entry.orderId),
+              inArray(payments.status, ['succeeded', 'partially_refunded']),
+            ),
+          })
+        : await ctx.db.query.payments.findFirst({
+            where: and(
+              eq(payments.entryId, input.entryId),
+              inArray(payments.status, ['succeeded', 'partially_refunded']),
+            ),
+          });
 
       if (!originalPayment?.stripePaymentId) {
         throw new TRPCError({
@@ -2282,37 +3407,22 @@ export const secretaryRouter = createTRPCRouter({
         });
       }
 
-      // Issue refund via Stripe
-      const stripe = getStripe();
-      await stripe.refunds.create({
-        payment_intent: originalPayment.stripePaymentId,
-        amount: refundAmount,
-        ...(input.reason ? { reason: 'requested_by_customer' as const } : {}),
-      });
-
-      // Record the refund payment
-      await ctx.db.insert(payments).values({
+      const result = await executeStripeRefund(ctx.db, originalPayment, {
+        amountPence: refundAmount,
+        reason: input.reason,
         entryId: input.entryId,
-        orderId: originalPayment.orderId,
-        stripePaymentId: originalPayment.stripePaymentId,
-        amount: refundAmount,
-        status: 'refunded',
-        type: 'refund',
       });
 
-      // Update original payment's refund tracking
-      const newRefundTotal = alreadyRefunded + refundAmount;
-      const isFullyRefunded = newRefundTotal >= originalPayment.amount;
-      await ctx.db
-        .update(payments)
-        .set({
-          refundAmount: newRefundTotal,
-          status: isFullyRefunded ? 'refunded' : 'partially_refunded',
-        })
-        .where(eq(payments.id, originalPayment.id));
-
-      // If fully refunded, cancel the entry
-      if (isFullyRefunded) {
+      // Cancel the entry so it drops out of the catalogue AND income when:
+      //  - this refund cleared the whole order (existing behaviour), or
+      //  - a WITHDRAWN entry's full fee was just refunded. A withdrawn
+      //    exhibitor keeps their fee with the club by default; once the
+      //    secretary chooses to refund it, it's no longer "withdrawn, fee kept"
+      //    but refunded/gone, so it must leave the withdrawn count + the income
+      //    total (Mandy 2026-07-13).
+      const withdrawnFullyRefunded =
+        entry.status === 'withdrawn' && refundAmount >= entry.totalFee;
+      if (result.fullyRefunded || withdrawnFullyRefunded) {
         await ctx.db
           .update(entries)
           .set({ status: 'cancelled' })
@@ -2321,8 +3431,8 @@ export const secretaryRouter = createTRPCRouter({
 
       return {
         refunded: true,
-        amount: refundAmount,
-        fullyRefunded: isFullyRefunded,
+        amount: result.amount,
+        fullyRefunded: result.fullyRefunded,
       };
     }),
 
@@ -2415,7 +3525,12 @@ export const secretaryRouter = createTRPCRouter({
         exhibitorEmail: z.string().email(),
         handlerName: z.string().optional(),
         isNfc: z.boolean().default(false),
-        paymentMethod: z.enum(['postal', 'cash', 'bank_transfer', 'online']).default('postal'),
+        // RKC registration flags — per show, same as the exhibitor checkout.
+        naf: z.boolean().default(false),
+        taf: z.boolean().default(false),
+        cnaf: z.boolean().default(false),
+        atcNumber: z.string().max(32).optional(),
+        paymentMethod: z.enum(['postal', 'cash', 'bank_transfer', 'online']).default('bank_transfer'),
         sundryItems: z
           .array(z.object({ sundryItemId: z.string().uuid(), quantity: z.number().int().min(1) }))
           .optional(),
@@ -2462,6 +3577,7 @@ export const secretaryRouter = createTRPCRouter({
           inArray(showClasses.id, input.classIds),
           eq(showClasses.showId, input.showId)
         ),
+        with: { classDefinition: { columns: { type: true } } },
       });
 
       if (selectedClasses.length !== input.classIds.length) {
@@ -2469,6 +3585,30 @@ export const secretaryRouter = createTRPCRouter({
           code: 'BAD_REQUEST',
           message: 'One or more classes are invalid for this show',
         });
+      }
+
+      // Reject if this dog is already entered in any of the selected classes on
+      // this show. The online checkout enforces this (orders.ts), but the manual
+      // path didn't — so a secretary could record the same dog in the same class
+      // twice, creating a duplicate catalogue row and double-counting the fee in
+      // club revenue. Mirror the checkout guard here.
+      const existingDogEntry = await ctx.db.query.entries.findFirst({
+        where: and(
+          eq(entries.dogId, input.dogId),
+          eq(entries.showId, input.showId),
+          isNull(entries.deletedAt),
+          eq(entries.status, 'confirmed')
+        ),
+        with: { entryClasses: { columns: { showClassId: true } } },
+      });
+      if (existingDogEntry) {
+        const alreadyEntered = new Set(existingDogEntry.entryClasses.map((ec) => ec.showClassId));
+        if (input.classIds.some((id) => alreadyEntered.has(id))) {
+          throw new TRPCError({
+            code: 'BAD_REQUEST',
+            message: `${dog.registeredName ?? 'This dog'} is already entered in one or more of those classes. Remove the existing entry first, or choose different classes.`,
+          });
+        }
       }
 
       // Validate and price sundry items
@@ -2494,7 +3634,44 @@ export const secretaryRouter = createTRPCRouter({
         }));
       }
 
-      const classFee = selectedClasses.reduce((sum, sc) => sum + sc.entryFee, 0);
+      // Price through the SAME fee engine the online checkout uses, so a
+      // postal/cash entry costs exactly what the identical dog + classes would
+      // cost online: first-class fee + subsequent-class fee per extra class.
+      // Summing each class's entryFee (every class carries the first-class
+      // rate) previously charged the first-class fee for EVERY class, so a
+      // 3-class entry was billed 3× the first fee instead of first + 2×
+      // subsequent — overcharging the exhibitor and inflating club revenue
+      // reports (bug hunt #2). Legacy shows with no show-level fee keep the
+      // per-class fallback, matching orders.checkout.
+      const feeCtx: FeeContext = {
+        firstEntryFeePence: show.firstEntryFee,
+        subsequentEntryFeePence: show.subsequentEntryFee,
+        nfcEntryFeePence: show.nfcEntryFee,
+        juniorHandlerFeePence: show.juniorHandlerFee,
+        multiDogThreshold: show.multiDogThreshold,
+        multiDogPackagePence: show.multiDogPackagePence,
+        discountGroup: null,
+      };
+      const feeResult =
+        show.firstEntryFee == null
+          ? null
+          : computeOrderFees(
+              [{
+                key: 'manual',
+                kind: input.isNfc ? 'nfc' : 'standard',
+                classCount: selectedClasses.length,
+                // Special Award Classes charge their own fee (Mandy 2026-07-19),
+                // aligned to selectedClasses order (perClassFees[i] matches it).
+                specialClassFees: selectedClasses.map((sc) =>
+                  sc.classDefinition?.type === 'special' ? sc.entryFee : null,
+                ),
+              }],
+              feeCtx,
+            );
+      const perClassFees = feeResult?.perEntry[0]?.perClassFees ?? null;
+      const classFee = feeResult
+        ? feeResult.total
+        : selectedClasses.reduce((sum, sc) => sum + sc.entryFee, 0);
       const sundryFee = selectedSundryItems.reduce((sum, s) => sum + s.priceInPence * s.quantity, 0);
       const totalAmount = classFee + sundryFee;
 
@@ -2509,6 +3686,34 @@ export const secretaryRouter = createTRPCRouter({
         })
         .returning();
 
+      // Catalogue number for this late entry. While numbers are still
+      // PROVISIONAL (the show hasn't been locked for printing), we leave the
+      // number null here and re-sort the whole show after the classes are
+      // attached, so the new entry slots into its class. Once the secretary has
+      // LOCKED numbers for printing, append at max+1 so the printed catalogue's
+      // existing numbers never shift.
+      const showForNumbering = await ctx.db.query.shows.findFirst({
+        where: eq(shows.id, input.showId),
+        columns: { catalogueNumbersLockedAt: true },
+      });
+      const numbersLocked = Boolean(showForNumbering?.catalogueNumbersLockedAt);
+      let nextCatalogueNumber: string | null = null;
+      if (numbersLocked) {
+        const allNumbered = await ctx.db.query.entries.findMany({
+          where: and(
+            eq(entries.showId, input.showId),
+            eq(entries.status, 'confirmed'),
+            isNotNull(entries.catalogueNumber),
+          ),
+          columns: { catalogueNumber: true },
+        });
+        const highest = allNumbered.reduce((max, e) => {
+          const n = Number(e.catalogueNumber);
+          return Number.isFinite(n) && n > max ? n : max;
+        }, 0);
+        nextCatalogueNumber = String(highest + 1);
+      }
+
       // Create entry — auto-confirmed for secretary entries
       const [entry] = await ctx.db
         .insert(entries)
@@ -2517,20 +3722,32 @@ export const secretaryRouter = createTRPCRouter({
           dogId: input.dogId,
           exhibitorId,
           isNfc: input.isNfc,
+          naf: input.naf,
+          taf: input.taf,
+          cnaf: input.cnaf,
+          atcNumber: formatAtcNumber(input.atcNumber),
           totalFee: classFee,
           orderId: order!.id,
           status: 'confirmed',
+          catalogueNumber: nextCatalogueNumber,
         })
         .returning();
 
       // Create entry class records
       await ctx.db.insert(entryClasses).values(
-        selectedClasses.map((sc) => ({
+        selectedClasses.map((sc, i) => ({
           entryId: entry!.id,
           showClassId: sc.id,
-          fee: sc.entryFee,
+          fee: perClassFees ? (perClassFees[i] ?? 0) : sc.entryFee,
         }))
       );
+
+      // Provisional numbers re-sort the whole show now that this entry's classes
+      // exist, so it lands in its class (and Junior Handlers / NFC stay grouped
+      // at the end) rather than tacked on. Locked shows keep the append above.
+      if (!numbersLocked) {
+        await resortCatalogueNumbers(ctx.db, input.showId);
+      }
 
       // Create sundry item records
       if (selectedSundryItems.length > 0) {
@@ -2844,6 +4061,15 @@ export const secretaryRouter = createTRPCRouter({
 
       const show = await ctx.db.query.shows.findFirst({
         where: eq(shows.id, input.showId),
+        with: {
+          organisation: {
+            columns: {
+              payoutSortCode: true,
+              payoutAccountNumber: true,
+              payoutAccountName: true,
+            },
+          },
+        },
       });
 
       if (!show) return {};
@@ -2852,6 +4078,11 @@ export const secretaryRouter = createTRPCRouter({
         .select({ count: sql<number>`count(*)` })
         .from(showClasses)
         .where(eq(showClasses.showId, input.showId));
+
+      const [sundryItemCount] = await ctx.db
+        .select({ count: sql<number>`count(*)` })
+        .from(sundryItems)
+        .where(eq(sundryItems.showId, input.showId));
 
       // Use the same coverage logic as getJudgeCoverage — query classes + assignments
       const [showClassRows, assignmentRows, stewardCountRow, ringCountRow] = await Promise.all([
@@ -2902,6 +4133,14 @@ export const secretaryRouter = createTRPCRouter({
         judges_assigned: allJudgesCovered,
         stewards_assigned: Number(stewardCount?.count) > 0,
         rings_created: Number(ringCount?.count) > 0,
+        // Club needs payout bank details saved before we can open entries —
+        // entry fees land in Remi's balance and we pay out by BACS after
+        // the show.
+        payout_details_set: !!(
+          show.organisation?.payoutSortCode &&
+          show.organisation?.payoutAccountNumber &&
+          show.organisation?.payoutAccountName
+        ),
       };
 
       // Check if all assigned judges have been sent offer letters
@@ -2919,14 +4158,34 @@ export const secretaryRouter = createTRPCRouter({
         detected.judge_offers_sent = false;
       }
 
-      // Additional auto-detect keys for lifecycle gates
-      detected.entry_fees_set = show.firstEntryFee != null && show.firstEntryFee > 0;
+      // Additional auto-detect keys for lifecycle gates. Regional (SV/WUSV)
+      // shows price via regionalFeeConfig, not firstEntryFee — count either
+      // (Mandy 2026-07-05: regional fees set but checklist said "not set").
+      const regionalFeesSet = !!(
+        (show as { regionalFeeConfig?: { tiers?: unknown[] } | null }).regionalFeeConfig?.tiers?.length
+      );
+      detected.entry_fees_set =
+        regionalFeesSet || (show.firstEntryFee != null && show.firstEntryFee > 0);
       detected.entry_close_date_set = show.entryCloseDate != null;
       detected.secretary_details_set = !!(show.secretaryName && show.secretaryEmail);
+      // Post-show: the "Publish results" checklist item declares this autoDetectKey
+      // (default-checklist.ts) but it was never populated here, so it could never
+      // auto-tick. (The sibling 'judge_approvals_sent' key is still unwired — see
+      // SECRETARY_DASHBOARD_AUDIT.md; it needs the approval-state query.)
+      detected.results_published = !!show.resultsPublishedAt;
+      // Sundry items — surfaced in the setup checklist because Amanda
+      // kept missing the step on SV regional shows (2026-05-24). Counts
+      // both enabled and disabled rows, so the secretary can explicitly
+      // disable the presets and still tick the box.
+      detected.sundry_items_reviewed = Number(sundryItemCount?.count) > 0;
       const scheduleData = show.scheduleData as Record<string, unknown> | null;
       const guarantors = (scheduleData?.guarantors as { name: string }[] | undefined) ?? [];
       const minGuarantors = show.showType === 'championship' ? 6 : 3;
-      detected.guarantors_added = guarantors.length >= minGuarantors;
+      // SV/WUSV regional shows aren't licensed under the RKC F-rules
+      // framework that requires guarantors, so the check auto-passes
+      // (Amanda 2026-05-19/20).
+      const isWusvShow = (show as { showRuleset?: 'rkc' | 'wusv' }).showRuleset === 'wusv';
+      detected.guarantors_added = isWusvShow || guarantors.length >= minGuarantors;
 
       // Championship shows: check Open + Limit for each sex per breed
       if (show.showType === 'championship' && Number(classCount?.count) > 0) {
@@ -2985,6 +4244,9 @@ export const secretaryRouter = createTRPCRouter({
       const scheduleData = show.scheduleData as Record<string, unknown> | null;
       const guarantors = (scheduleData?.guarantors as { name: string }[] | undefined) ?? [];
       const minGuarantors = show.showType === 'championship' ? 6 : 3;
+      // SV regional shows don't operate under the RKC F-rules framework,
+      // so the guarantor + RKC class-minimum checks don't apply.
+      const isWusvShow = (show as { showRuleset?: 'rkc' | 'wusv' }).showRuleset === 'wusv';
 
       type Blocker = {
         key: string;
@@ -3011,7 +4273,12 @@ export const secretaryRouter = createTRPCRouter({
           actionPath: '/people', severity: 'required',
         });
       }
-      if (!show.firstEntryFee || show.firstEntryFee <= 0) {
+      // Regional (SV/WUSV) shows price via regionalFeeConfig, not firstEntryFee
+      // — treat either as "fees set" (Mandy 2026-07-05).
+      const regionalFeesSet = !!(
+        (show as { regionalFeeConfig?: { tiers?: unknown[] } | null }).regionalFeeConfig?.tiers?.length
+      );
+      if (!regionalFeesSet && (!show.firstEntryFee || show.firstEntryFee <= 0)) {
         openEntriesBlockers.push({
           key: 'no_entry_fees', label: 'Entry fees not set',
           detail: 'Click Edit on the main show page to set entry fees',
@@ -3025,14 +4292,21 @@ export const secretaryRouter = createTRPCRouter({
           actionPath: '', severity: 'required',
         });
       }
-      if (!show.secretaryName || !show.secretaryEmail) {
+      if (!show.secretaryName || !show.secretaryEmail || !show.secretaryAddress || !show.secretaryPhone) {
         openEntriesBlockers.push({
-          key: 'no_secretary_details', label: 'Secretary name or email missing',
-          detail: 'Click Edit on the main show page to add secretary details',
+          key: 'no_secretary_details', label: 'Secretary contact details incomplete',
+          detail: 'Add the secretary name, postal address, email and phone number required on the schedule and entry form',
           actionPath: '', severity: 'required',
         });
       }
-      if (guarantors.length < minGuarantors) {
+      if (!isWusvShow && (!show.showOpenTime || !show.startTime)) {
+        openEntriesBlockers.push({
+          key: 'show_times_missing', label: 'Show opening or judging time missing',
+          detail: 'Set both times before publishing the RKC schedule',
+          actionPath: '/schedule', severity: 'required',
+        });
+      }
+      if (!isWusvShow && guarantors.length < minGuarantors) {
         openEntriesBlockers.push({
           key: 'insufficient_guarantors',
           label: `Guarantors (${guarantors.length} of ${minGuarantors})`,
@@ -3040,85 +4314,113 @@ export const secretaryRouter = createTRPCRouter({
           actionPath: '/schedule', severity: 'required',
         });
       }
-      // Minimum class count validation (RKC regulation, non-companion shows only)
-      if (show.showType !== 'companion') {
-        const numClasses = Number(classCount[0]?.count);
-        const minClasses = show.showScope === 'single_breed' ? 12 : 16;
-        if (numClasses > 0 && numClasses < minClasses) {
-          openEntriesBlockers.push({
-            key: 'insufficient_classes',
-            label: `Only ${numClasses} classes (RKC minimum: ${minClasses})`,
-            detail: `${show.showScope === 'single_breed' ? 'Single breed' : 'Multi-breed'} shows should have at least ${minClasses} classes per RKC regulations`,
-            actionPath: '', severity: 'recommended',
-          });
-        }
-      }
 
       if (!show.venueId) {
         openEntriesBlockers.push({
           key: 'no_venue', label: 'Venue not confirmed',
           detail: 'Confirm the show venue',
-          actionPath: '', severity: 'recommended',
+          actionPath: '', severity: 'required',
         });
       }
-      if (!show.kcLicenceNo) {
+      // SV/WUSV regionals aren't RKC-licensed — skip the warning entirely
+      // for that ruleset (Amanda 2026-05-24).
+      if (!show.kcLicenceNo && show.showRuleset !== 'wusv') {
         openEntriesBlockers.push({
           key: 'no_rkc_licence', label: 'RKC licence not recorded',
           detail: 'Record the RKC licence number',
-          actionPath: '', severity: 'recommended',
+          actionPath: '', severity: 'required',
         });
       }
 
-      // Championship shows: every breed with classes must have Open + Limit for each sex
-      // Skip for single-breed shows — their classes are breed-less by design
-      if (show.showType === 'championship' && show.showScope !== 'single_breed' && Number(classCount[0]?.count) > 0) {
-        const showClassRows = await ctx.db.query.showClasses.findMany({
-          where: eq(showClasses.showId, input.showId),
-          with: { classDefinition: true },
+      if (!isWusvShow && Number(classCount[0]?.count) > 0) {
+        const [complianceClasses, complianceShowBreeds] = await Promise.all([
+          ctx.db.query.showClasses.findMany({
+            where: eq(showClasses.showId, input.showId),
+            with: { classDefinition: true, breed: { with: { group: true } } },
+          }),
+          ctx.db.query.showBreeds.findMany({
+            where: eq(showBreeds.showId, input.showId),
+            with: { breed: true },
+          }),
+        ]);
+        const complianceIssues = validateRkcSchedule({
+          show: {
+            showType: show.showType,
+            showScope: show.showScope,
+            showRuleset: show.showRuleset,
+            judgedOnGroupSystem: show.scheduleData?.judgedOnGroupSystem,
+            startDate: show.startDate,
+            entryCloseDate: show.entryCloseDate,
+            postalCloseDate: show.postalCloseDate,
+          },
+          classes: complianceClasses.map((item) => ({
+            className: item.classDefinition?.name ?? '',
+            classType: item.classDefinition?.type,
+            breedId: item.breedId,
+            breedName: item.breed?.name,
+            breedGroupName: item.breed?.group?.name,
+            classGroup: item.classGroup,
+            sex: item.sex,
+          })),
+          showBreeds: complianceShowBreeds.map((item) => ({
+            breedId: item.breedId,
+            breedName: item.breed?.name ?? 'Unnamed breed',
+            ccOffered: item.ccOffered,
+          })),
         });
-
-        // Group classes by breedId, only for breed-specific classes
-        const breedClassMap = new Map<string, { hasOpenDog: boolean; hasOpenBitch: boolean; hasLimitDog: boolean; hasLimitBitch: boolean }>();
-        for (const sc of showClassRows) {
-          if (!sc.breedId) continue;
-          if (!breedClassMap.has(sc.breedId)) {
-            breedClassMap.set(sc.breedId, { hasOpenDog: false, hasOpenBitch: false, hasLimitDog: false, hasLimitBitch: false });
-          }
-          const entry = breedClassMap.get(sc.breedId)!;
-          const className = sc.classDefinition?.name?.toLowerCase() ?? '';
-          if (className === 'open' && sc.sex === 'dog') entry.hasOpenDog = true;
-          if (className === 'open' && sc.sex === 'bitch') entry.hasOpenBitch = true;
-          if (className === 'limit' && sc.sex === 'dog') entry.hasLimitDog = true;
-          if (className === 'limit' && sc.sex === 'bitch') entry.hasLimitBitch = true;
-        }
-
-        // Find breeds missing required classes
-        const missingBreedIds: string[] = [];
-        for (const [breedId, entry] of breedClassMap) {
-          if (!entry.hasOpenDog || !entry.hasOpenBitch || !entry.hasLimitDog || !entry.hasLimitBitch) {
-            missingBreedIds.push(breedId);
-          }
-        }
-
-        if (missingBreedIds.length > 0) {
-          // Fetch breed names for the label
-          const missingBreeds = await ctx.db.query.breeds.findMany({
-            where: inArray(breeds.id, missingBreedIds),
-            columns: { name: true },
-          });
-          const breedNames = missingBreeds.map((b) => b.name);
-          const breedList = breedNames.length <= 3
-            ? breedNames.join(', ')
-            : `${breedNames.slice(0, 2).join(', ')} + ${breedNames.length - 2} more`;
-
+        for (const issue of complianceIssues) {
           openEntriesBlockers.push({
-            key: 'championship_missing_classes',
-            label: `Open + Limit classes missing (${breedList})`,
-            detail: 'Championship shows require Open and Limit classes for each sex per RKC regulations',
-            actionPath: '', severity: 'required',
+            key: 'rkc_' + issue.code,
+            label: issue.message,
+            detail: 'Fix the classification on the main show page before opening entries',
+            actionPath: '',
+            severity: 'required',
           });
         }
       }
+
+      if (!isWusvShow && Number(judgeCount[0]?.count) > 0) {
+        const [assignedJudges, contracts] = await Promise.all([
+          ctx.db.query.judgeAssignments.findMany({
+            where: eq(judgeAssignments.showId, input.showId),
+            columns: { judgeId: true },
+          }),
+          ctx.db.query.judgeContracts.findMany({
+            where: eq(judgeContracts.showId, input.showId),
+            columns: { judgeId: true, stage: true },
+          }),
+        ]);
+        const acceptedJudgeIds = new Set(
+          contracts.filter((contract) => contract.stage === 'offer_accepted' || contract.stage === 'confirmed').map((contract) => contract.judgeId),
+        );
+        const missingAcceptance = new Set(assignedJudges.map((assignment) => assignment.judgeId).filter((judgeId) => !acceptedJudgeIds.has(judgeId)));
+        if (missingAcceptance.size > 0) {
+          openEntriesBlockers.push({
+            key: 'judge_acceptance_missing',
+            label: `${missingAcceptance.size} assigned judge${missingAcceptance.size === 1 ? ' has' : 's have'} not accepted`,
+            detail: 'Every assigned judge must accept the written appointment before entries open',
+            actionPath: '/people', severity: 'required',
+          });
+        }
+      }
+
+      // Sundry items step is easy to miss on the show page — bump it onto
+      // the "Set up your show" checklist as a recommended item so Amanda
+      // doesn't keep forgetting it on SV regionals (her 2026-05-24
+      // feedback). Recommended-severity so it doesn't block entries
+      // opening — clubs that genuinely sell no sundries can ignore it.
+      const [sundryCountForBlocker] = await ctx.db
+        .select({ count: sql<number>`count(*)` })
+        .from(sundryItems)
+        .where(eq(sundryItems.showId, input.showId));
+      if (Number(sundryCountForBlocker?.count) === 0) {
+        openEntriesBlockers.push({
+          key: 'no_sundry_items', label: 'Sundry items not added',
+          detail: 'Add catalogues, memberships, donations or other extras exhibitors can buy at checkout',
+          actionPath: `/secretary/shows/${input.showId}#sundry-items`, severity: 'recommended',
+        });
+      }
+
 
       const requiredBlockers = openEntriesBlockers.filter((b) => b.severity === 'required');
 
@@ -3128,21 +4430,23 @@ export const secretaryRouter = createTRPCRouter({
         startShowBlockers.push({
           key: 'no_rings', label: 'Rings not set up',
           detail: 'Create at least one ring for judging',
-          actionPath: '/people', severity: 'recommended',
+          actionPath: '/people', severity: 'required',
         });
       }
-      if (Number(stewardCount[0]?.count) === 0) {
+      if (Number(stewardCount[0]?.count) < Number(ringCount[0]?.count)) {
         startShowBlockers.push({
-          key: 'no_stewards', label: 'No stewards assigned',
-          detail: 'Assign stewards to help on show day',
-          actionPath: '/people', severity: 'recommended',
+          key: 'insufficient_stewards', label: `${Number(stewardCount[0]?.count)} steward${Number(stewardCount[0]?.count) === 1 ? '' : 's'} for ${Number(ringCount[0]?.count)} ring${Number(ringCount[0]?.count) === 1 ? '' : 's'}`,
+          detail: 'RKC F Regulations require at least one steward for every ring',
+          actionPath: '/people', severity: 'required',
         });
       }
+
+      const requiredStartBlockers = startShowBlockers.filter((blocker) => blocker.severity === 'required');
 
       return {
         canOpenEntries: requiredBlockers.length === 0,
         openEntriesBlockers,
-        canStartShow: true, // start show blockers are all recommended
+        canStartShow: requiredStartBlockers.length === 0,
         startShowBlockers,
       };
     }),
@@ -3151,6 +4455,9 @@ export const secretaryRouter = createTRPCRouter({
   getShowPhaseContext: secretaryProcedure
     .input(z.object({ showId: z.string().uuid() }))
     .query(async ({ ctx, input }) => {
+      await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId, {
+        callerIsAdmin: ctx.callerIsAdmin,
+      });
       const show = await ctx.db.query.shows.findFirst({
         where: eq(shows.id, input.showId),
         columns: { status: true, resultsPublishedAt: true },
@@ -3266,11 +4573,15 @@ export const secretaryRouter = createTRPCRouter({
         with: { breed: true, ring: true },
       });
 
-      // Derive breed text: show.breed (single-breed), class breeds, or show name
+      // Derive breed + classification labels per Amanda's 2026-05-15 spec.
       const showBreedNames = show.breed
         ? [show.breed.name]
         : [...new Set(show.showClasses.filter((sc) => sc.breed).map((sc) => sc.breed!.name))];
-      const breedsText = buildJudgeBreedText(assignments, showBreedNames, show.name);
+      const { breedLine, classificationLine } = buildJudgeBreedAndClassification(
+        assignments,
+        showBreedNames,
+        show.name,
+      );
 
       // Token expires in 30 days
       const tokenExpiresAt = new Date();
@@ -3323,56 +4634,69 @@ export const secretaryRouter = createTRPCRouter({
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
 </head>
-<body style="margin: 0; padding: 0; background-color: #f5f3ef; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
+<body style="margin: 0; padding: 0; background-color: ${BRAND.paper}; font-family: 'Hanken Grotesk', -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
   <div style="max-width: 600px; margin: 0 auto; padding: 24px 16px;">
 
     <!-- Header -->
     <div style="text-align: center; padding: 24px 0;">
-      <h1 style="margin: 0; font-family: Georgia, 'Times New Roman', serif; font-size: 28px; color: #2D5F3F; letter-spacing: -0.5px;">Remi</h1>
+      <h1 style="margin: 0; font-family: 'Hanken Grotesk', -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 26px; font-weight: 800; color: ${BRAND.green}; letter-spacing: -0.015em;">Remi<span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:${BRAND.fresh};margin-left:3px;"></span></h1>
     </div>
 
     <!-- Main card -->
-    <div style="background: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+    <div style="background: #ffffff; border: 1px solid ${BRAND.line}; border-radius: 14px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
 
       <!-- Banner -->
-      <div style="background: #2D5F3F; padding: 24px 24px 20px; text-align: center;">
-        <h2 style="margin: 0; color: #ffffff; font-size: 22px; font-weight: 700;">Judging Appointment Offer</h2>
-        <p style="margin: 8px 0 0; color: #b8d4c4; font-size: 14px;">
+      <div style="background: ${BRAND.deep}; padding: 24px 24px 20px; text-align: center;">
+        <h2 style="margin: 0; color: ${BRAND.cream}; font-size: 22px; font-weight: 700;">Judging Appointment Offer</h2>
+        <p style="margin: 8px 0 0; color: rgba(243, 236, 220, 0.78); font-size: 14px;">
           from ${orgName}
         </p>
       </div>
 
       <!-- Letter body -->
       <div style="padding: 24px;">
-        <p style="font-size: 15px; color: #1a1a1a; line-height: 1.6;">
+        <p style="font-size: 15px; color: ${BRAND.ink}; line-height: 1.6;">
           Dear ${judge.name},
         </p>
-        <p style="font-size: 15px; color: #333; line-height: 1.6;">
+        <p style="font-size: 15px; color: ${BRAND.ink}; line-height: 1.6;">
           On behalf of ${orgName}, I have much pleasure in inviting you to judge at our forthcoming show. The details are as follows:
         </p>
 
         <!-- Show details table -->
         <table style="width: 100%; margin: 20px 0; border-collapse: collapse;">
           <tr>
-            <td style="padding: 10px 12px; border-bottom: 1px solid #e5e5e5; font-weight: 600; color: #444; width: 120px;">Show</td>
-            <td style="padding: 10px 12px; border-bottom: 1px solid #e5e5e5; color: #1a1a1a;">${show.name}</td>
+            <td style="padding: 10px 12px; border-bottom: 1px solid ${BRAND.line}; font-weight: 600; color: ${BRAND.ink}; width: 120px;">Show</td>
+            <td style="padding: 10px 12px; border-bottom: 1px solid ${BRAND.line}; color: ${BRAND.ink};">${show.name}</td>
           </tr>
           <tr>
-            <td style="padding: 10px 12px; border-bottom: 1px solid #e5e5e5; font-weight: 600; color: #444;">Date</td>
-            <td style="padding: 10px 12px; border-bottom: 1px solid #e5e5e5; color: #1a1a1a;">${showDate}</td>
+            <td style="padding: 10px 12px; border-bottom: 1px solid ${BRAND.line}; font-weight: 600; color: ${BRAND.ink};">Date</td>
+            <td style="padding: 10px 12px; border-bottom: 1px solid ${BRAND.line}; color: ${BRAND.ink};">${showDate}</td>
           </tr>
           <tr>
-            <td style="padding: 10px 12px; border-bottom: 1px solid #e5e5e5; font-weight: 600; color: #444;">Venue</td>
-            <td style="padding: 10px 12px; border-bottom: 1px solid #e5e5e5; color: #1a1a1a;">${venue}</td>
+            <td style="padding: 10px 12px; border-bottom: 1px solid ${BRAND.line}; font-weight: 600; color: ${BRAND.ink};">Venue</td>
+            <td style="padding: 10px 12px; border-bottom: 1px solid ${BRAND.line}; color: ${BRAND.ink};">${venue}</td>
           </tr>
           <tr>
-            <td style="padding: 10px 12px; border-bottom: 1px solid #e5e5e5; font-weight: 600; color: #444;">Breeds</td>
-            <td style="padding: 10px 12px; border-bottom: 1px solid #e5e5e5; color: #1a1a1a;">${breedsText}</td>
+            <td style="padding: 10px 12px; border-bottom: 1px solid ${BRAND.line}; font-weight: 600; color: ${BRAND.ink};">Breed</td>
+            <td style="padding: 10px 12px; border-bottom: 1px solid ${BRAND.line}; color: ${BRAND.ink};">${breedLine}</td>
           </tr>
-          ${show.showType ? `<tr>
-            <td style="padding: 10px 12px; border-bottom: 1px solid #e5e5e5; font-weight: 600; color: #444;">Show Type</td>
-            <td style="padding: 10px 12px; border-bottom: 1px solid #e5e5e5; color: #1a1a1a;">${show.showType.replace('_', ' ').replace(/\b\w/g, (c: string) => c.toUpperCase())}</td>
-          </tr>` : ''}
+          <tr>
+            <td style="padding: 10px 12px; border-bottom: 1px solid ${BRAND.line}; font-weight: 600; color: ${BRAND.ink};">Classification</td>
+            <td style="padding: 10px 12px; border-bottom: 1px solid ${BRAND.line}; color: ${BRAND.ink};">${classificationLine}</td>
+          </tr>
+          ${(() => {
+            // SV/WUSV regional shows still carry show_type='championship' on
+            // the legacy column, so render "Regional" when the ruleset is
+            // wusv (Amanda 2026-05-22).
+            const isWusvHere = (show as { showRuleset?: 'rkc' | 'wusv' }).showRuleset === 'wusv';
+            const showTypeText = isWusvHere
+              ? 'Regional'
+              : (show.showType ? show.showType.replace('_', ' ').replace(/\b\w/g, (c: string) => c.toUpperCase()) : null);
+            return showTypeText ? `<tr>
+            <td style="padding: 10px 12px; border-bottom: 1px solid ${BRAND.line}; font-weight: 600; color: ${BRAND.ink};">Show Type</td>
+            <td style="padding: 10px 12px; border-bottom: 1px solid ${BRAND.line}; color: ${BRAND.ink};">${showTypeText}</td>
+          </tr>` : '';
+          })()}
           ${(() => {
             const parts: string[] = [];
             if (input.hotelCost && input.hotelCost > 0) parts.push(`Hotel: £${(input.hotelCost / 100).toFixed(2)}`);
@@ -3381,39 +4705,39 @@ export const secretaryRouter = createTRPCRouter({
             if (parts.length === 0) return '';
             const expText = parts.join(', ') + (input.expenseNotes ? ` (${input.expenseNotes})` : '');
             return `<tr>
-              <td style="padding: 10px 12px; border-bottom: 1px solid #e5e5e5; font-weight: 600; color: #444;">Expenses</td>
-              <td style="padding: 10px 12px; border-bottom: 1px solid #e5e5e5; color: #1a1a1a;">${expText}</td>
+              <td style="padding: 10px 12px; border-bottom: 1px solid ${BRAND.line}; font-weight: 600; color: ${BRAND.ink};">Expenses</td>
+              <td style="padding: 10px 12px; border-bottom: 1px solid ${BRAND.line}; color: ${BRAND.ink};">${expText}</td>
             </tr>`;
           })()}
         </table>
 
-        ${input.notes ? `<p style="font-size: 14px; color: #555; line-height: 1.6; padding: 12px; background: #f9f8f6; border-radius: 8px;">${input.notes}</p>` : ''}
+        ${input.notes ? `<p style="font-size: 14px; color: ${BRAND.ink2}; line-height: 1.6; padding: 12px; background: ${BRAND.paper}; border-radius: 8px;">${input.notes}</p>` : ''}
 
-        <p style="font-size: 15px; color: #333; line-height: 1.6;">
+        <p style="font-size: 15px; color: ${BRAND.ink}; line-height: 1.6;">
           If you are willing to accept this appointment, please confirm by clicking the button below. This constitutes the formal written offer as required under Royal Kennel Club regulations.
         </p>
 
         <!-- Buttons -->
         <div style="text-align: center; margin: 28px 0;">
           <a href="${acceptUrl}?action=accept"
-             style="display: inline-block; background: #2D5F3F; color: #ffffff; padding: 14px 32px; border-radius: 8px; font-size: 16px; font-weight: 600; text-decoration: none; margin-bottom: 12px;">
+             style="display: inline-block; background: ${BRAND.green}; color: ${BRAND.cream}; padding: 14px 32px; border-radius: 13px; font-size: 16px; font-weight: 700; text-decoration: none; margin-bottom: 12px;">
             Accept Appointment
           </a>
           <br>
           <a href="${acceptUrl}?action=decline"
-             style="display: inline-block; color: #888; padding: 8px 16px; font-size: 13px; text-decoration: underline; margin-top: 8px;">
+             style="display: inline-block; color: ${BRAND.ink2}; padding: 8px 16px; font-size: 13px; text-decoration: underline; margin-top: 8px;">
             Decline
           </a>
         </div>
 
-        <p style="font-size: 13px; color: #999; line-height: 1.5; text-align: center;">
+        <p style="font-size: 13px; color: ${BRAND.ink2}; line-height: 1.5; text-align: center;">
           This link will expire on ${tokenExpiresAt.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}.
         </p>
       </div>
     </div>
 
     <!-- Footer -->
-    <div style="text-align: center; padding: 24px 16px; font-size: 12px; color: #999;">
+    <div style="text-align: center; padding: 24px 16px; font-size: 12px; color: ${BRAND.ink2};">
       <p style="margin: 0;">
         This offer was sent by <strong>Remi</strong> on behalf of ${orgName}.
       </p>
@@ -3429,13 +4753,16 @@ export const secretaryRouter = createTRPCRouter({
       const emailFrom = process.env.EMAIL_FROM ?? 'Remi <noreply@remishowmanager.co.uk>';
 
       try {
-        await resend.emails.send({
+        const result = await resend.emails.send({
           from: emailFrom,
           to: input.judgeEmail,
           replyTo: process.env.FEEDBACK_EMAIL ?? 'feedback@remishowmanager.co.uk',
           subject: `Judging Offer — ${show.name}`,
           html,
         });
+        // Resend reports API-level rejections (suppressed address, bad
+        // recipient) in result.error without throwing — treat as a failure.
+        if (result.error) throw new Error(result.error.message ?? 'Resend rejected the email');
       } catch (error) {
         console.error('[email] Failed to send judge offer:', error);
         throw new TRPCError({
@@ -3492,7 +4819,11 @@ export const secretaryRouter = createTRPCRouter({
       const showBreedNames = contract.show.breed
         ? [contract.show.breed.name]
         : [...new Set(contract.show.showClasses.filter((sc) => sc.breed).map((sc) => sc.breed!.name))];
-      const breedsText = buildJudgeBreedText(assignments, showBreedNames, contract.show.name);
+      const { breedLine, classificationLine } = buildJudgeBreedAndClassification(
+        assignments,
+        showBreedNames,
+        contract.show.name,
+      );
 
       const baseUrl = getBaseUrl();
       const acceptUrl = `${baseUrl}/api/judge-contract/${contract.offerToken}`;
@@ -3517,38 +4848,39 @@ export const secretaryRouter = createTRPCRouter({
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
 </head>
-<body style="margin: 0; padding: 0; background-color: #f5f3ef; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
+<body style="margin: 0; padding: 0; background-color: ${BRAND.paper}; font-family: 'Hanken Grotesk', -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
   <div style="max-width: 600px; margin: 0 auto; padding: 24px 16px;">
     <div style="text-align: center; padding: 24px 0;">
-      <h1 style="margin: 0; font-family: Georgia, 'Times New Roman', serif; font-size: 28px; color: #2D5F3F; letter-spacing: -0.5px;">Remi</h1>
+      <h1 style="margin: 0; font-family: 'Hanken Grotesk', -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 26px; font-weight: 800; color: ${BRAND.green}; letter-spacing: -0.015em;">Remi<span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:${BRAND.fresh};margin-left:3px;"></span></h1>
     </div>
-    <div style="background: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
-      <div style="background: #2D5F3F; padding: 24px 24px 20px; text-align: center;">
-        <h2 style="margin: 0; color: #ffffff; font-size: 22px; font-weight: 700;">Judging Appointment Offer</h2>
-        <p style="margin: 8px 0 0; color: #b8d4c4; font-size: 14px;">Reminder from ${orgName}</p>
+    <div style="background: #ffffff; border: 1px solid ${BRAND.line}; border-radius: 14px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+      <div style="background: ${BRAND.deep}; padding: 24px 24px 20px; text-align: center;">
+        <h2 style="margin: 0; color: ${BRAND.cream}; font-size: 22px; font-weight: 700;">Judging Appointment Offer</h2>
+        <p style="margin: 8px 0 0; color: rgba(243, 236, 220, 0.78); font-size: 14px;">Reminder from ${orgName}</p>
       </div>
       <div style="padding: 24px;">
-        <p style="font-size: 15px; color: #1a1a1a; line-height: 1.6;">Dear ${contract.judgeName},</p>
-        <p style="font-size: 15px; color: #333; line-height: 1.6;">
+        <p style="font-size: 15px; color: ${BRAND.ink}; line-height: 1.6;">Dear ${contract.judgeName},</p>
+        <p style="font-size: 15px; color: ${BRAND.ink}; line-height: 1.6;">
           This is a reminder regarding our invitation for you to judge at our show. We would be delighted if you could confirm your acceptance at your earliest convenience.
         </p>
         <table style="width: 100%; margin: 20px 0; border-collapse: collapse;">
-          <tr><td style="padding: 10px 12px; border-bottom: 1px solid #e5e5e5; font-weight: 600; color: #444; width: 120px;">Show</td><td style="padding: 10px 12px; border-bottom: 1px solid #e5e5e5; color: #1a1a1a;">${show.name}</td></tr>
-          <tr><td style="padding: 10px 12px; border-bottom: 1px solid #e5e5e5; font-weight: 600; color: #444;">Date</td><td style="padding: 10px 12px; border-bottom: 1px solid #e5e5e5; color: #1a1a1a;">${showDate}</td></tr>
-          <tr><td style="padding: 10px 12px; border-bottom: 1px solid #e5e5e5; font-weight: 600; color: #444;">Venue</td><td style="padding: 10px 12px; border-bottom: 1px solid #e5e5e5; color: #1a1a1a;">${venue}</td></tr>
-          <tr><td style="padding: 10px 12px; border-bottom: 1px solid #e5e5e5; font-weight: 600; color: #444;">Breeds</td><td style="padding: 10px 12px; border-bottom: 1px solid #e5e5e5; color: #1a1a1a;">${breedsText}</td></tr>
+          <tr><td style="padding: 10px 12px; border-bottom: 1px solid ${BRAND.line}; font-weight: 600; color: ${BRAND.ink}; width: 120px;">Show</td><td style="padding: 10px 12px; border-bottom: 1px solid ${BRAND.line}; color: ${BRAND.ink};">${show.name}</td></tr>
+          <tr><td style="padding: 10px 12px; border-bottom: 1px solid ${BRAND.line}; font-weight: 600; color: ${BRAND.ink};">Date</td><td style="padding: 10px 12px; border-bottom: 1px solid ${BRAND.line}; color: ${BRAND.ink};">${showDate}</td></tr>
+          <tr><td style="padding: 10px 12px; border-bottom: 1px solid ${BRAND.line}; font-weight: 600; color: ${BRAND.ink};">Venue</td><td style="padding: 10px 12px; border-bottom: 1px solid ${BRAND.line}; color: ${BRAND.ink};">${venue}</td></tr>
+          <tr><td style="padding: 10px 12px; border-bottom: 1px solid ${BRAND.line}; font-weight: 600; color: ${BRAND.ink};">Breed</td><td style="padding: 10px 12px; border-bottom: 1px solid ${BRAND.line}; color: ${BRAND.ink};">${breedLine}</td></tr>
+          <tr><td style="padding: 10px 12px; border-bottom: 1px solid ${BRAND.line}; font-weight: 600; color: ${BRAND.ink};">Classification</td><td style="padding: 10px 12px; border-bottom: 1px solid ${BRAND.line}; color: ${BRAND.ink};">${classificationLine}</td></tr>
         </table>
         <div style="text-align: center; margin: 28px 0;">
-          <a href="${acceptUrl}?action=accept" style="display: inline-block; background: #2D5F3F; color: #ffffff; padding: 14px 32px; border-radius: 8px; font-size: 16px; font-weight: 600; text-decoration: none; margin-bottom: 12px;">Accept Appointment</a>
+          <a href="${acceptUrl}?action=accept" style="display: inline-block; background: ${BRAND.green}; color: ${BRAND.cream}; padding: 14px 32px; border-radius: 13px; font-size: 16px; font-weight: 700; text-decoration: none; margin-bottom: 12px;">Accept Appointment</a>
           <br>
-          <a href="${acceptUrl}?action=decline" style="display: inline-block; color: #888; padding: 8px 16px; font-size: 13px; text-decoration: underline; margin-top: 8px;">Decline</a>
+          <a href="${acceptUrl}?action=decline" style="display: inline-block; color: ${BRAND.ink2}; padding: 8px 16px; font-size: 13px; text-decoration: underline; margin-top: 8px;">Decline</a>
         </div>
-        <p style="font-size: 13px; color: #999; line-height: 1.5; text-align: center;">
+        <p style="font-size: 13px; color: ${BRAND.ink2}; line-height: 1.5; text-align: center;">
           This link will expire on ${tokenExpiresAt.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}.
         </p>
       </div>
     </div>
-    <div style="text-align: center; padding: 24px 16px; font-size: 12px; color: #999;">
+    <div style="text-align: center; padding: 24px 16px; font-size: 12px; color: ${BRAND.ink2};">
       <p style="margin: 0;">This offer was sent by <strong>Remi</strong> on behalf of ${orgName}.</p>
     </div>
   </div>
@@ -3593,7 +4925,7 @@ export const secretaryRouter = createTRPCRouter({
       const contract = await ctx.db.query.judgeContracts.findFirst({
         where: eq(judgeContracts.id, input.contractId),
         with: {
-          show: { with: { venue: true, organisation: true } },
+          show: { with: { venue: true, organisation: true, breed: true } },
           judge: true,
         },
       });
@@ -3620,13 +4952,22 @@ export const secretaryRouter = createTRPCRouter({
         with: { breed: true, ring: true },
       });
 
-      const breedNames = assignments.filter((a) => a.breed).map((a) => a.breed!.name);
-      const breedsText = breedNames.length > 0 ? breedNames.join(', ') : 'All breeds';
+      const show = contract.show;
+
+      // Same Breed/Classification derivation as the offer email and the
+      // signed contract PDF — this confirmation used to hand-roll a breeds
+      // list that rendered a Junior Handling judge (breed-null assignment)
+      // as "All breeds" (Mandy's own JH appointment, North East Regional,
+      // 2026-08-03). One rule, one builder.
+      const { breedLine, classificationLine } = buildJudgeBreedAndClassification(
+        assignments,
+        show.breed ? [show.breed.name] : [],
+        show.name,
+      );
 
       const ringNums = assignments.filter((a) => a.ring).map((a) => `Ring ${a.ring!.number}`);
       const ringsText = ringNums.length > 0 ? ringNums.join(', ') : 'TBC';
 
-      const show = contract.show;
       const orgName = show.organisation?.name ?? 'the Show Society';
 
       const showDate = new Date(show.startDate).toLocaleDateString('en-GB', {
@@ -3636,8 +4977,17 @@ export const secretaryRouter = createTRPCRouter({
         year: 'numeric',
       });
 
+      // Venue strings arrive with stray commas in the data ("Outpaw
+      // Pursuits, , St Aidens…", "Durham,,") — normalise by splitting on
+      // commas and dropping empty segments rather than trusting each field.
       const venue = show.venue
-        ? `${show.venue.name}${show.venue.address ? `, ${show.venue.address}` : ''}${show.venue.postcode ? `, ${show.venue.postcode}` : ''}`
+        ? [show.venue.name, show.venue.address, show.venue.postcode]
+            .filter(Boolean)
+            .join(', ')
+            .split(',')
+            .map((s) => s.trim())
+            .filter(Boolean)
+            .join(', ')
         : 'Venue TBC';
 
       // Update contract stage
@@ -3645,6 +4995,18 @@ export const secretaryRouter = createTRPCRouter({
         .update(judgeContracts)
         .set({ stage: 'confirmed', confirmedAt: new Date() })
         .where(eq(judgeContracts.id, input.contractId));
+
+      // Backfill for contracts confirmed before the archive feature landed.
+      if (!contract.contractPdfKey) {
+        try {
+          await generateJudgeContractPdf(input.contractId);
+        } catch (err) {
+          console.error(
+            `[judge-contract] Failed to backfill PDF snapshot for contract ${input.contractId} (show ${contract.showId}):`,
+            err,
+          );
+        }
+      }
 
       // Auto-update checklist items for this judge
       await ctx.db
@@ -3670,38 +5032,39 @@ export const secretaryRouter = createTRPCRouter({
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
 </head>
-<body style="margin: 0; padding: 0; background-color: #f5f3ef; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
+<body style="margin: 0; padding: 0; background-color: ${BRAND.paper}; font-family: 'Hanken Grotesk', -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
   <div style="max-width: 600px; margin: 0 auto; padding: 24px 16px;">
     <div style="text-align: center; padding: 24px 0;">
-      <h1 style="margin: 0; font-family: Georgia, 'Times New Roman', serif; font-size: 28px; color: #2D5F3F; letter-spacing: -0.5px;">Remi</h1>
+      <h1 style="margin: 0; font-family: 'Hanken Grotesk', -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 26px; font-weight: 800; color: ${BRAND.green}; letter-spacing: -0.015em;">Remi<span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:${BRAND.fresh};margin-left:3px;"></span></h1>
     </div>
-    <div style="background: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
-      <div style="background: #2D5F3F; padding: 24px 24px 20px; text-align: center;">
+    <div style="background: #ffffff; border: 1px solid ${BRAND.line}; border-radius: 14px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+      <div style="background: ${BRAND.deep}; padding: 24px 24px 20px; text-align: center;">
         <div style="font-size: 32px; margin-bottom: 8px;">&#10003;</div>
-        <h2 style="margin: 0; color: #ffffff; font-size: 22px; font-weight: 700;">Appointment Confirmed</h2>
+        <h2 style="margin: 0; color: ${BRAND.cream}; font-size: 22px; font-weight: 700;">Appointment Confirmed</h2>
       </div>
       <div style="padding: 24px;">
-        <p style="font-size: 15px; color: #1a1a1a; line-height: 1.6;">Dear ${contract.judgeName},</p>
-        <p style="font-size: 15px; color: #333; line-height: 1.6;">
+        <p style="font-size: 15px; color: ${BRAND.ink}; line-height: 1.6;">Dear ${contract.judgeName},</p>
+        <p style="font-size: 15px; color: ${BRAND.ink}; line-height: 1.6;">
           Thank you for accepting our invitation. This letter confirms your appointment to judge at our show. Please retain this as your formal confirmation.
         </p>
         <table style="width: 100%; margin: 20px 0; border-collapse: collapse;">
-          <tr><td style="padding: 10px 12px; border-bottom: 1px solid #e5e5e5; font-weight: 600; color: #444; width: 120px;">Show</td><td style="padding: 10px 12px; border-bottom: 1px solid #e5e5e5; color: #1a1a1a;">${show.name}</td></tr>
-          <tr><td style="padding: 10px 12px; border-bottom: 1px solid #e5e5e5; font-weight: 600; color: #444;">Date</td><td style="padding: 10px 12px; border-bottom: 1px solid #e5e5e5; color: #1a1a1a;">${showDate}</td></tr>
-          <tr><td style="padding: 10px 12px; border-bottom: 1px solid #e5e5e5; font-weight: 600; color: #444;">Venue</td><td style="padding: 10px 12px; border-bottom: 1px solid #e5e5e5; color: #1a1a1a;">${venue}</td></tr>
-          <tr><td style="padding: 10px 12px; border-bottom: 1px solid #e5e5e5; font-weight: 600; color: #444;">Breeds</td><td style="padding: 10px 12px; border-bottom: 1px solid #e5e5e5; color: #1a1a1a;">${breedsText}</td></tr>
-          <tr><td style="padding: 10px 12px; border-bottom: 1px solid #e5e5e5; font-weight: 600; color: #444;">Ring(s)</td><td style="padding: 10px 12px; border-bottom: 1px solid #e5e5e5; color: #1a1a1a;">${ringsText}</td></tr>
+          <tr><td style="padding: 10px 12px; border-bottom: 1px solid ${BRAND.line}; font-weight: 600; color: ${BRAND.ink}; width: 120px;">Show</td><td style="padding: 10px 12px; border-bottom: 1px solid ${BRAND.line}; color: ${BRAND.ink};">${show.name}</td></tr>
+          <tr><td style="padding: 10px 12px; border-bottom: 1px solid ${BRAND.line}; font-weight: 600; color: ${BRAND.ink};">Date</td><td style="padding: 10px 12px; border-bottom: 1px solid ${BRAND.line}; color: ${BRAND.ink};">${showDate}</td></tr>
+          <tr><td style="padding: 10px 12px; border-bottom: 1px solid ${BRAND.line}; font-weight: 600; color: ${BRAND.ink};">Venue</td><td style="padding: 10px 12px; border-bottom: 1px solid ${BRAND.line}; color: ${BRAND.ink};">${venue}</td></tr>
+          <tr><td style="padding: 10px 12px; border-bottom: 1px solid ${BRAND.line}; font-weight: 600; color: ${BRAND.ink};">Breed</td><td style="padding: 10px 12px; border-bottom: 1px solid ${BRAND.line}; color: ${BRAND.ink};">${breedLine}</td></tr>
+          <tr><td style="padding: 10px 12px; border-bottom: 1px solid ${BRAND.line}; font-weight: 600; color: ${BRAND.ink};">Classification</td><td style="padding: 10px 12px; border-bottom: 1px solid ${BRAND.line}; color: ${BRAND.ink};">${classificationLine}</td></tr>
+          <tr><td style="padding: 10px 12px; border-bottom: 1px solid ${BRAND.line}; font-weight: 600; color: ${BRAND.ink};">Ring(s)</td><td style="padding: 10px 12px; border-bottom: 1px solid ${BRAND.line}; color: ${BRAND.ink};">${ringsText}</td></tr>
         </table>
-        <p style="font-size: 15px; color: #333; line-height: 1.6;">
+        <p style="font-size: 15px; color: ${BRAND.ink}; line-height: 1.6;">
           Further details regarding entry numbers and the running order will be sent to you closer to the show date. We look forward to welcoming you.
         </p>
-        <p style="font-size: 15px; color: #333; line-height: 1.6; margin-top: 24px;">
+        <p style="font-size: 15px; color: ${BRAND.ink}; line-height: 1.6; margin-top: 24px;">
           Yours sincerely,<br>
           <strong>${orgName}</strong>
         </p>
       </div>
     </div>
-    <div style="text-align: center; padding: 24px 16px; font-size: 12px; color: #999;">
+    <div style="text-align: center; padding: 24px 16px; font-size: 12px; color: ${BRAND.ink2};">
       <p style="margin: 0;">This confirmation was sent by <strong>Remi</strong> on behalf of ${orgName}.</p>
     </div>
   </div>
@@ -3712,13 +5075,14 @@ export const secretaryRouter = createTRPCRouter({
       const emailFrom = process.env.EMAIL_FROM ?? 'Remi <noreply@remishowmanager.co.uk>';
 
       try {
-        await resend.emails.send({
+        const result = await resend.emails.send({
           from: emailFrom,
           to: contract.judgeEmail,
           replyTo: process.env.FEEDBACK_EMAIL ?? 'feedback@remishowmanager.co.uk',
           subject: `Appointment Confirmed — ${show.name}`,
           html,
         });
+        if (result.error) throw new Error(result.error.message ?? 'Resend rejected the email');
       } catch (error) {
         console.error('[email] Failed to send judge confirmation:', error);
         throw new TRPCError({
@@ -4061,39 +5425,40 @@ export const secretaryRouter = createTRPCRouter({
 
           const acceptUrl = `${baseUrl}/api/judge-contract/${contract!.offerToken}`;
 
-          await resend.emails.send({
+          const offerResult = await resend.emails.send({
             from: emailFrom,
             to: judge.contactEmail,
             replyTo: process.env.FEEDBACK_EMAIL ?? 'feedback@remishowmanager.co.uk',
             subject: `Judging Offer — ${show.name}`,
             html: `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
-<body style="margin:0;padding:0;background-color:#f5f3ef;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
+<body style="margin:0;padding:0;background-color:${BRAND.paper};font-family:'Hanken Grotesk',-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
 <div style="max-width:600px;margin:0 auto;padding:24px 16px;">
-  <div style="text-align:center;padding:24px 0;"><h1 style="margin:0;font-family:Georgia,'Times New Roman',serif;font-size:28px;color:#2D5F3F;">Remi</h1></div>
-  <div style="background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
-    <div style="background:#2D5F3F;padding:24px;text-align:center;">
-      <h2 style="margin:0;color:#fff;font-size:22px;font-weight:700;">Judging Appointment Offer</h2>
-      <p style="margin:8px 0 0;color:#b8d4c4;font-size:14px;">from ${orgName}</p>
+  <div style="text-align:center;padding:24px 0;"><h1 style="margin:0;font-family:'Hanken Grotesk',-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;font-size:26px;font-weight:800;color:${BRAND.green};letter-spacing:-0.015em;">Remi<span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:${BRAND.fresh};margin-left:3px;"></span></h1></div>
+  <div style="background:#fff;border:1px solid ${BRAND.line};border-radius:14px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
+    <div style="background:${BRAND.deep};padding:24px;text-align:center;">
+      <h2 style="margin:0;color:${BRAND.cream};font-size:22px;font-weight:700;">Judging Appointment Offer</h2>
+      <p style="margin:8px 0 0;color:rgba(243,236,220,0.78);font-size:14px;">from ${orgName}</p>
     </div>
     <div style="padding:24px;">
-      <p style="font-size:15px;color:#1a1a1a;line-height:1.6;">Dear ${judge.name},</p>
-      <p style="font-size:15px;color:#333;line-height:1.6;">On behalf of ${orgName}, I have much pleasure in inviting you to judge at our forthcoming show.</p>
+      <p style="font-size:15px;color:${BRAND.ink};line-height:1.6;">Dear ${judge.name},</p>
+      <p style="font-size:15px;color:${BRAND.ink};line-height:1.6;">On behalf of ${orgName}, I have much pleasure in inviting you to judge at our forthcoming show.</p>
       <table style="width:100%;margin:20px 0;border-collapse:collapse;">
-        <tr><td style="padding:10px 12px;border-bottom:1px solid #e5e5e5;font-weight:600;color:#444;width:120px;">Show</td><td style="padding:10px 12px;border-bottom:1px solid #e5e5e5;">${show.name}</td></tr>
-        <tr><td style="padding:10px 12px;border-bottom:1px solid #e5e5e5;font-weight:600;color:#444;">Date</td><td style="padding:10px 12px;border-bottom:1px solid #e5e5e5;">${showDate}</td></tr>
-        <tr><td style="padding:10px 12px;border-bottom:1px solid #e5e5e5;font-weight:600;color:#444;">Venue</td><td style="padding:10px 12px;border-bottom:1px solid #e5e5e5;">${venue}</td></tr>
-        <tr><td style="padding:10px 12px;border-bottom:1px solid #e5e5e5;font-weight:600;color:#444;">Breeds</td><td style="padding:10px 12px;border-bottom:1px solid #e5e5e5;">${breedsText}</td></tr>
+        <tr><td style="padding:10px 12px;border-bottom:1px solid ${BRAND.line};font-weight:600;color:${BRAND.ink};width:120px;">Show</td><td style="padding:10px 12px;border-bottom:1px solid ${BRAND.line};">${show.name}</td></tr>
+        <tr><td style="padding:10px 12px;border-bottom:1px solid ${BRAND.line};font-weight:600;color:${BRAND.ink};">Date</td><td style="padding:10px 12px;border-bottom:1px solid ${BRAND.line};">${showDate}</td></tr>
+        <tr><td style="padding:10px 12px;border-bottom:1px solid ${BRAND.line};font-weight:600;color:${BRAND.ink};">Venue</td><td style="padding:10px 12px;border-bottom:1px solid ${BRAND.line};">${venue}</td></tr>
+        <tr><td style="padding:10px 12px;border-bottom:1px solid ${BRAND.line};font-weight:600;color:${BRAND.ink};">Breeds</td><td style="padding:10px 12px;border-bottom:1px solid ${BRAND.line};">${breedsText}</td></tr>
       </table>
-      <p style="font-size:15px;color:#333;line-height:1.6;">Please confirm by clicking below.</p>
+      <p style="font-size:15px;color:${BRAND.ink};line-height:1.6;">Please confirm by clicking below.</p>
       <div style="text-align:center;margin:28px 0;">
-        <a href="${acceptUrl}?action=accept" style="display:inline-block;background:#2D5F3F;color:#fff;padding:14px 32px;border-radius:8px;font-size:16px;font-weight:600;text-decoration:none;">Accept Appointment</a>
-        <br><a href="${acceptUrl}?action=decline" style="display:inline-block;color:#888;padding:8px 16px;font-size:13px;text-decoration:underline;margin-top:8px;">Decline</a>
+        <a href="${acceptUrl}?action=accept" style="display:inline-block;background:${BRAND.green};color:${BRAND.cream};padding:14px 32px;border-radius:13px;font-size:16px;font-weight:700;text-decoration:none;">Accept Appointment</a>
+        <br><a href="${acceptUrl}?action=decline" style="display:inline-block;color:${BRAND.ink2};padding:8px 16px;font-size:13px;text-decoration:underline;margin-top:8px;">Decline</a>
       </div>
-      <p style="font-size:13px;color:#999;text-align:center;">This link expires on ${tokenExpiresAt.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}.</p>
+      <p style="font-size:13px;color:${BRAND.ink2};text-align:center;">This link expires on ${tokenExpiresAt.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}.</p>
     </div>
   </div>
 </div></body></html>`,
           });
+          if (offerResult.error) throw new Error(offerResult.error.message ?? 'Resend rejected the email');
           sent++;
         } catch (error) {
           console.error(`[bulk-offer] Failed for ${judge.name}:`, error);
@@ -4184,36 +5549,37 @@ export const secretaryRouter = createTRPCRouter({
             )
           );
 
-          await resend.emails.send({
+          const confirmResult = await resend.emails.send({
             from: emailFrom,
             to: contract.judgeEmail,
             replyTo: process.env.FEEDBACK_EMAIL ?? 'feedback@remishowmanager.co.uk',
             subject: `Appointment Confirmed — ${show.name}`,
             html: `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
-<body style="margin:0;padding:0;background-color:#f5f3ef;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
+<body style="margin:0;padding:0;background-color:${BRAND.paper};font-family:'Hanken Grotesk',-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
 <div style="max-width:600px;margin:0 auto;padding:24px 16px;">
-  <div style="text-align:center;padding:24px 0;"><h1 style="margin:0;font-family:Georgia,'Times New Roman',serif;font-size:28px;color:#2D5F3F;">Remi</h1></div>
-  <div style="background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
-    <div style="background:#2D5F3F;padding:24px;text-align:center;">
+  <div style="text-align:center;padding:24px 0;"><h1 style="margin:0;font-family:'Hanken Grotesk',-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;font-size:26px;font-weight:800;color:${BRAND.green};letter-spacing:-0.015em;">Remi<span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:${BRAND.fresh};margin-left:3px;"></span></h1></div>
+  <div style="background:#fff;border:1px solid ${BRAND.line};border-radius:14px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
+    <div style="background:${BRAND.deep};padding:24px;text-align:center;">
       <div style="font-size:32px;margin-bottom:8px;">&#10003;</div>
-      <h2 style="margin:0;color:#fff;font-size:22px;font-weight:700;">Appointment Confirmed</h2>
+      <h2 style="margin:0;color:${BRAND.cream};font-size:22px;font-weight:700;">Appointment Confirmed</h2>
     </div>
     <div style="padding:24px;">
-      <p style="font-size:15px;color:#1a1a1a;line-height:1.6;">Dear ${contract.judgeName},</p>
-      <p style="font-size:15px;color:#333;line-height:1.6;">Thank you for accepting our invitation. This confirms your appointment to judge at our show.</p>
+      <p style="font-size:15px;color:${BRAND.ink};line-height:1.6;">Dear ${contract.judgeName},</p>
+      <p style="font-size:15px;color:${BRAND.ink};line-height:1.6;">Thank you for accepting our invitation. This confirms your appointment to judge at our show.</p>
       <table style="width:100%;margin:20px 0;border-collapse:collapse;">
-        <tr><td style="padding:10px 12px;border-bottom:1px solid #e5e5e5;font-weight:600;color:#444;width:120px;">Show</td><td style="padding:10px 12px;border-bottom:1px solid #e5e5e5;">${show.name}</td></tr>
-        <tr><td style="padding:10px 12px;border-bottom:1px solid #e5e5e5;font-weight:600;color:#444;">Date</td><td style="padding:10px 12px;border-bottom:1px solid #e5e5e5;">${showDate}</td></tr>
-        <tr><td style="padding:10px 12px;border-bottom:1px solid #e5e5e5;font-weight:600;color:#444;">Venue</td><td style="padding:10px 12px;border-bottom:1px solid #e5e5e5;">${venue}</td></tr>
-        <tr><td style="padding:10px 12px;border-bottom:1px solid #e5e5e5;font-weight:600;color:#444;">Breeds</td><td style="padding:10px 12px;border-bottom:1px solid #e5e5e5;">${breedsText}</td></tr>
-        <tr><td style="padding:10px 12px;border-bottom:1px solid #e5e5e5;font-weight:600;color:#444;">Ring(s)</td><td style="padding:10px 12px;border-bottom:1px solid #e5e5e5;">${ringsText}</td></tr>
+        <tr><td style="padding:10px 12px;border-bottom:1px solid ${BRAND.line};font-weight:600;color:${BRAND.ink};width:120px;">Show</td><td style="padding:10px 12px;border-bottom:1px solid ${BRAND.line};">${show.name}</td></tr>
+        <tr><td style="padding:10px 12px;border-bottom:1px solid ${BRAND.line};font-weight:600;color:${BRAND.ink};">Date</td><td style="padding:10px 12px;border-bottom:1px solid ${BRAND.line};">${showDate}</td></tr>
+        <tr><td style="padding:10px 12px;border-bottom:1px solid ${BRAND.line};font-weight:600;color:${BRAND.ink};">Venue</td><td style="padding:10px 12px;border-bottom:1px solid ${BRAND.line};">${venue}</td></tr>
+        <tr><td style="padding:10px 12px;border-bottom:1px solid ${BRAND.line};font-weight:600;color:${BRAND.ink};">Breeds</td><td style="padding:10px 12px;border-bottom:1px solid ${BRAND.line};">${breedsText}</td></tr>
+        <tr><td style="padding:10px 12px;border-bottom:1px solid ${BRAND.line};font-weight:600;color:${BRAND.ink};">Ring(s)</td><td style="padding:10px 12px;border-bottom:1px solid ${BRAND.line};">${ringsText}</td></tr>
       </table>
-      <p style="font-size:15px;color:#333;line-height:1.6;">Further details regarding entry numbers will be sent closer to the show date. We look forward to welcoming you.</p>
-      <p style="font-size:15px;color:#333;line-height:1.6;margin-top:24px;">Yours sincerely,<br><strong>${orgName}</strong></p>
+      <p style="font-size:15px;color:${BRAND.ink};line-height:1.6;">Further details regarding entry numbers will be sent closer to the show date. We look forward to welcoming you.</p>
+      <p style="font-size:15px;color:${BRAND.ink};line-height:1.6;margin-top:24px;">Yours sincerely,<br><strong>${orgName}</strong></p>
     </div>
   </div>
 </div></body></html>`,
           });
+          if (confirmResult.error) throw new Error(confirmResult.error.message ?? 'Resend rejected the email');
           sent++;
         } catch (error) {
           console.error(`[bulk-confirm] Failed for ${contract.judgeName}:`, error);
@@ -4312,41 +5678,49 @@ export const secretaryRouter = createTRPCRouter({
 
       const classRows = classEntries.length > 0
         ? classEntries.map((c) =>
-            `<tr><td style="padding:8px 12px;border-bottom:1px solid #e5e5e5;font-size:14px;">${c.breedName ? `${c.breedName} — ` : ''}${c.className}</td><td style="padding:8px 12px;border-bottom:1px solid #e5e5e5;text-align:center;font-weight:600;">${c.entryCount}</td></tr>`
+            `<tr><td style="padding:8px 12px;border-bottom:1px solid ${BRAND.line};font-size:14px;">${c.breedName ? `${c.breedName} — ` : ''}${c.className}</td><td style="padding:8px 12px;border-bottom:1px solid ${BRAND.line};text-align:center;font-weight:600;">${c.entryCount}</td></tr>`
           ).join('')
-        : '<tr><td colspan="2" style="padding:12px;text-align:center;color:#999;">No class data available yet</td></tr>';
+        : '<tr><td colspan="2" style="padding:12px;text-align:center;color:${BRAND.ink2};">No class data available yet</td></tr>';
 
       const resend = new Resend(process.env.RESEND_API_KEY);
       const emailFrom = process.env.EMAIL_FROM ?? 'Remi <noreply@remishowmanager.co.uk>';
 
-      await resend.emails.send({
+      const entryNumbersResult = await resend.emails.send({
         from: emailFrom,
         to: judge.contactEmail,
         replyTo: process.env.FEEDBACK_EMAIL ?? 'feedback@remishowmanager.co.uk',
         subject: `Entry Numbers — ${show.name}`,
         html: `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
-<body style="margin:0;padding:0;background-color:#f5f3ef;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
+<body style="margin:0;padding:0;background-color:${BRAND.paper};font-family:'Hanken Grotesk',-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
 <div style="max-width:600px;margin:0 auto;padding:24px 16px;">
-  <div style="text-align:center;padding:24px 0;"><h1 style="margin:0;font-family:Georgia,'Times New Roman',serif;font-size:28px;color:#2D5F3F;">Remi</h1></div>
-  <div style="background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
-    <div style="background:#2D5F3F;padding:24px;text-align:center;">
-      <h2 style="margin:0;color:#fff;font-size:22px;font-weight:700;">Entry Numbers</h2>
-      <p style="margin:8px 0 0;color:#b8d4c4;font-size:14px;">${show.name} — ${showDate}</p>
+  <div style="text-align:center;padding:24px 0;"><h1 style="margin:0;font-family:'Hanken Grotesk',-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;font-size:26px;font-weight:800;color:${BRAND.green};letter-spacing:-0.015em;">Remi<span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:${BRAND.fresh};margin-left:3px;"></span></h1></div>
+  <div style="background:#fff;border:1px solid ${BRAND.line};border-radius:14px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
+    <div style="background:${BRAND.deep};padding:24px;text-align:center;">
+      <h2 style="margin:0;color:${BRAND.cream};font-size:22px;font-weight:700;">Entry Numbers</h2>
+      <p style="margin:8px 0 0;color:rgba(243,236,220,0.78);font-size:14px;">${show.name} — ${showDate}</p>
     </div>
     <div style="padding:24px;">
-      <p style="font-size:15px;color:#1a1a1a;line-height:1.6;">Dear ${judge.name},</p>
-      <p style="font-size:15px;color:#333;line-height:1.6;">Please find below the entry numbers for your judging appointment. You will be judging <strong>${breedsText}</strong> with a total of <strong>${totalEntries}</strong> entries.</p>
+      <p style="font-size:15px;color:${BRAND.ink};line-height:1.6;">Dear ${judge.name},</p>
+      <p style="font-size:15px;color:${BRAND.ink};line-height:1.6;">Please find below the entry numbers for your judging appointment. You will be judging <strong>${breedsText}</strong> with a total of <strong>${totalEntries}</strong> entries.</p>
       <table style="width:100%;margin:20px 0;border-collapse:collapse;">
-        <tr><th style="padding:10px 12px;border-bottom:2px solid #2D5F3F;text-align:left;font-size:14px;color:#444;">Class</th><th style="padding:10px 12px;border-bottom:2px solid #2D5F3F;text-align:center;font-size:14px;color:#444;">Entries</th></tr>
+        <tr><th style="padding:10px 12px;border-bottom:2px solid ${BRAND.green};text-align:left;font-size:14px;color:${BRAND.ink};">Class</th><th style="padding:10px 12px;border-bottom:2px solid ${BRAND.green};text-align:center;font-size:14px;color:${BRAND.ink};">Entries</th></tr>
         ${classRows}
         <tr><td style="padding:10px 12px;font-weight:700;">Total</td><td style="padding:10px 12px;text-align:center;font-weight:700;">${totalEntries}</td></tr>
       </table>
-      <p style="font-size:15px;color:#333;line-height:1.6;">We look forward to welcoming you on the day.</p>
-      <p style="font-size:15px;color:#333;line-height:1.6;margin-top:24px;">Yours sincerely,<br><strong>${orgName}</strong></p>
+      <p style="font-size:15px;color:${BRAND.ink};line-height:1.6;">We look forward to welcoming you on the day.</p>
+      <p style="font-size:15px;color:${BRAND.ink};line-height:1.6;margin-top:24px;">Yours sincerely,<br><strong>${orgName}</strong></p>
     </div>
   </div>
 </div></body></html>`,
       });
+
+      if (entryNumbersResult.error) {
+        console.error('[email] Resend rejected entry-numbers email:', entryNumbersResult.error);
+        throw new TRPCError({
+          code: 'INTERNAL_SERVER_ERROR',
+          message: `The email could not be delivered (${entryNumbersResult.error.message ?? 'provider error'}). Check the judge's email address and try again.`,
+        });
+      }
 
       // Auto-complete checklist item
       await ctx.db.update(showChecklistItems).set({
@@ -4400,7 +5774,7 @@ export const secretaryRouter = createTRPCRouter({
 
       const totalExpenses = (contract?.hotelCost ?? 0) + (contract?.travelCost ?? 0) + (contract?.otherExpenses ?? 0);
       const expenseSection = totalExpenses > 0 ? `
-        <p style="font-size:14px;color:#555;line-height:1.6;padding:12px;background:#f9f8f6;border-radius:8px;margin-top:16px;">
+        <p style="font-size:14px;color:${BRAND.ink2};line-height:1.6;padding:12px;background:${BRAND.paper};border-radius:8px;margin-top:16px;">
           <strong>Expenses Summary:</strong><br>
           ${contract?.hotelCost ? `Hotel: £${penceToPoundsString(contract.hotelCost)}<br>` : ''}
           ${contract?.travelCost ? `Travel: £${penceToPoundsString(contract.travelCost)}<br>` : ''}
@@ -4411,29 +5785,37 @@ export const secretaryRouter = createTRPCRouter({
       const resend = new Resend(process.env.RESEND_API_KEY);
       const emailFrom = process.env.EMAIL_FROM ?? 'Remi <noreply@remishowmanager.co.uk>';
 
-      await resend.emails.send({
+      const thankYouResult = await resend.emails.send({
         from: emailFrom,
         to: judge.contactEmail,
         replyTo: process.env.FEEDBACK_EMAIL ?? 'feedback@remishowmanager.co.uk',
         subject: `Thank You — ${show.name}`,
         html: `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
-<body style="margin:0;padding:0;background-color:#f5f3ef;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
+<body style="margin:0;padding:0;background-color:${BRAND.paper};font-family:'Hanken Grotesk',-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
 <div style="max-width:600px;margin:0 auto;padding:24px 16px;">
-  <div style="text-align:center;padding:24px 0;"><h1 style="margin:0;font-family:Georgia,'Times New Roman',serif;font-size:28px;color:#2D5F3F;">Remi</h1></div>
-  <div style="background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
-    <div style="background:#2D5F3F;padding:24px;text-align:center;">
-      <h2 style="margin:0;color:#fff;font-size:22px;font-weight:700;">Thank You</h2>
-      <p style="margin:8px 0 0;color:#b8d4c4;font-size:14px;">${show.name}</p>
+  <div style="text-align:center;padding:24px 0;"><h1 style="margin:0;font-family:'Hanken Grotesk',-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;font-size:26px;font-weight:800;color:${BRAND.green};letter-spacing:-0.015em;">Remi<span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:${BRAND.fresh};margin-left:3px;"></span></h1></div>
+  <div style="background:#fff;border:1px solid ${BRAND.line};border-radius:14px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
+    <div style="background:${BRAND.deep};padding:24px;text-align:center;">
+      <h2 style="margin:0;color:${BRAND.cream};font-size:22px;font-weight:700;">Thank You</h2>
+      <p style="margin:8px 0 0;color:rgba(243,236,220,0.78);font-size:14px;">${show.name}</p>
     </div>
     <div style="padding:24px;">
-      <p style="font-size:15px;color:#1a1a1a;line-height:1.6;">Dear ${judge.name},</p>
-      <p style="font-size:15px;color:#333;line-height:1.6;">${customMessage}</p>
+      <p style="font-size:15px;color:${BRAND.ink};line-height:1.6;">Dear ${judge.name},</p>
+      <p style="font-size:15px;color:${BRAND.ink};line-height:1.6;">${customMessage}</p>
       ${expenseSection}
-      <p style="font-size:15px;color:#333;line-height:1.6;margin-top:24px;">With kind regards,<br><strong>${orgName}</strong></p>
+      <p style="font-size:15px;color:${BRAND.ink};line-height:1.6;margin-top:24px;">With kind regards,<br><strong>${orgName}</strong></p>
     </div>
   </div>
 </div></body></html>`,
       });
+
+      if (thankYouResult.error) {
+        console.error('[email] Resend rejected thank-you email:', thankYouResult.error);
+        throw new TRPCError({
+          code: 'INTERNAL_SERVER_ERROR',
+          message: `The email could not be delivered (${thankYouResult.error.message ?? 'provider error'}). Check the judge's email address and try again.`,
+        });
+      }
 
       // Auto-complete checklist item
       await ctx.db.update(showChecklistItems).set({
@@ -4557,28 +5939,6 @@ export const secretaryRouter = createTRPCRouter({
       return { softDeleted: false };
     }),
 
-  reorderSundryItems: secretaryProcedure
-    .input(
-      z.object({
-        showId: z.string().uuid(),
-        itemIds: z.array(z.string().uuid()),
-      })
-    )
-    .mutation(async ({ ctx, input }) => {
-      await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId, { callerIsAdmin: ctx.callerIsAdmin });
-
-      await Promise.all(
-        input.itemIds.map((id, index) =>
-          ctx.db
-            .update(sundryItems)
-            .set({ sortOrder: index })
-            .where(and(eq(sundryItems.id, id), eq(sundryItems.showId, input.showId)))
-        )
-      );
-
-      return { reordered: true };
-    }),
-
   bulkCreateSundryItems: secretaryProcedure
     .input(
       z.object({
@@ -4654,67 +6014,61 @@ export const secretaryRouter = createTRPCRouter({
   getShowEntryStats: secretaryProcedure
     .input(z.object({ showId: z.string().uuid() }))
     .query(async ({ ctx, input }) => {
-      // Entry counts by status
-      const statusCounts = await ctx.db
-        .select({
-          status: entries.status,
-          count: sql<number>`count(*)`,
-        })
-        .from(entries)
-        .where(eq(entries.showId, input.showId))
-        .groupBy(entries.status);
-
-      // Revenue from paid orders
-      const revenueResult = await ctx.db
-        .select({
-          totalRevenue: sql<number>`coalesce(sum(${orders.totalAmount}), 0)`,
-          orderCount: sql<number>`count(*)`,
-        })
-        .from(orders)
-        .where(
-          and(
-            eq(orders.showId, input.showId),
-            eq(orders.status, 'paid')
-          )
-        );
-
-      // Unique exhibitors
-      const exhibitorResult = await ctx.db
-        .select({
-          count: sql<number>`count(distinct ${entries.exhibitorId})`,
-        })
-        .from(entries)
-        .where(
-          and(
-            eq(entries.showId, input.showId),
-            inArray(entries.status, ['pending', 'confirmed'])
-          )
-        );
-
-      // Most recent entry date
-      const latestEntry = await ctx.db
-        .select({ createdAt: entries.createdAt })
-        .from(entries)
-        .where(eq(entries.showId, input.showId))
-        .orderBy(desc(entries.createdAt))
-        .limit(1);
-
-      const counts: Record<string, number> = {};
-      for (const row of statusCounts) {
-        counts[row.status] = Number(row.count);
-      }
+      await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId, {
+        callerIsAdmin: ctx.callerIsAdmin,
+      });
+      const [metrics, exhibitorResult, latestEntry] = await Promise.all([
+        computeShowMetrics(ctx.db, input.showId),
+        // Unique exhibitors across alive, not-cancelled entries
+        ctx.db
+          .select({
+            count: sql<number>`count(distinct ${entries.exhibitorId})`,
+          })
+          .from(entries)
+          .where(
+            and(
+              eq(entries.showId, input.showId),
+              isNull(entries.deletedAt),
+              inArray(entries.status, ['pending', 'confirmed'])
+            )
+          ),
+        ctx.db
+          .select({ createdAt: entries.createdAt })
+          .from(entries)
+          .where(and(eq(entries.showId, input.showId), isNull(entries.deletedAt)))
+          .orderBy(desc(entries.createdAt))
+          .limit(1),
+      ]);
 
       return {
-        totalEntries: Object.values(counts).reduce((a, b) => a + b, 0),
-        confirmed: counts.confirmed ?? 0,
-        pending: counts.pending ?? 0,
-        withdrawn: counts.withdrawn ?? 0,
-        cancelled: counts.cancelled ?? 0,
-        transferred: counts.transferred ?? 0,
-        totalRevenue: Number(revenueResult[0]?.totalRevenue ?? 0),
-        paidOrders: Number(revenueResult[0]?.orderCount ?? 0),
+        // Entry counts — live (not soft-deleted) entries, bucketed by order state
+        totalEntries:
+          metrics.confirmedEntryCount +
+          metrics.pendingEntryCount +
+          metrics.withdrawnEntryCount,
+        confirmed: metrics.confirmedEntryCount,
+        pending: metrics.pendingEntryCount,
+        withdrawn: metrics.withdrawnEntryCount,
+        cancelled: metrics.cancelledEntryCount,
+        // Legacy shape — we don't separately track transferred here
+        transferred: 0,
+        // Revenue here is the show's total earnings across both channels
+        // (Stripe + offline), net of refunds — this feeds general "how much
+        // has this show made" displays (dashboard cards, lifecycle banner),
+        // not a "what's due from Remi" figure. See getShowStats for the
+        // strict clubReceivablePence/offlineCollectedPence split.
+        totalRevenue: metrics.totalClubRevenuePence,
+        paidOrders: metrics.paidOrderCount,
         uniqueExhibitors: Number(exhibitorResult[0]?.count ?? 0),
         lastEntryAt: latestEntry[0]?.createdAt ?? null,
+
+        // ── "Dogs entered" canonical breakdown (financial-clarity redesign) ──
+        // Shared with getShowStats via shapeDogsEnteredFields — both derive
+        // from the same computeShowMetrics() call AND the same field-shaping
+        // function, so the dashboard, banner, and entries page can never
+        // disagree with the Financial page, and the two field lists can't
+        // fork apart from each other over time.
+        ...shapeDogsEnteredFields(metrics),
       };
     }),
 
@@ -4740,7 +6094,7 @@ export const secretaryRouter = createTRPCRouter({
           eq(memberships.status, 'active')
         ),
       });
-      if (!membership) {
+      if (!membership && !ctx.callerIsAdmin) {
         throw new TRPCError({ code: 'FORBIDDEN', message: 'You do not have access to this show' });
       }
       return show.scheduleData ?? null;
@@ -4755,6 +6109,21 @@ export const secretaryRouter = createTRPCRouter({
         columns: { id: true, organisationId: true },
       });
       if (!currentShow) return null;
+
+      // Verify the caller is an active member of THIS show's org before we use
+      // its organisationId to read a sibling show's schedule data — otherwise any
+      // secretary could pass another club's showId and read its guarantors (home
+      // addresses), prize money, sponsors and officers. Mirrors getScheduleData.
+      const membership = await ctx.db.query.memberships.findFirst({
+        where: and(
+          eq(memberships.userId, ctx.session.user.id),
+          eq(memberships.organisationId, currentShow.organisationId),
+          eq(memberships.status, 'active')
+        ),
+      });
+      if (!membership && !ctx.callerIsAdmin) {
+        throw new TRPCError({ code: 'FORBIDDEN', message: 'You do not have access to this show' });
+      }
 
       // Find the most recent OTHER show from the same org that has schedule data
       const previous = await ctx.db.query.shows.findFirst({
@@ -4829,14 +6198,63 @@ export const secretaryRouter = createTRPCRouter({
           additionalNotes: z.string().optional(),
           welcomeNote: z.string().optional(),
           outsideAttraction: z.boolean().optional(),
+          hasBestVeteranInShow: z.boolean().optional(),
+          bestVeteranInShowEligibility: z.string().optional(),
         }),
       })
     )
     .mutation(async ({ ctx, input }) => {
       await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId, { callerIsAdmin: ctx.callerIsAdmin });
 
-      // Save show-level fields alongside scheduleData JSONB
-      const showUpdates: Record<string, unknown> = { scheduleData: input.scheduleData };
+      // Time ordering must be sane so the schedule doesn't print nonsense
+      // like "Judging starts 08:30, Show opens 09:00". Strings are "HH:MM"
+      // so lexical comparison works.
+      const showOpen = input.showOpenTime?.trim() || null;
+      const judgingStart = input.judgingStartTime?.trim() || null;
+      const latestArrival = input.scheduleData.latestArrivalTime?.trim() || null;
+
+      if (showOpen && judgingStart && judgingStart <= showOpen) {
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: `Judging start (${judgingStart}) must be after the show opens (${showOpen}).`,
+        });
+      }
+      if (latestArrival && showOpen && latestArrival < showOpen) {
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: `Latest arrival (${latestArrival}) can't be before the show opens (${showOpen}).`,
+        });
+      }
+      if (latestArrival && judgingStart && latestArrival > judgingStart) {
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: `Latest arrival (${latestArrival}) must be before judging starts (${judgingStart}).`,
+        });
+      }
+
+      // Merge (rather than replace) scheduleData against the current
+      // DB value. The mutation is called from several places (schedule
+      // form autosave, sponsors page, catalogue-settings page), all
+      // of which build their payload by spreading the client-side
+      // React Query cache — a cache that can go stale. Merging
+      // against the authoritative DB state makes partial payloads
+      // safe: a stale client missing a field no longer drags that
+      // field out when it saves. Clearing a field via this mutation
+      // still works — send the field explicitly as empty string or
+      // null — but omission means "leave alone", not "erase".
+      const currentShow = await ctx.db.query.shows.findFirst({
+        where: eq(shows.id, input.showId),
+        columns: { scheduleData: true, organisationId: true },
+      });
+      const existingScheduleData = (currentShow?.scheduleData ?? {}) as Record<string, unknown>;
+      // Trim + dedupe officers so a trailing-space typo can't render
+      // the same person twice on the schedule (Amanda 2026-05-19).
+      const normalisedInput = input.scheduleData.officers
+        ? { ...input.scheduleData, officers: normaliseOfficers(input.scheduleData.officers) }
+        : input.scheduleData;
+      const mergedScheduleData = { ...existingScheduleData, ...normalisedInput };
+
+      const showUpdates: Record<string, unknown> = { scheduleData: mergedScheduleData };
       if (input.showOpenTime !== undefined) showUpdates.showOpenTime = input.showOpenTime || null;
       if (input.judgingStartTime !== undefined) showUpdates.startTime = input.judgingStartTime || null;
       if (input.onCallVet !== undefined) showUpdates.onCallVet = input.onCallVet || null;
@@ -4846,16 +6264,22 @@ export const secretaryRouter = createTRPCRouter({
         .set(showUpdates)
         .where(eq(shows.id, input.showId));
 
-      // Sync new officers into organisation_people so they're available for future shows
+      // Sync new officers into organisation_people so they're available for future shows.
+      //
+      // Important: the form auto-saves on every keystroke, so a partially
+      // typed name like "Phili" would otherwise be inserted as its own
+      // roster row each tick. Only sync an officer when BOTH the name and
+      // the position are filled in — position is a single-click dropdown,
+      // so its presence is the strongest signal that the user has
+      // committed to this officer rather than still typing.
+      //
+      // Also require a space in the name (i.e. first + surname) as a
+      // second guard against incidental single-letter or partial entries.
       const scheduleOfficers = input.scheduleData.officers;
-      if (scheduleOfficers && scheduleOfficers.length > 0) {
-        const show = await ctx.db.query.shows.findFirst({
-          where: eq(shows.id, input.showId),
-          columns: { organisationId: true },
-        });
-        if (show) {
+      if (scheduleOfficers && scheduleOfficers.length > 0 && currentShow) {
+        {
           const existingPeople = await ctx.db.query.organisationPeople.findMany({
-            where: eq(organisationPeople.organisationId, show.organisationId),
+            where: eq(organisationPeople.organisationId, currentShow.organisationId),
             columns: { name: true },
           });
           const existingNames = new Set(
@@ -4871,9 +6295,16 @@ export const secretaryRouter = createTRPCRouter({
           );
 
           const newPeople = scheduleOfficers
-            .filter((o) => o.name.trim() && !existingNames.has(o.name.toLowerCase().trim()))
+            .filter((o) => {
+              const name = o.name.trim();
+              const position = (o.position ?? '').trim();
+              if (!name || !position) return false;
+              if (!name.includes(' ')) return false;
+              if (existingNames.has(name.toLowerCase())) return false;
+              return true;
+            })
             .map((o) => ({
-              organisationId: show.organisationId,
+              organisationId: currentShow.organisationId,
               name: o.name.trim(),
               position: o.position || null,
               isGuarantor: guarantorNames.has(o.name.toLowerCase().trim()),
@@ -4886,6 +6317,7 @@ export const secretaryRouter = createTRPCRouter({
         }
       }
 
+      scheduleCatalogueRefresh(ctx.db, input.showId, 'schedule-data-update'); // schedule/timing/vet fields print on a closed show's catalogue cover
       return { success: true };
     }),
 
@@ -4894,6 +6326,8 @@ export const secretaryRouter = createTRPCRouter({
   listSponsors: secretaryProcedure
     .input(z.object({ organisationId: z.string().uuid() }))
     .query(async ({ ctx, input }) => {
+      if (!ctx.callerIsAdmin)
+        await verifyOrgAccess(ctx.db, ctx.session.user.id, input.organisationId);
       return ctx.db.query.sponsors.findMany({
         where: and(
           eq(sponsors.organisationId, input.organisationId),
@@ -4921,6 +6355,8 @@ export const secretaryRouter = createTRPCRouter({
       })
     )
     .mutation(async ({ ctx, input }) => {
+      if (!ctx.callerIsAdmin)
+        await verifyOrgAccess(ctx.db, ctx.session.user.id, input.organisationId);
       const [created] = await ctx.db
         .insert(sponsors)
         .values(input)
@@ -4947,6 +6383,13 @@ export const secretaryRouter = createTRPCRouter({
     )
     .mutation(async ({ ctx, input }) => {
       const { id, ...data } = input;
+      const existing = await ctx.db.query.sponsors.findFirst({
+        where: eq(sponsors.id, id),
+        columns: { organisationId: true },
+      });
+      if (!existing) throw new TRPCError({ code: 'NOT_FOUND', message: 'Sponsor not found' });
+      if (!ctx.callerIsAdmin)
+        await verifyOrgAccess(ctx.db, ctx.session.user.id, existing.organisationId);
       const [updated] = await ctx.db
         .update(sponsors)
         .set(data)
@@ -4959,6 +6402,13 @@ export const secretaryRouter = createTRPCRouter({
   deleteSponsor: secretaryProcedure
     .input(z.object({ id: z.string().uuid() }))
     .mutation(async ({ ctx, input }) => {
+      const existing = await ctx.db.query.sponsors.findFirst({
+        where: eq(sponsors.id, input.id),
+        columns: { organisationId: true },
+      });
+      if (!existing) throw new TRPCError({ code: 'NOT_FOUND', message: 'Sponsor not found' });
+      if (!ctx.callerIsAdmin)
+        await verifyOrgAccess(ctx.db, ctx.session.user.id, existing.organisationId);
       const [deleted] = await ctx.db
         .update(sponsors)
         .set({ deletedAt: new Date() })
@@ -5000,11 +6450,22 @@ export const secretaryRouter = createTRPCRouter({
       })
     )
     .mutation(async ({ ctx, input }) => {
-      await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId, { callerIsAdmin: ctx.callerIsAdmin });
+      const show = await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId, { callerIsAdmin: ctx.callerIsAdmin });
+      // The sponsor must belong to the same org as the show — otherwise a
+      // secretary could attach (and surface in their catalogue) a sponsor that
+      // belongs to a different club.
+      const sponsor = await ctx.db.query.sponsors.findFirst({
+        where: eq(sponsors.id, input.sponsorId),
+        columns: { organisationId: true },
+      });
+      if (!sponsor || sponsor.organisationId !== show.organisationId) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'Sponsor not found' });
+      }
       const [created] = await ctx.db
         .insert(showSponsors)
         .values(input)
         .returning();
+      scheduleCatalogueRefresh(ctx.db, input.showId, 'sponsor-assign'); // new/changed sponsor may show up on a closed show's catalogue
       return created!;
     }),
 
@@ -5024,23 +6485,37 @@ export const secretaryRouter = createTRPCRouter({
     )
     .mutation(async ({ ctx, input }) => {
       const { id, ...data } = input;
+      const existing = await ctx.db.query.showSponsors.findFirst({
+        where: eq(showSponsors.id, id),
+        columns: { showId: true },
+      });
+      if (!existing) throw new TRPCError({ code: 'NOT_FOUND', message: 'Show sponsor not found' });
+      await verifyShowAccess(ctx.db, ctx.session.user.id, existing.showId, { callerIsAdmin: ctx.callerIsAdmin });
       const [updated] = await ctx.db
         .update(showSponsors)
         .set(data)
         .where(eq(showSponsors.id, id))
         .returning();
       if (!updated) throw new TRPCError({ code: 'NOT_FOUND', message: 'Show sponsor not found' });
+      scheduleCatalogueRefresh(ctx.db, existing.showId, 'sponsor-update'); // sponsor tier/artwork change may show up on a closed show's catalogue
       return updated;
     }),
 
   removeShowSponsor: secretaryProcedure
     .input(z.object({ id: z.string().uuid() }))
     .mutation(async ({ ctx, input }) => {
+      const existing = await ctx.db.query.showSponsors.findFirst({
+        where: eq(showSponsors.id, input.id),
+        columns: { showId: true },
+      });
+      if (!existing) throw new TRPCError({ code: 'NOT_FOUND', message: 'Show sponsor not found' });
+      await verifyShowAccess(ctx.db, ctx.session.user.id, existing.showId, { callerIsAdmin: ctx.callerIsAdmin });
       const [removed] = await ctx.db
         .delete(showSponsors)
         .where(eq(showSponsors.id, input.id))
         .returning();
       if (!removed) throw new TRPCError({ code: 'NOT_FOUND', message: 'Show sponsor not found' });
+      scheduleCatalogueRefresh(ctx.db, existing.showId, 'sponsor-remove'); // removed sponsor must drop off a closed show's catalogue too
       return removed;
     }),
 
@@ -5056,6 +6531,12 @@ export const secretaryRouter = createTRPCRouter({
       })
     )
     .mutation(async ({ ctx, input }) => {
+      const sc = await ctx.db.query.showClasses.findFirst({
+        where: eq(showClasses.id, input.showClassId),
+        columns: { showId: true },
+      });
+      if (!sc) throw new TRPCError({ code: 'NOT_FOUND', message: 'Class not found' });
+      await verifyShowAccess(ctx.db, ctx.session.user.id, sc.showId, { callerIsAdmin: ctx.callerIsAdmin });
       const [created] = await ctx.db
         .insert(classSponsorships)
         .values(input)
@@ -5066,6 +6547,16 @@ export const secretaryRouter = createTRPCRouter({
   removeClassSponsorship: secretaryProcedure
     .input(z.object({ id: z.string().uuid() }))
     .mutation(async ({ ctx, input }) => {
+      const existing = await ctx.db.query.classSponsorships.findFirst({
+        where: eq(classSponsorships.id, input.id),
+        columns: { showClassId: true },
+      });
+      if (!existing) throw new TRPCError({ code: 'NOT_FOUND', message: 'Class sponsorship not found' });
+      const sc = await ctx.db.query.showClasses.findFirst({
+        where: eq(showClasses.id, existing.showClassId),
+        columns: { showId: true },
+      });
+      if (sc) await verifyShowAccess(ctx.db, ctx.session.user.id, sc.showId, { callerIsAdmin: ctx.callerIsAdmin });
       const [removed] = await ctx.db
         .delete(classSponsorships)
         .where(eq(classSponsorships.id, input.id))
@@ -5083,6 +6574,12 @@ export const secretaryRouter = createTRPCRouter({
       trophyName: z.string().max(255).optional(),
     }))
     .mutation(async ({ ctx, input }) => {
+      const sc = await ctx.db.query.showClasses.findFirst({
+        where: eq(showClasses.id, input.showClassId),
+        columns: { showId: true },
+      });
+      if (!sc) throw new TRPCError({ code: 'NOT_FOUND', message: 'Class not found' });
+      await verifyShowAccess(ctx.db, ctx.session.user.id, sc.showId, { callerIsAdmin: ctx.callerIsAdmin });
       const [created] = await ctx.db
         .insert(classSponsorships)
         .values({
@@ -5105,6 +6602,16 @@ export const secretaryRouter = createTRPCRouter({
     }))
     .mutation(async ({ ctx, input }) => {
       const { id, ...data } = input;
+      const existing = await ctx.db.query.classSponsorships.findFirst({
+        where: eq(classSponsorships.id, id),
+        columns: { showClassId: true },
+      });
+      if (!existing) throw new TRPCError({ code: 'NOT_FOUND', message: 'Class sponsorship not found' });
+      const sc = await ctx.db.query.showClasses.findFirst({
+        where: eq(showClasses.id, existing.showClassId),
+        columns: { showId: true },
+      });
+      if (sc) await verifyShowAccess(ctx.db, ctx.session.user.id, sc.showId, { callerIsAdmin: ctx.callerIsAdmin });
       const updateData: Record<string, unknown> = {};
       if (data.sponsorName !== undefined) updateData.sponsorName = data.sponsorName.trim();
       if (data.sponsorAffix !== undefined) updateData.sponsorAffix = data.sponsorAffix?.trim() || null;
@@ -5119,6 +6626,66 @@ export const secretaryRouter = createTRPCRouter({
       return updated;
     }),
 
+  /**
+   * Set / clear the class-header banner image for a class sponsorship.
+   * The banner is conceptually scoped to (show, sponsor) — Amanda's spec
+   * 2026-05-23: *"different banner for each show, same banner if
+   * sponsoring more than one class in the same show"*. So whenever we
+   * write to one row we propagate to every sibling row in the same show
+   * whose sponsor identity matches (by linked show_sponsor when present,
+   * otherwise by free-text sponsor_name, case-insensitive).
+   *
+   * `imageUrl` / `storageKey` null → clear.
+   */
+  setClassSponsorBanner: secretaryProcedure
+    .input(z.object({
+      id: z.string().uuid(),
+      imageUrl: z.string().url().nullable(),
+      storageKey: z.string().max(512).nullable(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const target = await ctx.db.query.classSponsorships.findFirst({
+        where: eq(classSponsorships.id, input.id),
+        with: { showClass: true },
+      });
+      if (!target) throw new TRPCError({ code: 'NOT_FOUND', message: 'Class sponsorship not found' });
+
+      await verifyShowAccess(ctx.db, ctx.session.user.id, target.showClass.showId, { callerIsAdmin: ctx.callerIsAdmin });
+
+      // Find every class_sponsorship in the same show belonging to the
+      // same sponsor (linked show_sponsor takes precedence; fall back to
+      // case-insensitive sponsor_name match for free-text rows). One
+      // upload propagates across the lot.
+      const siblings = await ctx.db
+        .select({ id: classSponsorships.id })
+        .from(classSponsorships)
+        .innerJoin(showClasses, eq(classSponsorships.showClassId, showClasses.id))
+        .where(
+          and(
+            eq(showClasses.showId, target.showClass.showId),
+            target.showSponsorId
+              ? eq(classSponsorships.showSponsorId, target.showSponsorId)
+              : and(
+                  isNull(classSponsorships.showSponsorId),
+                  sql`LOWER(${classSponsorships.sponsorName}) = LOWER(${target.sponsorName ?? ''})`
+                )
+          )
+        );
+
+      const ids = siblings.map((s) => s.id);
+      if (ids.length === 0) ids.push(input.id);
+
+      await ctx.db
+        .update(classSponsorships)
+        .set({
+          bannerImageUrl: input.imageUrl,
+          bannerImageStorageKey: input.storageKey,
+        })
+        .where(inArray(classSponsorships.id, ids));
+
+      return { propagatedTo: ids.length };
+    }),
+
   // Get all classes for a show with their sponsorships (for the spreadsheet view)
   getClassesWithSponsorships: secretaryProcedure
     .input(z.object({ showId: z.string().uuid() }))
@@ -5129,7 +6696,10 @@ export const secretaryRouter = createTRPCRouter({
         with: {
           classDefinition: true,
           breed: true,
-          classSponsorships: true,
+          // Insertion order keeps Trophy above Rosettes on the page.
+          // Secretaries add Trophy first; without an explicit order
+          // the rows shuffle between edits.
+          classSponsorships: { orderBy: [asc(classSponsorships.createdAt)] },
         },
         orderBy: [asc(showClasses.sortOrder)],
       });
@@ -5140,15 +6710,32 @@ export const secretaryRouter = createTRPCRouter({
     .input(z.object({ organisationId: z.string().uuid() }))
     .query(async ({ ctx, input }) => {
       await verifyOrgAccess(ctx.db, ctx.session.user.id, input.organisationId);
+      // Names are drawn from two sources: class-level sponsorships
+      // (class_sponsorships.sponsor_name) and show-level awards
+      // (shows.schedule_data->'awardSponsors'[*]). UNION + GROUP BY
+      // collapses duplicates that appear in both.
       const rows = await ctx.db.execute(sql`
-        SELECT DISTINCT cs.sponsor_name, cs.sponsor_affix
-        FROM class_sponsorships cs
-        JOIN show_classes sc ON cs.show_class_id = sc.id
-        JOIN shows s ON sc.show_id = s.id
-        WHERE s.organisation_id = ${input.organisationId}
-          AND cs.sponsor_name IS NOT NULL
-          AND cs.sponsor_name != ''
-        ORDER BY cs.sponsor_name
+        SELECT sponsor_name, MAX(sponsor_affix) AS sponsor_affix
+        FROM (
+          SELECT cs.sponsor_name, cs.sponsor_affix
+          FROM class_sponsorships cs
+          JOIN show_classes sc ON cs.show_class_id = sc.id
+          JOIN shows s ON sc.show_id = s.id
+          WHERE s.organisation_id = ${input.organisationId}
+            AND cs.sponsor_name IS NOT NULL
+            AND cs.sponsor_name != ''
+          UNION ALL
+          SELECT
+            entry->>'sponsorName' AS sponsor_name,
+            entry->>'sponsorAffix' AS sponsor_affix
+          FROM shows s,
+               jsonb_array_elements(COALESCE(s.schedule_data->'awardSponsors', '[]'::jsonb)) AS entry
+          WHERE s.organisation_id = ${input.organisationId}
+            AND entry->>'sponsorName' IS NOT NULL
+            AND entry->>'sponsorName' != ''
+        ) combined
+        GROUP BY sponsor_name
+        ORDER BY sponsor_name
       `);
       return rows as { sponsor_name: string; sponsor_affix: string | null }[];
     }),
@@ -5161,7 +6748,7 @@ export const secretaryRouter = createTRPCRouter({
       sendNotifications: z.boolean().default(true),
     }))
     .mutation(async ({ ctx, input }) => {
-      await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId);
+      await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId, { callerIsAdmin: ctx.callerIsAdmin });
 
       const show = await ctx.db.query.shows.findFirst({
         where: eq(shows.id, input.showId),
@@ -5206,6 +6793,18 @@ export const secretaryRouter = createTRPCRouter({
         throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Failed to publish results. Please try again.' });
       }
 
+      // Sweep any Top Award achievements (Best Dog/Bitch, Best Puppy, etc.) live
+      // too. The steward records these on the show page and publishes each one
+      // individually — but if one is forgotten, this end-of-day publish is the
+      // backstop. Without it, resultsLockedAt (set just above) blocks the
+      // steward's publishAchievement, so a missed award would stay invisible to
+      // the public forever.
+      const sweptAwards = await ctx.db
+        .update(achievements)
+        .set({ publishedAt: now })
+        .where(and(eq(achievements.showId, input.showId), isNull(achievements.publishedAt)))
+        .returning({ id: achievements.id });
+
       // Fire downstream notifications async (Phase 4)
       if (input.sendNotifications) {
         const { sendExhibitorResultsEmails, sendFollowerResultsNotifications, createResultsMilestonePosts } = await import('@/server/services/results-notifications');
@@ -5217,13 +6816,13 @@ export const secretaryRouter = createTRPCRouter({
         ]);
       }
 
-      return { published: true, publishedAt: now };
+      return { published: true, publishedAt: now, awardsSwept: sweptAwards.length };
     }),
 
   unpublishResults: secretaryProcedure
     .input(z.object({ showId: z.string().uuid() }))
     .mutation(async ({ ctx, input }) => {
-      await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId);
+      await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId, { callerIsAdmin: ctx.callerIsAdmin });
 
       const show = await ctx.db.query.shows.findFirst({
         where: eq(shows.id, input.showId),
@@ -5262,7 +6861,7 @@ export const secretaryRouter = createTRPCRouter({
       showClassId: z.string().uuid(),
     }))
     .mutation(async ({ ctx, input }) => {
-      await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId);
+      await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId, { callerIsAdmin: ctx.callerIsAdmin });
 
       const now = new Date();
       try {
@@ -5291,7 +6890,7 @@ export const secretaryRouter = createTRPCRouter({
       showClassId: z.string().uuid(),
     }))
     .mutation(async ({ ctx, input }) => {
-      await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId);
+      await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId, { callerIsAdmin: ctx.callerIsAdmin });
 
       try {
         await ctx.db.execute(sql`
@@ -5314,7 +6913,7 @@ export const secretaryRouter = createTRPCRouter({
   getResultsPublicationStatus: secretaryProcedure
     .input(z.object({ showId: z.string().uuid() }))
     .query(async ({ ctx, input }) => {
-      await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId);
+      await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId, { callerIsAdmin: ctx.callerIsAdmin });
 
       const show = await ctx.db.query.shows.findFirst({
         where: eq(shows.id, input.showId),
@@ -5379,7 +6978,7 @@ export const secretaryRouter = createTRPCRouter({
   resendJudgeApprovalRequest: secretaryProcedure
     .input(z.object({ showId: z.string().uuid(), judgeId: z.string().uuid() }))
     .mutation(async ({ ctx, input }) => {
-      await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId);
+      await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId, { callerIsAdmin: ctx.callerIsAdmin });
 
       const judge = await ctx.db.query.judges.findFirst({
         where: eq(judges.id, input.judgeId),
@@ -5394,7 +6993,7 @@ export const secretaryRouter = createTRPCRouter({
 
       const show = await ctx.db.query.shows.findFirst({
         where: eq(shows.id, input.showId),
-        with: { organisation: true },
+        with: { organisation: true, breed: true },
       });
 
       if (!show) throw new TRPCError({ code: 'NOT_FOUND', message: 'Show not found' });
@@ -5404,6 +7003,7 @@ export const secretaryRouter = createTRPCRouter({
           eq(judgeAssignments.showId, input.showId),
           eq(judgeAssignments.judgeId, input.judgeId)
         ),
+        with: { breed: true },
       });
 
       if (assignments.length === 0) {
@@ -5415,6 +7015,36 @@ export const secretaryRouter = createTRPCRouter({
 
       const crypto = await import('crypto');
       const sharedToken = crypto.randomUUID();
+
+      // Send the email FIRST — if it fails, DB state doesn't change and the
+      // previous approval token (if any) remains valid for the judge to use.
+      const { sendJudgeApprovalRequestEmail } = await import('@/server/services/email');
+      try {
+        await sendJudgeApprovalRequestEmail({
+          judge: { name: judge.name, email: judge.contactEmail },
+          show: {
+            name: show.name,
+            startDate: show.startDate,
+            slug: show.slug,
+            id: show.id,
+            organisation: show.organisation,
+          },
+          approvalToken: sharedToken,
+          // One builder for what a judge judges — the breed-id filter told a
+          // Junior Handling judge they judged "All breeds" (2026-08-03).
+          ...buildJudgeBreedAndClassification(
+            assignments,
+            show.breed ? [show.breed.name] : [],
+            show.name,
+          ),
+        });
+      } catch (error) {
+        throw new TRPCError({
+          code: 'INTERNAL_SERVER_ERROR',
+          message: `Could not send approval email to ${judge.contactEmail}. Please check the address and try again.`,
+          cause: error,
+        });
+      }
 
       await ctx.db
         .update(judgeAssignments)
@@ -5431,20 +7061,6 @@ export const secretaryRouter = createTRPCRouter({
             eq(judgeAssignments.judgeId, input.judgeId)
           )
         );
-
-      const { sendJudgeApprovalRequestEmail } = await import('@/server/services/email');
-      await sendJudgeApprovalRequestEmail({
-        judge: { name: judge.name, email: judge.contactEmail },
-        show: {
-          name: show.name,
-          startDate: show.startDate,
-          slug: show.slug,
-          id: show.id,
-          organisation: show.organisation,
-        },
-        approvalToken: sharedToken,
-        breeds: assignments.filter((a) => a.breedId).map((a) => a.breedId!),
-      });
 
       return { sent: true };
     }),
@@ -5656,6 +7272,10 @@ export const secretaryRouter = createTRPCRouter({
           );
       }
 
+      // Capture the judge (derived from the show's breed-level judge
+      // assignments) so a CC credits the right judge toward the Champion
+      // "3 different judges" rule (Mandy 2026-07-09).
+      const judgeId = await deriveTopAwardJudge(ctx.db, input.showId, input.type);
       const [achievement] = await ctx.db
         .insert(achievements)
         .values({
@@ -5663,6 +7283,7 @@ export const secretaryRouter = createTRPCRouter({
           dogId: input.dogId,
           type: input.type,
           date: input.date,
+          judgeId,
         })
         .returning();
 
@@ -5690,5 +7311,395 @@ export const secretaryRouter = createTRPCRouter({
         );
 
       return { removed: true };
+    }),
+
+  // ── WUSV / SV class management ───────────────────────────
+
+  listWusvClassDefs: publicProcedure.query(async ({ ctx }) => {
+    return ctx.db.query.classDefinitions.findMany({
+      where: eq(classDefinitions.type, 'sv_age'),
+      orderBy: [asc(classDefinitions.sortOrder)],
+    });
+  }),
+
+  setupWusvClasses: secretaryProcedure
+    .input(
+      z.object({
+        showId: z.string().uuid(),
+        entryFee: z.number().int().min(0),
+        selectedAgeDefIds: z.array(z.string().uuid()),
+        includeJh6_11: z.boolean(),
+        includeJh12_16: z.boolean(),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId, { callerIsAdmin: ctx.callerIsAdmin });
+
+      // Load existing show classes with their entry counts
+      const existing = await ctx.db.query.showClasses.findMany({
+        where: eq(showClasses.showId, input.showId),
+        with: {
+          classDefinition: { columns: { type: true } },
+          entryClasses: { columns: { id: true } },
+        },
+      });
+
+      const managed = existing.filter(
+        (sc) => sc.classDefinition?.type === 'sv_age' || sc.classDefinition?.type === 'junior_handler'
+      );
+      const managedIds = managed.map((sc) => sc.id);
+
+      // Guard: refuse if any managed class already has entries
+      const entriedClasses = managed.filter((sc) => sc.entryClasses.length > 0);
+      if (entriedClasses.length > 0) {
+        throw new TRPCError({
+          code: 'PRECONDITION_FAILED',
+          message: `Cannot modify SV classes — ${entriedClasses.length} class(es) already have entries. Cancel or refund entries first.`,
+        });
+      }
+
+      const hasClasses = input.selectedAgeDefIds.length > 0 || input.includeJh6_11 || input.includeJh12_16;
+
+      // Load defs before opening transaction (reads don't need to be atomic with the writes)
+      const [ageDefs, jhDefs] = await Promise.all([
+        input.selectedAgeDefIds.length > 0
+          ? ctx.db.query.classDefinitions.findMany({
+              where: and(
+                eq(classDefinitions.type, 'sv_age'),
+                inArray(classDefinitions.id, input.selectedAgeDefIds)
+              ),
+              orderBy: [asc(classDefinitions.sortOrder)],
+            })
+          : Promise.resolve([]),
+        (input.includeJh6_11 || input.includeJh12_16)
+          ? ctx.db.query.classDefinitions.findMany({
+              where: eq(classDefinitions.type, 'junior_handler'),
+              orderBy: [asc(classDefinitions.sortOrder)],
+            })
+          : Promise.resolve([]),
+      ]);
+
+      if (input.includeJh6_11 && !jhDefs.find((d) => d.name === 'Junior Handler (6-11)')) {
+        throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Junior Handler (6-11) class definition not found' });
+      }
+      if (input.includeJh12_16 && !jhDefs.find((d) => d.name === 'Junior Handler (12-16)')) {
+        throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Junior Handler (12-16) class definition not found' });
+      }
+
+      const nonManaged = existing.filter((sc) => !managedIds.includes(sc.id));
+      const baseClassNumber = nonManaged.reduce((max, sc) => Math.max(max, sc.classNumber ?? 0), 0);
+
+      const values: {
+        showId: string;
+        classDefinitionId: string;
+        sex: 'dog' | 'bitch' | null;
+        svCoatType: 'stock' | 'long_stock' | null;
+        entryFee: number;
+        sortOrder: number;
+        classNumber: number;
+      }[] = [];
+
+      let idx = 0;
+      for (const def of ageDefs) {
+        for (const { sex, coat } of SV_CLASS_AUTO_CREATE_COMBOS) {
+          values.push({
+            showId: input.showId,
+            classDefinitionId: def.id,
+            sex,
+            svCoatType: coat,
+            entryFee: input.entryFee,
+            sortOrder: nonManaged.length + idx,
+            classNumber: baseClassNumber + idx + 1,
+          });
+          idx++;
+        }
+      }
+
+      if (input.includeJh6_11) {
+        const def = jhDefs.find((d) => d.name === 'Junior Handler (6-11)')!;
+        values.push({
+          showId: input.showId,
+          classDefinitionId: def.id,
+          sex: null,
+          svCoatType: null,
+          entryFee: 0,
+          sortOrder: nonManaged.length + idx,
+          classNumber: baseClassNumber + idx + 1,
+        });
+        idx++;
+      }
+
+      if (input.includeJh12_16) {
+        const def = jhDefs.find((d) => d.name === 'Junior Handler (12-16)')!;
+        values.push({
+          showId: input.showId,
+          classDefinitionId: def.id,
+          sex: null,
+          svCoatType: null,
+          entryFee: 0,
+          sortOrder: nonManaged.length + idx,
+          classNumber: baseClassNumber + idx + 1,
+        });
+        idx++;
+      }
+
+      await ctx.db.transaction(async (tx) => {
+        if (managedIds.length > 0) {
+          await tx.delete(showClasses).where(inArray(showClasses.id, managedIds));
+        }
+
+        if (hasClasses && values.length > 0) {
+          await tx.insert(showClasses).values(values);
+        }
+      });
+
+      return { created: values.length };
+    }),
+
+  // ── Catalogue adverts ────────────────────────────────────
+
+  getCatalogueAdverts: secretaryProcedure
+    .input(z.object({ showId: z.string().uuid() }))
+    .query(async ({ ctx, input }) => {
+      await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId, { callerIsAdmin: ctx.callerIsAdmin });
+      return ctx.db.query.catalogueAdverts.findMany({
+        where: eq(catalogueAdverts.showId, input.showId),
+        orderBy: [asc(catalogueAdverts.sortOrder)],
+      });
+    }),
+
+  upsertCatalogueAdvert: secretaryProcedure
+    .input(
+      z.object({
+        id: z.string().uuid().optional(),
+        showId: z.string().uuid(),
+        advertiserName: z.string().min(1).max(255),
+        adType: z.enum(['full_page', 'half_page', 'quarter_page']).default('full_page'),
+        document: z.enum(['schedule', 'catalogue', 'both']).default('catalogue'),
+        position: z.enum(['inside_front', 'inside_back', 'last_page']).default('last_page'),
+        imageStorageKey: z.string().nullable().optional(),
+        imageUrl: z.string().nullable().optional(),
+        textContent: z.string().nullable().optional(),
+        sortOrder: z.number().int().min(0).default(0),
+        isPaid: z.boolean().default(false),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId, { callerIsAdmin: ctx.callerIsAdmin });
+
+      const { id, ...data } = input;
+      if (id) {
+        const existing = await ctx.db.query.catalogueAdverts.findFirst({
+          where: and(eq(catalogueAdverts.id, id), eq(catalogueAdverts.showId, input.showId)),
+          columns: { id: true },
+        });
+        if (!existing) throw new TRPCError({ code: 'NOT_FOUND', message: 'Advert not found' });
+
+        const [updated] = await ctx.db
+          .update(catalogueAdverts)
+          .set({ ...data, updatedAt: new Date() })
+          .where(eq(catalogueAdverts.id, id))
+          .returning();
+        scheduleCatalogueRefresh(ctx.db, input.showId, 'advert-upsert'); // re-render a closed show's catalogue with the changed advert
+        return updated!;
+      }
+
+      const [created] = await ctx.db
+        .insert(catalogueAdverts)
+        .values(data)
+        .returning();
+      scheduleCatalogueRefresh(ctx.db, input.showId, 'advert-upsert'); // new advert on a closed show — re-render to pick it up
+      return created!;
+    }),
+
+  deleteCatalogueAdvert: secretaryProcedure
+    .input(z.object({ id: z.string().uuid(), showId: z.string().uuid() }))
+    .mutation(async ({ ctx, input }) => {
+      await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId, { callerIsAdmin: ctx.callerIsAdmin });
+      await ctx.db
+        .delete(catalogueAdverts)
+        .where(
+          and(eq(catalogueAdverts.id, input.id), eq(catalogueAdverts.showId, input.showId))
+        );
+      scheduleCatalogueRefresh(ctx.db, input.showId, 'advert-delete'); // removed advert must drop off a closed show's catalogue too
+      return { deleted: true };
+    }),
+
+  // ── Discount groups ──────────────────────────────────────
+  // Named per-show discount tiers (Members, Pensioners, etc.) — the
+  // exhibitor declares one at checkout and pays the group's reduced
+  // first-class fee. If a group also sets multiDogPackagePence, that
+  // package replaces the show-wide one when the group is claimed.
+
+  listDiscountGroups: secretaryProcedure
+    .input(z.object({ showId: z.string().uuid() }))
+    .query(async ({ ctx, input }) => {
+      await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId, { callerIsAdmin: ctx.callerIsAdmin });
+      return ctx.db.query.showDiscountGroups.findMany({
+        where: eq(showDiscountGroups.showId, input.showId),
+        orderBy: [asc(showDiscountGroups.displayOrder)],
+      });
+    }),
+
+  createDiscountGroup: secretaryProcedure
+    .input(z.object({
+      showId: z.string().uuid(),
+      label: z.string().min(1).max(100),
+      firstEntryFeePence: z.number().int().min(0),
+      multiDogPackagePence: z.number().int().min(0).nullable().optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId, { callerIsAdmin: ctx.callerIsAdmin });
+      const [maxOrder] = await ctx.db
+        .select({ max: sql<number>`COALESCE(MAX(display_order), -1)` })
+        .from(showDiscountGroups)
+        .where(eq(showDiscountGroups.showId, input.showId));
+      const [created] = await ctx.db
+        .insert(showDiscountGroups)
+        .values({
+          showId: input.showId,
+          label: input.label,
+          firstEntryFeePence: input.firstEntryFeePence,
+          multiDogPackagePence: input.multiDogPackagePence ?? null,
+          displayOrder: (maxOrder?.max ?? -1) + 1,
+        })
+        .returning();
+      return created!;
+    }),
+
+  updateDiscountGroup: secretaryProcedure
+    .input(z.object({
+      id: z.string().uuid(),
+      label: z.string().min(1).max(100).optional(),
+      firstEntryFeePence: z.number().int().min(0).optional(),
+      multiDogPackagePence: z.number().int().min(0).nullable().optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const existing = await ctx.db.query.showDiscountGroups.findFirst({
+        where: eq(showDiscountGroups.id, input.id),
+      });
+      if (!existing) throw new TRPCError({ code: 'NOT_FOUND', message: 'Discount group not found' });
+      await verifyShowAccess(ctx.db, ctx.session.user.id, existing.showId, { callerIsAdmin: ctx.callerIsAdmin });
+
+      const updates: Record<string, unknown> = {};
+      if (input.label !== undefined) updates.label = input.label;
+      if (input.firstEntryFeePence !== undefined) updates.firstEntryFeePence = input.firstEntryFeePence;
+      if (input.multiDogPackagePence !== undefined) updates.multiDogPackagePence = input.multiDogPackagePence;
+      if (Object.keys(updates).length === 0) return existing;
+
+      const [updated] = await ctx.db
+        .update(showDiscountGroups)
+        .set(updates)
+        .where(eq(showDiscountGroups.id, input.id))
+        .returning();
+      return updated!;
+    }),
+
+  deleteDiscountGroup: secretaryProcedure
+    .input(z.object({ id: z.string().uuid() }))
+    .mutation(async ({ ctx, input }) => {
+      const existing = await ctx.db.query.showDiscountGroups.findFirst({
+        where: eq(showDiscountGroups.id, input.id),
+      });
+      if (!existing) throw new TRPCError({ code: 'NOT_FOUND', message: 'Discount group not found' });
+      await verifyShowAccess(ctx.db, ctx.session.user.id, existing.showId, { callerIsAdmin: ctx.callerIsAdmin });
+
+      // Refuse to delete a group that existing orders were priced under. The
+      // orders.discountGroupId FK is onDelete:'set null', so deleting it strips
+      // the member-rate reference from those orders — and a later entry edit
+      // would then re-price them at the STANDARD rate, turning a member's class
+      // REMOVAL into an "upgrade" that demands a new payment (bug hunt #10). The
+      // group must stay so its pricing can be reproduced when entries are edited.
+      const referencing = await ctx.db.query.orders.findFirst({
+        where: eq(orders.discountGroupId, input.id),
+        columns: { id: true },
+      });
+      if (referencing) {
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message:
+            "This discount group is used by existing entries and can't be deleted — members who entered under it must keep their pricing.",
+        });
+      }
+
+      await ctx.db.delete(showDiscountGroups).where(eq(showDiscountGroups.id, input.id));
+      return { deleted: true };
+    }),
+
+  // ── Donations (acknowledgment-only) ───────────────────────
+  // Mandy 2026-06-17: a place to record folk who gave a donation rather than
+  // sponsoring a class — a name + optional kennel affix, NO amount — thanked in
+  // the catalogue. Distinct from class/show sponsors (prizes/trophies) and from
+  // exhibitor checkout donations (sundry items).
+  listShowDonations: secretaryProcedure
+    .input(z.object({ showId: z.string().uuid() }))
+    .query(async ({ ctx, input }) => {
+      await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId, { callerIsAdmin: ctx.callerIsAdmin });
+      return ctx.db.query.showDonations.findMany({
+        where: eq(showDonations.showId, input.showId),
+        orderBy: [asc(showDonations.displayOrder), asc(showDonations.createdAt)],
+      });
+    }),
+
+  createShowDonation: secretaryProcedure
+    .input(z.object({
+      showId: z.string().uuid(),
+      donorName: z.string().trim().min(1).max(120),
+      affix: z.string().trim().max(120).nullable().optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId, { callerIsAdmin: ctx.callerIsAdmin });
+      const [maxOrder] = await ctx.db
+        .select({ max: sql<number>`COALESCE(MAX(display_order), -1)` })
+        .from(showDonations)
+        .where(eq(showDonations.showId, input.showId));
+      const [created] = await ctx.db
+        .insert(showDonations)
+        .values({
+          showId: input.showId,
+          donorName: input.donorName,
+          affix: input.affix?.trim() ? input.affix.trim() : null,
+          displayOrder: (maxOrder?.max ?? -1) + 1,
+        })
+        .returning();
+      return created!;
+    }),
+
+  updateShowDonation: secretaryProcedure
+    .input(z.object({
+      id: z.string().uuid(),
+      donorName: z.string().trim().min(1).max(120).optional(),
+      affix: z.string().trim().max(120).nullable().optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const existing = await ctx.db.query.showDonations.findFirst({
+        where: eq(showDonations.id, input.id),
+      });
+      if (!existing) throw new TRPCError({ code: 'NOT_FOUND', message: 'Donation not found' });
+      await verifyShowAccess(ctx.db, ctx.session.user.id, existing.showId, { callerIsAdmin: ctx.callerIsAdmin });
+
+      const updates: Record<string, unknown> = {};
+      if (input.donorName !== undefined) updates.donorName = input.donorName;
+      if (input.affix !== undefined) updates.affix = input.affix?.trim() ? input.affix.trim() : null;
+      if (Object.keys(updates).length === 0) return existing;
+
+      const [updated] = await ctx.db
+        .update(showDonations)
+        .set(updates)
+        .where(eq(showDonations.id, input.id))
+        .returning();
+      return updated!;
+    }),
+
+  deleteShowDonation: secretaryProcedure
+    .input(z.object({ id: z.string().uuid() }))
+    .mutation(async ({ ctx, input }) => {
+      const existing = await ctx.db.query.showDonations.findFirst({
+        where: eq(showDonations.id, input.id),
+      });
+      if (!existing) throw new TRPCError({ code: 'NOT_FOUND', message: 'Donation not found' });
+      await verifyShowAccess(ctx.db, ctx.session.user.id, existing.showId, { callerIsAdmin: ctx.callerIsAdmin });
+      await ctx.db.delete(showDonations).where(eq(showDonations.id, input.id));
+      return { deleted: true };
     }),
 });

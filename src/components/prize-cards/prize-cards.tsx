@@ -1,5 +1,6 @@
 import { Document, Page, Text, View, StyleSheet, Font, Image } from '@react-pdf/renderer';
 import path from 'path';
+import { formatLondonLongDate } from '@/lib/date-utils';
 
 // Register Times New Roman
 const fontsDir = path.join(process.cwd(), 'public', 'fonts');
@@ -22,7 +23,7 @@ export interface PrizeCardShowInfo {
 }
 
 export interface PrizeCardClass {
-  classNumber: number | null;
+  classLabel: string;
   className: string;
   sex: string | null;
   breedName: string | null;
@@ -37,6 +38,11 @@ interface PrizeCardsProps {
   placements: number;
   /** 'filled' = coloured background, 'outline' = white bg + coloured text/frame */
   cardStyle?: PrizeCardStyle;
+  /** Explicit page dimensions [width, height] in points. Defaults to the
+   *  traditional UK half-A5 prize card (210 × 107mm) which Mixam tiles 4-up
+   *  on an A3 sheet. Pass [595.28, 419.53] for full A5 landscape — fills an
+   *  A5 sheet edge-to-edge on a home printer (Amanda 2026-05-27). */
+  pageSize?: [number, number];
 }
 
 const SHOW_TYPE_LABELS: Record<string, string> = {
@@ -88,8 +94,11 @@ const s = StyleSheet.create({
     padding: 0,
     position: 'relative',
   },
-  // Decorative double border — outer is the bold accent frame, inner is a
-  // hairline rule offset by 4pt to create a "matted print" look.
+  // outerBorder is no longer used — see the four edge-bar Views in the
+  // Page render (react-pdf silently clipped the left edge of an
+  // absolutely-positioned bordered View, so we draw each side
+  // explicitly instead). Kept here only for reference if a future
+  // version of react-pdf fixes the underlying bug.
   outerBorder: {
     position: 'absolute',
     top: 12,
@@ -101,17 +110,20 @@ const s = StyleSheet.create({
   },
   innerBorder: {
     position: 'absolute',
-    top: 18,
-    left: 18,
-    right: 18,
-    bottom: 18,
+    top: 26,
+    left: 26,
+    right: 26,
+    bottom: 26,
     borderWidth: 0.75,
     borderColor: '#999',
   },
-  // Content area — reduced padding so content reaches near the inner frame
+  // Content area — padded clear of the inner grey hairline (now at
+  // 26pt). 40pt top/bottom keeps the title and footer comfortably
+  // inside the matted frame even at the bigger heading font sizes.
+  // (Amanda 2026-05-27 spotted the club name overlapping the line.)
   content: {
     flex: 1,
-    padding: '20 28',
+    padding: '40 38',
     alignItems: 'center',
     justifyContent: 'space-between',
   },
@@ -237,16 +249,12 @@ const s = StyleSheet.create({
   },
 });
 
-export function PrizeCards({ show, classes, includeJudgeName, placements, cardStyle = 'filled' }: PrizeCardsProps) {
+export function PrizeCards({ show, classes, includeJudgeName, placements, cardStyle = 'filled', pageSize }: PrizeCardsProps) {
   // Full date format with weekday + ordinal day matches the Higham Press
   // tradition (e.g. "Saturday 16 May 2026") — feels ceremonial vs the bare
   // "16 May 2026" the previous design used.
-  const showDate = new Date(show.date).toLocaleDateString('en-GB', {
-    weekday: 'long',
-    day: 'numeric',
-    month: 'long',
-    year: 'numeric',
-  });
+  // Always Europe/London, never the process's own timezone (Michael 2026-09-03).
+  const showDate = formatLondonLongDate(show.date);
   const showTypeLabel = SHOW_TYPE_LABELS[show.showType] ?? show.showType;
   const placementCount = Math.min(Math.max(placements, 1), 5);
 
@@ -254,8 +262,8 @@ export function PrizeCards({ show, classes, includeJudgeName, placements, cardSt
     <Document title={`Prize Cards — ${show.name}`} author="Remi Show Manager">
       {classes.map((cls, classIdx) => {
         const sexLabel = cls.sex === 'dog' ? 'Dogs' : cls.sex === 'bitch' ? 'Bitches' : null;
-        const classLabel = [
-          cls.classNumber ? `Class ${cls.classNumber}` : null,
+        const classHeading = [
+          cls.classLabel ? `Class ${cls.classLabel}` : null,
           cls.className,
         ]
           .filter(Boolean)
@@ -273,13 +281,25 @@ export function PrizeCards({ show, classes, includeJudgeName, placements, cardSt
           return (
             <Page
               key={`${classIdx}-${placement}`}
-              size="A5"
-              orientation="landscape"
+              {...(pageSize
+                ? { size: pageSize }
+                : { size: 'A5' as const, orientation: 'landscape' as const })}
               wrap={false}
               style={{ ...s.page, backgroundColor: bgColor }}
             >
-              {/* Decorative double border — outer in placement colour, inner hairline */}
-              <View style={{ ...s.outerBorder, borderColor: colours.accent }} />
+              {/* Decorative double border — outer in placement colour,
+                  inner hairline. Implemented as four explicit edge bars
+                  rather than a single bordered View because react-pdf
+                  (3.x) clips the left edge of an absolutely-positioned
+                  View whose left+right offsets equal half-symmetrically
+                  on landscape pages (Amanda 2026-05-27). 20pt insets
+                  (~7mm) keep the bars inside any home printer's
+                  unprintable margin — her first print test had a 5mm-
+                  ish left dead zone that ate the 4mm-inset version. */}
+              <View style={{ position: 'absolute', top: 20, left: 20, right: 20, height: 3, backgroundColor: colours.accent }} />
+              <View style={{ position: 'absolute', bottom: 20, left: 20, right: 20, height: 3, backgroundColor: colours.accent }} />
+              <View style={{ position: 'absolute', top: 20, left: 20, bottom: 20, width: 3, backgroundColor: colours.accent }} />
+              <View style={{ position: 'absolute', top: 20, right: 20, bottom: 20, width: 3, backgroundColor: colours.accent }} />
               <View style={s.innerBorder} />
 
               <View style={s.content}>
@@ -310,7 +330,7 @@ export function PrizeCards({ show, classes, includeJudgeName, placements, cardSt
 
                 {/* BOTTOM ZONE — class details, judge, write-in */}
                 <View style={s.bottomZone}>
-                  <Text style={s.classInfo}>{classLabel}</Text>
+                  <Text style={s.classInfo}>{classHeading}</Text>
                   {cls.breedName && (
                     <Text style={s.breedInfo}>{cls.breedName}</Text>
                   )}

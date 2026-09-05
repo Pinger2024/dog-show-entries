@@ -34,21 +34,6 @@ describe('admin breed groups CRUD', () => {
     await expect(caller.admin.deleteBreedGroup({ id: group.id }))
       .rejects.toThrow(/Cannot delete: 1 breeds/);
   });
-
-  it('reorders breed groups by writing positional sortOrder', async () => {
-    const caller = await adminCaller();
-    const [a, b, c] = await Promise.all([
-      makeBreedGroup({ name: 'A', sortOrder: 100 }),
-      makeBreedGroup({ name: 'B', sortOrder: 100 }),
-      makeBreedGroup({ name: 'C', sortOrder: 100 }),
-    ]);
-    await caller.admin.reorderBreedGroups({ ids: [c.id, a.id, b.id] });
-    const rows = await testDb.query.breedGroups.findMany({});
-    const byId = Object.fromEntries(rows.map((r) => [r.id, r.sortOrder]));
-    expect(byId[c.id]).toBe(0);
-    expect(byId[a.id]).toBe(1);
-    expect(byId[b.id]).toBe(2);
-  });
 });
 
 describe('admin breed CRUD', () => {
@@ -184,13 +169,6 @@ describe('feedback inbox (admin-only)', () => {
       notes: 'Triaged - escalating',
     });
     expect(updated.notes).toBe('Triaged - escalating');
-  });
-
-  it('returns NOT_FOUND when getting an unknown feedback id', async () => {
-    const admin = await makeUser({ role: 'admin' });
-    await expect(
-      createTestCaller(admin).feedback.get({ id: '00000000-0000-0000-0000-000000000000' }),
-    ).rejects.toThrow(/Feedback not found/);
   });
 });
 

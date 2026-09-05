@@ -1,18 +1,26 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, isValidElement, cloneElement, type ReactElement } from 'react';
 import { useRouter } from 'next/navigation';
-import { useForm, useFieldArray } from 'react-hook-form';
+import { useForm, useFieldArray, useWatch, type Control } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { format, parse, isValid } from 'date-fns';
 import { CalendarIcon, Check, ChevronsUpDown, Loader2, Plus, Trash2, Award, Search, UserPlus } from 'lucide-react';
 import { toast } from 'sonner';
 import { trpc } from '@/lib/trpc';
+import { useBeaconAutosave } from '@/lib/use-beacon-autosave';
+import { blank } from '@/lib/sv-entry-readiness';
+import {
+  addressesMatch,
+  applySameAddress,
+  deriveSameAddressFlags,
+} from '@/lib/owner-address';
 import { cn, getTitleDisplay } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Textarea } from '@/components/ui/textarea';
 import { Calendar } from '@/components/ui/calendar';
 import {
@@ -51,16 +59,27 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card';
-import { PostcodeLookup, formatAddress } from '@/components/postcode-lookup';
 
 const ownerSchema = z.object({
+  ownerTitle: z.string().optional(),
   ownerName: z.string().min(1, 'Name is required'),
   ownerAddress: z.string().min(1, 'Address is required'),
   ownerEmail: z.string().email('Valid email required'),
   ownerPhone: z.string().optional(),
+  /** UI-only: "same address as Owner 1". Never stored — the row always keeps
+   *  a real address VALUE (see lib/owner-address.ts). Derived on load by
+   *  comparing addresses, resolved back into `ownerAddress` at submit. */
+  sameAddressAsPrimary: z.boolean().optional(),
   isPrimary: z.boolean(),
 });
 
+// Owners are required in both create and edit mode (RKC catalogue listing).
+// We still don't bake `.min(1)` into the schema below: in edit mode the
+// `owners` array starts empty and is only populated once the saved dog's
+// owner rows have loaded (see the hydration effect further down) — a
+// schema-level min would let the zodResolver block submission during that
+// brief window before real data arrives. "At least one owner" is instead
+// enforced by hand in onSubmit, once the live form value is in hand.
 const dogFormSchema = z.object({
   registeredName: z
     .string()
@@ -76,9 +95,27 @@ const dogFormSchema = z.object({
   sireName: z.string().optional(),
   damName: z.string().optional(),
   breederName: z.string().optional(),
+  breederCountry: z.string().optional(),
+  breederCity: z.string().optional(),
+  breederPostcode: z.string().optional(),
   bio: z.string().optional(),
-  owners: z.array(ownerSchema).optional(),
-});
+  owners: z.array(ownerSchema),
+  // SV / WUSV fields
+  registrationBody: z.enum(['kc', 'sv', 'ikc', 'other']).optional(),
+  registrationBodyOther: z.string().optional(),
+  coatType: z.enum(['stock', 'long_stock']).optional(),
+  microchipNumber: z.string().optional(),
+  sireRegistrationBody: z.enum(['kc', 'sv', 'ikc', 'other']).optional(),
+  sireRegistrationNumber: z.string().optional(),
+  damRegistrationBody: z.enum(['kc', 'sv', 'ikc', 'other']).optional(),
+  damRegistrationNumber: z.string().optional(),
+}).refine(
+  (data) => !data.registrationBody || (data.kcRegNumber && data.kcRegNumber.trim().length > 0),
+  {
+    message: 'Registration number is required when a registration body is selected',
+    path: ['kcRegNumber'],
+  },
+);
 
 type DogFormValues = z.infer<typeof dogFormSchema>;
 
@@ -93,13 +130,128 @@ const TITLE_OPTIONS = [
   { value: 'wt_ch', label: 'WT.Ch. — Working Trial Champion' },
 ] as const;
 
+/** Label suffix: a "Required" tag when a field is mandatory for the show the
+ *  exhibitor is entering (regional/SV), else the usual "(opt.)". Mandy
+ *  2026-07-12: regional fields shouldn't read "optional" — for these shows
+ *  they aren't. */
+function FieldTag({ required }: { required: boolean }) {
+  return required ? (
+    <span className="font-normal text-destructive">Required</span>
+  ) : (
+    <span className="font-normal text-muted-foreground">(opt.)</span>
+  );
+}
+
+/** Static reassurance line for the autosaved cards (edit mode). The live
+ *  saving/saved/error status renders once, via DogFormAutosaveBridge. */
+function AutosaveHint() {
+  return (
+    <span className="mt-1 block text-xs text-muted-foreground">
+      Saves automatically as you type.
+    </span>
+  );
+}
+
+/** The dog-form sections that autosave in edit mode. Must match
+ *  dogAutosaveFieldsSchema (server side) — field order matters below. */
+const AUTOSAVE_FIELDS = [
+  'sireName',
+  'damName',
+  'breederName',
+  'breederCountry',
+  'breederCity',
+  'breederPostcode',
+  'microchipNumber',
+  'coatType',
+  'sireRegistrationBody',
+  'sireRegistrationNumber',
+  'damRegistrationBody',
+  'damRegistrationNumber',
+] as const;
+
+/** Isolates the autosave subscription so typing only re-renders THIS tiny
+ *  component, not the whole 1500-line form — react-hook-form's inputs stay
+ *  uncontrolled (the point of RHF). Renders the live status line shown
+ *  above the submit button. */
+function DogFormAutosaveBridge({
+  control,
+  dogId,
+}: {
+  control: Control<DogFormValues>;
+  dogId: string;
+}) {
+  const [
+    sireName, damName, breederName, breederCountry, breederCity,
+    breederPostcode, microchipNumber, coatType, sireRegistrationBody,
+    sireRegistrationNumber, damRegistrationBody, damRegistrationNumber,
+  ] = useWatch({ control, name: AUTOSAVE_FIELDS }) as Array<string | undefined>;
+
+  // hydrated is unconditionally true: the edit page only mounts the form
+  // AFTER the dog has loaded, so it is born with server values, never
+  // blank defaults.
+  const status = useBeaconAutosave({
+    url: `/api/dog-autosave/${dogId}`,
+    enabled: true,
+    hydrated: true,
+    payload: {
+      dog: {
+        sireName: sireName ?? '',
+        damName: damName ?? '',
+        breederName: breederName ?? '',
+        breederCountry: breederCountry ?? '',
+        breederCity: breederCity ?? '',
+        breederPostcode: breederPostcode ?? '',
+        microchipNumber: microchipNumber ?? '',
+        coatType: coatType ?? null,
+        sireRegistrationBody: sireRegistrationBody ?? null,
+        sireRegistrationNumber: sireRegistrationNumber ?? '',
+        damRegistrationBody: damRegistrationBody ?? null,
+        damRegistrationNumber: damRegistrationNumber ?? '',
+      },
+    },
+  });
+
+  return (
+    <p className="flex items-center gap-1.5 text-xs text-muted-foreground" aria-live="polite">
+      {status === 'saving' ? (
+        'Saving your changes…'
+      ) : status === 'saved' ? (
+        <span className="text-green-700">Saved ✓</span>
+      ) : status === 'error' ? (
+        <span className="text-destructive">
+          Some details couldn&apos;t save — check your connection, then press Save Dog Details.
+        </span>
+      ) : (
+        'Pedigree, breeder and registration details save automatically.'
+      )}
+    </p>
+  );
+}
+
 interface DogFormProps {
   mode: 'create' | 'edit';
   defaultValues?: Partial<DogFormValues>;
   dogId?: string;
+  /** Slot for SV/WUSV-specific cards. Rendered inside the form immediately
+   *  after the SV/WUSV Details card (Amanda 2026-05-21 — keeps all the
+   *  German-Shepherd-specific data together as one visual block). Only
+   *  rendered when the selected breed matches German Shepherd. When this is
+   *  a single element (the usual <DogSvHealthCard/> case), it's cloned with
+   *  a `kcHealthSuggestions` prop carrying any BVA/KC hip/elbow/DNA-DM
+   *  results a completed RKC profile lookup returned. */
+  svSection?: React.ReactNode;
+  /** Where to go after a successful save. Used when the exhibitor came from an
+   *  entry to fill in mandatory info — send them straight back to that show's
+   *  entry instead of the dog profile (Mandy 2026-06-26). Internal paths only. */
+  returnTo?: string;
+  /** True when the dog is being added/edited for an SV/WUSV regional show —
+   *  flips the catalogue-mandatory fields from "(opt.)" to Required and adds
+   *  a guiding banner (Mandy 2026-07-12). */
+  isRegional?: boolean;
 }
 
-export function DogForm({ mode, defaultValues, dogId }: DogFormProps) {
+export function DogForm({ mode, defaultValues, dogId, svSection, returnTo, isRegional = false }: DogFormProps) {
+  const safeReturnTo = returnTo && returnTo.startsWith('/shows/') ? returnTo : null;
   const router = useRouter();
   const [breedOpen, setBreedOpen] = useState(false);
   const [calendarOpen, setCalendarOpen] = useState(false);
@@ -123,9 +275,11 @@ export function DogForm({ mode, defaultValues, dogId }: DogFormProps) {
     onSuccess: () => {
       utils.dogs.list.invalidate();
       toast.success('Dog added successfully!', {
-        description: 'Your dog has been added to your profile.',
+        description: safeReturnTo
+          ? 'Taking you back to your entry…'
+          : 'Your dog has been added to your profile.',
       });
-      router.push('/dogs');
+      router.push(safeReturnTo ?? '/dogs');
     },
     onError: (error) => {
       toast.error('Something went wrong', {
@@ -139,9 +293,11 @@ export function DogForm({ mode, defaultValues, dogId }: DogFormProps) {
       utils.dogs.list.invalidate();
       if (dogId) utils.dogs.getById.invalidate({ id: dogId });
       toast.success('Dog updated successfully!', {
-        description: 'Your changes have been saved.',
+        description: safeReturnTo
+          ? 'Taking you back to your entry…'
+          : 'Your changes have been saved.',
       });
-      router.push(`/dogs/${dogId}`);
+      router.push(safeReturnTo ?? `/dogs/${dogId}`);
     },
     onError: (error) => {
       toast.error('Something went wrong', {
@@ -166,42 +322,75 @@ export function DogForm({ mode, defaultValues, dogId }: DogFormProps) {
 
   // RKC lookup — returns an array of results
   const [kcResults, setKcResults] = useState<
-    { registeredName: string; breed: string; sex: string; dateOfBirth: string; colour?: string; sire: string; dam: string; breeder: string; dogId?: string }[]
+    { registeredName: string; breed: string; sex: string; dateOfBirth: string; colour?: string; sire: string; dam: string; dogId?: string }[]
   >([]);
 
-  // Phase 2: Fetch enriched pedigree data from the RKC dog profile page
+  // Health values a GSD's RKC profile lookup returned (BVA/KC hip + elbow
+  // scores, DNA-DM result) — only ever consumed by the SV Health card below,
+  // which owns the actual "is this field still empty" check and applies
+  // them itself (see the kcHealthSuggestions prop wiring near the svSection
+  // render below). Kept as state, not applied directly to the DB, because
+  // the health card's own autosave PUTs its full local state on every save
+  // — a side-channel write here would just get silently overwritten the
+  // next time the exhibitor touches any other health field.
+  const [kcHealthSuggestions, setKcHealthSuggestions] = useState<
+    { hipScore?: string; elbowScore?: string; dmTest?: 'clear' | 'carrier' | 'affected' } | undefined
+  >(undefined);
+
+  // Phase 2: Fetch enriched pedigree + health data from the RKC dog profile page
   const kcProfileLookup = trpc.dogs.kcLookupProfile.useMutation({
     onSuccess: (profile) => {
       if (!profile) return;
       const sv = { shouldValidate: true, shouldDirty: true } as const;
-      // Only fill sire/dam/breeder if not already populated (don't overwrite manual entries)
+      // Only fill sire/dam if not already populated (don't overwrite manual entries)
       if (profile.sire && !form.getValues('sireName')) {
         form.setValue('sireName', profile.sire, sv);
       }
       if (profile.dam && !form.getValues('damName')) {
         form.setValue('damName', profile.dam, sv);
       }
-      if (profile.breeder && !form.getValues('breederName')) {
-        form.setValue('breederName', profile.breeder, sv);
-      }
       // Colour from profile page may be more detailed
       if (profile.colour && !form.getValues('colour')) {
         form.setValue('colour', profile.colour, sv);
       }
 
-      const enriched = [profile.sire, profile.dam, profile.breeder].filter(Boolean);
-      if (enriched.length > 0) {
-        toast.success('Pedigree details populated from RKC', {
-          description: `Sire, dam, and breeder info filled in from the Royal Kennel Club.`,
+      const hasHealthData = Boolean(profile.hipScore || profile.elbowScore || profile.dmTest);
+      // Only worth stashing (and mentioning) when there's an SV Health card
+      // mounted to receive it — GSD + editing an existing dog.
+      if (hasHealthData && isGsd && mode === 'edit') {
+        setKcHealthSuggestions({
+          hipScore: profile.hipScore,
+          elbowScore: profile.elbowScore,
+          dmTest: profile.dmTest,
+        });
+      }
+
+      const enrichedPedigree = [profile.sire, profile.dam].filter(Boolean);
+      if (enrichedPedigree.length > 0 || hasHealthData || profile.studbookNumber) {
+        const parts: string[] = [];
+        if (enrichedPedigree.length > 0) parts.push('sire and dam');
+        if (hasHealthData && isGsd && mode === 'edit') parts.push('BVA/KC hip, elbow and DNA-DM results (added to the SV Health card below where blank)');
+        if (profile.studbookNumber) parts.push(`Studbook No. ${profile.studbookNumber}`);
+        toast.success('Details populated from RKC', {
+          description: parts.length > 0
+            ? `${parts.join(', ')} filled in from the Royal Kennel Club.`
+            : 'Pedigree details filled in from the Royal Kennel Club.',
         });
       }
     },
-    // Silent failure — profile enrichment is optional
-    onError: () => {},
+    onError: (error) => {
+      // Profile enrichment is normally silent-optional (a timeout or an
+      // unrecognised page just means less gets filled in) — but if RKC's
+      // own site is down, say so, matching the primary search's behaviour.
+      if (error.message.includes('having trouble right now')) {
+        toast.error('RKC lookup incomplete', { description: error.message });
+      }
+    },
   });
 
   function applyKcResult(data: typeof kcResults[number]) {
     const sv = { shouldValidate: true, shouldDirty: true } as const;
+    setLookupApplied(true);
 
     if (data.registeredName) form.setValue('registeredName', data.registeredName, sv);
     if (data.sex) form.setValue('sex', data.sex as 'dog' | 'bitch', sv);
@@ -225,7 +414,6 @@ export function DogForm({ mode, defaultValues, dogId }: DogFormProps) {
     }
     if (data.sire) form.setValue('sireName', data.sire, sv);
     if (data.dam) form.setValue('damName', data.dam, sv);
-    if (data.breeder) form.setValue('breederName', data.breeder, sv);
     if (data.colour) form.setValue('colour', data.colour, sv);
 
     if (data.breed) {
@@ -277,6 +465,7 @@ export function DogForm({ mode, defaultValues, dogId }: DogFormProps) {
 
   function applyRemiResult(data: typeof remiResults[number]) {
     const sv = { shouldValidate: true, shouldDirty: true } as const;
+    setLookupApplied(true);
 
     if (data.registeredName) form.setValue('registeredName', data.registeredName, sv);
     if (data.kcRegNumber) form.setValue('kcRegNumber', data.kcRegNumber, sv);
@@ -344,6 +533,9 @@ export function DogForm({ mode, defaultValues, dogId }: DogFormProps) {
       sireName: '',
       damName: '',
       breederName: '',
+      breederCountry: '',
+      breederCity: '',
+      breederPostcode: '',
       bio: '',
       owners: [],
       ...defaultValues,
@@ -356,6 +548,7 @@ export function DogForm({ mode, defaultValues, dogId }: DogFormProps) {
     if (mode === 'create' && userProfile && !ownerPrepopulated.current && form.getValues('owners').length === 0) {
       ownerPrepopulated.current = true;
       form.setValue('owners', [{
+        ownerTitle: '',
         ownerName: userProfile.name ?? '',
         ownerAddress: [userProfile.address, userProfile.postcode].filter(Boolean).join(', '),
         ownerEmail: userProfile.email ?? '',
@@ -364,6 +557,43 @@ export function DogForm({ mode, defaultValues, dogId }: DogFormProps) {
       }]);
     }
   }, [mode, userProfile, form]);
+
+  // Populate the owners field array from the dog's SAVED rows in edit mode —
+  // previously edit mode never loaded them at all, so a joint owner crammed
+  // into one slot (e.g. "Andy & Ann Johnstone") could never be split out or
+  // corrected (Mandy 2026-08-03). Guarded by a ref so this runs exactly once
+  // — without it, re-renders after the user starts editing would stomp their
+  // in-progress changes back to the server snapshot. It only fires once
+  // `dogData.owners` has real rows, so an empty pre-load array can never
+  // seed (and therefore never autosave-overwrite; owners aren't part of the
+  // autosave payload at all — see AUTOSAVE_FIELDS above).
+  const ownersHydrated = useRef(false);
+  useEffect(() => {
+    if (
+      mode === 'edit' &&
+      dogData?.owners &&
+      dogData.owners.length > 0 &&
+      !ownersHydrated.current
+    ) {
+      ownersHydrated.current = true;
+      // A joint owner already living at the primary's address loads with the
+      // "same address" tick on, so the household stays a household — and a
+      // later edit to Owner 1's address carries them with it on save.
+      const sameAddressFlags = deriveSameAddressFlags(dogData.owners);
+      form.setValue(
+        'owners',
+        dogData.owners.map((o, i) => ({
+          ownerTitle: o.ownerTitle ?? '',
+          ownerName: o.ownerName,
+          ownerAddress: o.ownerAddress,
+          ownerEmail: o.ownerEmail,
+          ownerPhone: o.ownerPhone ?? '',
+          isPrimary: o.isPrimary,
+          sameAddressAsPrimary: sameAddressFlags[i],
+        }))
+      );
+    }
+  }, [mode, dogData, form]);
 
   // When breeds load after a RKC lookup already stashed a breed name, apply it
   useEffect(() => {
@@ -384,14 +614,144 @@ export function DogForm({ mode, defaultValues, dogId }: DogFormProps) {
   const { fields: ownerFields, append: appendOwner, remove: removeOwner } =
     useFieldArray({ control: form.control, name: 'owners' });
 
+  // Keep every ticked joint owner's address tracking Owner 1's, live. The
+  // field is hidden while ticked, so it can't be left holding a stale — or
+  // empty — value that would fail validation behind a tick nobody can see.
+  const watchedOwners = useWatch({ control: form.control, name: 'owners' });
+  const primaryAddress = watchedOwners?.[0]?.ownerAddress ?? '';
+  useEffect(() => {
+    if (!watchedOwners || !primaryAddress.trim()) return;
+    watchedOwners.forEach((owner, i) => {
+      if (
+        i > 0 &&
+        owner?.sameAddressAsPrimary &&
+        owner.ownerAddress !== primaryAddress
+      ) {
+        form.setValue(`owners.${i}.ownerAddress`, primaryAddress, {
+          shouldValidate: true,
+        });
+      }
+    });
+  }, [watchedOwners, primaryAddress, form]);
+
   const isPending = createDog.isPending || updateDog.isPending;
 
+  // SV/WUSV fields apply only to German Shepherd Dogs — for any other
+  // breed the whole section is irrelevant and hidden (Amanda 2026-05-21).
+  const watchedBreedId = form.watch('breedId');
+  const selectedBreedName = breeds?.find((b) => b.id === watchedBreedId)?.name ?? '';
+  const isGsd = /german\s+shepherd/i.test(selectedBreedName);
+
+  // The RKC lookup can only find RKC-registered dogs — hide it when the
+  // registration body says otherwise (regional flows pre-tick SV), when the
+  // saved dog already has its registration number, or once a lookup result
+  // has just been applied (nothing left to look up; Mandy 2026-07-11:
+  // exhibitors clicked it and got confused). Autosave lives in
+  // DogFormAutosaveBridge so keystrokes don't re-render this form.
+  const watchedRegBody = form.watch('registrationBody');
+  const savedRegNumber = mode === 'edit' ? (defaultValues?.kcRegNumber ?? '').trim() : '';
+  const [lookupApplied, setLookupApplied] = useState(false);
+  const showKcLookup =
+    (watchedRegBody == null || watchedRegBody === 'kc') &&
+    !savedRegNumber &&
+    !lookupApplied;
+
   function onSubmit(data: DogFormValues) {
+    // "At least one owner" and "up to 4" are enforced here rather than in
+    // the schema — see the comment above dogFormSchema for why. Checked for
+    // both modes: the UI already blocks removing Owner 1 and hides "Add
+    // Joint Owner" past 10, so these are a backstop, not the primary gate.
+    if (!data.owners || data.owners.length === 0) {
+      form.setError('owners', {
+        type: 'manual',
+        message: 'At least one owner with name and address is required',
+      });
+      toast.error('Please add at least one owner');
+      return;
+    }
+    if (data.owners.length > 10) {
+      form.setError('owners', {
+        type: 'manual',
+        message: 'Up to 10 owners are allowed',
+      });
+      toast.error('Up to 10 owners are allowed');
+      return;
+    }
+
+    // Resolve "same address as Owner 1" into real per-row address VALUES, and
+    // drop the UI-only flag — the server stores an address on every row.
+    const payload = {
+      ...data,
+      owners: applySameAddress(
+        data.owners,
+        data.owners.map((o) => o.sameAddressAsPrimary ?? false),
+      ).map((owner) => {
+        const row = { ...owner };
+        delete row.sameAddressAsPrimary;
+        return row;
+      }),
+    };
+
     if (mode === 'create') {
-      createDog.mutate(data);
+      // Pedigree (sire + dam + breeder) is mandatory — a catalogue can't be
+      // produced with this missing (Michael 2026-06-25; breeder added 2026-06-26).
+      let pedigreeMissing = false;
+      if (!data.sireName || !data.sireName.trim()) {
+        form.setError('sireName', { type: 'manual', message: "The sire's name is required" });
+        pedigreeMissing = true;
+      }
+      if (!data.damName || !data.damName.trim()) {
+        form.setError('damName', { type: 'manual', message: "The dam's name is required" });
+        pedigreeMissing = true;
+      }
+      if (!data.breederName || !data.breederName.trim()) {
+        form.setError('breederName', { type: 'manual', message: "The breeder's name is required" });
+        pedigreeMissing = true;
+      }
+      if (!data.colour || !data.colour.trim()) {
+        form.setError('colour', { type: 'manual', message: 'The colour is required' });
+        pedigreeMissing = true;
+      }
+      if (pedigreeMissing) {
+        toast.error('Please add the sire, dam, breeder and colour — they appear in the catalogue');
+        return;
+      }
+      // Regional (SV/WUSV) shows need the full catalogue/pedigree set, or the
+      // entry gate blocks the entry later. This is the always-required subset
+      // of svMissingRequirements (sv-entry-readiness.ts) that maps to a single
+      // form field — sire/dam NAMES + breeder name are already required for
+      // every create above. Reuses the gate's blank() predicate; keep the two
+      // in step if the required set ever changes (Mandy 2026-07-12).
+      if (isRegional) {
+        const regionalRequired: Array<{
+          name: 'kcRegNumber' | 'registrationBody' | 'microchipNumber' | 'coatType' | 'breederCity' | 'breederPostcode' | 'sireRegistrationNumber' | 'damRegistrationNumber';
+          value: string | null | undefined;
+          message: string;
+        }> = [
+          { name: 'kcRegNumber', value: data.kcRegNumber, message: "Your dog's registration number is required for regional shows" },
+          { name: 'registrationBody', value: data.registrationBody, message: 'The registration body (RKC, SV…) is required for regional shows' },
+          { name: 'microchipNumber', value: data.microchipNumber, message: 'The microchip number is required for regional shows' },
+          { name: 'coatType', value: data.coatType, message: 'Coat type is required for regional shows' },
+          { name: 'breederCity', value: data.breederCity, message: 'Breeder town/city is required for regional shows' },
+          { name: 'breederPostcode', value: data.breederPostcode, message: 'Breeder postcode is required for regional shows' },
+          { name: 'sireRegistrationNumber', value: data.sireRegistrationNumber, message: "The sire's registration number is required for regional shows" },
+          { name: 'damRegistrationNumber', value: data.damRegistrationNumber, message: "The dam's registration number is required for regional shows" },
+        ];
+        let regionalMissing = false;
+        for (const f of regionalRequired) {
+          if (blank(f.value)) {
+            form.setError(f.name, { type: 'manual', message: f.message });
+            regionalMissing = true;
+          }
+        }
+        if (regionalMissing) {
+          toast.error('Please complete the fields marked Required for regional shows');
+          return;
+        }
+      }
+      createDog.mutate(payload);
     } else if (dogId) {
-      const { owners: _owners, ...dogFields } = data;
-      updateDog.mutate({ id: dogId, ...dogFields });
+      updateDog.mutate({ id: dogId, ...payload });
     }
   }
 
@@ -409,35 +769,85 @@ export function DogForm({ mode, defaultValues, dogId }: DogFormProps) {
   return (
     <Form {...form}>
       <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+        {isRegional && (
+          <div className="rounded-lg border border-se-honey-line bg-se-honey-soft p-4">
+            <p className="text-sm font-medium text-se-honey-ink">
+              You&apos;re adding a dog for a regional show
+            </p>
+            <p className="mt-1 text-sm text-se-honey-ink/80">
+              Regional (SV / WUSV) entries need a little more detail than a normal
+              show. The fields marked <span className="font-semibold">Required</span>{' '}
+              must be completed — they print in the show catalogue and we need them
+              to accept your entry.
+            </p>
+          </div>
+        )}
         {/* Registration Details */}
         <Card>
           <CardHeader>
             <CardTitle>Registration Details</CardTitle>
             <CardDescription>
-              Enter the details as they appear on your Royal Kennel Club registration
-              certificate, or use the RKC Lookup to auto-fill.
+              Enter your dog&apos;s registration details. If your dog is RKC registered,
+              use the RKC Lookup below to auto-fill. Registered with another body
+              (SV, FCI, IKC)? Just type the details in.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
+            {/* Registration Number — label + helper text adapt to the
+                chosen Registration Body so IKC / SV / Other dogs get a
+                relevant prompt rather than the RKC-only one (Amanda
+                2026-05-19). */}
             <FormField
               control={form.control}
               name="kcRegNumber"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>RKC Registration Number <span className="text-muted-foreground font-normal">(optional)</span></FormLabel>
-                  <FormControl>
-                    <Input
-                      placeholder="e.g. AQ04052601"
-                      {...field}
-                    />
-                  </FormControl>
-                  <FormDescription>
-                    Found on your Royal Kennel Club registration certificate. Leave
-                    blank if not yet registered.
-                  </FormDescription>
-                  <FormMessage />
-                </FormItem>
-              )}
+              render={({ field }) => {
+                const body = watchedRegBody;
+                const labelByBody: Record<string, { label: string; placeholder: string; helper: string }> = {
+                  kc: {
+                    label: 'Dog Registration Number',
+                    placeholder: 'e.g. AQ04052601',
+                    helper: "Found on your dog's registration certificate. Leave blank if not yet registered.",
+                  },
+                  sv: {
+                    label: 'SV Registration Number',
+                    placeholder: 'e.g. SZ 2355001',
+                    helper: 'Found on the SV (Verein für Deutsche Schäferhunde) pedigree.',
+                  },
+                  ikc: {
+                    label: 'IKC Registration Number',
+                    placeholder: 'e.g. A12345',
+                    helper: 'Irish Kennel Club registration number.',
+                  },
+                  other: {
+                    label: 'Registration Number',
+                    placeholder: 'Registration number',
+                    helper: 'Use whichever format the registering body issued.',
+                  },
+                };
+                const cfg = body && labelByBody[body] ? labelByBody[body] : labelByBody.kc;
+                // Required whenever a registration body is selected — Amanda
+                // 2026-05-20: SV regional shows demand a registration number
+                // regardless of body (RKC/SV/IKC/Other). For RKC-only dogs
+                // not registered yet, the user can leave Body blank.
+                const isRequired = !!body;
+                return (
+                  <FormItem>
+                    <FormLabel>
+                      {cfg.label} {' '}
+                      {isRequired ? (
+                        <span className="text-destructive">*</span>
+                      ) : (
+                        <span className="text-muted-foreground font-normal">(optional)</span>
+                      )}
+                    </FormLabel>
+                    <FormControl>
+                      <Input placeholder={cfg.placeholder} {...field} />
+                    </FormControl>
+                    <FormDescription>{cfg.helper}</FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                );
+              }}
             />
 
             <FormField
@@ -448,12 +858,12 @@ export function DogForm({ mode, defaultValues, dogId }: DogFormProps) {
                   <FormLabel>Registered Name</FormLabel>
                   <FormControl>
                     <Input
-                      placeholder="e.g. Dorabella Dancing Queen"
+                      placeholder="e.g. Thornfield Silver Dream"
                       {...field}
                     />
                   </FormControl>
                   <FormDescription>
-                    Enter the name exactly as it appears on your RKC registration
+                    Enter the name exactly as it appears on your dog&apos;s registration
                     certificate.
                   </FormDescription>
                   <FormMessage />
@@ -461,7 +871,9 @@ export function DogForm({ mode, defaultValues, dogId }: DogFormProps) {
               )}
             />
 
-            {/* RKC Lookup Button */}
+            {/* RKC Lookup Button — hidden for non-RKC dogs and for dogs
+                whose registration number is already saved. */}
+            {showKcLookup && (
             <div className="rounded-lg border border-dashed border-primary/30 bg-primary/5 p-4">
               <div className="flex items-start gap-3">
                 <Search className="mt-0.5 size-5 shrink-0 text-primary" />
@@ -534,19 +946,19 @@ export function DogForm({ mode, defaultValues, dogId }: DogFormProps) {
                       than create a new entry. */}
                   {remiResults.length > 0 && (
                     <div className="mt-3 space-y-2">
-                      <p className="text-sm font-medium text-emerald-700">
+                      <p className="text-sm font-medium text-se-fresh-deep">
                         Found in Remi — tap to fill in the details
                       </p>
                       <div className="space-y-1">
                         {remiResults.map((dog) => (
                           <div
                             key={dog.id}
-                            className="rounded-md border border-emerald-200 bg-emerald-50"
+                            className="rounded-md border border-se-fresh-line bg-se-fresh-soft"
                           >
                             <button
                               type="button"
                               onClick={() => applyRemiResult(dog)}
-                              className="flex w-full flex-col gap-0.5 px-3 py-2.5 text-left text-sm transition-colors hover:bg-emerald-100 sm:flex-row sm:items-center sm:justify-between sm:gap-2 sm:py-2"
+                              className="flex w-full flex-col gap-0.5 px-3 py-2.5 text-left text-sm transition-colors hover:bg-se-fresh-line sm:flex-row sm:items-center sm:justify-between sm:gap-2 sm:py-2"
                             >
                               <div className="min-w-0">
                                 <span className="font-medium">{dog.registeredName}</span>
@@ -561,7 +973,7 @@ export function DogForm({ mode, defaultValues, dogId }: DogFormProps) {
                             </button>
                             <a
                               href={`/dogs/${dog.id}`}
-                              className="block border-t border-emerald-200 px-3 py-1.5 text-center text-xs text-emerald-700 hover:bg-emerald-100"
+                              className="block border-t border-se-fresh-line px-3 py-1.5 text-center text-xs text-se-fresh-deep hover:bg-se-fresh-line"
                             >
                               Go to existing profile →
                             </a>
@@ -591,7 +1003,7 @@ export function DogForm({ mode, defaultValues, dogId }: DogFormProps) {
                         {kcResults.length} dogs found — select the correct one:
                       </p>
                       {kcResults.length >= 12 && (
-                        <p className="text-xs text-amber-600">
+                        <p className="text-xs text-se-honey-deep">
                           Showing first 12 results only. Try a more specific search
                           (e.g. the full registered name) if your dog isn&apos;t listed.
                         </p>
@@ -622,6 +1034,7 @@ export function DogForm({ mode, defaultValues, dogId }: DogFormProps) {
                 </div>
               </div>
             </div>
+            )}
           </CardContent>
         </Card>
 
@@ -810,8 +1223,8 @@ export function DogForm({ mode, defaultValues, dogId }: DogFormProps) {
           <CardHeader>
             <CardTitle>Pedigree</CardTitle>
             <CardDescription>
-              Your dog&apos;s lineage details. These are often required for show
-              entries.
+              Your dog&apos;s lineage — sire, dam and breeder. {isGsd && 'The sire\u2019s and dam\u2019s registration numbers sit with their names below. '}These print in the show catalogue.
+              {mode === 'edit' && <AutosaveHint />}
             </CardDescription>
             {kcProfileLookup.isPending && (
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -838,6 +1251,51 @@ export function DogForm({ mode, defaultValues, dogId }: DogFormProps) {
               )}
             />
 
+            {/* Sire's registration sits with the sire's name so the pedigree
+                reads as one block, not names here / numbers lower down (Mandy
+                2026-07-12). GSD-only — RKC dogs keep the simpler pedigree. */}
+            {isGsd && (
+              <div className="grid gap-3 sm:grid-cols-2">
+                <FormField
+                  control={form.control}
+                  name="sireRegistrationBody"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Sire Registration Body <span className="text-muted-foreground font-normal">(opt.)</span></FormLabel>
+                      <Select onValueChange={(v) => field.onChange(v === 'none' ? undefined : v)} value={field.value ?? 'none'}>
+                        <FormControl>
+                          <SelectTrigger className="w-full">
+                            <SelectValue placeholder="Select body" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          <SelectItem value="none">— Not specified —</SelectItem>
+                          <SelectItem value="kc">RKC</SelectItem>
+                          <SelectItem value="sv">SV</SelectItem>
+                          <SelectItem value="ikc">IKC</SelectItem>
+                          <SelectItem value="other">Other</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="sireRegistrationNumber"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Sire Registration Number <FieldTag required={isRegional} /></FormLabel>
+                      <FormControl>
+                        <Input placeholder="e.g. SZ 2355001" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+            )}
+
             <FormField
               control={form.control}
               name="damName"
@@ -855,6 +1313,48 @@ export function DogForm({ mode, defaultValues, dogId }: DogFormProps) {
               )}
             />
 
+            {isGsd && (
+              <div className="grid gap-3 sm:grid-cols-2">
+                <FormField
+                  control={form.control}
+                  name="damRegistrationBody"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Dam Registration Body <span className="text-muted-foreground font-normal">(opt.)</span></FormLabel>
+                      <Select onValueChange={(v) => field.onChange(v === 'none' ? undefined : v)} value={field.value ?? 'none'}>
+                        <FormControl>
+                          <SelectTrigger className="w-full">
+                            <SelectValue placeholder="Select body" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          <SelectItem value="none">— Not specified —</SelectItem>
+                          <SelectItem value="kc">RKC</SelectItem>
+                          <SelectItem value="sv">SV</SelectItem>
+                          <SelectItem value="ikc">IKC</SelectItem>
+                          <SelectItem value="other">Other</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="damRegistrationNumber"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Dam Registration Number <FieldTag required={isRegional} /></FormLabel>
+                      <FormControl>
+                        <Input placeholder="e.g. SZ 2344555" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+            )}
+
             <FormField
               control={form.control}
               name="breederName"
@@ -871,8 +1371,159 @@ export function DogForm({ mode, defaultValues, dogId }: DogFormProps) {
                 </FormItem>
               )}
             />
+
+            {/* Breeder location — Amanda 2026-05-19. SV/WUSV catalogues
+                typically list the breeder's location (especially for
+                overseas imports), so we capture Country/City/Postcode
+                as separate fields. */}
+            <div className="grid gap-3 sm:grid-cols-3">
+              <FormField
+                control={form.control}
+                name="breederCountry"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Breeder Country <span className="text-muted-foreground font-normal">(opt.)</span></FormLabel>
+                    <FormControl>
+                      <Input placeholder="e.g. Germany" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="breederCity"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Breeder Town / City <FieldTag required={isRegional} /></FormLabel>
+                    <FormControl>
+                      <Input placeholder="e.g. Augsburg" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="breederPostcode"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Breeder Postcode <FieldTag required={isRegional} /></FormLabel>
+                    <FormControl>
+                      <Input placeholder="e.g. 86150" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
           </CardContent>
         </Card>
+
+        {/* German Shepherd / SV Details — only relevant for GSDs.
+            Hidden entirely for any other breed (Amanda 2026-05-21). */}
+        {isGsd && (
+        <Card className="border-se-honey/60">
+          <CardHeader>
+            <CardTitle>German Shepherd — SV / WUSV Details</CardTitle>
+            <CardDescription className="space-y-1">
+              <span className="block">
+                Your German Shepherd&apos;s SV details — coat type, microchip and
+                registration body. <span className="font-semibold text-foreground">Coat type is required for SV Regional shows and the British Sieger</span> (governed by the GSDL-BRG / WUSV, not the Royal Kennel Club).
+              </span>
+              <span className="block text-xs">
+                Your dog&apos;s own registration number is at the top of the form,
+                with the registered name; the sire&apos;s and dam&apos;s are in the
+                Pedigree section above.
+              </span>
+              {mode === 'edit' && <AutosaveHint />}
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3 sm:space-y-4">
+            <div className="grid gap-3 sm:grid-cols-2">
+              <FormField
+                control={form.control}
+                name="registrationBody"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Registration Body <span className="text-muted-foreground font-normal">(optional)</span></FormLabel>
+                    <Select onValueChange={(v) => field.onChange(v === 'none' ? undefined : v)} value={field.value ?? 'none'}>
+                      <FormControl>
+                        <SelectTrigger className="w-full">
+                          <SelectValue placeholder="Select body" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value="none">— Not specified —</SelectItem>
+                        <SelectItem value="kc">Royal Kennel Club (RKC)</SelectItem>
+                        <SelectItem value="sv">SV (Germany)</SelectItem>
+                        <SelectItem value="ikc">IKC (Ireland)</SelectItem>
+                        <SelectItem value="other">Other</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="coatType"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Coat Type <FieldTag required={isRegional} /></FormLabel>
+                    <Select onValueChange={(v) => field.onChange(v === 'none' ? undefined : v)} value={field.value ?? 'none'}>
+                      <FormControl>
+                        <SelectTrigger className="w-full">
+                          <SelectValue placeholder="Select coat type" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value="none">— Not specified —</SelectItem>
+                        <SelectItem value="stock">Stock Coat</SelectItem>
+                        <SelectItem value="long_stock">Long Stock Coat</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+
+            <FormField
+              control={form.control}
+              name="microchipNumber"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Microchip Number <span className="text-muted-foreground font-normal">(optional)</span></FormLabel>
+                  <FormControl>
+                    <Input placeholder="15-digit microchip number" {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+          </CardContent>
+        </Card>
+        )}
+
+        {/* SV Health & Working Titles — rendered inline alongside the
+            SV/WUSV Details card so all the German-Shepherd-specific data
+            lives as one visual block. The slot is filled by the dog edit
+            page when breed = GSD (Amanda 2026-05-21). Cloned with
+            kcHealthSuggestions so a completed RKC profile lookup can offer
+            its BVA/KC hip, elbow and DNA-DM results to the health card —
+            which applies them itself, only into fields still blank, the
+            same way it already applies its own saved profile. */}
+        {isGsd && (
+          isValidElement(svSection)
+            // Injecting an extra prop into an arbitrary passed-in element;
+            // cloneElement's typing can't express "this element accepts
+            // kcHealthSuggestions" without threading a generic through the
+            // svSection prop itself.
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            ? cloneElement(svSection as ReactElement<any>, { kcHealthSuggestions })
+            : svSection
+        )}
 
         {/* Bio */}
         <Card>
@@ -908,7 +1559,27 @@ export function DogForm({ mode, defaultValues, dogId }: DogFormProps) {
           <CardHeader>
             <CardTitle>Owners</CardTitle>
             <CardDescription>
-              Add up to 4 owners. At least one owner with name, address, and email is required for show entries.
+              {/* Mandy 2026-07-11: copy must name the button that actually
+                  exists — it said "Add New Owner" while the button reads
+                  "Add Joint Owner". Edit mode gets its own copy (Mandy
+                  2026-08-03): "you're already saved as Owner 1" is wrong once
+                  Owner 1 is an editable saved row that might not even be the
+                  viewer. */}
+              {mode === 'create' ? (
+                <>
+                  <strong>You&apos;re already saved as Owner 1.</strong> If the dog
+                  is jointly owned with a partner, family member or co-breeder,
+                  tap <em>Add Joint Owner</em> below — every name will appear
+                  together on the show catalogue.
+                </>
+              ) : (
+                <>
+                  These names appear on the show catalogue exactly as
+                  written — one entry per person. Correct a name below, or
+                  tap <em>Add Joint Owner</em> to split a joint entry into
+                  separate people.
+                </>
+              )}
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -916,8 +1587,9 @@ export function DogForm({ mode, defaultValues, dogId }: DogFormProps) {
               <div key={field.id} className="space-y-3 rounded-lg border p-4">
                 <div className="flex items-center justify-between">
                   <span className="text-sm font-medium">
-                    Owner {index + 1}
-                    {index === 0 && ' (Primary)'}
+                    {index === 0
+                      ? mode === 'create' ? 'Owner 1 — You' : 'Owner 1'
+                      : `Joint Owner ${index + 1}`}
                   </span>
                   {index > 0 && (
                     <Button
@@ -930,7 +1602,35 @@ export function DogForm({ mode, defaultValues, dogId }: DogFormProps) {
                     </Button>
                   )}
                 </div>
-                <div className="grid gap-3 sm:grid-cols-2">
+                <div className="grid gap-3 sm:grid-cols-[7rem_1fr]">
+                  <FormField
+                    control={form.control}
+                    name={`owners.${index}.ownerTitle`}
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Title</FormLabel>
+                        <Select
+                          onValueChange={(v) => field.onChange(v === '__none__' ? '' : v)}
+                          value={field.value || '__none__'}
+                        >
+                          <FormControl>
+                            <SelectTrigger className="w-full h-11">
+                              <SelectValue placeholder="—" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            <SelectItem value="__none__">—</SelectItem>
+                            <SelectItem value="Mr">Mr</SelectItem>
+                            <SelectItem value="Mrs">Mrs</SelectItem>
+                            <SelectItem value="Miss">Miss</SelectItem>
+                            <SelectItem value="Ms">Ms</SelectItem>
+                            <SelectItem value="Dr">Dr</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
                   <FormField
                     control={form.control}
                     name={`owners.${index}.ownerName`}
@@ -944,6 +1644,8 @@ export function DogForm({ mode, defaultValues, dogId }: DogFormProps) {
                       </FormItem>
                     )}
                   />
+                </div>
+                <div className="grid gap-3 sm:grid-cols-1">
                   <FormField
                     control={form.control}
                     name={`owners.${index}.ownerEmail`}
@@ -964,25 +1666,64 @@ export function DogForm({ mode, defaultValues, dogId }: DogFormProps) {
                     )}
                   />
                 </div>
-                <PostcodeLookup
-                  compact
-                  onSelect={(result) => {
-                    form.setValue(`owners.${index}.ownerAddress`, formatAddress(result) + ', ' + result.postcode);
-                  }}
-                />
-                <FormField
-                  control={form.control}
-                  name={`owners.${index}.ownerAddress`}
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Address</FormLabel>
-                      <FormControl>
-                        <Input placeholder="Full postal address" {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
+                {/* Joint owners are usually the same household, so they
+                    default to Owner 1's address — untick to type a different
+                    one (Mandy 2026-08-12). */}
+                {index > 0 && (
+                  <FormField
+                    control={form.control}
+                    name={`owners.${index}.sameAddressAsPrimary`}
+                    render={({ field }) => (
+                      <FormItem className="flex flex-row items-center gap-3 rounded-md border bg-muted/40 p-3">
+                        <FormControl>
+                          <Checkbox
+                            checked={field.value ?? false}
+                            onCheckedChange={(checked) => {
+                              const ticked = checked === true;
+                              field.onChange(ticked);
+                              if (ticked && primaryAddress.trim()) {
+                                form.setValue(
+                                  `owners.${index}.ownerAddress`,
+                                  primaryAddress,
+                                  { shouldValidate: true },
+                                );
+                              }
+                            }}
+                            className="size-5"
+                          />
+                        </FormControl>
+                        <FormLabel className="!mt-0 cursor-pointer text-sm font-normal leading-snug">
+                          Same address as Owner 1
+                        </FormLabel>
+                      </FormItem>
+                    )}
+                  />
+                )}
+                {index > 0 && form.watch(`owners.${index}.sameAddressAsPrimary`) ? (
+                  <div className="space-y-1">
+                    <p className="text-sm font-medium">Full postal address</p>
+                    <p className="rounded-md border border-dashed px-3 py-2 text-sm text-muted-foreground">
+                      {primaryAddress.trim() || 'Add Owner 1’s address above'}
+                    </p>
+                  </div>
+                ) : (
+                  <FormField
+                    control={form.control}
+                    name={`owners.${index}.ownerAddress`}
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Full postal address</FormLabel>
+                        <FormControl>
+                          <Input
+                            placeholder="House, street, town, postcode"
+                            {...field}
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                )}
                 <FormField
                   control={form.control}
                   name={`owners.${index}.ownerPhone`}
@@ -999,7 +1740,7 @@ export function DogForm({ mode, defaultValues, dogId }: DogFormProps) {
               </div>
             ))}
 
-            {ownerFields.length < 4 && (
+            {ownerFields.length < 10 && (
               <div className="flex flex-wrap gap-2">
                 <Button
                   type="button"
@@ -1007,16 +1748,20 @@ export function DogForm({ mode, defaultValues, dogId }: DogFormProps) {
                   size="sm"
                   onClick={() =>
                     appendOwner({
+                      ownerTitle: '',
                       ownerName: '',
-                      ownerAddress: '',
+                      // Ticked by default — most joint owners live with
+                      // Owner 1, so the address arrives already filled in.
+                      ownerAddress: primaryAddress,
                       ownerEmail: '',
                       ownerPhone: '',
                       isPrimary: ownerFields.length === 0,
+                      sameAddressAsPrimary: ownerFields.length > 0,
                     })
                   }
                 >
                   <Plus className="size-4" />
-                  Add New Owner
+                  Add Joint Owner
                 </Button>
                 {mode === 'create' && ownerProfiles && ownerProfiles.length > 0 && (
                   <Popover>
@@ -1041,11 +1786,17 @@ export function DogForm({ mode, defaultValues, dogId }: DogFormProps) {
                             className="flex w-full flex-col items-start gap-0.5 rounded-md px-3 py-2.5 text-left transition-colors hover:bg-accent"
                             onClick={() => {
                               appendOwner({
+                                ownerTitle: profile.ownerTitle ?? '',
                                 ownerName: profile.ownerName,
                                 ownerAddress: profile.ownerAddress,
                                 ownerEmail: profile.ownerEmail,
                                 ownerPhone: profile.ownerPhone ?? '',
                                 isPrimary: ownerFields.length === 0,
+                                // Their saved address speaks for itself — tick
+                                // only if it already is Owner 1's.
+                                sameAddressAsPrimary:
+                                  ownerFields.length > 0 &&
+                                  addressesMatch(profile.ownerAddress, primaryAddress),
                               });
                               toast.success(`Added ${profile.ownerName}`);
                             }}
@@ -1070,7 +1821,7 @@ export function DogForm({ mode, defaultValues, dogId }: DogFormProps) {
 
             {ownerFields.length === 0 && (
               <p className="text-sm text-muted-foreground">
-                No owners added yet. Click &quot;Add New Owner&quot; to add one.
+                No owners added yet. Tap &quot;Add Joint Owner&quot; to add one.
               </p>
             )}
           </CardContent>
@@ -1126,11 +1877,17 @@ export function DogForm({ mode, defaultValues, dogId }: DogFormProps) {
           </Card>
         )}
 
-        {/* Submit */}
+        {/* Submit. The SV Health card and the pedigree/breeder/registration
+            sections save themselves in edit mode (DogFormAutosaveBridge +
+            useBeaconAutosave) — the old second "Save Health Data" button and
+            its warning banner are gone (Mandy 2026-07-11). */}
+        {mode === 'edit' && dogId && (
+          <DogFormAutosaveBridge control={form.control} dogId={dogId} />
+        )}
         <div className="flex flex-col gap-2 sm:flex-row sm:gap-3">
           <Button type="submit" disabled={isPending} size="lg" className="w-full sm:w-auto">
             {isPending && <Loader2 className="size-4 animate-spin" />}
-            {mode === 'create' ? 'Add Dog' : 'Save Changes'}
+            {mode === 'create' ? 'Add Dog' : 'Save Dog Details'}
           </Button>
           <Button
             type="button"
