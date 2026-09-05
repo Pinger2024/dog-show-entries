@@ -25,6 +25,7 @@ import {
 } from '@/server/db/schema';
 import { isUuid } from '@/lib/slugify';
 import { buildJudgeBreedAndClassification } from '@/lib/judge-breed-classification';
+import { buildClassLabelMap, svDisplayAge } from '@/lib/class-labels';
 import { publicOrgColumns } from '../public-org-columns';
 import { sendJudgeApprovalRequestEmail } from '@/server/services/email';
 import { deriveTopAwardJudge } from '@/server/services/derive-award-judge';
@@ -1124,6 +1125,14 @@ export const stewardRouter = createTRPCRouter({
         orderBy: [asc(showClasses.sortOrder)],
       });
 
+      // Canonical per-class label ("11a"/"11b" on wusv shows, plain
+      // classNumber on RKC) — single source of truth shared with the
+      // schedule/catalogue/judges-book/prize-cards/ring-board/reports.
+      // Also carries the coat type so a wusv show's two same-age/sex
+      // classes (Long Coat / Short Coat) are visibly distinct on results
+      // (Mandy, NE Regional 5 Sept 2026 — two identical-looking cards).
+      const classLabelMap = buildClassLabelMap(classes, show.showRuleset);
+
       // Build results grouped by breed → class
       const breedGroups = new Map<
         string,
@@ -1133,6 +1142,8 @@ export const stewardRouter = createTRPCRouter({
             classId: string;
             className: string;
             classNumber: number | null;
+            classLabel: string;
+            svCoatType: 'stock' | 'long_stock' | null;
             sex: string | null;
             entriesCount: number;
             dogsForward: number;
@@ -1210,8 +1221,16 @@ export const stewardRouter = createTRPCRouter({
         if (classResults.length > 0) {
           breedGroups.get(breedName)!.classes.push({
             classId: sc.id,
-            className: sc.classDefinition.name,
+            // Strip the "SV " disambiguation prefix some sv_age defs carry
+            // ("SV Yearling", "SV Junior") — the catalogue/schedule/judges-
+            // book already do this via the same helper; results were the one
+            // surface left printing "SV Yearling" next to a plain "Adult"
+            // (Mandy, NE Regional 5 Sept 2026 screenshot). No-op for any
+            // name without the prefix, so RKC classes are unaffected.
+            className: svDisplayAge(sc.classDefinition.name),
             classNumber: sc.classNumber,
+            classLabel: classLabelMap.get(sc.id) ?? (sc.classNumber != null ? String(sc.classNumber) : ''),
+            svCoatType: sc.svCoatType ?? null,
             sex: sc.sex,
             entriesCount: confirmedEntries.length,
             dogsForward,

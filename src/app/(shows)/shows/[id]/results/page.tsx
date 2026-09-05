@@ -21,6 +21,7 @@ import { toast } from 'sonner';
 import { trpc } from '@/lib/trpc';
 import { getPlacementLabel, placementColors, achievementLabels } from '@/lib/placements';
 import { computeSvClassRatings } from '@/lib/sv-grading';
+import { svCoatDisplayName } from '@/lib/class-labels';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { SE_H } from '@/components/show-experience/tokens';
@@ -425,11 +426,17 @@ export default function LiveResultsPage({
 
               // Build share text for this breed
               const topResults = group.classes
-                .flatMap((cls) =>
-                  cls.results
+                .flatMap((cls) => {
+                  // A wusv show runs each age×sex twice (once per coat) —
+                  // the shared class name is ambiguous on its own, so the
+                  // coat must ride along in any text pulled out of the
+                  // class object (share captions included).
+                  const coat = svCoatDisplayName(cls.svCoatType);
+                  const classLabel = coat ? `${cls.className} — ${coat}` : cls.className;
+                  return cls.results
                     .filter((r) => r.placement && r.placement <= 3)
-                    .map((r) => `${getPlacementLabel(r.placement!)}: ${r.dogName}${cls.className ? ` (${cls.className})` : ''}`)
-                )
+                    .map((r) => `${getPlacementLabel(r.placement!)}: ${r.dogName}${classLabel ? ` (${classLabel})` : ''}`);
+                })
                 .slice(0, 6);
 
               const breedShareText = [
@@ -491,9 +498,14 @@ export default function LiveResultsPage({
                         className="rounded-lg border bg-card p-4"
                       >
                         <div className="mb-3 flex items-center gap-2">
-                          {cls.classNumber != null && (
+                          {/* Guard on the LABEL, not the number — Junior
+                              Handling classes carry class_number = NULL but
+                              still get a canonical label ('JHA'/'JHB') from
+                              buildClassLabelMap, and a number-only guard hid
+                              them entirely (Mandy 2026-09-05, NE Regional). */}
+                          {(cls.classLabel || cls.classNumber != null) && (
                             <span className="text-xs font-bold text-muted-foreground">
-                              #{cls.classNumber}
+                              #{cls.classLabel || cls.classNumber}
                             </span>
                           )}
                           <h3 className="font-semibold text-sm">
@@ -505,6 +517,14 @@ export default function LiveResultsPage({
                               className="text-xs capitalize"
                             >
                               {cls.sex}
+                            </Badge>
+                          )}
+                          {svCoatDisplayName(cls.svCoatType) && (
+                            <Badge
+                              variant="outline"
+                              className="text-xs"
+                            >
+                              {svCoatDisplayName(cls.svCoatType)}
                             </Badge>
                           )}
                           <span className="text-xs text-muted-foreground">

@@ -12,6 +12,7 @@ import {
   dogOwners,
 } from '@/server/db/schema';
 import { getPlacementLabel, achievementLabels } from '@/lib/placements';
+import { svCoatDisplayName, svDisplayAge } from '@/lib/class-labels';
 import { buildResultsSubject } from '@/lib/results-subject';
 import { resend, FROM, APP_URL, btn, emailHeader, emailFooter } from './email';
 import { BRAND } from '@/lib/brand';
@@ -99,14 +100,22 @@ export async function sendExhibitorResultsEmails(showId: string) {
         .filter((ec) => ec.result)
         .map((ec) => {
           const r = ec.result!;
-          const className = ec.showClass?.classDefinition?.name ?? 'Class';
+          // Strip the "SV " disambiguation prefix some sv_age defs carry
+          // ("SV Yearling") — matches the catalogue/schedule everywhere else;
+          // no-op for a plain RKC/unprefixed name.
+          const className = svDisplayAge(ec.showClass?.classDefinition?.name) || 'Class';
           const sex = ec.showClass?.sex;
           const sexLabel = sex === 'dog' ? ' Dog' : sex === 'bitch' ? ' Bitch' : '';
+          // A wusv show runs each age×sex TWICE, once per coat — without the
+          // coat wording, an exhibitor's own results email shows two
+          // identical-looking class rows (Mandy, NE Regional 5 Sept 2026).
+          const coat = svCoatDisplayName(ec.showClass?.svCoatType);
+          const coatLabel = coat ? ` — ${coat}` : '';
           const pLabel = r.placement ? getPlacementLabel(r.placement) : 'Entered';
           const pColor = r.placement ? (placementColor[r.placement] ?? BRAND.ink2) : '#8f9488';
 
           return `<tr>
-            <td style="padding: 6px 12px; border-bottom: 1px solid ${BRAND.line}; font-size: 14px;">${className}${sexLabel}</td>
+            <td style="padding: 6px 12px; border-bottom: 1px solid ${BRAND.line}; font-size: 14px;">${className}${sexLabel}${coatLabel}</td>
             <td style="padding: 6px 12px; border-bottom: 1px solid ${BRAND.line}; font-size: 14px; font-weight: 600; color: ${pColor};">${pLabel}</td>
             ${r.specialAward ? `<td style="padding: 6px 12px; border-bottom: 1px solid ${BRAND.line}; font-size: 12px; color: ${BRAND.ink2};">${r.specialAward}</td>` : '<td></td>'}
           </tr>`;
@@ -442,11 +451,17 @@ export async function createResultsMilestonePosts(showId: string) {
     if (!entry.dogId || !entry.dog) continue;
     for (const ec of entry.entryClasses) {
       if (ec.result?.placement && ec.result.placement <= 3) {
-        const className = ec.showClass?.classDefinition?.name ?? 'class';
+        // Same "SV " prefix strip as the exhibitor results email above.
+        const className = svDisplayAge(ec.showClass?.classDefinition?.name) || 'class';
         const sex = ec.showClass?.sex;
         const sexLabel = sex === 'dog' ? ' Dog' : sex === 'bitch' ? ' Bitch' : '';
+        // Same coat disambiguation as the exhibitor results email above —
+        // a wusv show's shared social caption must not conflate the two
+        // coat classes of the same age×sex.
+        const coat = svCoatDisplayName(ec.showClass?.svCoatType);
+        const coatLabel = coat ? ` — ${coat}` : '';
         const pLabel = getPlacementLabel(ec.result.placement);
-        const caption = `Placed ${pLabel} in ${className}${sexLabel} at ${show.name}`;
+        const caption = `Placed ${pLabel} in ${className}${sexLabel}${coatLabel} at ${show.name}`;
 
         if (!dogMilestones.has(entry.dogId)) {
           dogMilestones.set(entry.dogId, {

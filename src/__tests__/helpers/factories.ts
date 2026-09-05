@@ -161,15 +161,14 @@ export async function makeShowClass(opts: {
   classDefinitionId?: string;
   entryFee?: number;
   breedId?: string;
-}) {
+} & Partial<typeof showClasses.$inferInsert>) {
   const classDefinitionId = opts.classDefinitionId ?? (await makeClassDef()).id;
   const [row] = await testDb
     .insert(showClasses)
     .values({
-      showId: opts.showId,
-      classDefinitionId,
-      breedId: opts.breedId,
-      entryFee: opts.entryFee ?? 500, // pence
+      entryFee: 500, // pence, default — opts.entryFee below overrides if given
+      ...opts,
+      classDefinitionId, // always the resolved id, never opts' possibly-undefined one
     })
     .returning();
   return row;
