@@ -144,7 +144,12 @@ describe('CatalogueByClass — judge-copy results fill-in', () => {
     expect(dottedSlots).toBeGreaterThan(0);
   });
 
-  it('Junior Handling class: placings fill in too, using plain placement numbers (no SV grade concept)', () => {
+  it('Junior Handling class: placings fill in with the HANDLER name (same identity the class listing itself prints), not just the catalogue number', () => {
+    // Team lead 2026-09-05, from a real North East Regional render (page
+    // 31): breed classes fill "39 YAKASIMBA BUBBLES", but JH filled only
+    // "70" / "74" — the handler's name (already printed above, in the same
+    // class listing, via jhHandlerName) never made it into the identity
+    // write-in slot.
     const jhEntry = makeEntry({
       catalogueNumber: '10',
       entryType: 'junior_handler',
@@ -165,11 +170,45 @@ describe('CatalogueByClass — judge-copy results fill-in', () => {
     ]);
 
     const text = allText(CatalogueByClass({ show: makeShow(), entries: [jhEntry, jhEntry2], judgeResults }));
-    expect(text).toContain('Alexxa Cowan');
-    expect(text).toContain('Sam Swift');
-    // Ungraded fallback in computeSvClassRatings: plain placement number.
-    expect(text).toMatch(/\b1\b/);
-    expect(text).toMatch(/\b2\b/);
+    // The identity slot: catalogue number PLUS the handler's name together —
+    // same pairing the breed-class identity slot uses (number + name).
+    expect(text).toMatch(/1st\n10 {2}Alexxa Cowan\n/);
+    expect(text).toMatch(/2nd\n11 {2}Sam Swift\n/);
+  });
+
+  it('Junior Handling class: the grade slot stays blank — there is no SV grade for a handler, so never substitute the placement number', () => {
+    // Team lead 2026-09-05, from the same real render: JHB rendered "1st 74
+    // GR 1" / "2nd 73 GR 2" — computeSvClassRatings' ungraded-but-placed
+    // fallback (plain placement number, meant for a results BADGE) leaked
+    // into the grid's explicitly-labelled "Gr" slot, reading as a meaningless
+    // (and to a child handler, faintly insulting) "Grade 1".
+    const jhEntry = makeEntry({
+      catalogueNumber: '73',
+      entryType: 'junior_handler',
+      jhHandlerName: 'Alexxa Cowan',
+      classes: [{ name: 'JHB', sex: null, classNumber: null, classLabel: 'JHB', sortOrder: 101, showClassId: SHOW_CLASS_JH }],
+    });
+    const jhEntry2 = makeEntry({
+      catalogueNumber: '74',
+      entryType: 'junior_handler',
+      jhHandlerName: 'Julia Sobolewska',
+      classes: [{ name: 'JHB', sex: null, classNumber: null, classLabel: 'JHB', sortOrder: 101, showClassId: SHOW_CLASS_JH }],
+    });
+    const judgeResults = new Map<string, JudgeCopyResult>([
+      [`73-${SHOW_CLASS_JH}`, { svGrade: null, placement: 2, placementStatus: null, specialAward: null }],
+      [`74-${SHOW_CLASS_JH}`, { svGrade: null, placement: 1, placementStatus: null, specialAward: null }],
+    ]);
+
+    const text = allText(CatalogueByClass({ show: makeShow(), entries: [jhEntry, jhEntry2], judgeResults }));
+    // The identity is still filled (this class WAS judged)...
+    expect(text).toMatch(/1st\n74 {2}Julia Sobolewska\n/);
+    expect(text).toMatch(/2nd\n73 {2}Alexxa Cowan\n/);
+    // ...but the "Gr" slot for each of those two rows must be the ordinary
+    // blank dots, never a bare "1" or "2".
+    expect(text).toMatch(/1st\n74 {2}Julia Sobolewska\nGr\n…\n/);
+    expect(text).toMatch(/2nd\n73 {2}Alexxa Cowan\nGr\n…\n/);
+    expect(text).not.toContain('Gr\n1\n');
+    expect(text).not.toContain('Gr\n2\n');
   });
 
   it('withheld exhibitor: judge-copy fill-in never surfaces the redacted address', () => {

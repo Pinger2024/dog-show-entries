@@ -227,12 +227,15 @@ function renderSvPlacings(count: number): React.ReactElement {
 
 /**
  * The judge-copy variant of {@link renderSvPlacings} — same grid, same
- * styling, but each slot is filled with the dog that actually finished
- * there (catalogue number + name) and its SV rating (grade + within-grade
- * rank, e.g. "SG1"), instead of a blank write-in. A slot with no recorded
- * placement (class not yet judged, or that dog withheld/unplaced) degrades
- * to the exact same dots as the blank steward's copy — never a wrong or
- * empty-looking grade.
+ * styling, but each slot is filled with whoever actually finished there
+ * (catalogue number + identity — dog name for a breed class, HANDLER name
+ * for Junior Handling, via {@link judgeCopyIdentityLabel}) and its SV rating
+ * (grade + within-grade rank, e.g. "SG1"), instead of a blank write-in. A
+ * slot with no recorded placement (class not yet judged, or that dog
+ * withheld/unplaced) degrades to the exact same dots as the blank steward's
+ * copy — never a wrong or empty-looking grade. Junior Handling in particular
+ * has no SV grade at all, so its "Gr" slot always stays blank too — see the
+ * `hasGrade` guard below.
  *
  * `computeSvClassRatings` restarts its rank per grade (SG1, SG2, then G1,
  * G2…), so it MUST be run once per class over every dog that has a result —
@@ -263,10 +266,22 @@ function renderSvPlacingsFilled(
   }
 
   const ratingByKey = computeSvClassRatings(classResults);
-  const byPlacement = new Map<number, { entry: CatalogueEntry; rating: string }>();
+  const byPlacement = new Map<number, { entry: CatalogueEntry; rating: string; hasGrade: boolean }>();
   for (const cr of classResults) {
     if (cr.placement != null) {
-      byPlacement.set(cr.placement, { entry: cr.entry, rating: ratingByKey.get(cr.entryClassId) ?? '' });
+      byPlacement.set(cr.placement, {
+        entry: cr.entry,
+        rating: ratingByKey.get(cr.entryClassId) ?? '',
+        // computeSvClassRatings falls back to the PLAIN placement number for
+        // an ungraded-but-placed result (right for a results badge, where
+        // "no grade" still needs some label) — wrong here, because that
+        // number would land in a slot explicitly labelled "Gr". Junior
+        // Handling has no SV grade at all (team lead 2026-09-05, from a real
+        // render: JHB read "1st 74 Gr 1", a meaningless "Grade 1" for a
+        // child handler), so the grade slot must only ever show a REAL
+        // recorded grade — never that fallback.
+        hasGrade: !!cr.svGrade,
+      });
     }
   }
 
@@ -278,17 +293,32 @@ function renderSvPlacingsFilled(
           <View key={n} style={svPlacings.cell}>
             <Text style={svPlacings.ordinal}>{ordinalLabel(n)}</Text>
             <Text style={svPlacings.writeIn}>
-              {filled
-                ? `${filled.entry.catalogueNumber ?? ''}  ${uppercaseName(filled.entry.dogName) || ''}`.trim()
-                : '………'}
+              {filled ? `${filled.entry.catalogueNumber ?? ''}  ${judgeCopyIdentityLabel(filled.entry)}`.trim() : '………'}
             </Text>
             <Text style={svPlacings.gradeLabel}>Gr</Text>
-            <Text style={svPlacings.gradeWriteIn}>{filled ? filled.rating || '—' : '…'}</Text>
+            <Text style={svPlacings.gradeWriteIn}>{filled && filled.hasGrade ? filled.rating || '—' : '…'}</Text>
           </View>
         );
       })}
     </View>
   );
+}
+
+/**
+ * The identity printed into the judge-copy write-in slot — MUST agree with
+ * whatever identity the class listing itself prints for that same entry
+ * (team lead 2026-09-05, from a real render: JH classes filled only the
+ * catalogue number, "70"/"74", while the class listing right above names
+ * the handler — "70 Lia Stevenson"). Junior Handling entries have no dog
+ * name of their own to place here; mirrors the exact fallback renderEntry
+ * uses for a JH row (`entry.jhHandlerName ?? entry.exhibitor`, title-cased,
+ * with the same "Unnamed Handler" default).
+ */
+function judgeCopyIdentityLabel(entry: CatalogueEntry): string {
+  if (entry.entryType === 'junior_handler') {
+    return smartOwnerTitleCase(entry.jhHandlerName ?? entry.exhibitor) || 'Unnamed Handler';
+  }
+  return uppercaseName(entry.dogName) || '';
 }
 
 export function renderSvEntry(
