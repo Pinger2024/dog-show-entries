@@ -1238,7 +1238,21 @@ export const stewardRouter = createTRPCRouter({
         // there is never a withheld/unpublished result riding along with it.
         const allAbsent = confirmedEntries.length > 0 && confirmedEntries.every((ec) => ec.absent);
 
-        if (classResults.length > 0 || allAbsent) {
+        // An all-absent class is reached via attendance, not a published
+        // result, so it has no result row to carry the usual publishedAt
+        // gate. Add the show-day lock as its stand-in: don't surface entry
+        // counts for an all-absent class before the show has actually
+        // started (or its results are already published) — an absence
+        // keyed in early (a pre-show withdrawal, a steward testing the app
+        // the night before) must not reveal that class's entry count to the
+        // public ahead of the steward fairness lock that guards entry lists
+        // everywhere else. Privileged callers (the show's own steward/
+        // secretary/admin) see it regardless, same as unpublished results.
+        const showHasStarted =
+          show.status === 'in_progress' || show.status === 'completed' || show.resultsPublishedAt !== null;
+        const allAbsentVisible = allAbsent && (isPrivileged || showHasStarted);
+
+        if (classResults.length > 0 || allAbsentVisible) {
           breedGroups.get(breedName)!.classes.push({
             classId: sc.id,
             allAbsent,

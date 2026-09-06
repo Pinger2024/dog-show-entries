@@ -14,7 +14,7 @@
  */
 import { describe, it, expect } from 'vitest';
 import { eq } from 'drizzle-orm';
-import { results } from '@/server/db/schema';
+import { results, shows } from '@/server/db/schema';
 import { testDb } from '../helpers/db';
 import { createTestCaller } from '../helpers/context';
 import {
@@ -177,5 +177,90 @@ describe('live results — all-confirmed-entries-absent class (2026-09-06)', () 
     expect(publicCard).toBeDefined();
     expect(publicCard!.allAbsent).toBe(true);
     expect(publicCard!.results).toEqual([]);
+  });
+});
+
+describe('live results — all-absent class respects the show-day lock (2026-09-06)', () => {
+  /** Same shape as baseShow() but with a caller-supplied status, so a class
+   *  can be built on a show that hasn't started yet (entry lists/attendance
+   *  stay hidden from the public until show day everywhere else in the
+   *  app — an absence keyed in early must not be the one path that skips
+   *  that lock). */
+  async function showWithStatus(status: 'entries_closed' | 'in_progress') {
+    const [steward, org, breed] = await Promise.all([
+      makeUser({ role: 'steward' }),
+      makeOrg(),
+      makeBreed(),
+    ]);
+    const show = await makeShow({
+      organisationId: org.id,
+      breedId: breed.id,
+      showRuleset: 'rkc',
+      status,
+      startDate: PAST,
+      endDate: PAST,
+    });
+    await makeStewardAssignment({ userId: steward.id, showId: show.id });
+    const classDef = await makeClassDef({ name: 'Puppy Dog' });
+    return { steward, org, breed, show, classDef };
+  }
+
+  it('(f) an all-absent class on a show that has NOT started is hidden from the public but visible to the steward', async () => {
+    const { steward, breed, show, classDef } = await showWithStatus('entries_closed');
+    const showClass = await makeShowClass({
+      showId: show.id, breedId: breed.id, classDefinitionId: classDef.id, sex: 'dog', classNumber: 7,
+    });
+    await confirmedEntry(show.id, breed.id, showClass.id, { absent: true });
+
+    const publicLive = await createTestCaller(null).steward.getLiveResults({ showId: show.id });
+    expect(findCard(publicLive, showClass.id)).toBeUndefined();
+
+    const live = await createTestCaller(steward).steward.getLiveResults({ showId: show.id });
+    const card = findCard(live, showClass.id);
+    expect(card).toBeDefined();
+    expect(card!.allAbsent).toBe(true);
+    expect(card!.results).toEqual([]);
+  });
+
+  it('(g) the same class becomes publicly visible once the show is in_progress', async () => {
+    const { steward, breed, show, classDef } = await showWithStatus('in_progress');
+    const showClass = await makeShowClass({
+      showId: show.id, breedId: breed.id, classDefinitionId: classDef.id, sex: 'dog', classNumber: 8,
+    });
+    await confirmedEntry(show.id, breed.id, showClass.id, { absent: true });
+
+    const publicLive = await createTestCaller(null).steward.getLiveResults({ showId: show.id });
+    const publicCard = findCard(publicLive, showClass.id);
+    expect(publicCard).toBeDefined();
+    expect(publicCard!.allAbsent).toBe(true);
+    expect(publicCard!.results).toEqual([]);
+
+    const live = await createTestCaller(steward).steward.getLiveResults({ showId: show.id });
+    expect(findCard(live, showClass.id)).toBeDefined();
+  });
+
+  it('(h) a normal class with a published result is unaffected by the show-day lock, before or after show day', async () => {
+    const { steward, breed, show, classDef } = await showWithStatus('entries_closed');
+    const showClass = await makeShowClass({
+      showId: show.id, breedId: breed.id, classDefinitionId: classDef.id, sex: 'dog', classNumber: 9,
+    });
+    const { ec } = await confirmedEntry(show.id, breed.id, showClass.id, { absent: false });
+    const result = await makeResult({ entryClassId: ec.id, placement: 1 });
+    await testDb.update(results).set({ publishedAt: new Date() }).where(eq(results.id, result.id));
+
+    // Not started yet — the published result still shows publicly, exactly
+    // as it always has (this class is never all-absent, so the new lock
+    // must not touch it).
+    const publicLiveBefore = await createTestCaller(null).steward.getLiveResults({ showId: show.id });
+    const publicCardBefore = findCard(publicLiveBefore, showClass.id);
+    expect(publicCardBefore).toBeDefined();
+    expect(publicCardBefore!.results).toHaveLength(1);
+
+    await testDb.update(shows).set({ status: 'in_progress' }).where(eq(shows.id, show.id));
+
+    const publicLiveAfter = await createTestCaller(null).steward.getLiveResults({ showId: show.id });
+    const publicCardAfter = findCard(publicLiveAfter, showClass.id);
+    expect(publicCardAfter).toBeDefined();
+    expect(publicCardAfter!.results).toHaveLength(1);
   });
 });
