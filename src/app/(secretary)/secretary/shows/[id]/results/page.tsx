@@ -1022,7 +1022,7 @@ export default function SecretaryResultsPage() {
                     </div>
                     {cls.results.length === 0 ? (
                       <p className="text-xs text-muted-foreground italic">
-                        No results yet
+                        {cls.allAbsent ? 'No dogs present' : 'No results yet'}
                       </p>
                     ) : (
                       <div className="space-y-1">

@@ -1147,6 +1147,13 @@ export const stewardRouter = createTRPCRouter({
             sex: string | null;
             entriesCount: number;
             dogsForward: number;
+            // True when the class was reached (it has at least one confirmed
+            // entry) but every one of those entries was marked absent, so
+            // there is nothing to place — distinct from "not judged yet",
+            // which must never render the same way (Mandy, NE Regional 5
+            // Sept 2026: class 6b vanished and she couldn't tell which case
+            // it was).
+            allAbsent: boolean;
             results: {
               entryClassId: string;
               placement: number | null;
@@ -1218,9 +1225,23 @@ export const stewardRouter = createTRPCRouter({
           // withheld/unplaced at the end (99 sentinel for sort).
           .sort((a, b) => (a.placement ?? 99) - (b.placement ?? 99));
 
-        if (classResults.length > 0) {
+        // A class with no results shows only when it was actually reached:
+        // at least one confirmed entry, and EVERY confirmed entry in it is
+        // marked absent (nobody turned up — nothing left to record). Still
+        // hide a class with entries but no results and no absences (simply
+        // not judged yet) and a class with no entries at all. This is pure
+        // attendance data — `entriesCount`/`dogsForward` above are already
+        // computed unconditionally for every class regardless of caller
+        // privilege, so surfacing them here for an all-absent class adds no
+        // new leak: the per-result publishedAt gate above is untouched, and
+        // an all-absent class by definition has zero non-absent entries, so
+        // there is never a withheld/unpublished result riding along with it.
+        const allAbsent = confirmedEntries.length > 0 && confirmedEntries.every((ec) => ec.absent);
+
+        if (classResults.length > 0 || allAbsent) {
           breedGroups.get(breedName)!.classes.push({
             classId: sc.id,
+            allAbsent,
             // Strip the "SV " disambiguation prefix some sv_age defs carry
             // ("SV Yearling", "SV Junior") — the catalogue/schedule/judges-
             // book already do this via the same helper; results were the one
