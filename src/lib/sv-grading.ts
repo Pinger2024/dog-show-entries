@@ -116,6 +116,22 @@ export function formatSvRating(
 }
 
 /**
+ * The BARE SV grade for a single result — grade code only, never a
+ * within-grade rank (e.g. "SG", not "SG1"). Mandy 2026-09-07, reviewing the
+ * judge-copy results grid: "for the results one we don't need VP1, just VP
+ * because we have the catalogue number in the 1st place" — the grid's
+ * placing line already carries the catalogue number, so the rank digit on
+ * the grade line beneath it is redundant. Distinct from and does not affect
+ * {@link formatSvRating}/{@link computeSvClassRatings}, which stay ranked for
+ * every other consumer (results pages, the SV graded-results document,
+ * grading cards).
+ */
+export function formatSvGradeBare(svGrade: string | null | undefined): string {
+  if (svGrade === 'disqualified') return 'Disqualified';
+  return svGrade ? svGrade.toUpperCase() : '';
+}
+
+/**
  * Compute the SV rating (grade + within-grade rank) for every result in ONE
  * class. SV ranks within each grade and restarts the count per grade, so a
  * class graded SG,SG,G,G,A placed 1..5 reads SG1, SG2, G1, G2, A1.

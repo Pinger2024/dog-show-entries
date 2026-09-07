@@ -142,9 +142,10 @@ function findText(nodes: TextNode[], value: string): TextNode {
 }
 
 describe('CatalogueByClass — judge-copy results fill-in', () => {
-  it('RESULTS SUPPLIED: fills the write-in grid with real placings and restarts the SV rank per grade', () => {
-    // 4 dogs: SG,SG,G,G placed 1..4 — SV restarts numbering per grade, so
-    // this must read SG1, SG2, G1, G2 (never SG1, SG2, G3, G4).
+  it('RESULTS SUPPLIED: fills the write-in grid with real placings and prints the BARE grade — no within-grade rank', () => {
+    // 4 dogs: SG,SG,G,G placed 1..4. Mandy 2026-09-07: "for the results one
+    // we don't need VP1, just VP because we have the catalogue number in the
+    // 1st place" — so the grade line reads SG, SG, G, G, never SG1/SG2/G1/G2.
     const entries = [
       makeEntry({ catalogueNumber: '1' }),
       makeEntry({ catalogueNumber: '2' }),
@@ -160,26 +161,42 @@ describe('CatalogueByClass — judge-copy results fill-in', () => {
 
     const text = allText(CatalogueByClass({ show: makeShow(), entries, judgeResults }));
 
-    expect(text).toContain('SG1');
-    expect(text).toContain('SG2');
-    expect(text).toContain('G1');
-    expect(text).toContain('G2');
-    // The restart proves it isn't just printing the overall placement number
-    // relabelled — G1 (3rd overall) must NOT read "G3".
-    expect(text).not.toContain('G3');
-    expect(text).not.toContain('G4');
+    expect(text).not.toContain('SG1');
+    expect(text).not.toContain('SG2');
+    expect(text).not.toContain('G1');
+    expect(text).not.toContain('G2');
 
-    // The grid holds catalogue number + grade ONLY — no dog name (Mandy
-    // 2026-09-06: "the name is just a waste"). Exact line sequence per row:
-    // ordinal, bare number, "Gr", rating.
-    expect(text).toMatch(/1st\n1\nGr\nSG1\n/);
-    expect(text).toMatch(/2nd\n2\nGr\nSG2\n/);
-    expect(text).toMatch(/3rd\n3\nGr\nG1\n/);
-    expect(text).toMatch(/4th\n4\nGr\nG2\n/);
+    // The grid holds catalogue number + BARE grade ONLY — no dog name (Mandy
+    // 2026-09-06: "the name is just a waste") and no rank digit (Mandy
+    // 2026-09-07). Exact line sequence per row: ordinal, bare number, "Gr",
+    // bare grade.
+    expect(text).toMatch(/1st\n1\nGr\nSG\n/);
+    expect(text).toMatch(/2nd\n2\nGr\nSG\n/);
+    expect(text).toMatch(/3rd\n3\nGr\nG\n/);
+    expect(text).toMatch(/4th\n4\nGr\nG\n/);
     // The class listing above the grid is untouched — dog names still print
     // there exactly as before.
     expect(text).toContain('DOG 1');
     expect(text).toContain('DOG 2');
+  });
+
+  it('TWO DOGS, SAME GRADE: both print the bare grade with no digits, even though SV ranks within a grade elsewhere', () => {
+    // Same grade twice would previously read VP1/VP2 (within-grade rank) —
+    // Mandy's ask is specifically that the rank digit disappears here, so
+    // both slots must read the identical bare "VP".
+    const entries = [makeEntry({ catalogueNumber: '1' }), makeEntry({ catalogueNumber: '2' })];
+    const judgeResults = new Map<string, JudgeCopyResult>([
+      [`1-${SHOW_CLASS_WORKING}`, { svGrade: 'vp', placement: 1, placementStatus: null, specialAward: null }],
+      [`2-${SHOW_CLASS_WORKING}`, { svGrade: 'vp', placement: 2, placementStatus: null, specialAward: null }],
+    ]);
+
+    const text = allText(CatalogueByClass({ show: makeShow(), entries, judgeResults }));
+
+    expect(text).not.toContain('VP1');
+    expect(text).not.toContain('VP2');
+    expect(text).toMatch(/1st\n1\nGr\nVP\n/);
+    expect(text).toMatch(/2nd\n2\nGr\nVP\n/);
+    expect((text.match(/\nVP\n/g) ?? []).length).toBe(2);
   });
 
   it('NO RESULT for one dog: that dog degrades to the exact same blank dots as the steward copy', () => {
@@ -192,7 +209,7 @@ describe('CatalogueByClass — judge-copy results fill-in', () => {
     const filled = allText(CatalogueByClass({ show: makeShow(), entries, judgeResults }));
     const blank = allText(CatalogueByClass({ show: makeShow(), entries, judgeResults: new Map() }));
 
-    expect(filled).toContain('SG1');
+    expect(filled).toMatch(/Gr\nSG\n/);
     // The second (ungraded) slot still carries the ordinary write-in dots —
     // never a wrong or empty-looking grade.
     expect(filled).toContain('…');
@@ -213,7 +230,8 @@ describe('CatalogueByClass — judge-copy results fill-in', () => {
 
     const text = allText(CatalogueByClass({ show: makeShow(), entries, judgeResults }));
     expect(text).toContain('DOG 2'); // still printed in the class list
-    expect(text).toContain('V1');
+    expect(text).toMatch(/Gr\nV\n/);
+    expect(text).not.toContain('V1');
     // Only one filled slot — the rest of the grid (1 more slot for dog #2)
     // stays blank rather than guessing.
     const dottedSlots = (text.match(/…/g) ?? []).length;
@@ -311,7 +329,7 @@ describe('CatalogueByClass — judge-copy results fill-in', () => {
     expect(text).toContain('address withheld');
     // The result still renders — withholding an address is not the same as
     // withholding the result.
-    expect(text).toContain('V1');
+    expect(text).toMatch(/Gr\nV\n/);
   });
 });
 
@@ -384,7 +402,7 @@ describe('CatalogueByClass — SV placings grid: GR under the placing line, judg
     // The grade row underneath it: "Gr" label plus its sibling, the rating.
     const gradeLabel1 = nodes.filter((n) => n.value === 'Gr')[0]!;
     const filledGrade = nodes.find((n) => n.parent === gradeLabel1.parent && n !== gradeLabel1)!;
-    expect(filledGrade.value).toBe('SG1');
+    expect(filledGrade.value).toBe('SG');
 
     for (const leaf of [filledNumber, filledGrade]) {
       const style = leaf.style as { fontSize?: number; fontWeight?: string };

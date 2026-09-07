@@ -14,7 +14,7 @@ import { TonalWash } from '@/components/sv-pdf/cover-atoms';
 import { SV, SV_FONTS } from '@/components/schedule/shared/sv-styles';
 import { svCoatDisplayName, sectionClasses } from '@/lib/class-labels';
 import { AdvertPage } from '@/components/schedule/shared/advert-page';
-import { computeSvClassRatings } from '@/lib/sv-grading';
+import { formatSvGradeBare } from '@/lib/sv-grading';
 
 /**
  * One dog's recorded result, for the "judge-copy" format only — the SV/WUSV
@@ -274,24 +274,26 @@ function renderSvPlacings(count: number): React.ReactElement {
 /**
  * The judge-copy variant of {@link renderSvPlacings} — same grid, same
  * styling, but each slot is filled with the CATALOGUE NUMBER of whoever
- * actually finished there and its SV rating (grade + within-grade rank,
- * e.g. "SG1"), instead of a blank write-in. Number only, no name — Mandy
- * 2026-09-06, after seeing a real render with names in the slot: "I don't
- * think we need the name on the results just the catalogue number and grade
- * as the name is just a [waste]". The class listing directly above each
- * grid still names every dog/handler exactly as it always has; this grid is
- * a cross-reference into it, not a duplicate.
+ * actually finished there and its BARE SV grade (e.g. "SG", never "SG1"),
+ * instead of a blank write-in. Number only, no name — Mandy 2026-09-06,
+ * after seeing a real render with names in the slot: "I don't think we need
+ * the name on the results just the catalogue number and grade as the name
+ * is just a [waste]". The class listing directly above each grid still
+ * names every dog/handler exactly as it always has; this grid is a
+ * cross-reference into it, not a duplicate.
+ *
+ * The grade line prints {@link formatSvGradeBare} — no within-grade rank —
+ * per Mandy 2026-09-07: "for the results one we don't need VP1, just VP
+ * because we have the catalogue number in the 1st place". The ranked
+ * `computeSvClassRatings`/`formatSvRating` are deliberately NOT used here;
+ * they stay ranked for every other consumer (results pages, the SV
+ * graded-results document, grading cards).
  *
  * A slot with no recorded placement (class not yet judged, or that dog
  * withheld/unplaced) degrades to the exact same dots as the blank steward's
  * copy — never a wrong or empty-looking grade. Junior Handling in particular
  * has no SV grade at all, so its "Gr" slot always stays blank too — see the
  * `hasGrade` guard below.
- *
- * `computeSvClassRatings` restarts its rank per grade (SG1, SG2, then G1,
- * G2…), so it MUST be run once per class over every dog that has a result —
- * never per-dog — which is why this takes the whole class's `sorted` list
- * rather than being called per entry.
  */
 function renderSvPlacingsFilled(
   sorted: CatalogueEntry[],
@@ -301,7 +303,6 @@ function renderSvPlacingsFilled(
   const count = sorted.length;
 
   const classResults: {
-    entryClassId: string;
     svGrade: string | null;
     placement: number | null;
     catalogueNumber: string;
@@ -313,7 +314,6 @@ function renderSvPlacingsFilled(
       const result = judgeResults.get(key);
       if (!result) continue;
       classResults.push({
-        entryClassId: key,
         svGrade: result.svGrade,
         placement: result.placement,
         catalogueNumber: entry.catalogueNumber,
@@ -321,21 +321,16 @@ function renderSvPlacingsFilled(
     }
   }
 
-  const ratingByKey = computeSvClassRatings(classResults);
   const byPlacement = new Map<number, { catalogueNumber: string; rating: string; hasGrade: boolean }>();
   for (const cr of classResults) {
     if (cr.placement != null) {
       byPlacement.set(cr.placement, {
         catalogueNumber: cr.catalogueNumber,
-        rating: ratingByKey.get(cr.entryClassId) ?? '',
-        // computeSvClassRatings falls back to the PLAIN placement number for
-        // an ungraded-but-placed result (right for a results badge, where
-        // "no grade" still needs some label) — wrong here, because that
-        // number would land in a slot explicitly labelled "Gr". Junior
-        // Handling has no SV grade at all (team lead 2026-09-05, from a real
-        // render: JHB read "1st 74 Gr 1", a meaningless "Grade 1" for a
-        // child handler), so the grade slot must only ever show a REAL
-        // recorded grade — never that fallback.
+        rating: formatSvGradeBare(cr.svGrade),
+        // Junior Handling has no SV grade at all (team lead 2026-09-05, from
+        // a real render: JHB read "1st 74 Gr 1", a meaningless "Grade 1" for
+        // a child handler), so the grade slot must only ever show a REAL
+        // recorded grade — never a placement-number fallback.
         hasGrade: !!cr.svGrade,
       });
     }
