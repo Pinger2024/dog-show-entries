@@ -457,43 +457,76 @@ export function SvClassificationPage({ show }: { show: CatalogueShowInfo }) {
       {/* BRG points system — folded onto the classification page
           2026-05-26 (Amanda asked to save a front-matter page). The
           points table is small enough to share the page with the
-          classification grid. */}
-      <View style={{ marginTop: 7 }}>
+          classification grid.
+
+          Was a single 4-across wrapped grid with the value pushed to the
+          cell's far edge — on the printed A5 page the value visually sat
+          next to the NEXT label, not its own, so a reader couldn't tell
+          which number belonged to which award (Mandy photographed it and
+          flagged it 2026-09-07). Grouped into three life-stage columns
+          instead, each a small label/points table, so every value sits
+          directly beside its own row's label.
+
+          Vertical padding tightened throughout (block marginTop, intro
+          line-height/margin, column-heading margin, row padding) to absorb
+          the extra row height of a 3-row column vs the old grid's 2 rows —
+          this page has no slack (see the "Tightened 2026-08-11" note above)
+          and a 7-age-row real fixture (regional-show-2026) spilled onto a
+          second page before this pass. Font sizes are untouched. */}
+      <View style={{ marginTop: 4 }}>
         <SectionTitle title="BRG points system" />
-        <Text style={{ fontFamily: SV_FONTS.sans, fontSize: 7.5, color: SV.ink2, lineHeight: 1.45, marginBottom: 4 }}>
+        <Text style={{ fontFamily: SV_FONTS.sans, fontSize: 7.5, color: SV.ink2, lineHeight: 1.3, marginBottom: 3 }}>
           Points toward the British Gold Medal (25 points lifetime, including
           at least 5 in Adult/Working and one Adult SG1 at a regional with 3+
           exhibits).
         </Text>
-        <View style={{ flexDirection: 'row', flexWrap: 'wrap' }}>
+        <View style={{ flexDirection: 'row', gap: 8 }}>
           {[
-            { label: 'VV1 / VP1', value: '1' },
-            { label: 'SG1', value: '2' },
-            { label: 'SG1 adult', value: '4' },
-            { label: 'SG2', value: '1' },
-            { label: 'SG2 adult', value: '2' },
-            { label: 'V1 working', value: '5' },
-            { label: 'V2 working', value: '4' },
-            { label: 'VA working', value: '10' },
-          ].map((p, i) => (
-            <View
-              key={i}
-              style={{
-                width: '25%',
-                flexDirection: 'row',
-                justifyContent: 'space-between',
-                paddingVertical: 2,
-                paddingHorizontal: 4,
-                borderBottomWidth: 0.5,
-                borderBottomColor: SV.rule,
-              }}
-            >
-              <Text style={{ fontFamily: SV_FONTS.sans, fontSize: 7, color: SV.ink, fontWeight: 'bold' }}>
-                {p.label}
-              </Text>
-              <Text style={{ fontFamily: SV_FONTS.serif, fontStyle: 'italic', fontSize: 7, color: SV.accent }}>
-                {p.value}
-              </Text>
+            {
+              heading: 'Puppy / Youth',
+              rows: [
+                { label: 'VV1 / VP1', points: 1 },
+                { label: 'SG1', points: 2 },
+                { label: 'SG2', points: 1 },
+              ],
+            },
+            {
+              heading: 'Adult',
+              rows: [
+                { label: 'SG1 adult', points: 4 },
+                { label: 'SG2 adult', points: 2 },
+              ],
+            },
+            {
+              heading: 'Working',
+              rows: [
+                { label: 'V1 working', points: 5 },
+                { label: 'V2 working', points: 4 },
+                { label: 'VA working', points: 10 },
+              ],
+            },
+          ].map((col, ci) => (
+            <View key={ci} style={{ flex: 1 }}>
+              <Text style={[ss.eyebrow, { fontSize: 7, marginBottom: 1 }]}>{col.heading}</Text>
+              {col.rows.map((row, ri) => (
+                <View
+                  key={ri}
+                  style={{
+                    flexDirection: 'row',
+                    justifyContent: 'space-between',
+                    paddingVertical: 1,
+                    borderBottomWidth: ri === col.rows.length - 1 ? 0 : 0.5,
+                    borderBottomColor: SV.rule,
+                  }}
+                >
+                  <Text style={{ fontFamily: SV_FONTS.sans, fontSize: 7, color: SV.ink, lineHeight: 1.15 }}>
+                    {row.label}
+                  </Text>
+                  <Text style={{ fontFamily: SV_FONTS.sans, fontSize: 7, color: SV.accent, fontWeight: 'bold', lineHeight: 1.15 }}>
+                    {`${row.points} ${row.points === 1 ? 'pt' : 'pts'}`}
+                  </Text>
+                </View>
+              ))}
             </View>
           ))}
         </View>
