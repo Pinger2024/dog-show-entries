@@ -123,6 +123,14 @@ async function main() {
   // ── Entries: one class each (SV/WUSV convention), 12 total, each PAID ───
   let catalogueNumber = 1;
   let firstResultEntryClassId: string | null = null;
+  // Second placing in the SAME class as the first (classes[0], since
+  // 8 % classes.length === 0) — gives the judge-copy catalogue a class with
+  // TWO real grades rather than just one, so a real render actually shows
+  // the bigger/bold treatment on more than a single lonely slot. Before
+  // this, NO golden fixture carried a single svGrade at all (queued in
+  // project memory), so `renderSvPlacingsFilled`'s grade-styling branch had
+  // no real-render coverage.
+  let secondResultEntryClassId: string | null = null;
   for (let i = 0; i < 12; i++) {
     const cls = classes[i % classes.length]!;
     const exhibitor = await makeUser({ role: 'exhibitor', name: `Test Regional Exhibitor ${i}` });
@@ -148,11 +156,18 @@ async function main() {
       .where(eq(schema.entries.id, entry.id));
     const entryClass = await makeEntryClass({ entryId: entry.id, showClassId: cls.id });
     if (i === 0) firstResultEntryClassId = entryClass.id;
+    if (i === 8) secondResultEntryClassId = entryClass.id;
     catalogueNumber++;
   }
 
+  // Two real SV grades in the same class (Young Dog · Dog · Stock Coat) —
+  // exercises the judge-copy catalogue's filled write-in grid on a real
+  // render, not just the unit tests' mocked data.
   if (firstResultEntryClassId) {
-    await makeResult({ entryClassId: firstResultEntryClassId, placement: 1, recordedBy: secretary.id });
+    await makeResult({ entryClassId: firstResultEntryClassId, placement: 1, svGrade: 'v', recordedBy: secretary.id });
+  }
+  if (secondResultEntryClassId) {
+    await makeResult({ entryClassId: secondResultEntryClassId, placement: 2, svGrade: 'sg', recordedBy: secretary.id });
   }
 
   // ── Invoice ──────────────────────────────────────────────────────────────

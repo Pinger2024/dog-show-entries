@@ -254,6 +254,7 @@ export async function makeResult(opts: {
   entryClassId: string;
   placement?: number | null;
   placementStatus?: string | null;
+  svGrade?: (typeof results.$inferInsert)['svGrade'];
   recordedBy?: string;
 }) {
   const [row] = await testDb
@@ -262,6 +263,7 @@ export async function makeResult(opts: {
       entryClassId: opts.entryClassId,
       placement: opts.placement ?? null,
       placementStatus: opts.placementStatus ?? null,
+      svGrade: opts.svGrade ?? null,
       recordedBy: opts.recordedBy,
     })
     .returning();

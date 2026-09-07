@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { CatalogueByClass, type JudgeCopyResult } from '@/components/catalogue/catalogue-by-class';
 import type { CatalogueEntry, CatalogueShowInfo } from '@/components/catalogue/catalogue-types';
+import { View, Text } from '@react-pdf/renderer';
 import { isValidElement, type ReactElement } from 'react';
 
 /**
@@ -81,6 +82,63 @@ function allText(node: unknown): string {
   if (Array.isArray(node)) return node.map(allText).join('\n');
   if (isValidElement(node)) return allText((node as ReactElement<any>).props.children);
   return '';
+}
+
+/**
+ * A layout-aware tree walker for the SV placings grid (2026-09-07: Mandy
+ * asked for "the GR underneath the placing" and bigger/bolder judge-copy
+ * fill-in text — neither is visible to `allText` above, which flattens
+ * away all layout and style). Each `<Text>` leaf becomes a `TextNode`
+ * carrying its own style plus a `parent` pointer up the `<View>` chain, so
+ * a test can walk "what row is this text in, and what row/column wraps
+ * that". Fragments and other non-View/Text components (Document, Page) are
+ * transparent — they don't introduce a parent frame of their own.
+ */
+interface TextNode {
+  kind: 'text';
+  value: string;
+  style: unknown;
+  parent: ViewNode | null;
+}
+interface ViewNode {
+  kind: 'view';
+  style: unknown;
+  parent: ViewNode | null;
+}
+
+function walkTree(node: unknown, parent: ViewNode | null, out: TextNode[]): void {
+  if (node == null || typeof node === 'boolean') return;
+  if (typeof node === 'string' || typeof node === 'number') return; // bare text with no <Text> wrapper — not a grid leaf
+  if (Array.isArray(node)) {
+    for (const child of node) walkTree(child, parent, out);
+    return;
+  }
+  if (!isValidElement(node)) return;
+  const el = node as ReactElement<any>;
+  if (el.type === Text) {
+    out.push({ kind: 'text', value: allText(el.props.children), style: el.props.style, parent });
+    return;
+  }
+  if (el.type === View) {
+    const viewNode: ViewNode = { kind: 'view', style: el.props.style, parent };
+    walkTree(el.props.children, viewNode, out);
+    return;
+  }
+  walkTree(el.props.children, parent, out);
+}
+
+/** Every `<Text>` leaf in `element`, in document order, with style + parent-row info. */
+function collectTextNodes(element: unknown): TextNode[] {
+  const out: TextNode[] = [];
+  walkTree(element, null, out);
+  return out;
+}
+
+/** The first leaf whose flattened text is exactly `value`. */
+function findText(nodes: TextNode[], value: string): TextNode {
+  const found = nodes.find((n) => n.value === value);
+  if (!found) throw new Error(`No <Text> leaf with value ${JSON.stringify(value)}`);
+  return found;
 }
 
 describe('CatalogueByClass — judge-copy results fill-in', () => {
@@ -228,8 +286,8 @@ describe('CatalogueByClass — judge-copy results fill-in', () => {
     expect(text).toMatch(/2nd\n73\nGr\n/);
     // ...but the "Gr" slot for each of those two rows must be the ordinary
     // blank dots, never a bare "1" or "2".
-    expect(text).toMatch(/1st\n74\nGr\n…\n/);
-    expect(text).toMatch(/2nd\n73\nGr\n…\n/);
+    expect(text).toMatch(/1st\n74\nGr\n…+\n/);
+    expect(text).toMatch(/2nd\n73\nGr\n…+\n/);
     expect(text).not.toContain('Gr\n1\n');
     expect(text).not.toContain('Gr\n2\n');
     // The class listing above still names both handlers.
@@ -254,5 +312,107 @@ describe('CatalogueByClass — judge-copy results fill-in', () => {
     // The result still renders — withholding an address is not the same as
     // withholding the result.
     expect(text).toContain('V1');
+  });
+});
+
+/**
+ * Mandy 2026-09-07, after reviewing the judge-copy PDF: "can you make the
+ * font a bit bigger and bold on this catalogue and the placing and grading
+ * on the main catalogue bolder or maybe the GR underneath the placing?"
+ * — two changes: (1) GR moves to its own line under the placing line, on
+ * BOTH the plain wusv catalogue and judge-copy, and (2) judge-copy's
+ * filled-in catalogue number + grade get noticeably bigger and bold.
+ * `allText` above can't see either change (it flattens away layout and
+ * style), so these use the `collectTextNodes` walker instead.
+ */
+describe('CatalogueByClass — SV placings grid: GR under the placing line, judge-copy bold/bigger', () => {
+  it('PLAIN wusv catalogue (no judgeResults): GR sits on its own row, stacked under the placing row', () => {
+    const entries = [makeEntry({ catalogueNumber: '1' }), makeEntry({ catalogueNumber: '2' })];
+    const nodes = collectTextNodes(CatalogueByClass({ show: makeShow(), entries }));
+
+    const ordinal = findText(nodes, '1st');
+    const gradeLabel = findText(nodes, 'Gr');
+    const placingRow = ordinal.parent;
+    const gradeRow = gradeLabel.parent;
+    expect(placingRow).not.toBeNull();
+    expect(gradeRow).not.toBeNull();
+    // GR is NOT beside the placing (that would mean sharing its row)...
+    expect(gradeRow).not.toBe(placingRow);
+    // ...it's a second horizontal row...
+    expect(gradeRow!.style).toMatchObject({ flexDirection: 'row' });
+    expect(placingRow!.style).toMatchObject({ flexDirection: 'row' });
+    // ...stacked in a COLUMN under the first row, both inside the same slot.
+    expect(placingRow!.parent).toBe(gradeRow!.parent);
+    expect(placingRow!.parent!.style).toMatchObject({ flexDirection: 'column' });
+  });
+
+  it('JUDGE-COPY (filled): GR still sits under the placing line, same as the plain catalogue', () => {
+    const entries = [makeEntry({ catalogueNumber: '1' }), makeEntry({ catalogueNumber: '2' })];
+    const judgeResults = new Map<string, JudgeCopyResult>([
+      [`1-${SHOW_CLASS_WORKING}`, { svGrade: 'sg', placement: 1, placementStatus: null, specialAward: null }],
+    ]);
+    const nodes = collectTextNodes(CatalogueByClass({ show: makeShow(), entries, judgeResults }));
+
+    const ordinal = findText(nodes, '1st');
+    const gradeLabel = findText(nodes, 'Gr');
+    expect(gradeLabel.parent).not.toBe(ordinal.parent);
+    expect(gradeLabel.parent!.style).toMatchObject({ flexDirection: 'row' });
+    expect(ordinal.parent!.style).toMatchObject({ flexDirection: 'row' });
+    expect(ordinal.parent!.parent).toBe(gradeLabel.parent!.parent);
+    expect(ordinal.parent!.parent!.style).toMatchObject({ flexDirection: 'column' });
+  });
+
+  it('JUDGE-COPY: the filled catalogue number and grade render noticeably bigger and bold', () => {
+    // Catalogue numbers deliberately distinct from any other number printed
+    // in the document (e.g. the class listing's own catalogue-number column)
+    // so a same-parent lookup — not a global text search — pins down which
+    // "42" is the grid's write-in.
+    const entries = [
+      makeEntry({ catalogueNumber: '42' }),
+      makeEntry({ catalogueNumber: '43' }),
+    ];
+    const judgeResults = new Map<string, JudgeCopyResult>([
+      [`42-${SHOW_CLASS_WORKING}`, { svGrade: 'sg', placement: 1, placementStatus: null, specialAward: null }],
+    ]);
+    const nodes = collectTextNodes(CatalogueByClass({ show: makeShow(), entries, judgeResults }));
+
+    // The 1st-place row: ordinal "1st" plus its sibling, the filled-in
+    // catalogue number write-in.
+    const ordinal1 = findText(nodes, '1st');
+    const filledNumber = nodes.find((n) => n.parent === ordinal1.parent && n !== ordinal1)!;
+    expect(filledNumber.value).toBe('42');
+    // The grade row underneath it: "Gr" label plus its sibling, the rating.
+    const gradeLabel1 = nodes.filter((n) => n.value === 'Gr')[0]!;
+    const filledGrade = nodes.find((n) => n.parent === gradeLabel1.parent && n !== gradeLabel1)!;
+    expect(filledGrade.value).toBe('SG1');
+
+    for (const leaf of [filledNumber, filledGrade]) {
+      const style = leaf.style as { fontSize?: number; fontWeight?: string };
+      expect(style.fontWeight).toBe('bold');
+      // ~1.5x the blank write-in size (8pt) — target from Mandy's request.
+      expect(style.fontSize).toBeGreaterThanOrEqual(11);
+    }
+
+    // The still-blank 2nd-place slot (dog #43, not yet judged) keeps the
+    // ORIGINAL small, non-bold write-in style — only real results get the
+    // bigger/bold treatment.
+    const ordinal2 = findText(nodes, '2nd');
+    const blankNumber = nodes.find((n) => n.parent === ordinal2.parent && n !== ordinal2)!;
+    expect(blankNumber.value).toMatch(/^…+$/);
+    const blankStyle = blankNumber.style as { fontSize?: number; fontWeight?: string };
+    expect(blankStyle.fontWeight).not.toBe('bold');
+    expect(blankStyle.fontSize).toBeLessThan(11);
+  });
+
+  it('PLAIN wusv catalogue: the blank write-in dots stay the small non-bold style (no accidental bolding)', () => {
+    const entries = [makeEntry({ catalogueNumber: '1' })];
+    const nodes = collectTextNodes(CatalogueByClass({ show: makeShow(), entries }));
+    const dotsLeaves = nodes.filter((n) => /^…+$/.test(n.value));
+    expect(dotsLeaves.length).toBeGreaterThan(0);
+    for (const leaf of dotsLeaves) {
+      const style = leaf.style as { fontSize?: number; fontWeight?: string };
+      expect(style.fontWeight).not.toBe('bold');
+      expect(style.fontSize).toBeLessThan(11);
+    }
   });
 });

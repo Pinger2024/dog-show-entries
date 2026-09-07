@@ -152,6 +152,12 @@ const svEntry = {
 // catalogue, and made dynamic to the class size). SV judges place AND
 // grade every exhibit, so each slot carries a write-in for the dog and a
 // short grade box. Three slots per row keeps the footprint tight.
+//
+// Each slot is a COLUMN of two rows — the placing line, then the grade
+// line underneath it — rather than one cramped row with both squeezed
+// side by side (Mandy 2026-09-07: "the placing and grading on the main
+// catalogue bolder or maybe the GR underneath the placing"). Giving GR its
+// own full-width line means a hand-writer isn't fighting a 16pt box.
 const svPlacings = {
   wrap: {
     flexDirection: 'row',
@@ -162,12 +168,20 @@ const svPlacings = {
     borderTopColor: SV.rule,
   } as const,
   cell: {
-    flexDirection: 'row',
-    alignItems: 'baseline',
+    flexDirection: 'column',
     width: '33%',
     paddingRight: 6,
     // Roomier rows — the write-in slots were cramped (Michael 2026-06-19).
     marginBottom: 9,
+  } as const,
+  placingLine: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+  } as const,
+  gradeLine: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    marginTop: 2,
   } as const,
   ordinal: {
     fontFamily: SV_FONTS.sans,
@@ -190,17 +204,45 @@ const svPlacings = {
     letterSpacing: 0.4,
     fontWeight: 'bold' as const,
     color: SV.ink3,
-    paddingLeft: 2,
+    // Same width as `ordinal` above it, so the grade write-in line lines
+    // up directly under the placing write-in line.
+    width: 20,
   } as const,
   gradeWriteIn: {
     fontFamily: SV_FONTS.serif,
     fontStyle: 'italic' as const,
     fontSize: 8,
     color: SV.ink3,
-    width: 16,
-    paddingLeft: 2,
+    flex: 1,
+  } as const,
+  // Judge-copy fill-in values ONLY — noticeably bigger and bold (Mandy
+  // 2026-09-07: "can you make the font a bit bigger and bold on this
+  // catalogue"). ~1.5x the blank write-in size (8 → 12). Deliberately not
+  // italic: Times has no registered bold-italic face (see font
+  // registration in schedule/shared/styles.ts), and asking react-pdf for a
+  // weight/style pairing with no matching file risks the phantom-font
+  // substitution the print preflight guards against (reference
+  // catalogue_print_preflight) — bold alone is a real registered face.
+  filledWriteIn: {
+    fontFamily: SV_FONTS.serif,
+    fontWeight: 'bold' as const,
+    fontSize: 12,
+    color: SV.ink,
+    flex: 1,
+  } as const,
+  filledGradeWriteIn: {
+    fontFamily: SV_FONTS.serif,
+    fontWeight: 'bold' as const,
+    fontSize: 12,
+    color: SV.ink,
+    flex: 1,
   } as const,
 };
+
+// Blank write-in placeholder — same dot run for the placing slot and (now
+// that it spans the full cell width, not a cramped 16pt box) the grade
+// slot too, so both lines read as one consistent write-in rule.
+const SV_PLACINGS_BLANK = '………';
 
 /** "1st", "2nd", "3rd", "4th"… proper English ordinal for a placing slot. */
 function ordinalLabel(n: number): string {
@@ -215,10 +257,14 @@ function renderSvPlacings(count: number): React.ReactElement {
     <View style={svPlacings.wrap} wrap={false}>
       {Array.from({ length: count }, (_, i) => i + 1).map((n) => (
         <View key={n} style={svPlacings.cell}>
-          <Text style={svPlacings.ordinal}>{ordinalLabel(n)}</Text>
-          <Text style={svPlacings.writeIn}>………</Text>
-          <Text style={svPlacings.gradeLabel}>Gr</Text>
-          <Text style={svPlacings.gradeWriteIn}>…</Text>
+          <View style={svPlacings.placingLine}>
+            <Text style={svPlacings.ordinal}>{ordinalLabel(n)}</Text>
+            <Text style={svPlacings.writeIn}>{SV_PLACINGS_BLANK}</Text>
+          </View>
+          <View style={svPlacings.gradeLine}>
+            <Text style={svPlacings.gradeLabel}>Gr</Text>
+            <Text style={svPlacings.gradeWriteIn}>{SV_PLACINGS_BLANK}</Text>
+          </View>
         </View>
       ))}
     </View>
@@ -301,10 +347,18 @@ function renderSvPlacingsFilled(
         const filled = byPlacement.get(n);
         return (
           <View key={n} style={svPlacings.cell}>
-            <Text style={svPlacings.ordinal}>{ordinalLabel(n)}</Text>
-            <Text style={svPlacings.writeIn}>{filled ? filled.catalogueNumber : '………'}</Text>
-            <Text style={svPlacings.gradeLabel}>Gr</Text>
-            <Text style={svPlacings.gradeWriteIn}>{filled && filled.hasGrade ? filled.rating || '—' : '…'}</Text>
+            <View style={svPlacings.placingLine}>
+              <Text style={svPlacings.ordinal}>{ordinalLabel(n)}</Text>
+              <Text style={filled ? svPlacings.filledWriteIn : svPlacings.writeIn}>
+                {filled ? filled.catalogueNumber : SV_PLACINGS_BLANK}
+              </Text>
+            </View>
+            <View style={svPlacings.gradeLine}>
+              <Text style={svPlacings.gradeLabel}>Gr</Text>
+              <Text style={filled && filled.hasGrade ? svPlacings.filledGradeWriteIn : svPlacings.gradeWriteIn}>
+                {filled && filled.hasGrade ? filled.rating || '—' : SV_PLACINGS_BLANK}
+              </Text>
+            </View>
           </View>
         );
       })}
