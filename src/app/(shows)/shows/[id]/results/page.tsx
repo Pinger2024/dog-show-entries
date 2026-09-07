@@ -531,6 +531,11 @@ export default function LiveResultsPage({
                             ({cls.dogsForward} presented / {cls.entriesCount} entered)
                           </span>
                         </div>
+                        {cls.allAbsent ? (
+                          <p className="text-sm text-muted-foreground">
+                            No dogs present.
+                          </p>
+                        ) : (
                         <div className="space-y-1.5">
                           {cls.results.map((result) => (
                             <div key={result.entryClassId}>
@@ -601,6 +606,7 @@ export default function LiveResultsPage({
                             </div>
                           ))}
                         </div>
+                        )}
                       </div>
                       );
                     })}
