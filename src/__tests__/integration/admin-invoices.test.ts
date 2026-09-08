@@ -47,6 +47,7 @@ async function seedPayment(opts: {
   refundAmount?: number | null;
   /** Pass null for an OFFLINE payment (manual/postal — never touched Stripe). */
   stripePaymentId?: string | null;
+  type?: 'initial' | 'refund';
 }) {
   const [row] = await testDb
     .insert(payments)
@@ -56,7 +57,7 @@ async function seedPayment(opts: {
         opts.stripePaymentId === null ? null : opts.stripePaymentId ?? `pi_${randomUUID()}`,
       amount: opts.amount,
       status: opts.status,
-      type: 'initial',
+      type: opts.type ?? 'initial',
       feePence: opts.feePence ?? null,
       refundAmount: opts.refundAmount ?? null,
     })
@@ -71,8 +72,11 @@ async function seedPayment(opts: {
  *  - Order B: offline (manual/postal), £15.00 — club already holds this.
  *  - Order C: online, £30.00, £10.00 refunded off one entry (per-entry
  *    partial refund), fee £1.10 STILL captured (Stripe keeps the fee).
- *  - Order D: online, £10.00, succeeded but fee_pence never captured
- *    (the capture gap).
+ *  - Order D: online, £10.00, fee £0.40 captured — plain paid order (no
+ *    capture gap: the settlement-reconciliation guard now refuses to issue
+ *    a statement with any uncaptured card fee, so the shared "happy path"
+ *    fixture used by issue/supersede/list tests below must be gap-free; the
+ *    capture-gap scenario itself is covered separately, see below).
  * Confirmed entries are seeded 1:1 with each order's totalAmount so
  * show-metrics' entry-driven clubReceivablePence lines up with the order
  * totals, not just defaulting to zero.
@@ -85,7 +89,10 @@ async function seedShowWithMixedOrders() {
   const dog = await makeDog({ ownerId: exhibitor.id, breedId: breed.id });
 
   const orderA = await seedOrder({ showId: show.id, exhibitorId: exhibitor.id, amount: 2000 });
-  await seedPayment({ orderId: orderA.id, status: 'succeeded', amount: 2000, feePence: 80 });
+  // payment.amount is the FULL Stripe charge — entry total + Remi's £1.00
+  // platform fee (seedOrder hardcodes platformFeePence: 100) — matching a
+  // real checkout, where Stripe charges the exhibitor the combined amount.
+  await seedPayment({ orderId: orderA.id, status: 'succeeded', amount: 2100, feePence: 80 });
   await testDb.insert(entries).values({
     showId: show.id, dogId: dog!.id, exhibitorId: exhibitor.id, orderId: orderA.id,
     status: 'confirmed', totalFee: 2000,
@@ -98,14 +105,20 @@ async function seedShowWithMixedOrders() {
   });
 
   const orderC = await seedOrder({ showId: show.id, exhibitorId: exhibitor.id, amount: 3000 });
-  await seedPayment({ orderId: orderC.id, status: 'partially_refunded', amount: 3000, feePence: 110, refundAmount: 1000 });
+  await seedPayment({ orderId: orderC.id, status: 'partially_refunded', amount: 3100, feePence: 110, refundAmount: 1000 });
+  // Real refunds always write BOTH the running refundAmount on the initial
+  // payment AND a separate type='refund' row (see stripe-refunds.ts) —
+  // settlement-itemisation's refund line reads the latter exclusively, so
+  // this row must exist or the itemisation and show-metrics silently
+  // disagree about whether this £10.00 was ever credited back.
+  await seedPayment({ orderId: orderC.id, status: 'refunded', amount: 1000, type: 'refund' });
   await testDb.insert(entries).values({
     showId: show.id, dogId: dog!.id, exhibitorId: exhibitor.id, orderId: orderC.id,
     status: 'confirmed', totalFee: 3000,
   });
 
   const orderD = await seedOrder({ showId: show.id, exhibitorId: exhibitor.id, amount: 1000 });
-  await seedPayment({ orderId: orderD.id, status: 'succeeded', amount: 1000, feePence: null });
+  await seedPayment({ orderId: orderD.id, status: 'succeeded', amount: 1100, feePence: 40 });
   await testDb.insert(entries).values({
     showId: show.id, dogId: dog!.id, exhibitorId: exhibitor.id, orderId: orderD.id,
     status: 'confirmed', totalFee: 1000,
@@ -168,7 +181,8 @@ describe('adminInvoices.preview figures', () => {
   // invoice — it's an itemised statement with viaRemi/direct/free/costs
   // sections. Order A/C/D are viaRemi (£20/£30/£10, no sundries/donations,
   // so each entry's fee equals its order total — no discount line), order
-  // B is direct (£15). See computeSettlementItemisation.
+  // B is direct (£15). Order C's £10.00 refund credits back out of viaRemi.
+  // See computeSettlementItemisation.
   it('itemises the viaRemi/direct split, sums real Stripe fees to the penny, and nets out costs', async () => {
     const { show } = await seedShowWithMixedOrders();
     const caller = await adminCaller();
@@ -176,19 +190,19 @@ describe('adminInvoices.preview figures', () => {
     const preview = await caller.adminInvoices.preview(baseInput(show.id));
     const { settlement } = preview;
 
-    expect(settlement.viaRemi.totalPence).toBe(6000); // orders A+C+D: 2000+3000+1000
+    expect(settlement.viaRemi.totalPence).toBe(5000); // orders A+C+D: 2000+3000+1000, less C's £10.00 refund
     expect(settlement.direct.totalPence).toBe(1500); // order B
 
-    // Real fees: only order A (80) and order C (110) are fee-bearing and
-    // not status='refunded'. Order D's NULL fee is excluded from the sum
-    // and counted separately as the capture gap.
-    expect(settlement.cardFeeTotalPence).toBe(190);
-    expect(settlement.feeBearingChargeCount).toBe(2);
-    expect(settlement.captureGapCount).toBe(1);
+    // Real fees: orders A (80), C (110) and D (40) are all fee-bearing and
+    // not status='refunded' — no capture gap in this fixture (see below for
+    // the dedicated gap test).
+    expect(settlement.cardFeeTotalPence).toBe(230);
+    expect(settlement.feeBearingChargeCount).toBe(3);
+    expect(settlement.captureGapCount).toBe(0);
 
-    expect(settlement.discountAmountPence).toBe(40); // 20p × 2
-    expect(settlement.costs.totalPence).toBe(5000 + 190 - 40); // package + card fee - discount
-    expect(settlement.netToClubPence).toBe(6000 - (5000 + 190 - 40));
+    expect(settlement.discountAmountPence).toBe(60); // 20p × 3
+    expect(settlement.costs.totalPence).toBe(5000 + 230 - 60); // package + card fee - discount
+    expect(settlement.netToClubPence).toBe(5000 - (5000 + 230 - 60));
   });
 
   // Mandy 2026-08-18, Clyde Valley: a paid-direct-to-club order's manually
@@ -206,15 +220,18 @@ describe('adminInvoices.preview figures', () => {
     await seedPayment({
       orderId: offlineOrder.id, status: 'succeeded', amount: 2000, stripePaymentId: null,
     });
+    // A genuine capture gap: a real Stripe payment whose fee was never captured.
+    const gapOrder = await seedOrder({ showId: show.id, exhibitorId: exhibitor.id, amount: 1000 });
+    await seedPayment({ orderId: gapOrder.id, status: 'succeeded', amount: 1000, feePence: null });
 
     const caller = await adminCaller();
     const { settlement } = await caller.adminInvoices.preview(baseInput(show.id));
 
-    // Only order D (a real Stripe payment with an uncaptured fee) is a gap —
-    // the offline payment is not, and the fee sums are untouched by it.
+    // Only gapOrder (a real Stripe payment with an uncaptured fee) is a gap —
+    // the offline payment is not, and the fee sums are untouched by either.
     expect(settlement.captureGapCount).toBe(1);
-    expect(settlement.feeBearingChargeCount).toBe(2);
-    expect(settlement.cardFeeTotalPence).toBe(190);
+    expect(settlement.feeBearingChargeCount).toBe(3);
+    expect(settlement.cardFeeTotalPence).toBe(230);
   });
 
   it('does not write anything to the database', async () => {
@@ -237,9 +254,9 @@ describe('adminInvoices.issue', () => {
     expect(invoice.invoiceNumber).toMatch(/^INV-TEST-FEE-CLUB-\d{4}$/);
     expect(invoice.sequenceNumber).toBe(1);
     expect(invoice.organisationId).toBe(org.id);
-    expect(invoice.viaRemiTotalPence).toBe(6000);
+    expect(invoice.viaRemiTotalPence).toBe(5000);
     expect(invoice.directTotalPence).toBe(1500);
-    expect(invoice.netToClubPence).toBe(6000 - (5000 + 190 - 40));
+    expect(invoice.netToClubPence).toBe(5000 - (5000 + 230 - 60));
     expect(invoice.lineItems.viaRemi.totalLabel).toBe('Total collected via Remi');
     expect(invoice.lineItems.costs.lines.some((l) => l.label === 'Show package fee')).toBe(true);
   });

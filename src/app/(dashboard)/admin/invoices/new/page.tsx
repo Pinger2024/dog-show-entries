@@ -90,7 +90,11 @@ function NewInvoiceFlow() {
   const isSubmitting = issueMutation.isPending || supersedeMutation.isPending;
 
   const canIssue =
-    !!showId && packageFee.trim() !== '' && !Number.isNaN(packageFeePence) && packageFeePence >= 0;
+    !!showId &&
+    packageFee.trim() !== '' &&
+    !Number.isNaN(packageFeePence) &&
+    packageFeePence >= 0 &&
+    (preview ? preview.reconciliation.ok : false);
 
   const handleIssue = () => {
     if (!previewInput) return;
@@ -158,6 +162,26 @@ function NewInvoiceFlow() {
               <div className="h-24 animate-pulse rounded-lg bg-muted" />
             ) : (
               <>
+                <div
+                  className={cn(
+                    'flex items-start gap-2 rounded-lg border p-3 text-sm',
+                    preview.reconciliation.ok
+                      ? 'border-se-fresh-line bg-se-fresh-soft/50 text-se-fresh-deep'
+                      : 'border-destructive/40 bg-destructive/10 text-destructive',
+                  )}
+                >
+                  {preview.reconciliation.ok ? (
+                    <span>Reconciles to show metrics ✓</span>
+                  ) : (
+                    <span className="flex items-start gap-2">
+                      <AlertTriangle className="mt-0.5 size-4 shrink-0" />
+                      {preview.reconciliation.missingFeeCount > 0
+                        ? `${preview.reconciliation.missingFeeCount} card payment${preview.reconciliation.missingFeeCount === 1 ? '' : 's'} still have no captured Stripe fee.`
+                        : `Does not reconcile with show metrics — difference ${formatCurrency(Math.abs(preview.reconciliation.deltaPence || preview.reconciliation.cardFeeDeltaPence || preview.reconciliation.stripeDeltaPence))}.`}{' '}
+                      Cannot issue until this is resolved.
+                    </span>
+                  )}
+                </div>
                 {preview.settlement.captureGapCount > 0 && (
                   <div className="flex items-start gap-2 rounded-lg border border-se-honey-line bg-se-honey-soft/50 p-3 text-sm text-se-honey-deep">
                     <AlertTriangle className="mt-0.5 size-4 shrink-0" />

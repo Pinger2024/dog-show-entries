@@ -105,7 +105,10 @@ async function seedSouthWesternShapedShow() {
     const entry = await makeEntry({ showId: show.id, dogId: dog!.id, exhibitorId: exhibitor.id, orderId: orderJhViaRemi.id, totalFee: 300 });
     await makeEntryClass({ entryId: entry!.id, showClassId: specialAwardClass!.id, fee: 300 });
   }
-  await makePayment({ orderId: orderJhViaRemi.id, stripePaymentId: 'pi_sw_2', amount: orderJhViaRemi.totalAmount, status: 'succeeded', feePence: 869 });
+  await makePayment({
+    orderId: orderJhViaRemi.id, stripePaymentId: 'pi_sw_2', amount: orderJhViaRemi.totalAmount,
+    status: 'partially_refunded', feePence: 869, refundAmount: 200,
+  });
   await makePayment({ orderId: orderJhViaRemi.id, stripePaymentId: 'pi_sw_2', amount: 200, status: 'refunded', type: 'refund' });
 
   // ── Order 3 (viaRemi): sundries — 23 catalogues @ £4.00, 1 membership @ £10.00. ──
@@ -120,6 +123,7 @@ async function seedSouthWesternShapedShow() {
   const donationItem = await makeSundryItem({ showId: show.id, name: 'Donation', priceInPence: 500 });
   const orderDonations = await makeOrder({ showId: show.id, exhibitorId: exhibitor.id, status: 'paid', totalAmount: 1500 });
   await makeOrderSundryItem({ orderId: orderDonations.id, sundryItemId: donationItem!.id, quantity: 3, unitPrice: 500 });
+  await makePayment({ orderId: orderDonations.id, stripePaymentId: 'pi_sw_4', amount: orderDonations.totalAmount, status: 'succeeded', feePence: 0 });
 
   // ── Order 5 (direct): 4 entries @ £20.00. ──
   const orderDirectEntries = await makeOrder({ showId: show.id, exhibitorId: exhibitor.id, status: 'paid', totalAmount: 8000, stripePaymentIntentId: null });

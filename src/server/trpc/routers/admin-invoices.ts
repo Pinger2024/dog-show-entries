@@ -6,6 +6,7 @@ import { createTRPCRouter } from '../init';
 import { invoices, organisations, orders, payments } from '@/server/db/schema';
 import { computeSettlementItemisation } from '@/server/services/settlement-itemisation';
 import { healMissingStripeFees, type StripeFeeHealResult } from '@/server/services/stripe-fee-heal';
+import { reconcileSettlement, describeReconciliationMismatch } from '@/server/services/settlement-reconciliation';
 import type { Database } from '@/server/db';
 
 /**
@@ -100,6 +101,13 @@ async function computeSettlementFigures(
     discount: input.discount,
   });
 
+  // Cross-check show-metrics' independent money computation against this
+  // itemisation BEFORE any figures reach the admin — see
+  // settlement-reconciliation.ts for why this exists (GSD Club of Scotland,
+  // 19 Aug 2026: a wrong itemisation line shipped unchallenged because
+  // nothing compared it to the canonical show metrics).
+  const reconciliation = await reconcileSettlement(db, showId, settlement);
+
   const freeEntriesCount = settlement.free.lines.reduce((sum, l) => {
     const match = l.sub?.match(/^(\d+)/);
     return sum + (match ? parseInt(match[1]!, 10) : 0);
@@ -109,6 +117,7 @@ async function computeSettlementFigures(
     show: showRow,
     organisation: showRow.organisation,
     settlement,
+    reconciliation,
     freeEntriesCount,
     // Additive — rides along so the UI could later show "fees refreshed
     // just now"; undefined when the pre-check found nothing to heal.
@@ -213,6 +222,12 @@ export const adminInvoicesRouter = createTRPCRouter({
 
   issue: adminProcedure.input(issueInputSchema).mutation(async ({ ctx, input }) => {
     const figures = await computeSettlementFigures(ctx.db, input.showId, input);
+    if (!figures.reconciliation.ok) {
+      throw new TRPCError({
+        code: 'PRECONDITION_FAILED',
+        message: `Cannot issue — this settlement does not reconcile. ${describeReconciliationMismatch(figures.reconciliation)}`,
+      });
+    }
     return ctx.db.transaction((tx) => issueInvoiceRow(tx, figures, input, ctx.session.user.id));
   }),
 
@@ -259,6 +274,12 @@ export const adminInvoicesRouter = createTRPCRouter({
       }
 
       const figures = await computeSettlementFigures(ctx.db, input.showId, input);
+      if (!figures.reconciliation.ok) {
+        throw new TRPCError({
+          code: 'PRECONDITION_FAILED',
+          message: `Cannot issue — this settlement does not reconcile. ${describeReconciliationMismatch(figures.reconciliation)}`,
+        });
+      }
 
       return ctx.db.transaction(async (tx) => {
         const replacement = await issueInvoiceRow(tx, figures, input, ctx.session.user.id);
