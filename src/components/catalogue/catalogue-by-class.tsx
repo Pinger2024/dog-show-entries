@@ -31,6 +31,14 @@ export interface JudgeCopyResult {
   placement: number | null;
   placementStatus: 'withheld' | 'unplaced' | null;
   specialAward: string | null;
+  /** This entry-class was recorded absent (Mandy 2026-09-08, from the first
+   *  live judge's copy: "the absentees are not showing"). Drives the bold
+   *  "ABS" printed under the catalogue number in the class listing below —
+   *  the same visual convention as catalogue-marked.tsx's `absentByNumber`
+   *  badge. The placings/grading grid at the foot of the class is untouched;
+   *  an absent dog's slot there already reads as ordinary blank write-in
+   *  dots. */
+  absent: boolean;
 }
 
 // Class-sponsor banner strip. Renders at the FULL content width (A5 419.5pt −
@@ -84,6 +92,20 @@ function splitTownPostcode(address: string | null | undefined): { town: string; 
   return { town, postcode };
 }
 
+// Bold black "ABS" printed under a dog's catalogue number for an absentee,
+// judge-copy only (Mandy 2026-09-08, on the first live judge's copy: "the
+// absentees are not showing"). Mirrors catalogue-marked.tsx's
+// `absentByNumber` badge (same font, size, weight, colour) so the
+// convention reads identically across both formats — used for the Junior
+// Handling row, which shares that file's Inter-based styling.
+const absentByNumber = {
+  fontFamily: 'Inter',
+  fontSize: 6.5,
+  fontWeight: 'bold' as const,
+  color: '#000',
+  marginTop: 0.5,
+} as const;
+
 // SV entry-row styles. Densified per Amanda 2026-05-23 — page count
 // was ~30 for 65 entries, target is the SPGSD norm of ~20-22.
 const svEntry = {
@@ -97,6 +119,17 @@ const svEntry = {
     fontSize: 11,
     color: SV.accent,
     width: 20,
+  } as const,
+  // Bold black "ABS" under the catalogue number — same convention as the
+  // module-level `absentByNumber` above, set in the SV sans face so it
+  // matches the rest of this entry line rather than introducing Inter onto
+  // an otherwise SV-only page.
+  absentByNumber: {
+    fontFamily: SV_FONTS.sans,
+    fontSize: 6,
+    fontWeight: 'bold' as const,
+    color: '#000',
+    marginTop: 0.5,
   } as const,
   /** The flowing paragraph beside the hanging number column: name + quals +
    *  chip wrap together within the remaining width. Base metrics match the
@@ -364,6 +397,10 @@ function renderSvPlacingsFilled(
 export function renderSvEntry(
   entry: CatalogueEntry,
   rowKey: string,
+  /** Judge-copy only — prints bold "ABS" under the catalogue number when
+   *  this entry's class was recorded absent. Every other caller omits it,
+   *  so their output is unchanged. */
+  isAbsent?: boolean,
 ): React.ReactElement {
   const titlesStr = entry.titles && entry.titles.length > 0 ? entry.titles.join(', ') : null;
   const hip = formatHealthSide(
@@ -420,7 +457,14 @@ export function renderSvEntry(
           Regional, 2026-08-24) printed on top of its WB. As a single
           paragraph the tail wraps under the name instead. */}
       <View style={svEntry.line1}>
-        <Text style={svEntry.catNumber}>{entry.catalogueNumber ?? '—'}</Text>
+        {isAbsent ? (
+          <View>
+            <Text style={svEntry.catNumber}>{entry.catalogueNumber ?? '—'}</Text>
+            <Text style={svEntry.absentByNumber}>ABS</Text>
+          </View>
+        ) : (
+          <Text style={svEntry.catNumber}>{entry.catalogueNumber ?? '—'}</Text>
+        )}
         <Text style={svEntry.nameLine}>
           <Text style={svEntry.dogName}>{uppercaseName(entry.dogName) || 'Unnamed'}</Text>
           {qualifications ? (
@@ -829,11 +873,19 @@ export function CatalogueByClass({ show, entries, compact, judgeResults }: Props
         const renderEntry = (entry: typeof classEntries[number], entryIdx: number) => {
           const isJH = entry.entryType === 'junior_handler';
           const rowKey = `${classKey}-${entry.catalogueNumber ?? 'nocat'}-${entryIdx}`;
+          // Judge-copy only (judgeResults is undefined for every other
+          // format/ruleset) — this class bucket's own showClassId, so a dog
+          // entered in more than one class shows ABS only under the one it
+          // actually missed (same per-entry-class granularity as
+          // CatalogueMarked's absentees Set).
+          const isAbsent =
+            !!entry.catalogueNumber &&
+            judgeResults?.get(`${entry.catalogueNumber}-${showClassId}`)?.absent === true;
           // SV shows use Amanda's 5-line layout with the SV palette and
           // serif typography (2026-05-23). JH classes still render
           // their handler-name shape regardless of ruleset.
           if (isSvShow && !isJH) {
-            return renderSvEntry(entry, rowKey);
+            return renderSvEntry(entry, rowKey, isAbsent);
           }
           if (isJH) {
             // Typed however the parent typed it ("alexxa cowan") — same
@@ -842,7 +894,14 @@ export function CatalogueByClass({ show, entries, compact, judgeResults }: Props
             return (
               <View key={rowKey} style={styles.entryRowWrap} wrap={false}>
                 <View style={{ flexDirection: 'row', alignItems: 'baseline' }}>
-                  <Text style={styles.catalogueNumber}>{entry.catalogueNumber ?? '—'}</Text>
+                  {isAbsent ? (
+                    <View>
+                      <Text style={styles.catalogueNumber}>{entry.catalogueNumber ?? '—'}</Text>
+                      <Text style={absentByNumber}>ABS</Text>
+                    </View>
+                  ) : (
+                    <Text style={styles.catalogueNumber}>{entry.catalogueNumber ?? '—'}</Text>
+                  )}
                   <Text style={styles.dogName}>{handlerName}</Text>
                 </View>
                 {entry.dogName && (

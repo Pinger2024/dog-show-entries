@@ -153,10 +153,10 @@ describe('CatalogueByClass — judge-copy results fill-in', () => {
       makeEntry({ catalogueNumber: '4' }),
     ];
     const judgeResults = new Map<string, JudgeCopyResult>([
-      [`1-${SHOW_CLASS_WORKING}`, { svGrade: 'sg', placement: 1, placementStatus: null, specialAward: null }],
-      [`2-${SHOW_CLASS_WORKING}`, { svGrade: 'sg', placement: 2, placementStatus: null, specialAward: null }],
-      [`3-${SHOW_CLASS_WORKING}`, { svGrade: 'g', placement: 3, placementStatus: null, specialAward: null }],
-      [`4-${SHOW_CLASS_WORKING}`, { svGrade: 'g', placement: 4, placementStatus: null, specialAward: null }],
+      [`1-${SHOW_CLASS_WORKING}`, { svGrade: 'sg', placement: 1, placementStatus: null, specialAward: null, absent: false }],
+      [`2-${SHOW_CLASS_WORKING}`, { svGrade: 'sg', placement: 2, placementStatus: null, specialAward: null, absent: false }],
+      [`3-${SHOW_CLASS_WORKING}`, { svGrade: 'g', placement: 3, placementStatus: null, specialAward: null, absent: false }],
+      [`4-${SHOW_CLASS_WORKING}`, { svGrade: 'g', placement: 4, placementStatus: null, specialAward: null, absent: false }],
     ]);
 
     const text = allText(CatalogueByClass({ show: makeShow(), entries, judgeResults }));
@@ -186,8 +186,8 @@ describe('CatalogueByClass — judge-copy results fill-in', () => {
     // both slots must read the identical bare "VP".
     const entries = [makeEntry({ catalogueNumber: '1' }), makeEntry({ catalogueNumber: '2' })];
     const judgeResults = new Map<string, JudgeCopyResult>([
-      [`1-${SHOW_CLASS_WORKING}`, { svGrade: 'vp', placement: 1, placementStatus: null, specialAward: null }],
-      [`2-${SHOW_CLASS_WORKING}`, { svGrade: 'vp', placement: 2, placementStatus: null, specialAward: null }],
+      [`1-${SHOW_CLASS_WORKING}`, { svGrade: 'vp', placement: 1, placementStatus: null, specialAward: null, absent: false }],
+      [`2-${SHOW_CLASS_WORKING}`, { svGrade: 'vp', placement: 2, placementStatus: null, specialAward: null, absent: false }],
     ]);
 
     const text = allText(CatalogueByClass({ show: makeShow(), entries, judgeResults }));
@@ -203,7 +203,7 @@ describe('CatalogueByClass — judge-copy results fill-in', () => {
     const entries = [makeEntry({ catalogueNumber: '1' }), makeEntry({ catalogueNumber: '2' })];
     // Only dog #1 has a recorded result — #2 hasn't been judged yet.
     const judgeResults = new Map<string, JudgeCopyResult>([
-      [`1-${SHOW_CLASS_WORKING}`, { svGrade: 'sg', placement: 1, placementStatus: null, specialAward: null }],
+      [`1-${SHOW_CLASS_WORKING}`, { svGrade: 'sg', placement: 1, placementStatus: null, specialAward: null, absent: false }],
     ]);
 
     const filled = allText(CatalogueByClass({ show: makeShow(), entries, judgeResults }));
@@ -225,7 +225,7 @@ describe('CatalogueByClass — judge-copy results fill-in', () => {
       makeEntry({ catalogueNumber: '2' }), // absent, never judged — no result recorded
     ];
     const judgeResults = new Map<string, JudgeCopyResult>([
-      [`1-${SHOW_CLASS_WORKING}`, { svGrade: 'v', placement: 1, placementStatus: null, specialAward: null }],
+      [`1-${SHOW_CLASS_WORKING}`, { svGrade: 'v', placement: 1, placementStatus: null, specialAward: null, absent: false }],
     ]);
 
     const text = allText(CatalogueByClass({ show: makeShow(), entries, judgeResults }));
@@ -260,8 +260,8 @@ describe('CatalogueByClass — judge-copy results fill-in', () => {
       classes: [{ name: 'JHA', sex: null, classNumber: null, classLabel: 'JHA', sortOrder: 100, showClassId: SHOW_CLASS_JH }],
     });
     const judgeResults = new Map<string, JudgeCopyResult>([
-      [`10-${SHOW_CLASS_JH}`, { svGrade: null, placement: 1, placementStatus: null, specialAward: null }],
-      [`11-${SHOW_CLASS_JH}`, { svGrade: null, placement: 2, placementStatus: null, specialAward: null }],
+      [`10-${SHOW_CLASS_JH}`, { svGrade: null, placement: 1, placementStatus: null, specialAward: null, absent: false }],
+      [`11-${SHOW_CLASS_JH}`, { svGrade: null, placement: 2, placementStatus: null, specialAward: null, absent: false }],
     ]);
 
     const text = allText(CatalogueByClass({ show: makeShow(), entries: [jhEntry, jhEntry2], judgeResults }));
@@ -294,8 +294,8 @@ describe('CatalogueByClass — judge-copy results fill-in', () => {
       classes: [{ name: 'JHB', sex: null, classNumber: null, classLabel: 'JHB', sortOrder: 101, showClassId: SHOW_CLASS_JH }],
     });
     const judgeResults = new Map<string, JudgeCopyResult>([
-      [`73-${SHOW_CLASS_JH}`, { svGrade: null, placement: 2, placementStatus: null, specialAward: null }],
-      [`74-${SHOW_CLASS_JH}`, { svGrade: null, placement: 1, placementStatus: null, specialAward: null }],
+      [`73-${SHOW_CLASS_JH}`, { svGrade: null, placement: 2, placementStatus: null, specialAward: null, absent: false }],
+      [`74-${SHOW_CLASS_JH}`, { svGrade: null, placement: 1, placementStatus: null, specialAward: null, absent: false }],
     ]);
 
     const text = allText(CatalogueByClass({ show: makeShow(), entries: [jhEntry, jhEntry2], judgeResults }));
@@ -320,7 +320,7 @@ describe('CatalogueByClass — judge-copy results fill-in', () => {
       owners: [{ title: null, name: 'Withheld Owner', address: '99 Confidential Close, Hidden Town, HI1 1DE', userId: null }],
     });
     const judgeResults = new Map<string, JudgeCopyResult>([
-      [`1-${SHOW_CLASS_WORKING}`, { svGrade: 'v', placement: 1, placementStatus: null, specialAward: null }],
+      [`1-${SHOW_CLASS_WORKING}`, { svGrade: 'v', placement: 1, placementStatus: null, specialAward: null, absent: false }],
     ]);
 
     const text = allText(CatalogueByClass({ show: makeShow(), entries: [entry], judgeResults }));
@@ -330,6 +330,136 @@ describe('CatalogueByClass — judge-copy results fill-in', () => {
     // The result still renders — withholding an address is not the same as
     // withholding the result.
     expect(text).toMatch(/Gr\nV\n/);
+  });
+});
+
+/**
+ * Mandy 2026-09-08, having opened the first live judge's copy of the North
+ * East Regional: "All looks good but a minor thing, the absentees are not
+ * showing." Today an absent dog's row looks identical to a present one, and
+ * a one-dog class with the dog absent shows blank write-in boxes with no
+ * explanation. Convention established here matches catalogue-marked.tsx's
+ * "ABS" badge (bold, printed under the dog's catalogue number) — see
+ * markedStyles.absentByNumber / absentBadge there. Only the class LISTING
+ * gets the badge; the placings/grading grid at the foot of the class is
+ * untouched (a missing placement there already reads as ordinary blank
+ * dots, unchanged by this fix).
+ */
+describe('CatalogueByClass — judge-copy absentee marker ("ABS" under the catalogue number)', () => {
+  it('ABSENT dog: prints bold "ABS" under its catalogue number; the present dog carries none', () => {
+    const entries = [
+      makeEntry({ catalogueNumber: '1' }), // present, placed 1st
+      makeEntry({ catalogueNumber: '2' }), // absent
+    ];
+    const judgeResults = new Map<string, JudgeCopyResult>([
+      [`1-${SHOW_CLASS_WORKING}`, { svGrade: 'sg', placement: 1, placementStatus: null, specialAward: null, absent: false }],
+      [`2-${SHOW_CLASS_WORKING}`, { svGrade: null, placement: null, placementStatus: null, specialAward: null, absent: true }],
+    ]);
+
+    const nodes = collectTextNodes(CatalogueByClass({ show: makeShow(), entries, judgeResults }));
+    const absNodes = nodes.filter((n) => n.value === 'ABS');
+    // Exactly one ABS in the whole tree — not one per dog.
+    expect(absNodes).toHaveLength(1);
+
+    // Positioned in the absent dog's row: walk up from the ABS leaf to its
+    // wrapping column and confirm the catalogue-number sibling reads "2".
+    const absParent = absNodes[0]!.parent;
+    const catNoSibling = nodes.find((n) => n.parent === absParent && n.value !== 'ABS');
+    expect(catNoSibling?.value).toBe('2');
+
+    // The present dog's own catalogue-number column has no ABS sibling.
+    const dog1CatNo = nodes.find((n) => n.value === '1' && n.parent !== absParent);
+    expect(dog1CatNo).toBeDefined();
+    const dog1Siblings = nodes.filter((n) => n.parent === dog1CatNo!.parent);
+    expect(dog1Siblings.some((n) => n.value === 'ABS')).toBe(false);
+
+    // The placings grid at the foot of the class still prints the present
+    // dog's number + bare grade, untouched by the absentee marker.
+    const text = allText(CatalogueByClass({ show: makeShow(), entries, judgeResults }));
+    expect(text).toMatch(/1st\n1\nGr\nSG\n/);
+  });
+
+  it('PRESENT dog with a placed result: no "ABS" anywhere in its row', () => {
+    const entries = [makeEntry({ catalogueNumber: '1' })];
+    const judgeResults = new Map<string, JudgeCopyResult>([
+      [`1-${SHOW_CLASS_WORKING}`, { svGrade: 'sg', placement: 1, placementStatus: null, specialAward: null, absent: false }],
+    ]);
+    const text = allText(CatalogueByClass({ show: makeShow(), entries, judgeResults }));
+    expect(text).not.toContain('ABS');
+  });
+
+  it('A dog absent from one of its classes but present in another shows ABS only under the class it missed', () => {
+    const SHOW_CLASS_SPECIAL = 'sc-special';
+    const entry = makeEntry({
+      catalogueNumber: '1',
+      classes: [
+        {
+          name: 'SV Working',
+          sex: 'dog',
+          classNumber: 5,
+          classLabel: '5',
+          sortOrder: 5,
+          svCoatType: 'stock',
+          showClassId: SHOW_CLASS_WORKING,
+        },
+        {
+          name: 'Special Award Class',
+          sex: 'dog',
+          classNumber: null,
+          classLabel: 'SA1',
+          sortOrder: 200,
+          svCoatType: null,
+          showClassId: SHOW_CLASS_SPECIAL,
+        },
+      ],
+    });
+    const judgeResults = new Map<string, JudgeCopyResult>([
+      [`1-${SHOW_CLASS_WORKING}`, { svGrade: null, placement: null, placementStatus: null, specialAward: null, absent: true }],
+      [`1-${SHOW_CLASS_SPECIAL}`, { svGrade: null, placement: 1, placementStatus: null, specialAward: null, absent: false }],
+    ]);
+
+    const nodes = collectTextNodes(CatalogueByClass({ show: makeShow(), entries: [entry], judgeResults }));
+    const absNodes = nodes.filter((n) => n.value === 'ABS');
+    expect(absNodes).toHaveLength(1);
+  });
+
+  it('Junior Handling: an absent handler entry also prints "ABS" under the catalogue number', () => {
+    const jhEntry = makeEntry({
+      catalogueNumber: '10',
+      entryType: 'junior_handler',
+      jhHandlerName: 'Alexxa Cowan',
+      classes: [{ name: 'JHA', sex: null, classNumber: null, classLabel: 'JHA', sortOrder: 100, showClassId: SHOW_CLASS_JH }],
+    });
+    const jhEntry2 = makeEntry({
+      catalogueNumber: '11',
+      entryType: 'junior_handler',
+      jhHandlerName: 'Sam Swift',
+      classes: [{ name: 'JHA', sex: null, classNumber: null, classLabel: 'JHA', sortOrder: 100, showClassId: SHOW_CLASS_JH }],
+    });
+    const judgeResults = new Map<string, JudgeCopyResult>([
+      [`10-${SHOW_CLASS_JH}`, { svGrade: null, placement: null, placementStatus: null, specialAward: null, absent: true }],
+      [`11-${SHOW_CLASS_JH}`, { svGrade: null, placement: 1, placementStatus: null, specialAward: null, absent: false }],
+    ]);
+
+    const nodes = collectTextNodes(CatalogueByClass({ show: makeShow(), entries: [jhEntry, jhEntry2], judgeResults }));
+    const absNodes = nodes.filter((n) => n.value === 'ABS');
+    expect(absNodes).toHaveLength(1);
+    const catNoSibling = nodes.find((n) => n.parent === absNodes[0]!.parent && n.value !== 'ABS');
+    expect(catNoSibling?.value).toBe('10');
+
+    // Present handler #11 carries no ABS.
+    const handler11CatNo = nodes.find((n) => n.value === '11');
+    const handler11Siblings = nodes.filter((n) => n.parent === handler11CatNo!.parent);
+    expect(handler11Siblings.some((n) => n.value === 'ABS')).toBe(false);
+  });
+
+  it('PLAIN wusv catalogue (no judgeResults): never prints "ABS", even for the same underlying entries', () => {
+    const entries = [
+      makeEntry({ catalogueNumber: '1' }),
+      makeEntry({ catalogueNumber: '2' }),
+    ];
+    const text = allText(CatalogueByClass({ show: makeShow(), entries }));
+    expect(text).not.toContain('ABS');
   });
 });
 
@@ -367,7 +497,7 @@ describe('CatalogueByClass — SV placings grid: GR under the placing line, judg
   it('JUDGE-COPY (filled): GR still sits under the placing line, same as the plain catalogue', () => {
     const entries = [makeEntry({ catalogueNumber: '1' }), makeEntry({ catalogueNumber: '2' })];
     const judgeResults = new Map<string, JudgeCopyResult>([
-      [`1-${SHOW_CLASS_WORKING}`, { svGrade: 'sg', placement: 1, placementStatus: null, specialAward: null }],
+      [`1-${SHOW_CLASS_WORKING}`, { svGrade: 'sg', placement: 1, placementStatus: null, specialAward: null, absent: false }],
     ]);
     const nodes = collectTextNodes(CatalogueByClass({ show: makeShow(), entries, judgeResults }));
 
@@ -390,7 +520,7 @@ describe('CatalogueByClass — SV placings grid: GR under the placing line, judg
       makeEntry({ catalogueNumber: '43' }),
     ];
     const judgeResults = new Map<string, JudgeCopyResult>([
-      [`42-${SHOW_CLASS_WORKING}`, { svGrade: 'sg', placement: 1, placementStatus: null, specialAward: null }],
+      [`42-${SHOW_CLASS_WORKING}`, { svGrade: 'sg', placement: 1, placementStatus: null, specialAward: null, absent: false }],
     ]);
     const nodes = collectTextNodes(CatalogueByClass({ show: makeShow(), entries, judgeResults }));
 

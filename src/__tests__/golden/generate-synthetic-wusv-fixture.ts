@@ -154,7 +154,11 @@ async function main() {
       .update(schema.entries)
       .set({ catalogueNumber: String(catalogueNumber) })
       .where(eq(schema.entries.id, entry.id));
-    const entryClass = await makeEntryClass({ entryId: entry.id, showClassId: cls.id });
+    // Dog #2 (i === 1) is marked absent, unjudged — exercises the
+    // judge-copy catalogue's "ABS" badge on a real render (Mandy 2026-09-08,
+    // on the first live judge's copy: "the absentees are not showing"). No
+    // golden wusv fixture carried an absent entry-class before this.
+    const entryClass = await makeEntryClass({ entryId: entry.id, showClassId: cls.id, absent: i === 1 });
     if (i === 0) firstResultEntryClassId = entryClass.id;
     if (i === 8) secondResultEntryClassId = entryClass.id;
     catalogueNumber++;

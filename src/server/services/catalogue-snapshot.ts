@@ -859,24 +859,34 @@ export async function renderCatalogueFromSnapshot(
     const Component = formatComponents[effectiveFormat as keyof typeof formatComponents];
 
     // Judge-copy's fill-in data, built the same way CatalogueMarked's
-    // resultsMap is above: re-key the results ALREADY captured on every
-    // snapshot's entries (see SnapshotEntryClass.result) — no separate
-    // fetch. Only meaningful for WUSV (SV grading doesn't exist for RKC),
-    // and only ever passed when actually rendering 'judge-copy' so every
-    // other format's props — and therefore its rendered bytes — are
+    // resultsMap/absenteesSet are above: re-key data ALREADY captured on
+    // every snapshot's entries (see SnapshotEntryClass.result / .absent) —
+    // no separate fetch. Only meaningful for WUSV (SV grading doesn't exist
+    // for RKC), and only ever passed when actually rendering 'judge-copy' so
+    // every other format's props — and therefore its rendered bytes — are
     // unaffected.
+    //
+    // A map entry is kept when the entry-class has EITHER a result OR is
+    // marked absent (2026-09-08: Mandy, on the first live judge's copy —
+    // "the absentees are not showing" — a dog absent with no result was
+    // previously skipped entirely by the `!ec.result` guard, so the
+    // component had no way to know it was absent rather than simply
+    // unjudged). `absent` and `result` are independent fields on the
+    // snapshot — an absent dog ordinarily carries no result at all.
     let judgeResults: Map<string, JudgeCopyResult> | undefined;
     if (format === 'judge-copy' && isWusv) {
       judgeResults = new Map();
       for (const entry of filteredEntries) {
         if (!entry.catalogueNumber) continue;
         for (const ec of entry.classes) {
-          if (!ec.showClassId || !ec.result) continue;
+          if (!ec.showClassId) continue;
+          if (!ec.result && !ec.absent) continue;
           judgeResults.set(`${entry.catalogueNumber}-${ec.showClassId}`, {
-            svGrade: ec.result.svGrade,
-            placement: ec.result.placement,
-            placementStatus: ec.result.placementStatus,
-            specialAward: ec.result.specialAward,
+            svGrade: ec.result?.svGrade ?? null,
+            placement: ec.result?.placement ?? null,
+            placementStatus: ec.result?.placementStatus ?? null,
+            specialAward: ec.result?.specialAward ?? null,
+            absent: ec.absent,
           });
         }
       }
