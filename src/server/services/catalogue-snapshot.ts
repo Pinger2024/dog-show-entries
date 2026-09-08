@@ -50,6 +50,7 @@ import { fetchPdfSafeImage } from '@/lib/safe-image-fetch';
 import { syncCatalogueNumbers } from '@/server/services/catalogue-numbering';
 import { getDockingStatementFromScheduleData } from '@/lib/rkc-compliance';
 import { buildClassLabelMap, buildCatalogueClassDefinitions, sortEntryClassesByShowClassOrder } from '@/lib/class-labels';
+import { isJuniorHandlingClass } from '@/components/catalogue/catalogue-utils';
 import { buildScheduleJudges, aggregateJudgeAssignments } from '@/lib/schedule-judges';
 import { prepareAdvertsForRender } from '@/lib/advert-orientation';
 import { padPdfToMultiple, stripUnembeddedBase14Fonts } from '@/lib/pdf-pad';
@@ -352,6 +353,19 @@ export async function buildCatalogueSnapshot(db: Database, showId: string): Prom
   const classDefinitions = buildCatalogueClassDefinitions(showClassRows);
   const classLabelMap = buildClassLabelMap(showClassRows, show.showRuleset);
 
+  // Cover-page class count — Mandy 2026-09-08: a single-breed cover must
+  // read "N Breed Classes", counting only actual breed classes. Junior
+  // Handling is excluded via the same shared isJuniorHandlingClass()
+  // predicate the By-Class/Standard layout already uses, so this count can
+  // never drift from what those renderers treat as JH. Special Award
+  // Classes are deliberately NOT excluded: buildCatalogueClassDefinitions
+  // (the Definitions-of-Classes page, just above) floats JH to the end but
+  // never drops Special Award Classes from the list, so "breed class" for
+  // cover-count purposes mirrors that — everything except JH.
+  const totalClasses = showClassRows.filter(
+    (sc) => !isJuniorHandlingClass(sc.classDefinition?.name, sc.sex),
+  ).length;
+
   const classSponsorships: NonNullable<CatalogueShowInfo['classSponsorships']> = [];
   for (const sc of showClassRows) {
     for (const cs of sc.classSponsorships ?? []) {
@@ -542,6 +556,7 @@ export async function buildCatalogueSnapshot(db: Database, showId: string): Prom
     judgePhotos: Object.keys(judgePhotos).length > 0 ? judgePhotos : undefined,
     judgeRingNumbers: Object.keys(judgeRingNumbers).length > 0 ? judgeRingNumbers : undefined,
     classDefinitions,
+    totalClasses,
     showScope: show.showScope ?? undefined,
     classSponsorships: classSponsorships.length > 0 ? classSponsorships : undefined,
     skipTrophiesPage: classSponsorships.length > 0,

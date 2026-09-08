@@ -118,6 +118,61 @@ async function makeRkcShowWithEntry() {
   return { show, showClass, entry };
 }
 
+/** Build a single-breed RKC show with 3 breed classes + 1 Junior Handling
+ *  class + one confirmed entry — the minimum fixture for the cover's
+ *  "N Breed Classes" count (Mandy 2026-09-08), which must exclude JH. */
+async function makeRkcShowWithBreedAndJhClasses() {
+  const { org, breed } = await makeSecretaryWithOrgAndBreed();
+  const show = await makeShow({
+    organisationId: org.id,
+    breedId: breed.id,
+    showScope: 'single_breed',
+    showRuleset: 'rkc',
+    status: 'entries_closed',
+  });
+  const breedClassDefs = await Promise.all(
+    [1, 2, 3].map((i) => makeClassDef({ name: `Breed Class ${i}`, type: 'age' })),
+  );
+  const breedShowClasses = await Promise.all(
+    breedClassDefs.map((classDef, i) =>
+      makeShowClass({
+        showId: show.id,
+        classDefinitionId: classDef.id,
+        breedId: breed.id,
+        sex: 'dog',
+        classNumber: i + 1,
+        sortOrder: i + 1,
+      }),
+    ),
+  );
+  const jhClassDef = await makeClassDef({ name: 'Junior Handling', type: 'junior_handler' });
+  await makeShowClass({
+    showId: show.id,
+    classDefinitionId: jhClassDef.id,
+    sex: null,
+    classNumber: null,
+    sortOrder: 99,
+  });
+  const exhibitor = await makeUser({ role: 'exhibitor' });
+  const dog = await makeDog({ ownerId: exhibitor.id, breedId: breed.id, registeredName: 'Breed Count Fixture Dog' });
+  const entry = await makeEntry({ showId: show.id, dogId: dog.id, exhibitorId: exhibitor.id, status: 'confirmed' });
+  await makeEntryClass({ entryId: entry.id, showClassId: breedShowClasses[0]!.id });
+  return { show };
+}
+
+describe('buildCatalogueSnapshot — totalClasses excludes Junior Handling (Mandy 2026-09-08)', () => {
+  it('single-breed RKC show: totalClasses counts only breed classes, and the standard catalogue cover reads "3 Breed Classes"', async () => {
+    const { show } = await makeRkcShowWithBreedAndJhClasses();
+
+    const snapshot = await buildCatalogueSnapshot(db, show.id);
+    expect(snapshot.showInfoBase.totalClasses).toBe(3);
+
+    const buf = await renderCatalogueFromSnapshot(snapshot, 'standard');
+    const text = extractRawText(buf);
+    expect(text).toMatch(/3\s*Breed Class\s*es/);
+  });
+});
+
 describe('generateCataloguePdf — one renderer (RED TEST 1: judge-copy on wusv)', () => {
   it('fills the judge-copy results grid with the real SV grade, never the silently-substituted plain catalogue', async () => {
     const { show } = await makeWusvShowWithGradedResult();

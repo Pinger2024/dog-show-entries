@@ -1100,10 +1100,15 @@ export function CoverPage({ show }: FrontMatterProps) {
           );
         })()}
 
-        {/* Class count */}
+        {/* Class count — single-breed shows read "N Breed Classes" (Mandy
+            2026-09-08); all-breed wording is unchanged pending a separate
+            decision from Mandy. `totalClasses` (buildCatalogueSnapshot)
+            already excludes Junior Handling. */}
         {show.totalClasses != null && show.totalClasses > 0 && (
           <Text style={{ fontFamily: 'Inter', fontSize: 8, color: C.textMedium, marginTop: 2, marginBottom: 2 }}>
-            {show.totalClasses} Class{show.totalClasses !== 1 ? 'es' : ''}
+            {show.showScope === 'single_breed'
+              ? `${show.totalClasses} Breed Class${show.totalClasses !== 1 ? 'es' : ''}`
+              : `${show.totalClasses} Class${show.totalClasses !== 1 ? 'es' : ''}`}
           </Text>
         )}
 
