@@ -8,18 +8,11 @@
 import path from 'node:path';
 import sharp from 'sharp';
 import { db } from '@/server/db';
-import { and, eq, isNull, asc, sql, inArray } from 'drizzle-orm';
+import { and, eq, isNull, asc, sql } from 'drizzle-orm';
 import * as schema from '@/server/db/schema';
-import { formatDogName, formatDogNameForCatalogue } from '@/lib/utils';
 import { formatLondonLongDateNoComma } from '@/lib/date-utils';
-import { appendRegistrationFlags } from '@/lib/registration-flags';
-import { renderToBuffer, Document, Page, Text, StyleSheet } from '@react-pdf/renderer';
-import { CatalogueRingside } from '@/components/catalogue/catalogue-ringside';
-import { CatalogueByClass } from '@/components/catalogue/catalogue-by-class';
-import { CatalogueByBreed } from '@/components/catalogue/catalogue-by-breed';
-import { CatalogueJudging } from '@/components/catalogue/catalogue-judging';
-import type { CatalogueEntry, CatalogueShowInfo } from '@/components/catalogue/catalogue-types';
-import { fetchClubImage, fetchPdfSafeImage } from '@/lib/safe-image-fetch';
+import { renderToBuffer } from '@react-pdf/renderer';
+import { fetchClubImage } from '@/lib/safe-image-fetch';
 import { PrizeCards } from '@/components/prize-cards/prize-cards';
 import type { PrizeCardShowInfo, PrizeCardClass } from '@/components/prize-cards/prize-cards';
 import { pickScheduleComponent, designedSchedulePageCount } from '@/components/schedule';
@@ -31,19 +24,33 @@ import { RingNumbers as RingNumbersComponent } from '@/components/ring-numbers/r
 import type { RingNumberShowInfo, RingNumberFormat } from '@/components/ring-numbers/ring-numbers';
 import React from 'react';
 import { uploadToR2, getPublicUrl } from '@/server/services/storage';
-import { getDockingStatementFromScheduleData } from '@/lib/rkc-compliance';
 import type { RegionalFeeConfig } from '@/server/db/schema/shows';
-import { buildClassLabelMap, isSpecialAwardClass, buildCatalogueClassDefinitions } from '@/lib/class-labels';
-import { buildScheduleJudges, aggregateJudgeAssignments } from '@/lib/schedule-judges';
-import { padPdfToMultiple, stripUnembeddedBase14Fonts } from '@/lib/pdf-pad';
-import { prepareAdvertsForRender } from '@/lib/advert-orientation';
+import { buildClassLabelMap, isSpecialAwardClass } from '@/lib/class-labels';
+import { stripUnembeddedBase14Fonts } from '@/lib/pdf-pad';
 import { resolveJudgeForClass } from '@/lib/judge-resolution';
+import {
+  buildCatalogueSnapshot,
+  renderCatalogueFromSnapshot,
+  type CatalogueFormat,
+} from '@/server/services/catalogue-snapshot';
+import { isCatalogueFormat, UnsupportedCatalogueFormatError } from '@/server/services/catalogue-jobs';
 
 // ── Catalogue PDF ──
 
+/**
+ * Thin wrapper over the canonical snapshot-based render pipeline
+ * (catalogue-snapshot.ts's buildCatalogueSnapshot/renderCatalogueFromSnapshot
+ * — the same path the document-render worker and the /api/catalogue route
+ * use), so every `scripts/*.ts` caller of this function renders byte-for-byte
+ * what the site would produce. Before 2026-09-08 this function built its own
+ * show/entries query and its own component map, which silently diverged from
+ * the canonical renderer — e.g. a wusv show requesting `judge-copy` here
+ * collapsed to the plain by-class catalogue instead of erroring or rendering
+ * the judge-copy grid, because this function didn't know that format existed.
+ */
 export async function generateCataloguePdf(
   showId: string,
-  format: 'standard' | 'by-class' | 'judging' = 'standard',
+  format: CatalogueFormat = 'standard',
   opts?: {
     /** Print a different venue than the one stored on the show — for an
      *  embargoed venue change (Mandy 2026-08-17: Clyde Valley + Scotland
@@ -54,371 +61,20 @@ export async function generateCataloguePdf(
     venueOverride?: { name: string; address: string; what3words?: string };
   }
 ): Promise<Buffer> {
-  const show = await db.query.shows.findFirst({
-    where: eq(schema.shows.id, showId),
-    with: { organisation: true, venue: true },
-  });
-
-  if (!show) throw new Error(`Show ${showId} not found`);
-
-  // Run independent queries in parallel. These match the catalogue
-  // API route's queries so both pipelines build identical showInfo —
-  // previously this service dropped bios/photos/ring numbers/class
-  // sponsorships/show sponsors, so any catalogue generated via
-  // generateAndUploadForPrint was missing them.
-  const [judgeAssignmentRows, showClassRows, entries, showSponsorRows, catalogueAdvertRows] = await Promise.all([
-    db.query.judgeAssignments.findMany({
-      where: eq(schema.judgeAssignments.showId, showId),
-      with: { judge: true, breed: true, ring: true },
-    }),
-    db.query.showClasses.findMany({
-      where: eq(schema.showClasses.showId, showId),
-      with: {
-        classDefinition: true,
-        classSponsorships: {
-          with: { showSponsor: { with: { sponsor: true } } },
-          orderBy: [asc(schema.classSponsorships.createdAt)],
-        },
-      },
-      orderBy: [asc(schema.showClasses.sortOrder), asc(schema.showClasses.classNumber)],
-    }),
-    db.query.entries.findMany({
-      where: and(
-        eq(schema.entries.showId, showId),
-        eq(schema.entries.status, 'confirmed'),
-        isNull(schema.entries.deletedAt)
-      ),
-      with: {
-        dog: {
-          with: {
-            breed: { with: { group: true } },
-            owners: { orderBy: [asc(schema.dogOwners.sortOrder)] },
-            titles: true,
-            svProfile: true,
-          },
-        },
-        exhibitor: true,
-        handler: true,
-        juniorHandlerDetails: true,
-        entryClasses: {
-          with: { showClass: { with: { classDefinition: true } } },
-        },
-      },
-      orderBy: [schema.catalogueNumberAsc()],
-    }),
-    db.query.showSponsors.findMany({
-      where: eq(schema.showSponsors.showId, showId),
-      with: { sponsor: true },
-      orderBy: [asc(schema.showSponsors.displayOrder)],
-    }),
-    db.query.catalogueAdverts.findMany({
-      where: and(
-        eq(schema.catalogueAdverts.showId, showId),
-        inArray(schema.catalogueAdverts.document, ['catalogue', 'both']),
-      ),
-      orderBy: [asc(schema.catalogueAdverts.sortOrder)],
-    }),
-  ]);
-
-  // Plain donors thanked in the catalogue (name + optional affix, no amount).
-  const showDonationRows = await db.query.showDonations.findMany({
-    where: eq(schema.showDonations.showId, showId),
-    orderBy: [asc(schema.showDonations.displayOrder), asc(schema.showDonations.createdAt)],
-  });
-
-  const judgesByBreedName: Record<string, string> = {};
-  const judgeBios: Record<string, string> = {};
-  const judgePhotos: Record<string, string> = {};
-  const judgeRingNumbers: Record<string, string> = {};
-  for (const ja of judgeAssignmentRows) {
-    if (ja.breed?.name && ja.judge?.name) {
-      judgesByBreedName[ja.breed.name] = ja.judge.name;
-    }
-    if (ja.judge?.bio && !judgeBios[ja.judge.name]) {
-      judgeBios[ja.judge.name] = ja.judge.bio;
-    }
-    if (ja.judge?.photoUrl && !judgePhotos[ja.judge.name]) {
-      judgePhotos[ja.judge.name] = ja.judge.photoUrl;
-    }
-    if (ja.ring?.number != null && ja.breed?.name) {
-      judgeRingNumbers[ja.breed.name] = String(ja.ring.number);
-    }
-  }
-  // Sex-annotated display labels — the SAME aggregator + resolver the catalogue
-  // HTTP route and the schedule use, so a judge doing both sexes shows ONCE as
-  // "Dogs & Bitches — <name>" everywhere (Mandy 2026-06-16; shared 2026-06-19).
-  const { entries: catJudgeEntries, specialAwardsJudges: catSpecialAwardsJudges } =
-    aggregateJudgeAssignments(judgeAssignmentRows);
-  const catHasJuniorHandlerClasses = showClassRows.some(
-    (sc) => sc.classDefinition?.type === 'junior_handler',
-  );
-  const judgeDisplayList = buildScheduleJudges(
-    catJudgeEntries.values(),
-    catSpecialAwardsJudges,
-    catHasJuniorHandlerClasses,
-  )
-    .map((j) => j.displayLabel)
-    .filter((label): label is string => !!label);
-
-  const classLabelMap = buildClassLabelMap(showClassRows, show.showRuleset);
-
-  // Build class sponsorship list for the Trophies & Sponsorships page
-  // AND the inline per-class sponsor lines. Mirrors route.ts so the two
-  // pipelines produce the same catalogue for the same show.
-  const classSponsorshipInfos: CatalogueShowInfo['classSponsorships'] = [];
-  for (const sc of showClassRows) {
-    for (const cs of sc.classSponsorships ?? []) {
-      const sponsorName = cs.sponsorName ?? cs.showSponsor?.sponsor?.name ?? null;
-      const bannerImageUrl = (cs as { bannerImageUrl?: string | null }).bannerImageUrl ?? null;
-      if (cs.trophyName || sponsorName || cs.prizeDescription || bannerImageUrl) {
-        classSponsorshipInfos.push({
-          className: sc.classDefinition?.name ?? 'Unknown Class',
-          classNumber: sc.classNumber,
-          classLabel: classLabelMap.get(sc.id) ?? '',
-          trophyName: cs.trophyName,
-          trophyDonor: cs.trophyDonor,
-          sponsorName,
-          sponsorAffix: cs.sponsorAffix ?? null,
-          prizeDescription: cs.prizeDescription,
-          bannerImageUrl,
-        });
-      }
-    }
+  if (!isCatalogueFormat(format)) {
+    throw new UnsupportedCatalogueFormatError(format);
   }
 
-  // The show-tier sponsor gets its logo embedded in the catalogue's
-  // "grateful thanks" billing block — fetched + normalised to a format
-  // react-pdf can reliably render via fetchPdfSafeImage() (SSRF-guarded,
-  // and re-encoded so a progressive JPEG export doesn't silently vanish
-  // from the page — see safe-image-fetch.ts). Only the 'show' tier renders
-  // a logo today, so that's the only tier fetched. A failed/blocked fetch
-  // or an image sharp can't decode resolves to null and the renderer
-  // degrades to a text-only billing block.
-  const showSponsorInfos = await Promise.all(showSponsorRows.map(async (ss) => ({
-    name: ss.sponsor.name,
-    tier: ss.tier,
-    logoUrl: ss.sponsor.logoUrl,
-    website: ss.sponsor.website,
-    customTitle: ss.customTitle,
-    logoBuffer: ss.tier === 'show' && ss.sponsor.logoUrl
-      ? await fetchPdfSafeImage(ss.sponsor.logoUrl)
-      : null,
-  })));
-
-  const allShowClasses = showClassRows.map((sc) => ({
-    className: sc.classDefinition?.name ?? 'Unknown Class',
-    classNumber: sc.classNumber,
-    classLabel: classLabelMap.get(sc.id) ?? '',
-    sortOrder: sc.sortOrder,
-    sex: sc.sex,
-    svCoatType: (sc as { svCoatType?: 'stock' | 'long_stock' | null }).svCoatType ?? null,
-    classDefinitionType: sc.classDefinition?.type ?? null,
-  }));
-
-  // Definitions of Classes — deduped, Junior Handling floated to the END (after
-  // Veteran). Shared with the HTTP route so the page can't drift between them.
-  const classDefinitions = buildCatalogueClassDefinitions(showClassRows);
-
-  // The ringside-based "standard" format uses plain formatting; only the
-  // Crufts-style by-breed layout (for all-breed shows under "by-class")
-  // needs RKC catalogue formatting.
-  const useKCFormat = format === 'by-class' && show.showScope !== 'single_breed';
-
-  const catalogueEntries: CatalogueEntry[] = entries.map((entry) => ({
-    catalogueNumber: entry.catalogueNumber,
-    // RKC registration flags (NAF/TAF/CNAF) print after the dog's name. Must
-    // stay identical to the twin expression in the catalogue HTTP route —
-    // these are the two render paths that have to produce the same output.
-    dogName: appendRegistrationFlags(
-      entry.dog
-        ? (useKCFormat ? formatDogNameForCatalogue(entry.dog) : formatDogName(entry.dog))
-        : null,
-      entry
-    ),
-    breed: entry.dog?.breed?.name,
-    breedId: entry.dog?.breed?.id,
-    group: entry.dog?.breed?.group?.name,
-    groupSortOrder: entry.dog?.breed?.group?.sortOrder,
-    sex: entry.dog?.sex,
-    dateOfBirth: entry.dog?.dateOfBirth,
-    kcRegNumber: entry.dog?.kcRegNumber,
-    microchipNumber: entry.dog?.microchipNumber ?? null,
-    svProfile: entry.dog?.svProfile
-      ? {
-          hipGrade: entry.dog.svProfile.hipGrade ?? null,
-          hipScore: entry.dog.svProfile.hipScore ?? null,
-          hipScoreOther: entry.dog.svProfile.hipScoreOther ?? null,
-          elbowGrade: entry.dog.svProfile.elbowGrade ?? null,
-          elbowScore: entry.dog.svProfile.elbowScore ?? null,
-          elbowScoreOther: entry.dog.svProfile.elbowScoreOther ?? null,
-          dna: entry.dog.svProfile.dna ?? null,
-          koerung: entry.dog.svProfile.koerung ?? null,
-          workingTitle: entry.dog.svProfile.workingTitle ?? null,
-          bh: entry.dog.svProfile.bh ?? false,
-          ad: entry.dog.svProfile.ad ?? false,
-          wb: entry.dog.svProfile.wb ?? false,
-          otherQualifications: entry.dog.svProfile.otherQualifications ?? null,
-        }
-      : null,
-    colour: entry.dog?.colour,
-    sire: entry.dog?.sireName,
-    dam: entry.dog?.damName,
-    breeder: entry.dog?.breederName,
-    breederCity: (entry.dog as { breederCity?: string | null })?.breederCity ?? null,
-    breederPostcode: (entry.dog as { breederPostcode?: string | null })?.breederPostcode ?? null,
-    titles: entry.dog?.titles?.map((t) => t.title).filter(Boolean) ?? [],
-    owners: entry.dog?.owners?.map((o) => ({
-      title: o.ownerTitle,
-      name: o.ownerName,
-      address: o.ownerAddress,
-      userId: o.userId,
-    })) ?? [],
-    exhibitorId: entry.exhibitorId,
-    handler: entry.handler?.name,
-    exhibitor: entry.exhibitor?.name,
-    jhHandlerName: entry.juniorHandlerDetails?.handlerName ?? undefined,
-    classes: entry.entryClasses.map((ec) => ({
-      name: ec.showClass?.classDefinition?.name,
-      sex: ec.showClass?.sex,
-      classNumber: ec.showClass?.classNumber,
-      classLabel: ec.showClass?.id ? classLabelMap.get(ec.showClass.id) : undefined,
-      sortOrder: ec.showClass?.sortOrder,
-      showClassId: ec.showClassId,
-      svCoatType: (ec.showClass as { svCoatType?: 'stock' | 'long_stock' | null } | undefined)?.svCoatType ?? null,
-      classDefinitionType: ec.showClass?.classDefinition?.type ?? null,
-    })),
-    status: entry.status,
-    entryType: entry.entryType,
-    isNfc: entry.isNfc,
-    withholdFromPublication: entry.withholdFromPublication,
-  }));
-
-  // Drizzle gives us `ScheduleData | null` directly via the jsonb $type<>
-  // annotation in the schema, so we can read fields without casts.
-  const scheduleData = show.scheduleData;
-
-  // Measure each advert so landscape artwork gets a landscape page (fills it)
-  // rather than a portrait page with white bands top and bottom.
-  const advertsForCatalogue = await prepareAdvertsForRender(
-    catalogueAdvertRows.map((ad) => ({
-      id: ad.id,
-      advertiserName: ad.advertiserName,
-      position: ad.position,
-      imageUrl: ad.imageUrl,
-      sortOrder: ad.sortOrder,
-    })),
-  );
-
-  const showInfo: CatalogueShowInfo = {
-    name: show.name,
-    showType: show.showType,
-    showRuleset: (show as { showRuleset?: 'rkc' | 'wusv' | null }).showRuleset ?? null,
-    date: show.startDate,
-    endDate: show.endDate !== show.startDate ? show.endDate : undefined,
-    venue: opts?.venueOverride?.name ?? show.venue?.name,
-    venueAddress: opts?.venueOverride?.address ?? show.venue?.address ?? undefined,
-    venueWhat3words: opts?.venueOverride?.what3words,
-    organisation: show.organisation?.name,
-    kcLicenceNo: show.kcLicenceNo,
-    logoUrl: show.organisation?.logoUrl ?? undefined,
-    secretaryName: show.secretaryName ?? undefined,
-    secretaryEmail: show.secretaryEmail ?? undefined,
-    secretaryPhone: show.secretaryPhone ?? undefined,
-    secretaryAddress: show.secretaryAddress ?? undefined,
-    onCallVet: show.onCallVet ?? undefined,
-    showOpenTime: show.showOpenTime,
-    startTime: show.startTime,
-    totalClasses: showClassRows.length,
-    wetWeatherAccommodation: scheduleData?.wetWeatherAccommodation,
-    judgedOnGroupSystem: scheduleData?.judgedOnGroupSystem,
-    judgesByBreedName,
-    judgeDisplayList: judgeDisplayList.length > 0 ? judgeDisplayList : undefined,
-    judgeBios: Object.keys(judgeBios).length > 0 ? judgeBios : undefined,
-    judgePhotos: Object.keys(judgePhotos).length > 0 ? judgePhotos : undefined,
-    judgeRingNumbers: Object.keys(judgeRingNumbers).length > 0 ? judgeRingNumbers : undefined,
-    classDefinitions,
-    showScope: show.showScope ?? undefined,
-    classSponsorships: classSponsorshipInfos.length > 0 ? classSponsorshipInfos : undefined,
-    skipTrophiesPage: classSponsorshipInfos.length > 0,
-    showSponsors: showSponsorInfos.length > 0 ? showSponsorInfos : undefined,
-    donations: showDonationRows.length > 0
-      ? showDonationRows.map((d) => ({ name: d.donorName, affix: d.affix }))
-      : undefined,
-    allShowClasses: allShowClasses.length > 0 ? allShowClasses : undefined,
-    customStatements: scheduleData?.customStatements,
-    dockingStatement: getDockingStatementFromScheduleData(scheduleData),
-
-    // Settings audit (backlog #85): wire schedule fields through to the
-    // catalogue render pipeline so they actually appear in the PDF.
-    welcomeNote: scheduleData?.welcomeNote,
-    outsideAttraction: scheduleData?.outsideAttraction === true ? true : undefined,
-    showManager: scheduleData?.showManager,
-    firstAiders: scheduleData?.firstAiders,
-    officers: scheduleData?.officers,
-    guarantors: scheduleData?.guarantors,
-    awardSponsors: scheduleData?.awardSponsors,
-    bestAwards: scheduleData?.bestAwards,
-    awardsDescription: scheduleData?.awardsDescription,
-    additionalNotes: scheduleData?.additionalNotes,
-    futureShowDates: scheduleData?.futureShowDates,
-    catering: scheduleData?.catering,
-    latestArrivalTime: scheduleData?.latestArrivalTime,
-    acceptsNfc: scheduleData?.acceptsNfc,
-    prizeMoney: scheduleData?.prizeMoney,
-    country: scheduleData?.country,
-    publicAdmission: scheduleData?.publicAdmission,
-    adverts: advertsForCatalogue,
-  };
-
-  const isAllBreed = show.showScope !== 'single_breed';
-  const isWusv = showInfo.showRuleset === 'wusv';
-
-  // SV/WUSV regional shows always render as the by-class single-breed
-  // catalogue regardless of the requested format — Amanda 2026-05-23:
-  // "the only option will be 'by class' catalogue".
-  const effectiveFormat = isWusv ? 'by-class' : format;
-  const formatComponents = {
-    standard: CatalogueRingside,
-    'by-class': isAllBreed ? CatalogueByBreed : CatalogueByClass,
-    // Stewards' catalogue — same props, same assembly; mirrors the route's
-    // dispatch so the working document is renderable server-side too
-    // (verification harness / print pipeline).
-    judging: CatalogueJudging,
-  } as const;
-
-  // For SV shows we pre-bake the cover + inside tonal washes from the
-  // org's brand colours so the catalogue render stays synchronous.
-  if (isWusv) {
-    const orgRow = show.organisation as
-      | { logoColorPrimary?: string | null; logoColorSecondary?: string | null; logoMonochrome?: boolean | null }
-      | null
-      | undefined;
-    const { getTonalWash } = await import('./sv-tonal-wash');
-    const primary = orgRow?.logoMonochrome ? null : orgRow?.logoColorPrimary ?? null;
-    const secondary = orgRow?.logoMonochrome ? null : orgRow?.logoColorSecondary ?? null;
-    const [cover, inside] = await Promise.all([
-      getTonalWash(primary, secondary, 'cover'),
-      getTonalWash(primary, secondary, 'inside'),
-    ]);
-    showInfo.svWashes = { cover, inside };
+  const snapshot = await buildCatalogueSnapshot(db, showId);
+  if (opts?.venueOverride) {
+    snapshot.showInfoBase = {
+      ...snapshot.showInfoBase,
+      venue: opts.venueOverride.name,
+      venueAddress: opts.venueOverride.address,
+      venueWhat3words: opts.venueOverride.what3words,
+    };
   }
-
-  const Component = formatComponents[effectiveFormat];
-  const pdfDocument = React.createElement(Component, { show: showInfo, entries: catalogueEntries });
-  const rawBuffer = await renderToBuffer(pdfDocument);
-  // Pad to a multiple of 4 pages — the SAME padPdfToMultiple the
-  // /api/catalogue route applies to these booklet formats, so a catalogue
-  // from this function is page-for-page identical to a site download. It
-  // also strips react-pdf's unembedded base-14 phantom font refs. Before
-  // 2026-08-17 this function only stripped fonts and skipped the padding,
-  // which is how Mandy received a 31-page book that couldn't duplex
-  // ("we need an even number of pages for printing the catalogue").
-  // The judging (stewards') catalogue is an internal working document — the
-  // route doesn't booklet-pad it either, only the public booklet formats.
-  if (effectiveFormat === 'judging') {
-    return Buffer.from(await stripUnembeddedBase14Fonts(rawBuffer));
-  }
-  return Buffer.from(await padPdfToMultiple(rawBuffer, 4));
+  return renderCatalogueFromSnapshot(snapshot, format);
 }
 
 // ── Prize Cards PDF ──
@@ -1161,9 +817,14 @@ export async function generateAndUploadForPrint(
 
   let buffer: Buffer;
   switch (documentType) {
-    case 'catalogue':
-      buffer = await generateCataloguePdf(showId, (documentFormat as 'standard' | 'by-class') ?? 'standard');
+    case 'catalogue': {
+      const catalogueFormat = documentFormat ?? 'standard';
+      if (!isCatalogueFormat(catalogueFormat)) {
+        throw new UnsupportedCatalogueFormatError(catalogueFormat);
+      }
+      buffer = await generateCataloguePdf(showId, catalogueFormat);
       break;
+    }
     case 'schedule':
       buffer = await generateSchedulePdf(showId);
       break;

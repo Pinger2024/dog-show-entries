@@ -26,6 +26,17 @@ export function isCatalogueFormat(value: string): value is CatalogueFormat {
   return (CATALOGUE_FORMATS as readonly string[]).includes(value);
 }
 
+/** Thrown wherever a caller-supplied catalogue format string fails
+ *  `isCatalogueFormat` — named and typed so it's never confused with the
+ *  React "element type is invalid" crash an unchecked cast used to produce
+ *  (pdf-generation.ts's generateCataloguePdf/generateAndUploadForPrint). */
+export class UnsupportedCatalogueFormatError extends Error {
+  constructor(value: string) {
+    super(`Unsupported catalogue format "${value}" — expected one of: ${CATALOGUE_FORMATS.join(', ')}`);
+    this.name = 'UnsupportedCatalogueFormatError';
+  }
+}
+
 /** Catalogues are released to exhibitors on the morning of the show
  *  (Amanda 2026-05-28) — secretaries/admins get pre-show access for
  *  proofing and printing. Mirrors the check that used to live inline in
