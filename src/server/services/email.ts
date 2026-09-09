@@ -7,6 +7,7 @@ import { isCatalogueItem } from '@/lib/catalogue-utils';
 import { generateParkingPassPdf } from '@/server/services/parking-pass-pdf';
 import { buildClassLabelMap } from '@/lib/class-labels';
 import { BRAND } from '@/lib/brand';
+import { FEEDBACK_REPLY_TO } from '@/lib/email-addresses';
 
 export const resend = new Resend(process.env.RESEND_API_KEY);
 
@@ -299,7 +300,7 @@ export async function sendEntryConfirmationEmail(orderId: string) {
     const result = await resend.emails.send({
       from: FROM,
       to: exhibitor.email,
-      replyTo: process.env.FEEDBACK_EMAIL ?? 'feedback@remishowmanager.co.uk',
+      replyTo: FEEDBACK_REPLY_TO,
       subject: `Entry Confirmed — ${show.name}`,
       html,
     });
@@ -452,7 +453,7 @@ export async function sendSecretaryNotificationEmail(orderId: string) {
     const result = await resend.emails.send({
       from: FROM,
       to: secretaryEmail,
-      replyTo: process.env.FEEDBACK_EMAIL ?? 'feedback@remishowmanager.co.uk',
+      replyTo: FEEDBACK_REPLY_TO,
       subject: `New Entry — ${exhibitor?.name ?? 'Exhibitor'} → ${show.name}`,
       html,
     });
@@ -574,7 +575,7 @@ export async function sendPrintOrderConfirmationEmail(printOrderId: string) {
     const result = await resend.emails.send({
       from: FROM,
       to: order.orderedBy.email,
-      replyTo: process.env.FEEDBACK_EMAIL ?? 'feedback@remishowmanager.co.uk',
+      replyTo: FEEDBACK_REPLY_TO,
       subject: `Print Order Confirmed — ${show.name} (${orderRef})`,
       html,
     });
@@ -795,7 +796,7 @@ export async function sendPrintOrderDispatchEmail(printOrderId: string) {
     const result = await resend.emails.send({
       from: FROM,
       to: order.orderedBy.email,
-      replyTo: process.env.FEEDBACK_EMAIL ?? 'feedback@remishowmanager.co.uk',
+      replyTo: FEEDBACK_REPLY_TO,
       subject: `Your Print Order Has Shipped! — ${show.name} (${orderRef})`,
       html,
     });
@@ -885,7 +886,7 @@ export async function sendJudgeApprovalRequestEmail(params: {
   const result = await resend.emails.send({
     from: FROM,
     to: judge.email,
-    replyTo: process.env.FEEDBACK_EMAIL ?? 'feedback@remishowmanager.co.uk',
+    replyTo: FEEDBACK_REPLY_TO,
     subject: `Results Approval — ${show.name}`,
     html,
   });
@@ -952,7 +953,7 @@ export async function sendCatalogueReadyEmail(orderId: string) {
   const result = await resend.emails.send({
     from: FROM,
     to: exhibitor.email,
-    replyTo: process.env.FEEDBACK_EMAIL ?? 'feedback@remishowmanager.co.uk',
+    replyTo: FEEDBACK_REPLY_TO,
     subject: `Your catalogue is ready — ${show.name}`,
     html,
   });
@@ -1019,7 +1020,7 @@ export async function sendCritiqueInviteEmail(params: {
   const result = await resend.emails.send({
     from: FROM,
     to: email,
-    replyTo: process.env.FEEDBACK_EMAIL ?? 'feedback@remishowmanager.co.uk',
+    replyTo: FEEDBACK_REPLY_TO,
     subject: `Your Critiques — ${showName}`,
     html,
   });
@@ -1076,7 +1077,7 @@ export async function sendCritiqueSubmittedEmail(params: {
   const result = await resend.emails.send({
     from: FROM,
     to: secretaryEmail,
-    replyTo: process.env.FEEDBACK_EMAIL ?? 'feedback@remishowmanager.co.uk',
+    replyTo: FEEDBACK_REPLY_TO,
     subject: `Critiques Received — ${judgeName} for ${showName}`,
     html,
   });
@@ -1152,7 +1153,7 @@ export async function sendParkingPassEmail(orderId: string): Promise<boolean> {
   const result = await resend.emails.send({
     from: FROM,
     to: exhibitor.email,
-    replyTo: process.env.FEEDBACK_EMAIL ?? 'feedback@remishowmanager.co.uk',
+    replyTo: FEEDBACK_REPLY_TO,
     subject: `Your parking pass — ${showName}`,
     html,
     attachments: [{ filename, content: buffer }],

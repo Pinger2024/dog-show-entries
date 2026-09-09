@@ -16,6 +16,7 @@ import { svCoatDisplayName, svDisplayAge } from '@/lib/class-labels';
 import { buildResultsSubject } from '@/lib/results-subject';
 import { resend, FROM, APP_URL, btn, emailHeader, emailFooter } from './email';
 import { BRAND } from '@/lib/brand';
+import { FEEDBACK_REPLY_TO } from '@/lib/email-addresses';
 
 const placementColor: Record<number, string> = {
   1: BRAND.green,
@@ -182,7 +183,7 @@ export async function sendExhibitorResultsEmails(showId: string) {
     emailPayloads.push({
       from: FROM,
       to: exhibitor.email,
-      replyTo: process.env.FEEDBACK_EMAIL ?? 'feedback@remishowmanager.co.uk',
+      replyTo: FEEDBACK_REPLY_TO,
       subject,
       html,
     });
@@ -370,7 +371,7 @@ export async function sendFollowerResultsNotifications(showId: string) {
     emailPayloads.push({
       from: FROM,
       to: follower.email,
-      replyTo: process.env.FEEDBACK_EMAIL ?? 'feedback@remishowmanager.co.uk',
+      replyTo: FEEDBACK_REPLY_TO,
       subject,
       html,
     });

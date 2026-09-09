@@ -13,6 +13,7 @@ import { computeOrderFees, type FeeContext } from '@/lib/fee-calc';
 import { formatAtcNumber } from '@/lib/registration-flags';
 import { computePrizeCardCounts } from '@/lib/prize-card-counts';
 import { BRAND } from '@/lib/brand';
+import { FEEDBACK_REPLY_TO } from '@/lib/email-addresses';
 import { checkOwnerRecord, type OwnerCheckIssue } from '@/lib/catalogue-data-checks';
 import { SV_CLASS_AUTO_CREATE_COMBOS } from '@/lib/class-labels';
 import {
@@ -4756,7 +4757,7 @@ export const secretaryRouter = createTRPCRouter({
         const result = await resend.emails.send({
           from: emailFrom,
           to: input.judgeEmail,
-          replyTo: process.env.FEEDBACK_EMAIL ?? 'feedback@remishowmanager.co.uk',
+          replyTo: FEEDBACK_REPLY_TO,
           subject: `Judging Offer — ${show.name}`,
           html,
         });
@@ -4894,7 +4895,7 @@ export const secretaryRouter = createTRPCRouter({
         const result = await resend.emails.send({
           from: emailFrom,
           to: contract.judgeEmail,
-          replyTo: process.env.FEEDBACK_EMAIL ?? 'feedback@remishowmanager.co.uk',
+          replyTo: FEEDBACK_REPLY_TO,
           subject: `Reminder: Judging Offer — ${show.name}`,
           html,
         });
@@ -5078,7 +5079,7 @@ export const secretaryRouter = createTRPCRouter({
         const result = await resend.emails.send({
           from: emailFrom,
           to: contract.judgeEmail,
-          replyTo: process.env.FEEDBACK_EMAIL ?? 'feedback@remishowmanager.co.uk',
+          replyTo: FEEDBACK_REPLY_TO,
           subject: `Appointment Confirmed — ${show.name}`,
           html,
         });
@@ -5428,7 +5429,7 @@ export const secretaryRouter = createTRPCRouter({
           const offerResult = await resend.emails.send({
             from: emailFrom,
             to: judge.contactEmail,
-            replyTo: process.env.FEEDBACK_EMAIL ?? 'feedback@remishowmanager.co.uk',
+            replyTo: FEEDBACK_REPLY_TO,
             subject: `Judging Offer — ${show.name}`,
             html: `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
 <body style="margin:0;padding:0;background-color:${BRAND.paper};font-family:'Hanken Grotesk',-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
@@ -5552,7 +5553,7 @@ export const secretaryRouter = createTRPCRouter({
           const confirmResult = await resend.emails.send({
             from: emailFrom,
             to: contract.judgeEmail,
-            replyTo: process.env.FEEDBACK_EMAIL ?? 'feedback@remishowmanager.co.uk',
+            replyTo: FEEDBACK_REPLY_TO,
             subject: `Appointment Confirmed — ${show.name}`,
             html: `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
 <body style="margin:0;padding:0;background-color:${BRAND.paper};font-family:'Hanken Grotesk',-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
@@ -5688,7 +5689,7 @@ export const secretaryRouter = createTRPCRouter({
       const entryNumbersResult = await resend.emails.send({
         from: emailFrom,
         to: judge.contactEmail,
-        replyTo: process.env.FEEDBACK_EMAIL ?? 'feedback@remishowmanager.co.uk',
+        replyTo: FEEDBACK_REPLY_TO,
         subject: `Entry Numbers — ${show.name}`,
         html: `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
 <body style="margin:0;padding:0;background-color:${BRAND.paper};font-family:'Hanken Grotesk',-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
@@ -5788,7 +5789,7 @@ export const secretaryRouter = createTRPCRouter({
       const thankYouResult = await resend.emails.send({
         from: emailFrom,
         to: judge.contactEmail,
-        replyTo: process.env.FEEDBACK_EMAIL ?? 'feedback@remishowmanager.co.uk',
+        replyTo: FEEDBACK_REPLY_TO,
         subject: `Thank You — ${show.name}`,
         html: `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
 <body style="margin:0;padding:0;background-color:${BRAND.paper};font-family:'Hanken Grotesk',-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">

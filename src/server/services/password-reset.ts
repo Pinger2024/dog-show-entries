@@ -6,6 +6,7 @@ import { db } from '@/server/db';
 import { users, passwordResetTokens } from '@/server/db/schema';
 import { emailHeader } from './email';
 import { BRAND } from '@/lib/brand';
+import { FEEDBACK_REPLY_TO } from '@/lib/email-addresses';
 
 const resend = new Resend(process.env.RESEND_API_KEY);
 const FROM = process.env.EMAIL_FROM ?? 'Remi <noreply@remishowmanager.co.uk>';
@@ -65,7 +66,7 @@ export async function requestPasswordReset(email: string) {
   const result = await resend.emails.send({
     from: FROM,
     to: user.email,
-    replyTo: process.env.FEEDBACK_EMAIL ?? 'feedback@remishowmanager.co.uk',
+    replyTo: FEEDBACK_REPLY_TO,
     subject: 'Reset your Remi password',
     text: [
       'Reset your password',

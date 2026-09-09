@@ -3,6 +3,7 @@ import { Webhook } from 'svix';
 import { Resend } from 'resend';
 import { db } from '@/server/db';
 import { feedback } from '@/server/db/schema';
+import { INBOUND_EMAIL_DOMAIN } from '@/lib/email-addresses';
 
 const resend = new Resend(process.env.RESEND_API_KEY);
 
@@ -12,11 +13,25 @@ interface ResendEmailReceivedPayload {
     email_id: string;
     from: string;
     to: string[];
+    cc?: string[];
     subject: string;
     text: string;
     html: string;
     created_at: string;
   };
+}
+
+// The Resend account is shared with other projects (e.g. Lettiva) — its
+// email.received webhook fires for every recipient on the account, not just
+// ours. Only ingest mail actually addressed to our inbound domain.
+function extractEmail(address: string): string {
+  const match = address.match(/<(.+)>/);
+  return (match ? match[1] : address).trim().toLowerCase();
+}
+
+function addressedToUs(recipients: string[]): boolean {
+  const domainSuffix = `@${INBOUND_EMAIL_DOMAIN.toLowerCase()}`;
+  return recipients.some((addr) => extractEmail(addr).endsWith(domainSuffix));
 }
 
 export async function POST(request: NextRequest) {
@@ -65,6 +80,14 @@ export async function POST(request: NextRequest) {
   }
 
   const data = payload.data;
+
+  const recipients = [...(data.to ?? []), ...(data.cc ?? [])];
+  if (!addressedToUs(recipients)) {
+    console.log(
+      `[resend-webhook] Ignored — recipient not ours (to: ${(data.to ?? []).join(', ')}${data.cc ? `, cc: ${data.cc.join(', ')}` : ''})`
+    );
+    return NextResponse.json({ ignored: true, reason: 'recipient not ours' });
+  }
 
   // Parse sender — could be "Name <email>" or just "email"
   const fromMatch = data.from.match(/^(.+?)\s*<(.+)>$/);

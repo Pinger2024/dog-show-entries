@@ -8,6 +8,7 @@ import { db } from '@/server/db';
 import * as schema from '@/server/db/schema';
 import { Resend as ResendClient } from 'resend';
 import { BRAND } from '@/lib/brand';
+import { FEEDBACK_REPLY_TO } from '@/lib/email-addresses';
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
   trustHost: true,
@@ -40,7 +41,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         await resend.emails.send({
           from,
           to: email,
-          replyTo: 'feedback@remishowmanager.co.uk',
+          replyTo: FEEDBACK_REPLY_TO,
           subject: 'Your Remi sign-in link',
           text: [
             'Sign in to Remi',

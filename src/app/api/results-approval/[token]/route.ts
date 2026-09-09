@@ -16,6 +16,7 @@ import { getPlacementLabel, achievementLabels } from '@/lib/placements';
 import { buildClassLabelMap, svCoatDisplayName, svDisplayAge } from '@/lib/class-labels';
 import { resend, FROM, emailHeader } from '@/server/services/email';
 import { BRAND } from '@/lib/brand';
+import { FEEDBACK_REPLY_TO } from '@/lib/email-addresses';
 
 function esc(s: string) {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -446,7 +447,7 @@ export async function POST(
       await resend.emails.send({
         from: emailFrom,
         to: toAddresses,
-        replyTo: process.env.FEEDBACK_EMAIL ?? 'feedback@remishowmanager.co.uk',
+        replyTo: FEEDBACK_REPLY_TO,
         subject: `Results Approved — ${judge.name} for ${show.name}`,
         html: `
 <!DOCTYPE html>
@@ -542,7 +543,7 @@ export async function POST(
       await resend.emails.send({
         from: emailFrom,
         to: toAddresses,
-        replyTo: process.env.FEEDBACK_EMAIL ?? 'feedback@remishowmanager.co.uk',
+        replyTo: FEEDBACK_REPLY_TO,
         subject: `Results Query — ${judge.name} for ${show.name}`,
         html: `
 <!DOCTYPE html>

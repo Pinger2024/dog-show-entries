@@ -25,6 +25,8 @@
  * to GOOGLE_*.
  */
 
+import { FEEDBACK_REPLY_TO } from '@/lib/email-addresses';
+
 type GscRow = {
   keys?: string[];
   clicks: number;
@@ -329,7 +331,7 @@ export async function sendWeeklyReport(): Promise<{
       to: recipients,
       subject,
       html,
-      reply_to: process.env.FEEDBACK_EMAIL || 'feedback@inbound.remishowmanager.co.uk',
+      reply_to: FEEDBACK_REPLY_TO,
     }),
   });
 

@@ -11,6 +11,7 @@ import {
   userSvProfile,
 } from '@/server/db/schema';
 import { hash, compare } from 'bcryptjs';
+import { FEEDBACK_REPLY_TO } from '@/lib/email-addresses';
 
 export const usersRouter = createTRPCRouter({
   getProfile: protectedProcedure.query(async ({ ctx }) => {
@@ -168,7 +169,7 @@ export const usersRouter = createTRPCRouter({
           from:
             process.env.EMAIL_FROM ?? 'Remi <noreply@remishowmanager.co.uk>',
           to: originalEmail,
-          replyTo: 'feedback@inbound.remishowmanager.co.uk',
+          replyTo: FEEDBACK_REPLY_TO,
           subject: 'Your Remi account has been closed',
           text: [
             `Hi ${originalName},`,

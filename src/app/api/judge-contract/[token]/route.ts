@@ -8,6 +8,7 @@ import { Resend } from 'resend';
 import { generateJudgeContractPdf } from '@/server/services/judge-contract-pdf';
 import { emailHeader } from '@/server/services/email';
 import { BRAND } from '@/lib/brand';
+import { FEEDBACK_REPLY_TO } from '@/lib/email-addresses';
 
 function renderPage(title: string, body: string) {
   return `
@@ -339,7 +340,7 @@ export async function POST(
       await resend.emails.send({
         from: emailFrom,
         to: notifyEmail,
-        replyTo: process.env.FEEDBACK_EMAIL ?? 'feedback@remishowmanager.co.uk',
+        replyTo: FEEDBACK_REPLY_TO,
         subject: `Judge Accepted — ${contract.judgeName} for ${show.name}`,
         html: `
 <!DOCTYPE html>
@@ -432,7 +433,7 @@ export async function POST(
       await resend.emails.send({
         from: emailFrom,
         to: notifyEmail,
-        replyTo: process.env.FEEDBACK_EMAIL ?? 'feedback@remishowmanager.co.uk',
+        replyTo: FEEDBACK_REPLY_TO,
         subject: `Judge Declined — ${contract.judgeName} for ${show.name}`,
         html: `
 <!DOCTYPE html>

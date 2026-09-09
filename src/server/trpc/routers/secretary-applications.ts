@@ -14,6 +14,7 @@ import {
 } from '@/server/db/schema';
 import { generateToken, getBaseUrl, assignRole } from '@/server/lib/utils';
 import { BRAND } from '@/lib/brand';
+import { FEEDBACK_REPLY_TO } from '@/lib/email-addresses';
 
 const resend = process.env.RESEND_API_KEY
   ? new Resend(process.env.RESEND_API_KEY)
@@ -114,7 +115,7 @@ export const secretaryApplicationsRouter = createTRPCRouter({
             return resend.emails.send({
               from: 'Remi <noreply@remishowmanager.co.uk>',
               to: adminEmails,
-              replyTo: 'feedback@remishowmanager.co.uk',
+              replyTo: FEEDBACK_REPLY_TO,
               subject: `New Secretary Registered: ${input.organisationName}`,
               html: `
                 <div style="font-family: 'Hanken Grotesk', -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 560px; margin: 0 auto; background-color: ${BRAND.paper}; padding: 28px 24px; color: ${BRAND.ink}; border: 1px solid ${BRAND.line}; border-radius: 14px;">
@@ -292,7 +293,7 @@ export const secretaryApplicationsRouter = createTRPCRouter({
           const approvalResult = await resend.emails.send({
             from: 'Remi <noreply@remishowmanager.co.uk>',
             to: [application.contactEmail],
-            replyTo: 'feedback@remishowmanager.co.uk',
+            replyTo: FEEDBACK_REPLY_TO,
             subject: `Your Remi Secretary Application Has Been Approved!`,
             html: `
               <div style="font-family: 'Hanken Grotesk', -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 560px; margin: 0 auto; background-color: ${BRAND.paper}; padding: 28px 24px; color: ${BRAND.ink}; border: 1px solid ${BRAND.line}; border-radius: 14px;">
@@ -353,7 +354,7 @@ export const secretaryApplicationsRouter = createTRPCRouter({
           const rejectionResult = await resend.emails.send({
             from: 'Remi <noreply@remishowmanager.co.uk>',
             to: [application.contactEmail],
-            replyTo: 'feedback@remishowmanager.co.uk',
+            replyTo: FEEDBACK_REPLY_TO,
             subject: `Update on Your Remi Secretary Application`,
             html: `
               <div style="font-family: 'Hanken Grotesk', -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 560px; margin: 0 auto; background-color: ${BRAND.paper}; padding: 28px 24px; color: ${BRAND.ink}; border: 1px solid ${BRAND.line}; border-radius: 14px;">

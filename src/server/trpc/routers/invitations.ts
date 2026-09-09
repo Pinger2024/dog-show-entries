@@ -12,6 +12,7 @@ import { invitations, users, organisations, memberships } from '@/server/db/sche
 import { generateToken, getBaseUrl, assignRole } from '@/server/lib/utils';
 import { verifyOrgAccess } from '@/server/trpc/verify-org-access';
 import { BRAND } from '@/lib/brand';
+import { FEEDBACK_REPLY_TO } from '@/lib/email-addresses';
 
 const resend = process.env.RESEND_API_KEY
   ? new Resend(process.env.RESEND_API_KEY)
@@ -81,7 +82,7 @@ export const invitationsRouter = createTRPCRouter({
           const upgradeResult = await resend.emails.send({
             from: 'Remi <noreply@remishowmanager.co.uk>',
             to: [input.email],
-            replyTo: 'feedback@remishowmanager.co.uk',
+            replyTo: FEEDBACK_REPLY_TO,
             subject: `You've been made a ${roleName} on Remi`,
             html: `
               <div style="font-family: 'Hanken Grotesk', -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 560px; margin: 0 auto; background-color: ${BRAND.paper}; padding: 28px 24px; color: ${BRAND.ink}; border: 1px solid ${BRAND.line}; border-radius: 14px;">
@@ -134,7 +135,7 @@ export const invitationsRouter = createTRPCRouter({
         const inviteResult = await resend.emails.send({
           from: 'Remi <noreply@remishowmanager.co.uk>',
           to: [input.email],
-          replyTo: 'feedback@remishowmanager.co.uk',
+          replyTo: FEEDBACK_REPLY_TO,
           subject: `You've been added as a ${roleName} on Remi`,
           html: `
             <div style="font-family: 'Hanken Grotesk', -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 560px; margin: 0 auto; background-color: ${BRAND.paper}; padding: 28px 24px; color: ${BRAND.ink}; border: 1px solid ${BRAND.line}; border-radius: 14px;">

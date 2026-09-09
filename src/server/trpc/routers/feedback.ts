@@ -6,6 +6,7 @@ import { protectedProcedure } from '../procedures';
 import { createTRPCRouter } from '../init';
 import { feedback } from '@/server/db/schema';
 import { BRAND } from '@/lib/brand';
+import { FEEDBACK_REPLY_TO } from '@/lib/email-addresses';
 
 const resend = new Resend(process.env.RESEND_API_KEY);
 
@@ -74,7 +75,7 @@ export const feedbackRouter = createTRPCRouter({
           .send({
             from: process.env.EMAIL_FROM ?? 'Remi <noreply@remishowmanager.co.uk>',
             to: notifyEmails,
-            replyTo: process.env.FEEDBACK_EMAIL ?? 'feedback@remishowmanager.co.uk',
+            replyTo: FEEDBACK_REPLY_TO,
             subject: `Support request from ${fromName ?? fromEmail}: ${input.subject}`,
             html: `<div style="font-family: 'Hanken Grotesk', -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 24px 20px; background-color: ${BRAND.paper}; color: ${BRAND.ink};">
 <h2 style="margin: 0 0 12px; font-size: 20px; font-weight: 800; letter-spacing: -0.015em; color: ${BRAND.green};">Remi<span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:${BRAND.fresh};margin-left:3px;"></span></h2>
