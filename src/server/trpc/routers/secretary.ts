@@ -3530,6 +3530,11 @@ export const secretaryRouter = createTRPCRouter({
           breedId: dogData.breedId,
           sex: dogData.sex,
           dateOfBirth: dogData.dateOfBirth,
+          // Knowingly still open, not missed: this is the fifth pedigree write
+          // path with no completeness check (docs/AUDIT-duplicated-rules-2026-09-11.md
+          // §1) — this form has no Breeder or Colour field at all, so these are
+          // routinely null. Whether that should refuse or warn is a Mandy
+          // question nobody has answered; left alone deliberately (2026-09-11).
           sireName: dogData.sireName ?? null,
           damName: dogData.damName ?? null,
           breederName: dogData.breederName ?? null,

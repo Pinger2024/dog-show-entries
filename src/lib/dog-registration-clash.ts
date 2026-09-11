@@ -94,7 +94,14 @@ export function dogRegistrationClashMessage(
       return '';
 
     case 'own-deleted':
-      return `That registration number belongs to "${clash.dog.registeredName}", a dog that was removed. Please contact the show secretary to have it freed up.`;
+      // For the secretary audience this is the EXHIBITOR's own removed dog
+      // (findDogRegistrationClash judges "own" against the exhibitor being
+      // registered for, not the secretary) — telling the secretary to
+      // "contact the show secretary" is circular, since that's them. Every
+      // other kind already branches by audience; this one was missed.
+      return audience === 'secretary'
+        ? `${clash.dog.registeredName} — this exhibitor's own dog, removed — already holds that registration number. Ask them to restore it from their account, or contact Remi support to free it up.`
+        : `That registration number belongs to "${clash.dog.registeredName}", a dog that was removed. Please contact the show secretary to have it freed up.`;
 
     case 'own-live':
       return `That registration number is already on "${clash.dog.registeredName}". If that's this dog added twice, edit that record instead — or remove the duplicate first.`;
