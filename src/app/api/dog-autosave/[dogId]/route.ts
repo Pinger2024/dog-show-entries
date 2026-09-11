@@ -31,6 +31,11 @@ import {
   dogAutosaveFieldsSchema,
   svProfileInputSchema,
 } from '@/server/trpc/routers/dogs';
+import {
+  PEDIGREE_FIELDS,
+  findClearedPedigreeFields,
+  pedigreeClearMessage,
+} from '@/lib/dog-pedigree';
 
 const payloadSchema = z.object({
   dog: dogAutosaveFieldsSchema.optional(),
@@ -150,6 +155,9 @@ export async function POST(
   }
 
   const skipped: string[] = [];
+  // Which pedigree keys were refused, so the form can say which field it is
+  // rather than just "something didn't save".
+  let pedigreeRefused: string[] = [];
 
   if (parsed.dog) {
     const incoming = parsed.dog;
@@ -159,7 +167,20 @@ export async function POST(
       console.warn(`[dog-autosave] Refused suspicious dog-fields wipe for ${dogId}`);
       skipped.push('dog');
     } else {
+      // The pedigree the catalogue prints can't be cleared once set — the
+      // same rule dogs.update enforces. The wipe guard above only catches an
+      // ALL-blank payload, so clearing one field while the rest stayed
+      // populated used to be written straight through, and it then disarmed
+      // dogs.update's guard by leaving nothing left to clear (Michael
+      // 2026-09-11). Drop just the offending keys: this is a keystroke-level
+      // autosave, so the rest of the edit must still save.
+      const cleared = findClearedPedigreeFields(incoming, dog as unknown as Record<string, unknown>);
       const set = toMergeSet(incoming);
+      for (const field of cleared) delete set[field.key];
+      if (cleared.length > 0) {
+        pedigreeRefused = cleared.map((f) => f.key);
+        skipped.push('pedigree');
+      }
       if (Object.keys(set).length > 0) {
         await db.update(dogs).set(set).where(eq(dogs.id, dogId));
       }
@@ -186,7 +207,11 @@ export async function POST(
     }
   }
 
-  return NextResponse.json(
-    skipped.length > 0 ? { ok: true, skipped } : { ok: true },
-  );
+  return NextResponse.json({
+    ok: true,
+    ...(skipped.length > 0 ? { skipped } : {}),
+    ...(pedigreeRefused.length > 0
+      ? { pedigreeRefused, message: pedigreeClearMessage(PEDIGREE_FIELDS.filter((f) => pedigreeRefused.includes(f.key))) }
+      : {}),
+  });
 }

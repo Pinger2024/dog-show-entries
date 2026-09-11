@@ -11,6 +11,7 @@ import { toast } from 'sonner';
 import { trpc } from '@/lib/trpc';
 import { useBeaconAutosave } from '@/lib/use-beacon-autosave';
 import { blank } from '@/lib/sv-entry-readiness';
+import { PEDIGREE_FIELDS, findClearedPedigreeFields } from '@/lib/dog-pedigree';
 import {
   addressesMatch,
   applySameAddress,
@@ -134,6 +135,9 @@ const TITLE_OPTIONS = [
  *  exhibitor is entering (regional/SV), else the usual "(opt.)". Mandy
  *  2026-07-12: regional fields shouldn't read "optional" — for these shows
  *  they aren't. */
+/** "the sire's name" → "The sire's name", for use at the start of a message. */
+const sentenceCase = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
+
 function FieldTag({ required }: { required: boolean }) {
   return required ? (
     <span className="font-normal text-destructive">Required</span>
@@ -692,30 +696,37 @@ export function DogForm({ mode, defaultValues, dogId, svSection, returnTo, isReg
       }),
     };
 
+    // Pedigree (sire, dam, breeder, colour) is what the catalogue prints, so
+    // it's mandatory on a new dog (Michael 2026-06-25; breeder added
+    // 2026-06-26) and can't be CLEARED once set on an existing one — the same
+    // rule the server enforces in dogs.update and /api/dog-autosave
+    // (lib/dog-pedigree.ts). Edit deliberately doesn't demand a field that was
+    // already blank: dogs registered before the rule must stay editable so
+    // Mandy can repair them. Until 2026-09-11 this whole block sat inside the
+    // create branch and editing skipped it entirely (Michael).
+    const pedigreeProblems =
+      mode === 'create'
+        ? PEDIGREE_FIELDS.filter((f) => blank(data[f.key]))
+        : findClearedPedigreeFields(data, defaultValues ?? {});
+    if (pedigreeProblems.length > 0) {
+      for (const f of pedigreeProblems) {
+        form.setError(f.key, {
+          type: 'manual',
+          message:
+            mode === 'create'
+              ? `${sentenceCase(f.label)} is required`
+              : `${sentenceCase(f.label)} can't be removed — it appears in the catalogue`,
+        });
+      }
+      toast.error(
+        mode === 'create'
+          ? 'Please add the sire, dam, breeder and colour — they appear in the catalogue'
+          : "Please put back what you've cleared — it appears in the catalogue",
+      );
+      return;
+    }
+
     if (mode === 'create') {
-      // Pedigree (sire + dam + breeder) is mandatory — a catalogue can't be
-      // produced with this missing (Michael 2026-06-25; breeder added 2026-06-26).
-      let pedigreeMissing = false;
-      if (!data.sireName || !data.sireName.trim()) {
-        form.setError('sireName', { type: 'manual', message: "The sire's name is required" });
-        pedigreeMissing = true;
-      }
-      if (!data.damName || !data.damName.trim()) {
-        form.setError('damName', { type: 'manual', message: "The dam's name is required" });
-        pedigreeMissing = true;
-      }
-      if (!data.breederName || !data.breederName.trim()) {
-        form.setError('breederName', { type: 'manual', message: "The breeder's name is required" });
-        pedigreeMissing = true;
-      }
-      if (!data.colour || !data.colour.trim()) {
-        form.setError('colour', { type: 'manual', message: 'The colour is required' });
-        pedigreeMissing = true;
-      }
-      if (pedigreeMissing) {
-        toast.error('Please add the sire, dam, breeder and colour — they appear in the catalogue');
-        return;
-      }
       // Regional (SV/WUSV) shows need the full catalogue/pedigree set, or the
       // entry gate blocks the entry later. This is the always-required subset
       // of svMissingRequirements (sv-entry-readiness.ts) that maps to a single
@@ -1207,7 +1218,7 @@ export function DogForm({ mode, defaultValues, dogId, svSection, returnTo, isReg
               name="colour"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Colour</FormLabel>
+                  <FormLabel>Colour <FieldTag required /></FormLabel>
                   <FormControl>
                     <Input placeholder="e.g. Tricolour, Red, Black & Tan" {...field} />
                   </FormControl>
@@ -1239,7 +1250,7 @@ export function DogForm({ mode, defaultValues, dogId, svSection, returnTo, isReg
               name="sireName"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Sire (Father)</FormLabel>
+                  <FormLabel>Sire (Father) <FieldTag required /></FormLabel>
                   <FormControl>
                     <Input
                       placeholder="Registered name of sire"
@@ -1301,7 +1312,7 @@ export function DogForm({ mode, defaultValues, dogId, svSection, returnTo, isReg
               name="damName"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Dam (Mother)</FormLabel>
+                  <FormLabel>Dam (Mother) <FieldTag required /></FormLabel>
                   <FormControl>
                     <Input
                       placeholder="Registered name of dam"
@@ -1360,7 +1371,7 @@ export function DogForm({ mode, defaultValues, dogId, svSection, returnTo, isReg
               name="breederName"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Breeder</FormLabel>
+                  <FormLabel>Breeder <FieldTag required /></FormLabel>
                   <FormControl>
                     <Input
                       placeholder="Name of breeder"

@@ -213,15 +213,22 @@ describe('POST /api/dog-autosave/[dogId]', () => {
     expect(profile?.workingTitle).toBe('IGP3');
   });
 
-  it('accepts a genuine clearing edit when other content remains', async () => {
+  // Was: 'accepts a genuine clearing edit when other content remains', which
+  // asserted the sire ended up NULL. That encoded the opposite of the rule
+  // dogs.update had carried since e2c852ec the same month, and it is the
+  // behaviour Michael reproduced on 2026-09-11. A NON-pedigree field is still
+  // freely clearable — only the four the catalogue prints are protected.
+  it('accepts a genuine clearing edit of a non-pedigree field', async () => {
     const user = await makeUser({});
-    const dog = await makeDog({ ownerId: user.id, sireName: 'Old Sire', damName: 'Dam' });
+    const dog = await makeDog({
+      ownerId: user.id,
+      sireName: 'Old Sire',
+      microchipNumber: '981000000000001',
+    });
     authedAs(user);
 
-    // Exhibitor clears the sire but the payload still carries the dam —
-    // that's a real edit, not an unhydrated wipe.
     const res = await dogAutosavePOST(
-      req(dog.id, { dog: { sireName: '', damName: 'Dam' } }),
+      req(dog.id, { dog: { sireName: 'Old Sire', microchipNumber: '' } }),
       params(dog.id),
     );
     expect(res.status).toBe(200);
@@ -229,8 +236,95 @@ describe('POST /api/dog-autosave/[dogId]', () => {
     expect(body.skipped).toBeUndefined();
 
     const saved = await testDb.query.dogs.findFirst({ where: eq(dogs.id, dog.id) });
-    expect(saved?.sireName).toBeNull();
+    expect(saved?.microchipNumber).toBeNull();
+    expect(saved?.sireName).toBe('Old Sire');
+  });
+
+  // Michael 2026-09-11: cleared the sire name on Edit Dog and it saved.
+  // dogs.update has refused to clear sire/dam/breeder/colour since e2c852ec
+  // ("require the pedigree the catalogue prints, at every way in"), but the
+  // dog form autosaves those same columns through THIS route while you type,
+  // so the blank lands in the DB before Save is ever pressed — and the
+  // catalogue loses the pedigree. Autosave must honour the same rule.
+  it('refuses to clear a pedigree field that was already set (sire)', async () => {
+    const user = await makeUser({});
+    const dog = await makeDog({ ownerId: user.id, sireName: 'Old Sire', damName: 'Dam' });
+    authedAs(user);
+
+    const res = await dogAutosavePOST(
+      req(dog.id, { dog: { sireName: '', damName: 'Dam' } }),
+      params(dog.id),
+    );
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.pedigreeRefused).toEqual(['sireName']);
+    expect(body.message).toMatch(/sire/i);
+
+    const saved = await testDb.query.dogs.findFirst({ where: eq(dogs.id, dog.id) });
+    expect(saved?.sireName).toBe('Old Sire');
     expect(saved?.damName).toBe('Dam');
+  });
+
+  // This is a keystroke-level autosave: refusing the sire must not cost the
+  // exhibitor the breeder town they typed in the same breath.
+  it('keeps the rest of the edit when it refuses a pedigree clear', async () => {
+    const user = await makeUser({});
+    const dog = await makeDog({ ownerId: user.id, sireName: 'Old Sire', damName: 'Old Dam' });
+    authedAs(user);
+
+    const res = await dogAutosavePOST(
+      req(dog.id, {
+        dog: { sireName: '', damName: 'Old Dam', breederCity: 'Perth' },
+      }),
+      params(dog.id),
+    );
+    expect(res.status).toBe(200);
+
+    const saved = await testDb.query.dogs.findFirst({ where: eq(dogs.id, dog.id) });
+    expect(saved?.sireName).toBe('Old Sire');
+    expect(saved?.breederCity).toBe('Perth');
+  });
+
+  it('refuses every pedigree field cleared at once, naming each', async () => {
+    const user = await makeUser({});
+    const dog = await makeDog({
+      ownerId: user.id,
+      sireName: 'Old Sire',
+      damName: 'Old Dam',
+      breederName: 'Old Breeder',
+    });
+    authedAs(user);
+
+    const res = await dogAutosavePOST(
+      req(dog.id, { dog: { sireName: '', damName: '', breederName: '', breederCity: 'Perth' } }),
+      params(dog.id),
+    );
+    const body = await res.json();
+    expect(body.pedigreeRefused).toEqual(['sireName', 'damName', 'breederName']);
+
+    const saved = await testDb.query.dogs.findFirst({ where: eq(dogs.id, dog.id) });
+    expect(saved?.sireName).toBe('Old Sire');
+    expect(saved?.damName).toBe('Old Dam');
+    expect(saved?.breederName).toBe('Old Breeder');
+  });
+
+  // The rule blocks LOSING content, never adding it — Mandy repairs old
+  // records that predate the requirement, and must not be locked out.
+  it('still lets a blank pedigree field be filled in', async () => {
+    const user = await makeUser({});
+    const dog = await makeDog({ ownerId: user.id, sireName: null, damName: 'Dam' });
+    authedAs(user);
+
+    const res = await dogAutosavePOST(
+      req(dog.id, { dog: { sireName: 'Newly Known Sire', damName: 'Dam' } }),
+      params(dog.id),
+    );
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.pedigreeRefused).toBeUndefined();
+
+    const saved = await testDb.query.dogs.findFirst({ where: eq(dogs.id, dog.id) });
+    expect(saved?.sireName).toBe('Newly Known Sire');
   });
 
   it('400s an invalid payload shape', async () => {

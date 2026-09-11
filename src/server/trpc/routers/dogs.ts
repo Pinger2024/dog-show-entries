@@ -11,6 +11,7 @@ import { effectiveCcType } from '@/lib/effective-achievement-type';
 import { isAgeEligibleOnShowDay, todayInLondon } from '@/lib/date-utils';
 import { pickRecommendedAgeClass, type AgeClassOption } from '@/lib/class-recommendation';
 import { dogAccessCondition, dogRowGrantsAccess, userMayActOnDog } from '@/server/dog-access';
+import { findClearedPedigreeFields, pedigreeClearMessage } from '@/lib/dog-pedigree';
 
 /**
  * Recommend the best class for a dog based on age eligibility first,
@@ -625,27 +626,14 @@ export const dogsRouter = createTRPCRouter({
       // Cannot clear sire, dam, breeder or colour once set — a catalogue
       // can't be produced without them. A dog that's already missing one of
       // these must stay freely editable (including being filled in) so
-      // Mandy can repair the existing records by hand.
-      const guardedPedigreeFields: Array<{ key: 'sireName' | 'damName' | 'breederName' | 'colour'; label: string }> = [
-        { key: 'sireName', label: "the sire's name" },
-        { key: 'damName', label: "the dam's name" },
-        { key: 'breederName', label: "the breeder's name" },
-        { key: 'colour', label: 'the colour' },
-      ];
-      const clearedFields = guardedPedigreeFields.filter((f) => {
-        if (!(f.key in rest) || rest[f.key] === undefined) return false;
-        const newVal = rest[f.key];
-        const newBlank = newVal == null || !String(newVal).trim();
-        if (!newBlank) return false;
-        const oldVal = existing[f.key];
-        const oldBlank = oldVal == null || !String(oldVal).trim();
-        return !oldBlank;
-      });
+      // Mandy can repair the existing records by hand. Shared with
+      // /api/dog-autosave/[dogId], which writes the same columns — see
+      // lib/dog-pedigree.ts for why the two must not drift apart.
+      const clearedFields = findClearedPedigreeFields(rest, existing);
       if (clearedFields.length > 0) {
-        const list = clearedFields.map((f) => f.label).join(', ');
         throw new TRPCError({
           code: 'BAD_REQUEST',
-          message: `Please don't clear ${list} — it's needed for the catalogue. You can change it to something else instead.`,
+          message: pedigreeClearMessage(clearedFields),
         });
       }
 
