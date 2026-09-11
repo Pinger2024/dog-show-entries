@@ -650,19 +650,32 @@ function EditDogDialog({
               className="mt-1"
             />
           </div>
-          <div>
-            <Label className="text-sm font-medium">
-              Reason for Change <span className="text-destructive">*</span>
+          {/* The reason is what gates Save, so it gets its own panel rather
+              than sitting as a fifth identical field — Michael 2026-09-11
+              cleared a sire, found Save greyed out and reasonably assumed the
+              clearing was what blocked it. Someone not confident with
+              computers reads a dead button as a broken form, so the panel
+              says plainly what it wants and why. */}
+          <div className="rounded-lg border border-primary/30 bg-primary/5 p-3">
+            <Label htmlFor="dog-edit-reason" className="text-sm font-medium">
+              Why are you changing this? <span className="text-destructive">*</span>
             </Label>
+            <p className="mt-0.5 text-xs text-muted-foreground">
+              Every change to an exhibitor&apos;s dog is recorded, so the club can
+              always show who changed what and why.
+            </p>
             <Input
+              id="dog-edit-reason"
               value={reason}
               onChange={(e) => setReason(e.target.value)}
               placeholder="e.g. Exhibitor requested correction to sire name"
-              className="mt-1"
+              className="mt-2 bg-background"
             />
-            <p className="mt-1 text-xs text-muted-foreground">
-              This will be recorded in the audit log
-            </p>
+            {!reason.trim() && (
+              <p className="mt-2 text-xs font-medium text-muted-foreground">
+                Fill this in to turn on Save Changes.
+              </p>
+            )}
           </div>
           <div className="flex justify-end gap-2 pt-2">
             <Button variant="outline" onClick={onClose}>

@@ -9,6 +9,7 @@ import { verifyOrgAccess } from '../verify-org-access';
 import { fetchClubImage } from '@/lib/safe-image-fetch';
 import { getBaseUrl } from '@/server/lib/utils';
 import { ACHIEVEMENT_TYPES } from '@/lib/placements';
+import { findClearedPedigreeFields, pedigreeClearMessage } from '@/lib/dog-pedigree';
 import { computeOrderFees, type FeeContext } from '@/lib/fee-calc';
 import { formatAtcNumber } from '@/lib/registration-flags';
 import { computePrizeCardCounts } from '@/lib/prize-card-counts';
@@ -1323,6 +1324,20 @@ export const secretaryRouter = createTRPCRouter({
 
       if (Object.keys(newValues).length === 0) {
         throw new Error('No changes provided');
+      }
+
+      // Same pedigree rule dogs.update and /api/dog-autosave enforce — the
+      // catalogue prints these, so they can be CORRECTED but never emptied.
+      // This was the fifth write path to those columns and the 2026-09-11
+      // clear-guard missed it, so a secretary fixing a typo here could still
+      // blank the sire (Michael reproduced the same defect on the exhibitor
+      // form that morning). See lib/dog-pedigree.ts.
+      const clearedFields = findClearedPedigreeFields(input.changes, entry.dog);
+      if (clearedFields.length > 0) {
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: pedigreeClearMessage(clearedFields),
+        });
       }
 
       // Apply changes
