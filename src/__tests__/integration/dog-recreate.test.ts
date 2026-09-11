@@ -44,10 +44,16 @@ describe('dog re-creation after soft-delete (bug-hunt #23)', () => {
     await caller.dogs.create({
       registeredName: 'Rex', breedId: breed.id, sex: 'dog', dateOfBirth: '2024-01-01', kcRegNumber: 'CD456789', owners, ...pedigree,
     });
+    // Same owner, so this is the "own-live" clash — lib/dog-registration-clash.ts
+    // gives it the same wording `dogs.update` has always used (names the dog,
+    // suggests editing it instead), rather than create's old flat "already
+    // registered" text with no dog named. See dog-registration-clash-one-owner.test.ts
+    // and dog-registration-clash-cross-account.test.ts for the OTHER-account case,
+    // which this message must never take (that clash names nothing).
     await expect(
       caller.dogs.create({
         registeredName: 'Dup', breedId: breed.id, sex: 'dog', dateOfBirth: '2024-01-01', kcRegNumber: 'CD456789', owners, ...pedigree,
       })
-    ).rejects.toThrow(/already registered/i);
+    ).rejects.toThrow(/already on "Rex"/);
   });
 });

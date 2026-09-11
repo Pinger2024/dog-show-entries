@@ -10,6 +10,7 @@ import { fetchClubImage } from '@/lib/safe-image-fetch';
 import { getBaseUrl } from '@/server/lib/utils';
 import { ACHIEVEMENT_TYPES } from '@/lib/placements';
 import { findClearedPedigreeFields, pedigreeClearMessage } from '@/lib/dog-pedigree';
+import { findDogRegistrationClash, dogRegistrationClashMessage } from '@/lib/dog-registration-clash';
 import { computeOrderFees, type FeeContext } from '@/lib/fee-calc';
 import { formatAtcNumber } from '@/lib/registration-flags';
 import { computePrizeCardCounts } from '@/lib/prize-card-counts';
@@ -3501,6 +3502,25 @@ export const secretaryRouter = createTRPCRouter({
       });
 
       const exhibitorId = exhibitor?.id ?? ctx.session.user.id;
+
+      // kc_reg_number is UNIQUE across every dog on every account. Without a
+      // check here, entering a number already in use throws a raw Postgres
+      // unique violation straight to the secretary's screen — the exact
+      // failure dogs.create and dogs.update were fixed to catch (Rebecca
+      // Landgren, Mandy 2026-08-22); this path just never got the fix. One
+      // rule, in lib/dog-registration-clash.ts, now covers all three.
+      if (dogData.kcRegNumber) {
+        const clash = await findDogRegistrationClash(ctx.db, {
+          kcRegNumber: dogData.kcRegNumber,
+          currentUserId: exhibitorId,
+        });
+        if (clash.kind !== 'none') {
+          throw new TRPCError({
+            code: 'BAD_REQUEST',
+            message: dogRegistrationClashMessage(clash, 'secretary'),
+          });
+        }
+      }
 
       const [dog] = await ctx.db
         .insert(dogs)
