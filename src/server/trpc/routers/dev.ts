@@ -1,8 +1,8 @@
 import { z } from 'zod';
-import { eq, sql } from 'drizzle-orm';
+import { eq, isNull, sql } from 'drizzle-orm';
 import { createTRPCRouter } from '../init';
 import { adminProcedure } from '../procedures';
-import { users, entries } from '@/server/db/schema';
+import { users, entries, dogs, memberships, organisations } from '@/server/db/schema';
 import { populateShowWithTestData, clearShowTestData } from '@/server/services/test-data-generator';
 
 export const devRouter = createTRPCRouter({
@@ -11,6 +11,11 @@ export const devRouter = createTRPCRouter({
    * Includes entry count and timestamps for richer admin views.
    */
   listUsers: adminProcedure.query(async ({ ctx }) => {
+    // Dogs and entries are counted in their OWN grouped queries and stitched
+    // together here, rather than two leftJoins off users: joining both
+    // multiplies the rows together, so a user with 3 dogs and 4 entries reads
+    // as 12 of each. Scale is small (157 users, 13 clubs on prod at
+    // 2026-09-11) so three cheap queries beat one clever one.
     const allUsers = await ctx.db
       .select({
         id: users.id,
@@ -20,14 +25,62 @@ export const devRouter = createTRPCRouter({
         image: users.image,
         createdAt: users.createdAt,
         updatedAt: users.updatedAt,
-        entryCount: sql<number>`cast(count(${entries.id}) as int)`,
       })
       .from(users)
-      .leftJoin(entries, eq(entries.exhibitorId, users.id))
-      .groupBy(users.id)
       .orderBy(users.name);
 
-    return allUsers;
+    const entryCounts = await ctx.db
+      .select({
+        userId: entries.exhibitorId,
+        count: sql<number>`cast(count(*) as int)`,
+      })
+      .from(entries)
+      .where(isNull(entries.deletedAt))
+      .groupBy(entries.exhibitorId);
+
+    const dogCounts = await ctx.db
+      .select({
+        userId: dogs.ownerId,
+        count: sql<number>`cast(count(*) as int)`,
+      })
+      .from(dogs)
+      .where(isNull(dogs.deletedAt))
+      .groupBy(dogs.ownerId);
+
+    const entriesByUser = new Map(entryCounts.map((r) => [r.userId, r.count]));
+    const dogsByUser = new Map(dogCounts.map((r) => [r.userId, r.count]));
+
+    // Club membership is what actually grants a secretary access to a show
+    // (verifyOrgAccess gates on an ACTIVE membership), so the admin list is
+    // much more useful with it — several clubs on both prod and demo have
+    // near-identical names ("Midland Regional GSD Group" vs "Midland Region
+    // GSD Club" vs "Midland regional group"), and picking the wrong one to
+    // test against has bitten us before. Explicit org columns only: never
+    // select the organisation row wholesale, it carries bank details.
+    const clubRows = await ctx.db
+      .select({
+        userId: memberships.userId,
+        organisationId: organisations.id,
+        organisationName: organisations.name,
+        status: memberships.status,
+      })
+      .from(memberships)
+      .innerJoin(organisations, eq(organisations.id, memberships.organisationId))
+      .orderBy(organisations.name);
+
+    const clubsByUser = new Map<string, Array<{ id: string; name: string; status: string }>>();
+    for (const row of clubRows) {
+      const list = clubsByUser.get(row.userId) ?? [];
+      list.push({ id: row.organisationId, name: row.organisationName, status: row.status });
+      clubsByUser.set(row.userId, list);
+    }
+
+    return allUsers.map((u) => ({
+      ...u,
+      entryCount: entriesByUser.get(u.id) ?? 0,
+      dogCount: dogsByUser.get(u.id) ?? 0,
+      clubs: clubsByUser.get(u.id) ?? [],
+    }));
   }),
 
   /**
