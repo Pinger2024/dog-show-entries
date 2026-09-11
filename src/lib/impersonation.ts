@@ -21,11 +21,5 @@ export async function startImpersonation(userId: string): Promise<void> {
 
 export async function stopImpersonation(): Promise<void> {
   const cookieStore = await cookies();
-  cookieStore.set(COOKIE_NAME, '', {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
-    sameSite: 'lax',
-    maxAge: 0,
-    path: '/',
-  });
+  cookieStore.delete({ name: COOKIE_NAME, path: '/' });
 }

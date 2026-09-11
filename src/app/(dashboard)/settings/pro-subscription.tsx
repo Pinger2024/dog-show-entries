@@ -83,13 +83,13 @@ export function ProSubscription() {
   // Active subscription view
   if (isActive) {
     return (
-      <Card className="border-amber-200 dark:border-amber-900">
+      <Card className="border-se-honey-line">
         <CardHeader>
           <div className="flex items-center justify-between">
             <CardTitle className="flex items-center gap-2 text-base">
-              <Crown className="size-5 text-amber-500" />
+              <Crown className="size-5 text-se-honey" />
               Remi Pro
-              <Badge className="bg-gradient-to-r from-amber-500 to-yellow-500 text-white text-xs">
+              <Badge className="bg-gradient-to-r from-se-honey to-se-honey-deep text-white text-xs">
                 Active
               </Badge>
             </CardTitle>
@@ -100,7 +100,7 @@ export function ProSubscription() {
         </CardHeader>
         <CardContent className="space-y-4">
           {showSuccess && (
-            <div className="flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800 dark:border-emerald-900 dark:bg-emerald-950/30 dark:text-emerald-200">
+            <div className="flex items-center gap-2 rounded-lg border border-se-fresh-line bg-se-fresh-soft p-3 text-sm text-se-fresh-deep">
               <CheckCircle2 className="size-4 shrink-0" />
               Welcome to Remi Pro! Your subscription is now active.
             </div>
@@ -136,7 +136,7 @@ export function ProSubscription() {
   return (
     <Card className="overflow-hidden">
       {/* Pro header banner */}
-      <div className="bg-gradient-to-r from-amber-500 via-yellow-500 to-amber-500 px-6 py-5">
+      <div className="bg-gradient-to-r from-se-honey via-se-honey-deep to-se-honey px-6 py-5">
         <div className="flex items-center gap-3">
           <div className="flex size-11 items-center justify-center rounded-full bg-white/20 backdrop-blur-sm">
             <Crown className="size-6 text-white" />
@@ -155,8 +155,8 @@ export function ProSubscription() {
         <div className="space-y-4">
           {proFeatures.map((feature) => (
             <div key={feature.title} className="flex items-start gap-3">
-              <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-amber-100 dark:bg-amber-950/40">
-                <feature.icon className="size-4 text-amber-600 dark:text-amber-400" />
+              <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-se-honey-soft">
+                <feature.icon className="size-4 text-se-honey-deep" />
               </div>
               <div>
                 <p className="text-sm font-medium">{feature.title}</p>
@@ -190,7 +190,7 @@ export function ProSubscription() {
               }`}
             >
               Annual
-              <span className="ml-1.5 text-xs text-emerald-600">Save 33%</span>
+              <span className="ml-1.5 text-xs text-se-fresh-deep">Save 33%</span>
             </button>
           </div>
 
@@ -211,7 +211,7 @@ export function ProSubscription() {
 
         {/* Subscribe button */}
         <Button
-          className="w-full bg-gradient-to-r from-amber-500 to-yellow-500 text-white hover:from-amber-600 hover:to-yellow-600"
+          className="w-full bg-gradient-to-r from-se-honey to-se-honey-deep text-white hover:opacity-90"
           size="lg"
           onClick={handleSubscribe}
           disabled={createCheckout.isPending}

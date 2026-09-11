@@ -1,13 +1,14 @@
 import { z } from 'zod';
 import { TRPCError } from '@trpc/server';
-import { and, eq, isNull, inArray, asc, desc, sql } from 'drizzle-orm';
-import { differenceInMonths, differenceInWeeks } from 'date-fns';
+import { and, or, eq, isNull, inArray, notInArray, asc, desc, sql } from 'drizzle-orm';
+import { differenceInWeeks } from 'date-fns';
 import {
   protectedProcedure,
   secretaryProcedure,
 } from '../procedures';
 import { createTRPCRouter } from '../init';
 import { verifyShowAccess } from '../verify-show-access';
+import { publicOrgColumns } from '../public-org-columns';
 import {
   entries,
   entryClasses,
@@ -15,13 +16,37 @@ import {
   dogPhotos,
   shows,
   showClasses,
+  orders,
   payments,
   entryAuditLog,
   users,
   dogOwners,
   judgeAssignments,
+  showDiscountGroups,
+  dogSvProfile,
 } from '@/server/db/schema';
-import { createPaymentIntent, getStripe } from '@/server/services/stripe';
+import {
+  computeOrderFees,
+  type DogEntryInput,
+  type FeeContext,
+} from '@/lib/fee-calc';
+import {
+  computeRegionalOrderFees,
+  regionalClassFlatFee,
+  type RegionalDogEntryInput,
+  type RegionalFeeContext,
+} from '@/lib/regional-fee-calc';
+import {
+  createPaymentIntent,
+  calculatePlatformFee,
+} from '@/server/services/stripe';
+import { executeStripeRefund } from '@/server/services/stripe-refunds';
+import { svEntryMissingRequirements, svEntryBlockedMessage } from '@/lib/sv-entry-validation';
+import { pedigreeMissingForEntry } from '@/lib/sv-entry-readiness';
+import { hasJudgingConflict } from '@/lib/judge-exhibitor-conflict';
+import { getCompetitionAgeError } from '@/lib/date-utils';
+import { svCoatDisplayName } from '@/lib/class-labels';
+import { dogAccessCondition } from '@/server/dog-access';
 
 export const entriesRouter = createTRPCRouter({
   create: protectedProcedure
@@ -35,11 +60,11 @@ export const entriesRouter = createTRPCRouter({
       })
     )
     .mutation(async ({ ctx, input }) => {
-      // Validate dog belongs to user
+      // Validate dog belongs to (or is co-owned by) the caller
       const dog = await ctx.db.query.dogs.findFirst({
         where: and(
           eq(dogs.id, input.dogId),
-          eq(dogs.ownerId, ctx.session.user.id),
+          dogAccessCondition(ctx.db, ctx.session.user.id),
           isNull(dogs.deletedAt)
         ),
         with: { breed: true },
@@ -49,6 +74,28 @@ export const entriesRouter = createTRPCRouter({
         throw new TRPCError({
           code: 'BAD_REQUEST',
           message: 'Dog not found or you do not own this dog',
+        });
+      }
+
+      // Baseline pedigree check — sire, dam, breeder and colour all print in
+      // the show catalogue, so a dog can't be entered anywhere without them.
+      // This endpoint always creates a standard (dog-attached) entry — there
+      // is no Junior Handler branch here to skip. Deliberately applies to
+      // NFC entries too: NFC dogs still appear in the printed catalogue, so
+      // the catalogue-completeness reason for this check applies just the
+      // same (unlike the SV/WUSV health-and-coat gate above, which is about
+      // competition eligibility and rightly skips NFC).
+      const entryPedigreeMissing = pedigreeMissingForEntry({
+        sireName: dog.sireName,
+        damName: dog.damName,
+        breederName: dog.breederName,
+        colour: dog.colour,
+      });
+      if (entryPedigreeMissing.length > 0) {
+        const dogName = dog.registeredName ?? 'This dog';
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: `${dogName} can't be entered yet — please add ${entryPedigreeMissing.join(', ')}. These print in the show catalogue.`,
         });
       }
 
@@ -113,38 +160,39 @@ export const entriesRouter = createTRPCRouter({
         }
       }
 
-      // Breed validation for individual classes (all show types)
-      {
-        const entryClasses = await ctx.db.query.showClasses.findMany({
-          where: and(
-            inArray(showClasses.id, input.classIds),
-            eq(showClasses.showId, input.showId)
-          ),
-          with: { classDefinition: true },
-        });
-        for (const sc of entryClasses) {
-          if (!sc.breedId || sc.classDefinition.type === 'junior_handler') continue;
-          if (sc.breedId !== dog.breedId) {
-            const dogName = dog.registeredName ?? 'This dog';
-            const breedName = dog.breed?.name ?? 'its breed';
-            throw new TRPCError({
-              code: 'BAD_REQUEST',
-              message: `${dogName} (${breedName}) cannot be entered in the class "${sc.classDefinition.name}" as it is restricted to a different breed.`,
-            });
-          }
+      // Breed validation for individual classes (all show types). Fetched
+      // once and reused by the age check below. (Named to avoid shadowing the
+      // `entryClasses` schema table used by the inserts further down.)
+      const entryShowClasses = await ctx.db.query.showClasses.findMany({
+        where: and(
+          inArray(showClasses.id, input.classIds),
+          eq(showClasses.showId, input.showId)
+        ),
+        with: { classDefinition: true },
+      });
+      for (const sc of entryShowClasses) {
+        if (!sc.breedId || sc.classDefinition.type === 'junior_handler') continue;
+        if (sc.breedId !== dog.breedId) {
+          const dogName = dog.registeredName ?? 'This dog';
+          const breedName = dog.breed?.name ?? 'its breed';
+          throw new TRPCError({
+            code: 'BAD_REQUEST',
+            message: `${dogName} (${breedName}) cannot be entered in the class "${sc.classDefinition.name}" as it is restricted to a different breed.`,
+          });
         }
       }
 
-      // RKC age validation: dogs must meet minimum age on show day
+      // RKC age validation: competition age is judged against the specific
+      // class(es) entered, so Baby Puppy (4–6 months) isn't caught by the
+      // general 6-month floor.
       if (dog.dateOfBirth) {
         const showDate = new Date(show.startDate);
         const dob = new Date(dog.dateOfBirth);
-        const ageMonths = differenceInMonths(showDate, dob);
-        const ageWeeks = differenceInWeeks(showDate, dob);
         const dogName = dog.registeredName ?? 'This dog';
 
         if (input.isNfc) {
           // NFC entries: minimum 12 weeks (RKC 2026 regulations)
+          const ageWeeks = differenceInWeeks(showDate, dob);
           if (ageWeeks < 12) {
             throw new TRPCError({
               code: 'BAD_REQUEST',
@@ -152,20 +200,43 @@ export const entriesRouter = createTRPCRouter({
             });
           }
         } else {
-          // Competition entries: minimum 6 months
-          if (ageMonths < 4) {
-            // Under 4 months: reject entirely
-            throw new TRPCError({
-              code: 'BAD_REQUEST',
-              message: `${dogName} will only be ${ageMonths} months old on show day. Dogs must be at least 6 months old to enter competition classes, or at least 12 weeks old for Not For Competition (NFC) entries.`,
-            });
-          } else if (ageMonths < 6) {
-            // Between 4 and 6 months: suggest NFC
-            throw new TRPCError({
-              code: 'BAD_REQUEST',
-              message: `${dogName} will only be ${ageMonths} months old on show day. Dogs must be at least 6 months old for competition classes. You can enter Not For Competition (NFC) instead.`,
-            });
+          const ageError = getCompetitionAgeError({
+            dogName,
+            dob,
+            showDate,
+            classes: entryShowClasses.map((sc) => sc.classDefinition),
+          });
+          if (ageError) {
+            throw new TRPCError({ code: 'BAD_REQUEST', message: ageError });
           }
+        }
+      }
+
+      // WUSV / regional rule (Amanda 2026-05-26): one class per dog at a
+      // regional show, and once a dog is on the show they can't be entered
+      // again. Mirrors the same guard on the exhibitor checkout path in
+      // orders.ts createOrder.
+      if (show.showRuleset === 'wusv' && !input.isNfc) {
+        if (input.classIds.length > 1) {
+          throw new TRPCError({
+            code: 'BAD_REQUEST',
+            message: 'At a regional show, a dog can only be entered in one class. Please pick a single class.',
+          });
+        }
+        const dupOnShow = await ctx.db.query.entries.findFirst({
+          where: and(
+            eq(entries.dogId, input.dogId),
+            eq(entries.showId, input.showId),
+            isNull(entries.deletedAt),
+          ),
+          columns: { id: true },
+        });
+        if (dupOnShow) {
+          const dogName = dog.registeredName ?? 'This dog';
+          throw new TRPCError({
+            code: 'BAD_REQUEST',
+            message: `${dogName} is already entered in this regional show. Each dog can only be entered once at a regional.`,
+          });
         }
       }
 
@@ -198,7 +269,9 @@ export const entriesRouter = createTRPCRouter({
         }
       }
 
-      // Judge conflict check: exhibitors cannot exhibit at shows they are judging
+      // Judge conflict check: a judge can't exhibit in classes they judge.
+      // Junior Handling judges assess the handler, not the dog, so a JH-only
+      // judge IS allowed to enter (Amanda 2026-06-01). See hasJudgingConflict.
       const exhibitor = await ctx.db.query.users.findFirst({
         where: eq(users.id, ctx.session.user.id),
         columns: { name: true },
@@ -208,11 +281,7 @@ export const entriesRouter = createTRPCRouter({
           where: eq(judgeAssignments.showId, input.showId),
           with: { judge: { columns: { name: true } } },
         });
-        const exhibitorName = exhibitor.name.toLowerCase().trim();
-        const isJudge = assignedJudges.some(
-          (a) => a.judge?.name?.toLowerCase().trim() === exhibitorName
-        );
-        if (isJudge) {
+        if (hasJudgingConflict(assignedJudges, exhibitor.name)) {
           throw new TRPCError({
             code: 'BAD_REQUEST',
             message: 'You appear to be assigned as a judge at this show. Judges cannot exhibit dogs at shows they are judging.',
@@ -226,6 +295,7 @@ export const entriesRouter = createTRPCRouter({
           inArray(showClasses.id, input.classIds),
           eq(showClasses.showId, input.showId)
         ),
+        with: { classDefinition: true },
       });
 
       if (selectedClasses.length !== input.classIds.length) {
@@ -233,6 +303,43 @@ export const entriesRouter = createTRPCRouter({
           code: 'BAD_REQUEST',
           message: 'One or more classes are invalid for this show',
         });
+      }
+
+      // WUSV coat type validation: if the class specifies a coat type, the dog must match
+      if (show.showRuleset === 'wusv' && dog.coatType) {
+        for (const sc of selectedClasses) {
+          if (sc.svCoatType && sc.svCoatType !== dog.coatType) {
+            const expected = svCoatDisplayName(sc.svCoatType);
+            const actual = svCoatDisplayName(dog.coatType);
+            throw new TRPCError({
+              code: 'BAD_REQUEST',
+              message: `This class is for ${expected} dogs but your dog is registered as ${actual}. Please select the correct class.`,
+            });
+          }
+        }
+      }
+
+      // SV regional entry requirements (Amanda 2026-05-28): every dog needs
+      // a registration number + microchip; Junior class and above need the
+      // hip/elbow/DNA triad; Working class also needs a working title.
+      // Single source of truth shared with the exhibitor checkout path.
+      if (show.showRuleset === 'wusv') {
+        const svProfile = await ctx.db.query.dogSvProfile.findFirst({
+          where: eq(dogSvProfile.dogId, dog.id),
+        });
+        const missing = svEntryMissingRequirements({
+          dog,
+          svProfile,
+          classNames: selectedClasses
+            .map((sc) => sc.classDefinition?.name)
+            .filter((n): n is string => !!n),
+        });
+        if (missing.length > 0) {
+          throw new TRPCError({
+            code: 'BAD_REQUEST',
+            message: svEntryBlockedMessage(dog.registeredName, missing),
+          });
+        }
       }
 
       // Calculate total fee for the new classes
@@ -309,7 +416,7 @@ export const entriesRouter = createTRPCRouter({
         with: {
           show: {
             with: {
-              organisation: true,
+              organisation: { columns: publicOrgColumns },
               venue: true,
             },
           },
@@ -327,6 +434,9 @@ export const entriesRouter = createTRPCRouter({
               },
             },
           },
+          // Order status lets us separate abandoned checkouts (pending entry
+          // on an unpaid order) from real entries (Amanda 2026-05-28).
+          order: { columns: { id: true, status: true } },
         },
         orderBy: [desc(entries.createdAt)],
         limit: input.limit,
@@ -353,11 +463,31 @@ export const entriesRouter = createTRPCRouter({
 
       const total = Number(countResult[0]?.count ?? 0);
 
+      // An abandoned checkout leaves a 'pending' entry on an unpaid
+      // ('pending_payment'/'failed') order. Amanda 2026-05-28: these should
+      // NOT appear as real entries — surface them separately so the page can
+      // show a gentle "your entry isn't finished" notice with a link back to
+      // complete it, rather than a confusing pending row.
+      const isUnfinished = (item: (typeof items)[number]) =>
+        item.status === 'pending' &&
+        (item.order?.status === 'pending_payment' || item.order?.status === 'failed');
+
+      const withPhoto = items.map((item) => ({
+        ...item,
+        dogPhotoUrl: item.dogId ? photoMap.get(item.dogId) ?? null : null,
+      }));
+
       return {
-        items: items.map((item) => ({
-          ...item,
-          dogPhotoUrl: item.dogId ? photoMap.get(item.dogId) ?? null : null,
-        })),
+        items: withPhoto.filter((item) => !isUnfinished(item)),
+        unfinished: withPhoto
+          .filter(isUnfinished)
+          .map((item) => ({
+            id: item.id,
+            showId: item.showId,
+            showName: item.show?.name ?? 'this show',
+            showSlug: item.show?.slug ?? item.showId,
+            dogName: item.dog?.registeredName ?? 'your dog',
+          })),
         total,
         nextCursor:
           input.cursor + input.limit < total
@@ -374,7 +504,7 @@ export const entriesRouter = createTRPCRouter({
         with: {
           show: {
             with: {
-              organisation: true,
+              organisation: { columns: publicOrgColumns },
               venue: true,
             },
           },
@@ -404,15 +534,15 @@ export const entriesRouter = createTRPCRouter({
         });
       }
 
-      // Non-secretary users can only see their own entries
-      if (
-        entry.exhibitorId !== ctx.session.user.id &&
-        ctx.session.user.role !== 'secretary' &&
-        ctx.session.user.role !== 'admin'
-      ) {
-        throw new TRPCError({
-          code: 'FORBIDDEN',
-          message: 'You do not have access to this entry',
+      // The owner can always see their own entry. Anyone else must have
+      // secretary access to THIS show's organisation — a global 'secretary'
+      // role is NOT enough (per-org access lives in the memberships table),
+      // else a secretary at one club could read another club's entered dogs
+      // (a pre-judging privacy risk). Mirrors getForShow's verifyShowAccess.
+      const isAdmin = ctx.session.user.role === 'admin';
+      if (entry.exhibitorId !== ctx.session.user.id && !isAdmin) {
+        await verifyShowAccess(ctx.db, ctx.session.user.id, entry.show.id, {
+          callerIsAdmin: isAdmin,
         });
       }
 
@@ -446,10 +576,48 @@ export const entriesRouter = createTRPCRouter({
     .query(async ({ ctx, input }) => {
       await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId, { callerIsAdmin: ctx.callerIsAdmin });
 
+      // Entries don't belong in the secretary's list when their order is:
+      //  - refunded  (exhibitor pulled out + got their money back), or
+      //  - unpaid    (pending_payment / failed — an abandoned checkout that
+      //               was never booked in; Amanda 2026-05-28).
+      // The rows stay in the DB for audit; the Financial tab surfaces refunds.
+      //
+      // EXCEPTION: when the secretary explicitly asks for the "pending"
+      // (awaiting-payment) list — via the Pending status filter — surface the
+      // pending_payment-order entries so she can see WHO started but hasn't paid
+      // and chase them (Mandy 2026-07-20; the filter used to return nothing).
+      // Refunded/failed stay hidden either way.
+      const excludedStatuses =
+        input.status === 'pending'
+          ? (['refunded', 'failed'] as const)
+          : (['refunded', 'pending_payment', 'failed'] as const);
+      const excludedOrderRows = await ctx.db
+        .select({ id: orders.id })
+        .from(orders)
+        .where(
+          and(
+            eq(orders.showId, input.showId),
+            inArray(orders.status, [...excludedStatuses]),
+          ),
+        );
+      const excludedOrderIds = excludedOrderRows.map((r) => r.id);
+
       const conditions = [
         eq(entries.showId, input.showId),
         isNull(entries.deletedAt),
       ];
+
+      if (excludedOrderIds.length > 0) {
+        // NULL NOT IN (...) evaluates to NULL (not TRUE) in Postgres, so a bare
+        // notInArray silently drops every entry with a NULL order_id (NFC /
+        // pending / legacy rows) from BOTH the list and the count. Keep them.
+        conditions.push(
+          or(
+            isNull(entries.orderId),
+            notInArray(entries.orderId, excludedOrderIds),
+          )!,
+        );
+      }
 
       if (input.status) {
         conditions.push(eq(entries.status, input.status));
@@ -475,7 +643,15 @@ export const entriesRouter = createTRPCRouter({
               },
             },
           },
+          // Payments are linked at the order level (one Stripe charge per
+          // multi-entry order). entries.payments (via payments.entry_id) is
+          // currently always empty; order.payments is the live link.
           payments: true,
+          order: {
+            with: {
+              payments: true,
+            },
+          },
         },
         orderBy: [asc(entries.createdAt)],
         limit: input.limit,
@@ -590,6 +766,7 @@ export const entriesRouter = createTRPCRouter({
           inArray(showClasses.id, input.classIds),
           eq(showClasses.showId, entry.showId)
         ),
+        with: { classDefinition: { columns: { type: true, name: true } } },
       });
 
       if (newClasses.length !== input.classIds.length) {
@@ -600,52 +777,274 @@ export const entriesRouter = createTRPCRouter({
       }
 
       const oldFee = entry.totalFee;
-      // Use show-level tiered pricing if available, otherwise sum per-class fees
+
+      // Recompute fees via the shared service. When this entry is part of
+      // an order we also load the order's discount-group + sibling entries
+      // so the multi-dog package re-slots correctly. Without an order we
+      // still use the service — it cleanly handles the simple single-entry
+      // ladder case.
+      const orderId = entry.orderId;
       let newFee: number;
-      if (entry.show.firstEntryFee != null) {
-        const subsequentRate = entry.show.subsequentEntryFee ?? entry.show.firstEntryFee;
-        newFee = newClasses.length > 0
-          ? entry.show.firstEntryFee + subsequentRate * (newClasses.length - 1)
-          : 0;
+      let perClassFees: number[];
+
+      const regionalCfg =
+        entry.show.showRuleset === 'wusv' ? entry.show.regionalFeeConfig : null;
+
+      if (regionalCfg != null) {
+        // Regional (SV/WUSV) edit — price on the per-dog tier scale, NOT the raw
+        // class fee (Mandy 2026-07-02). Checkout runs this engine but edits used
+        // to fall through to the legacy per-class sum, so swapping a class
+        // demanded a bogus top-up (a 3rd dog priced £16 jumped to £20). We
+        // recompute the WHOLE order with the new class and let the edited entry
+        // absorb the order-total delta, leaving siblings untouched: regional
+        // per-dog attribution is order-arbitrary, so a swap that doesn't change
+        // the order total costs nothing and moves no other dog's fee.
+        const membershipOptions = regionalCfg.memberships ?? [
+          { label: 'BRG/League member' },
+        ];
+
+        type RegSib = {
+          id: string;
+          entryType: string;
+          totalFee: number;
+          entryClasses: {
+            showClass?: {
+              entryFee: number;
+              classDefinition?: { name: string | null; type: string | null } | null;
+            } | null;
+          }[];
+        };
+
+        // Reconstruct the exact context checkout used: the order's declared
+        // membership + first-time status (persisted on the order) and every
+        // sibling entry so the scale total is computed across the full order.
+        let regionalMembershipLabel: string | null = null;
+        let regionalFirstTime = false;
+        let siblingEntries: RegSib[] = [
+          {
+            id: input.id,
+            entryType: entry.entryType,
+            totalFee: entry.totalFee,
+            entryClasses: [],
+          },
+        ];
+
+        if (orderId) {
+          const [orderRow, dbSiblings] = await Promise.all([
+            ctx.db.query.orders.findFirst({
+              where: eq(orders.id, orderId),
+              columns: {
+                regionalMembership: true,
+                regionalFirstTimeExhibitor: true,
+              },
+            }),
+            ctx.db.query.entries.findMany({
+              where: and(eq(entries.orderId, orderId), isNull(entries.deletedAt)),
+              with: {
+                entryClasses: {
+                  columns: { id: true },
+                  with: {
+                    showClass: {
+                      columns: { entryFee: true },
+                      with: { classDefinition: { columns: { name: true, type: true } } },
+                    },
+                  },
+                },
+              },
+            }),
+          ]);
+          regionalMembershipLabel = orderRow?.regionalMembership ?? null;
+          regionalFirstTime = !!orderRow?.regionalFirstTimeExhibitor;
+          siblingEntries = dbSiblings as RegSib[];
+        }
+
+        const declared = regionalMembershipLabel
+          ? membershipOptions.find((m) => m.label === regionalMembershipLabel)
+          : undefined;
+        const regionalCtx: RegionalFeeContext = {
+          tiers: declared?.tiers ?? regionalCfg.tiers,
+          isMember: !!declared && !declared.tiers,
+          firstTimeExhibitor: regionalFirstTime && !!regionalCfg.firstTimeEnabled,
+          firstTimeFeePence: regionalCfg.firstTimeFeePence ?? 0,
+          juniorHandlerFeePence: entry.show.juniorHandlerFee ?? 0,
+        };
+
+        // Regional dogs sit in one class. Use the NEW class for the edited entry,
+        // each sibling's existing class for the rest. Flat detection uses the
+        // config tiers exactly as checkout does (`resolveClassFlatFee`).
+        const regionalEntries: RegionalDogEntryInput[] = siblingEntries.map((sib) => {
+          const isEdited = sib.id === input.id;
+          const cls = isEdited
+            ? {
+                name: newClasses[0]?.classDefinition?.name,
+                type: newClasses[0]?.classDefinition?.type,
+                entryFee: newClasses[0]?.entryFee,
+              }
+            : {
+                name: sib.entryClasses[0]?.showClass?.classDefinition?.name,
+                type: sib.entryClasses[0]?.showClass?.classDefinition?.type,
+                entryFee: sib.entryClasses[0]?.showClass?.entryFee,
+              };
+          return {
+            key: sib.id,
+            kind:
+              (isEdited ? entry.entryType : sib.entryType) === 'junior_handler'
+                ? 'junior_handler'
+                : 'standard',
+            flatFeePence: regionalClassFlatFee(
+              { className: cls.name, classType: cls.type, entryFee: cls.entryFee ?? null },
+              regionalCfg.tiers,
+            ),
+          };
+        });
+
+        const regionalResult = computeRegionalOrderFees(regionalEntries, regionalCtx);
+        const newOrderTotal = regionalResult.entriesTotal;
+        const oldOrderTotal = siblingEntries.reduce((sum, s) => sum + s.totalFee, 0);
+        // The edited entry absorbs the whole order delta; siblings stay put. So
+        // feeDiff (= newFee − oldFee, below) is exactly the order-level change,
+        // and the existing upgrade/downgrade + refund path handles it unchanged.
+        newFee = oldFee + (newOrderTotal - oldOrderTotal);
+        // Regional entries carry one fee per dog — attribute it to the first
+        // class slot (0 for any extra NFC classes) so the rows sum to newFee.
+        perClassFees = newClasses.map((_, i) => (i === 0 ? newFee : 0));
+      } else if (entry.show.firstEntryFee != null) {
+        const entryKind = entry.entryType === 'junior_handler'
+          ? 'junior_handler'
+          : entry.isNfc
+            ? 'nfc'
+            : 'standard';
+
+        let discountGroup: FeeContext['discountGroup'] = null;
+        type SiblingClass = { id: string; showClass?: { entryFee: number; classDefinition?: { type: string } | null } | null };
+        let siblingEntries: { id: string; entryType: string; isNfc: boolean; entryClasses: SiblingClass[]; totalFee: number }[] = [
+          {
+            id: input.id,
+            entryType: entry.entryType,
+            isNfc: entry.isNfc,
+            entryClasses: newClasses.map((_, i) => ({ id: `c${i}` })),
+            totalFee: entry.totalFee,
+          },
+        ];
+
+        if (orderId) {
+          const [orderRow, dbSiblings] = await Promise.all([
+            ctx.db.query.orders.findFirst({
+              where: eq(orders.id, orderId),
+              columns: { discountGroupId: true },
+            }),
+            ctx.db.query.entries.findMany({
+              where: and(eq(entries.orderId, orderId), isNull(entries.deletedAt)),
+              with: {
+                entryClasses: {
+                  columns: { id: true },
+                  with: { showClass: { columns: { entryFee: true }, with: { classDefinition: { columns: { type: true } } } } },
+                },
+              },
+            }),
+          ]);
+          siblingEntries = dbSiblings;
+
+          if (orderRow?.discountGroupId) {
+            const dg = await ctx.db.query.showDiscountGroups.findFirst({
+              where: eq(showDiscountGroups.id, orderRow.discountGroupId),
+            });
+            if (dg) {
+              discountGroup = {
+                firstEntryFeePence: dg.firstEntryFeePence,
+                multiDogPackagePence: dg.multiDogPackagePence,
+              };
+            }
+          }
+        }
+
+        const feeCtx: FeeContext = {
+          firstEntryFeePence: entry.show.firstEntryFee,
+          subsequentEntryFeePence: entry.show.subsequentEntryFee,
+          nfcEntryFeePence: entry.show.nfcEntryFee,
+          juniorHandlerFeePence: entry.show.juniorHandlerFee,
+          multiDogThreshold: entry.show.multiDogThreshold,
+          multiDogPackagePence: entry.show.multiDogPackagePence,
+          discountGroup,
+        };
+
+        // Special Award Classes charge their own fee, not the tier (Mandy
+        // 2026-07-19). The edited entry's specials come from newClasses; each
+        // sibling's from its loaded show classes.
+        const specialFeesFor = (e: (typeof siblingEntries)[number]): (number | null)[] =>
+          e.id === input.id
+            ? newClasses.map((sc) => (sc.classDefinition?.type === 'special' ? sc.entryFee : null))
+            : e.entryClasses.map((ec) =>
+                ec.showClass?.classDefinition?.type === 'special' ? ec.showClass.entryFee : null,
+              );
+        const dogEntries: DogEntryInput[] = siblingEntries.map((e) => ({
+          key: e.id,
+          kind: (e.id === input.id ? entryKind : e.entryType === 'junior_handler'
+            ? 'junior_handler'
+            : e.isNfc
+              ? 'nfc'
+              : 'standard'),
+          classCount: e.id === input.id ? newClasses.length : e.entryClasses.length,
+          specialClassFees: specialFeesFor(e),
+        }));
+
+        const result = computeOrderFees(dogEntries, feeCtx);
+        const myBreak = result.perEntry.find((b) => b.key === input.id)!;
+        newFee = myBreak.fee;
+        perClassFees = myBreak.perClassFees;
+
+        // Re-slot sibling fees only when an order exists — the multi-dog
+        // package may have shifted across rounding. Skip for a deferred upgrade
+        // (newFee > oldFee): siblings must not move until the adjustment is paid.
+        if (orderId && newFee <= oldFee) {
+          for (const sib of siblingEntries) {
+            if (sib.id === input.id) continue;
+            const sibBreak = result.perEntry.find((b) => b.key === sib.id);
+            if (sibBreak && sibBreak.fee !== sib.totalFee) {
+              await ctx.db
+                .update(entries)
+                .set({ totalFee: sibBreak.fee })
+                .where(eq(entries.id, sib.id));
+            }
+          }
+        }
       } else {
+        // Legacy per-class fallback for shows that never set show-level fees.
         newFee = newClasses.reduce((sum, sc) => sum + sc.entryFee, 0);
+        perClassFees = newClasses.map((sc) => sc.entryFee);
       }
+
       const feeDiff = newFee - oldFee;
 
       const oldClassIds = entry.entryClasses.map((ec) => ec.showClassId);
 
-      // Delete old entry classes and insert new ones
-      await ctx.db
-        .delete(entryClasses)
-        .where(eq(entryClasses.entryId, input.id));
+      // Apply the new class list + fee. For an UPGRADE (feeDiff > 0) this is
+      // NOT called here — it's deferred until the adjustment payment succeeds
+      // (applied by the Stripe webhook), so an abandoned top-up can't leave the
+      // exhibitor with upgraded classes for free + overstated club revenue.
+      const applyClassChange = async () => {
+        await ctx.db
+          .delete(entryClasses)
+          .where(eq(entryClasses.entryId, input.id));
 
-      await ctx.db.insert(entryClasses).values(
-        newClasses.map((sc) => ({
-          entryId: input.id,
-          showClassId: sc.id,
-          fee: sc.entryFee,
-        }))
-      );
+        await ctx.db.insert(entryClasses).values(
+          newClasses.map((sc, idx) => ({
+            entryId: input.id,
+            showClassId: sc.id,
+            fee: perClassFees[idx] ?? sc.entryFee,
+          }))
+        );
 
-      // Update entry total
-      await ctx.db
-        .update(entries)
-        .set({ totalFee: newFee })
-        .where(eq(entries.id, input.id));
+        await ctx.db
+          .update(entries)
+          .set({ totalFee: newFee })
+          .where(eq(entries.id, input.id));
+      };
 
-      // Audit log
-      await ctx.db.insert(entryAuditLog).values({
-        entryId: input.id,
-        action: 'classes_changed',
-        userId: ctx.session.user.id,
-        changes: {
-          oldClassIds,
-          newClassIds: input.classIds,
-          oldFee,
-          newFee,
-          feeDiff,
-        },
-      });
+      // NB: the audit-log entry is written where the change actually lands:
+      // immediately (else branch) for a downgrade/no-change, or by the Stripe
+      // webhook on payment success for a deferred upgrade. Writing it here would
+      // log a "classes_changed" that never happens if the top-up is abandoned.
 
       let paymentResult: { requiresPayment: boolean; clientSecret?: string } = {
         requiresPayment: false,
@@ -653,18 +1052,43 @@ export const entriesRouter = createTRPCRouter({
 
       // Handle fee difference
       if (feeDiff > 0) {
-        // Additional payment needed
-        const pi = await createPaymentIntent(feeDiff, {
+        // UPGRADE: additional payment needed. Platform-mode charge — money
+        // lands in Remi's balance, we include the diff in the next payout to
+        // the club. The new classes/fee are DEFERRED: they travel in the
+        // PaymentIntent metadata and are applied by the webhook on success, so
+        // an abandoned top-up leaves the entry exactly as it was (no free
+        // upgrade, no overstated club revenue).
+        const platformFeePence = calculatePlatformFee(feeDiff);
+        const grossAmount = feeDiff + platformFeePence;
+
+        // classIds + per-class fees travel in Stripe metadata (string values,
+        // 500-char limit). Realistic entries are a handful of classes; refuse
+        // the rare oversize case rather than truncate and corrupt the change.
+        const pendingClassIds = input.classIds.join(',');
+        const pendingPerClassFees = perClassFees.join(',');
+        if (pendingClassIds.length > 480 || pendingPerClassFees.length > 480) {
+          throw new TRPCError({
+            code: 'BAD_REQUEST',
+            message: 'Too many classes to adjust online — please contact the show secretary.',
+          });
+        }
+
+        const pi = await createPaymentIntent(grossAmount, {
           entryId: input.id,
           showId: entry.showId,
           exhibitorId: ctx.session.user.id,
           type: 'adjustment',
+          platformFeePence: String(platformFeePence),
+          subtotalPence: String(feeDiff),
+          pendingClassIds,
+          pendingPerClassFees,
+          pendingFee: String(newFee),
         });
 
         await ctx.db.insert(payments).values({
           entryId: input.id,
           stripePaymentId: pi.id,
-          amount: feeDiff,
+          amount: grossAmount,
           status: 'pending',
           type: 'adjustment',
         });
@@ -673,36 +1097,54 @@ export const entriesRouter = createTRPCRouter({
           requiresPayment: true,
           clientSecret: pi.client_secret!,
         };
-      } else if (feeDiff < 0) {
-        // Refund needed — find the original successful payment
-        // Check entry-level payments first, then order-level payments
-        let originalPayment = entry.payments.find(
-          (p) => p.status === 'succeeded' && p.stripePaymentId
-        );
+        // NB: applyClassChange() intentionally NOT called — deferred to webhook.
+      } else {
+        // Downgrade or no change — safe to apply the class change immediately.
+        await applyClassChange();
 
-        if (!originalPayment && entry.orderId) {
-          originalPayment = await ctx.db.query.payments.findFirst({
-            where: and(
-              eq(payments.orderId, entry.orderId),
-              eq(payments.status, 'succeeded'),
-            ),
-          }) ?? undefined;
-        }
+        // Audit the change now that it has actually landed (an upgrade is
+        // audited by the webhook instead, on payment success).
+        await ctx.db.insert(entryAuditLog).values({
+          entryId: input.id,
+          action: 'classes_changed',
+          userId: ctx.session.user.id,
+          changes: {
+            oldClassIds,
+            newClassIds: input.classIds,
+            oldFee,
+            newFee,
+            feeDiff,
+          },
+        });
 
-        if (originalPayment?.stripePaymentId) {
-          const stripe = getStripe();
-          await stripe.refunds.create({
-            payment_intent: originalPayment.stripePaymentId,
-            amount: Math.abs(feeDiff),
-          });
+        if (feeDiff < 0) {
+          // Refund the reduction via the shared helper so the original payment's
+          // refundAmount, the refund row's orderId, and the payment status are all
+          // updated consistently. The previous ad-hoc stripe.refunds.create +
+          // manual insert never incremented refundAmount and left orderId null,
+          // which silently desynced the books (enabling later over-refunds and
+          // club over-payouts via show-metrics skipping the orphan row).
+          let originalPayment = entry.payments.find(
+            (p) =>
+              (p.status === 'succeeded' || p.status === 'partially_refunded') &&
+              p.stripePaymentId
+          );
 
-          await ctx.db.insert(payments).values({
-            entryId: input.id,
-            stripePaymentId: originalPayment.stripePaymentId,
-            amount: Math.abs(feeDiff),
-            status: 'succeeded',
-            type: 'refund',
-          });
+          if (!originalPayment && entry.orderId) {
+            originalPayment = await ctx.db.query.payments.findFirst({
+              where: and(
+                eq(payments.orderId, entry.orderId),
+                inArray(payments.status, ['succeeded', 'partially_refunded']),
+              ),
+            }) ?? undefined;
+          }
+
+          if (originalPayment?.stripePaymentId) {
+            await executeStripeRefund(ctx.db, originalPayment, {
+              amountPence: Math.abs(feeDiff),
+              entryId: input.id,
+            });
+          }
         }
       }
 

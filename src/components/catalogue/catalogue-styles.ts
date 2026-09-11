@@ -1,16 +1,28 @@
 import path from 'path';
 import { StyleSheet, Font } from '@react-pdf/renderer';
+// Side-effect: registers the HankenGrotesk family used below for display/
+// heading elements. Imported from a single shared module (not registered
+// inline here) — see src/lib/pdf-fonts.ts for why duplicate registration
+// of the same family from multiple modules is unsafe.
+import '@/lib/pdf-fonts';
 
 // ── Font Registration ───────────────────────────────────────────
 // Register the same fonts as the schedule for visual consistency
 const fontsDir = path.join(process.cwd(), 'public', 'fonts');
 
+// Register EVERY weight/style combination each family is used in (including
+// bold+italic, e.g. the sex headings) — when a combo has no registered face,
+// react-pdf silently falls back to the base-14 Helvetica, which is NOT embedded
+// and gets rejected by print preflight (Tradeprint, BAGSD 2026-06-19). Faces we
+// don't have a dedicated file for are mapped to the closest available TTF so the
+// glyphs are always embedded.
 Font.register({
   family: 'Times',
   fonts: [
     { src: path.join(fontsDir, 'times-new-roman.ttf') },
     { src: path.join(fontsDir, 'times-new-roman-bold.ttf'), fontWeight: 'bold' },
     { src: path.join(fontsDir, 'times-new-roman-italic.ttf'), fontStyle: 'italic' },
+    { src: path.join(fontsDir, 'times-new-roman-italic.ttf'), fontWeight: 'bold', fontStyle: 'italic' },
   ],
 });
 
@@ -19,6 +31,8 @@ Font.register({
   fonts: [
     { src: path.join(fontsDir, 'libre-baskerville-regular.ttf') },
     { src: path.join(fontsDir, 'libre-baskerville-bold.ttf'), fontWeight: 'bold' },
+    { src: path.join(fontsDir, 'libre-baskerville-regular.ttf'), fontStyle: 'italic' },
+    { src: path.join(fontsDir, 'libre-baskerville-bold.ttf'), fontWeight: 'bold', fontStyle: 'italic' },
   ],
 });
 
@@ -28,11 +42,24 @@ Font.register({
     { src: path.join(fontsDir, 'inter-regular.ttf') },
     { src: path.join(fontsDir, 'inter-regular.ttf'), fontStyle: 'italic' },
     { src: path.join(fontsDir, 'inter-semibold.ttf'), fontWeight: 'bold' },
+    { src: path.join(fontsDir, 'inter-semibold.ttf'), fontWeight: 'bold', fontStyle: 'italic' },
   ],
 });
 
 // Disable word hyphenation for dog names and pedigree text
 Font.registerHyphenationCallback((word) => [word]);
+
+// Secretaries write welcome notes / awards lists WITH emoji (they display
+// fine on the public show page, which is HTML) — but none of the embedded
+// print fonts carry emoji glyphs, so the catalogue printed tofu boxes where
+// Mandy's 🏆 bullets should be (2026-08-17, GSD Scotland). react-pdf
+// resolves emoji as inline images from this source at render time instead.
+// Server-side fetch, same risk class as the R2 advert images the catalogue
+// already depends on. jdecked/twemoji is the maintained twemoji fork.
+Font.registerEmojiSource({
+  format: 'png',
+  url: 'https://cdn.jsdelivr.net/gh/jdecked/twemoji@15.1.0/assets/72x72/',
+});
 
 // ── Colour Palette (matches schedule) ───────────────────────────
 export const C = {
@@ -69,6 +96,21 @@ export const styles = StyleSheet.create({
     borderBottomColor: C.primary,
     paddingBottom: 6,
   },
+  // Every headerXxx style below sets lineHeight EXPLICITLY (matching
+  // styles.page's own 1.3) rather than relying on inheriting it from the
+  // page — confirmed root cause of a real overlap bug (coordinator's
+  // review, 2026-09-02): react-pdf can compute a Text's own reserved
+  // height using a tighter default than the intended inherited
+  // lineHeight when nothing is set directly on the Text itself, so the
+  // NEXT sibling can start before the previous one's glyphs are fully
+  // drawn — confirmed via an isolated repro (a bare sequence of Texts, no
+  // catalogue-specific logic involved) and already present, unnoticed, in
+  // real committed catalogue-absentees output (e.g. bagsd-champ-2026's
+  // baseline literally interleaves "Championship Show" characters into
+  // the show-name title's own line). headerTitle is the one most exposed
+  // to this (HankenGrotesk ExtraBold, the family/weight the bug was
+  // confirmed on) — see catalogue-header.tsx's FitText reserveHeight for
+  // the defensive backstop on top of this direct fix.
   headerOrganisation: {
     fontFamily: 'Inter',
     fontSize: 8,
@@ -76,15 +118,17 @@ export const styles = StyleSheet.create({
     letterSpacing: 0.8,
     textTransform: 'uppercase',
     marginBottom: 1,
+    lineHeight: 1.3,
     color: C.primary,
   },
   headerTitle: {
-    fontFamily: 'LibreBaskerville',
+    fontFamily: 'HankenGrotesk',
     fontSize: 13,
-    fontWeight: 'bold',
+    fontWeight: 800,
     textTransform: 'uppercase',
     letterSpacing: 1.5,
     marginBottom: 2,
+    lineHeight: 1.3,
     color: C.textDark,
   },
   headerSubtitle: {
@@ -92,6 +136,7 @@ export const styles = StyleSheet.create({
     fontSize: 9,
     fontWeight: 'bold',
     marginBottom: 1,
+    lineHeight: 1.3,
     color: C.primary,
   },
   headerShowType: {
@@ -99,6 +144,7 @@ export const styles = StyleSheet.create({
     fontSize: 7,
     fontStyle: 'italic',
     marginBottom: 3,
+    lineHeight: 1.3,
     color: C.textMedium,
   },
   headerDetail: {
@@ -106,6 +152,7 @@ export const styles = StyleSheet.create({
     fontSize: 6.5,
     color: C.textLight,
     marginTop: 1,
+    lineHeight: 1.3,
   },
 
   // ── Section band (full-width green band like schedule) ────
@@ -118,7 +165,7 @@ export const styles = StyleSheet.create({
     marginBottom: 12,
   },
   sectionBandText: {
-    fontFamily: 'LibreBaskerville',
+    fontFamily: 'HankenGrotesk',
     fontSize: 11,
     fontWeight: 'bold',
     color: C.textOnPrimary,
@@ -228,6 +275,50 @@ export const styles = StyleSheet.create({
     paddingLeft: 6,
   },
 
+  // Placements row appended after each class block. Mirrors the
+  // traditional UK printed catalogue: "1st .....   2nd .....   3rd .....
+  // Res .....   VHC .....", one row, evenly spaced, write-in lines for
+  // the judge to fill on the day. Amanda's spec 2026-05-14.
+  placementsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    // Clear gap between the last dog in the class and the placings line so
+    // the judge has room to write, and the line reads as a separate block
+    // rather than crowding the final entry (Mandy 2026-06-19).
+    marginTop: 14,
+    paddingTop: 5,
+    paddingBottom: 5,
+    paddingLeft: 6,
+    paddingRight: 6,
+  },
+  placementsCell: {
+    fontFamily: 'Inter',
+    fontSize: 7,
+    color: C.textDark,
+    flex: 1,
+  },
+  // Write-in placement slot — a bold label followed by a ruled line (matching
+  // the Standard/Ringside catalogue, which Mandy prefers over trailing dots).
+  placementSlot: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    flex: 1,
+    marginRight: 6,
+  },
+  placementSlotLabel: {
+    fontFamily: 'Inter',
+    fontSize: 7,
+    fontWeight: 'bold',
+    color: C.textMedium,
+    marginRight: 3,
+  },
+  placementSlotLine: {
+    flex: 1,
+    borderBottomWidth: 0.5,
+    borderBottomColor: C.textDark,
+    height: 10,
+  },
+
   // ── Absentee table ───────────────────────────
   absenteeRow: {
     flexDirection: 'row',
@@ -246,6 +337,11 @@ export const styles = StyleSheet.create({
   },
 
   // ── Footer ───────────────────────────────────
+  // NOTE: no top border here. A border on a `fixed` + position:absolute footer
+  // makes react-pdf overflow the stroke's Y coordinate across wrapped pages
+  // (it grew to ±10^15), which renders as a stray near-vertical green streak
+  // down the page (Mandy/Michael 2026-06-19, BAGSD By-Class). Keep the footer
+  // border-free; the page-number text alone is enough.
   footer: {
     position: 'absolute',
     bottom: 12,
@@ -255,8 +351,6 @@ export const styles = StyleSheet.create({
     fontFamily: 'Inter',
     fontSize: 6,
     color: C.textLight,
-    borderTopWidth: 0.75,
-    borderTopColor: C.primary,
     paddingTop: 4,
   },
   pageNumber: {
@@ -328,28 +422,31 @@ export const styles = StyleSheet.create({
   },
   coverContent: {
     paddingHorizontal: 30,
-    paddingTop: 14,
+    paddingTop: 4,
     flex: 1,
     alignItems: 'center',
   },
   coverLogo: {
-    width: 80,
-    height: 80,
-    marginBottom: 10,
+    maxWidth: 132,
+    maxHeight: 60,
+    objectFit: 'contain',
+    alignSelf: 'center',
+    marginBottom: 4,
   },
   coverShowName: {
-    fontFamily: 'LibreBaskerville',
+    fontFamily: 'HankenGrotesk',
     fontSize: 17,
-    fontWeight: 'bold',
+    fontWeight: 800,
     textAlign: 'center',
     color: C.textDark,
-    marginBottom: 8,
+    marginBottom: 5,
+    lineHeight: 1.3,
   },
   coverGoldRule: {
     width: '45%',
     height: 1.5,
     backgroundColor: C.accent,
-    marginVertical: 8,
+    marginVertical: 4,
   },
   coverBadge: {
     backgroundColor: C.primary,
@@ -370,14 +467,14 @@ export const styles = StyleSheet.create({
     width: '100%',
     backgroundColor: C.cardBg,
     borderRadius: 6,
-    padding: '8 14',
-    marginBottom: 8,
+    padding: '6 14',
+    marginBottom: 4,
     borderLeftWidth: 3,
     borderLeftColor: C.accent,
   },
   coverDetailRow: {
     flexDirection: 'row',
-    marginVertical: 1.5,
+    marginVertical: 1,
   },
   coverDetailLabel: {
     fontFamily: 'Inter',
@@ -386,7 +483,9 @@ export const styles = StyleSheet.create({
     textTransform: 'uppercase',
     letterSpacing: 0.5,
     color: C.textLight,
-    width: 58,
+    // Wide enough that "Judging Starts" stays on one line (Mandy 2026-07-20);
+    // every value column aligns to this same edge.
+    width: 66,
   },
   coverDetailValue: {
     fontFamily: 'Inter',
@@ -416,6 +515,33 @@ export const styles = StyleSheet.create({
     color: C.textMedium,
     textAlign: 'center',
     marginBottom: 2,
+  },
+  // Formal RKC designation ("CATALOGUE OF UNBENCHED …") — same designation
+  // wording as the schedule cover, in the catalogue's own print-first Times
+  // idiom rather than the schedule's coloured pill (Mandy 2026-08-17).
+  coverDesignation: {
+    fontFamily: 'Times',
+    fontSize: 8.5,
+    fontWeight: 'bold',
+    color: C.textDark,
+    textAlign: 'center',
+    textTransform: 'uppercase',
+    letterSpacing: 0.4,
+    marginTop: 2,
+    marginBottom: 1,
+  },
+  // Docking statement — mandatory RKC F(1).7.c(2) notice, now prominent on
+  // the cover directly beneath the designation (Mandy 2026-08-17), mirroring
+  // the schedule cover instead of being buried on the particulars page.
+  coverDocking: {
+    fontFamily: 'Times',
+    fontSize: 7,
+    fontStyle: 'italic',
+    color: C.textMedium,
+    textAlign: 'center',
+    marginTop: 2,
+    marginBottom: 2,
+    paddingHorizontal: 8,
   },
   coverBottomBand: {
     position: 'absolute',
@@ -471,7 +597,7 @@ export const styles = StyleSheet.create({
     color: C.textDark,
   },
   frontMatterTitle: {
-    fontFamily: 'LibreBaskerville',
+    fontFamily: 'HankenGrotesk',
     fontSize: 11,
     fontWeight: 'bold',
     textTransform: 'uppercase',
@@ -510,7 +636,7 @@ export const styles = StyleSheet.create({
     fontFamily: 'Inter',
     fontSize: 7.5,
     fontWeight: 'bold',
-    marginTop: 4,
+    marginTop: 2,
     marginBottom: 1,
     color: C.primary,
   },
@@ -518,8 +644,8 @@ export const styles = StyleSheet.create({
     fontFamily: 'Inter',
     fontSize: 6.5,
     color: C.textMedium,
-    marginBottom: 3,
-    lineHeight: 1.4,
+    marginBottom: 2,
+    lineHeight: 1.3,
   },
 
   // ── Ring plan styles ─────────────────────────
@@ -598,6 +724,44 @@ export const styles = StyleSheet.create({
     fontSize: 8,
     fontWeight: 'bold',
     color: C.textDark,
+  },
+
+  // ── Judges' Welfare Commitment (carried over from the schedule, catalogue's
+  //    own bordered-box idiom — Mandy 2026-08-17) ──────────────
+  welfareBlock: {
+    backgroundColor: C.cardBg,
+    borderWidth: 0.75,
+    borderColor: C.cardBorder,
+    borderRadius: 6,
+    borderLeftWidth: 3,
+    borderLeftColor: C.accent,
+    padding: '8 12',
+    marginBottom: 10,
+  },
+  welfareBlockEyebrow: {
+    fontFamily: 'Inter',
+    fontSize: 6,
+    fontWeight: 'bold',
+    color: C.textLight,
+    textTransform: 'uppercase',
+    letterSpacing: 1.1,
+    marginBottom: 2,
+  },
+  welfareBlockTitle: {
+    fontFamily: 'HankenGrotesk',
+    fontSize: 9,
+    fontWeight: 'bold',
+    color: C.primary,
+    textTransform: 'uppercase',
+    letterSpacing: 0.7,
+    marginBottom: 5,
+  },
+  welfareBlockText: {
+    fontFamily: 'Times',
+    fontSize: 8.5,
+    fontStyle: 'italic',
+    color: C.textDark,
+    lineHeight: 1.5,
   },
 
   // ── Judge bio styles ──────────────────────────

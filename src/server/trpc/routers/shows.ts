@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { TRPCError } from '@trpc/server';
-import { and, eq, gte, lte, sql, desc, asc, isNull, or, inArray, isNotNull, exists, ilike, count } from 'drizzle-orm';
+import { and, eq, gte, lte, sql, asc, isNull, or, inArray, isNotNull, exists, ilike, count } from 'drizzle-orm';
 import {
   publicProcedure,
   protectedProcedure,
@@ -15,6 +15,8 @@ import {
   sundryItems,
   memberships,
   entries,
+  entryClasses,
+  results,
   showSponsors,
   dogs,
   breeds,
@@ -22,11 +24,44 @@ import {
   classDefinitions,
   orders,
   orderSundryItems,
+  showDiscountGroups,
+  showBreeds,
 } from '@/server/db/schema';
 import { verifyShowAccess } from '../verify-show-access';
+import { publicOrgColumns } from '../public-org-columns';
 import { isUuid, generateShowSlug } from '@/lib/slugify';
 import { hasUserPurchasedCatalogue, CATALOGUE_AVAILABLE_STATUSES, CATALOGUE_NAME_PATTERN } from '@/lib/catalogue-utils';
+import { isShowDayReached } from '@/lib/date-utils';
+import { isCloseDateWithinFloor, entryCloseFloorMessage } from '@/lib/entry-close-rules';
+import { DEFAULT_REGIONAL_FEE_TIERS } from '@/lib/regional-fee-calc';
+import type { RegionalFeeConfig } from '@/server/db/schema/shows';
+import { PUBLIC_SHOW_STATUSES } from '@/lib/public-show-statuses';
+import { scheduleCatalogueRefresh } from '@/server/services/catalogue-jobs';
+import { SV_CLASS_AUTO_CREATE_COMBOS } from '@/lib/class-labels';
 import type { Database } from '@/server/db';
+
+/** Validation for the regional (SV/WUSV) tiered fee config jsonb — mirrors the
+ *  `RegionalFeeConfig` interface in schema/shows.ts (keep the two in step). */
+const regionalTierSchema = z.object({
+  standardPence: z.number().int().min(0),
+  memberPence: z.number().int().min(0),
+});
+const regionalFeeConfigSchema = z.object({
+  tiers: z.array(regionalTierSchema).min(1).max(20),
+  memberships: z
+    .array(
+      z.object({
+        label: z.string().trim().min(1).max(120),
+        requiresNumber: z.boolean().optional(),
+        tiers: z.array(regionalTierSchema).min(1).max(20).optional(),
+      }),
+    )
+    .max(10)
+    .optional(),
+  firstTimeEnabled: z.boolean().optional(),
+  firstTimeFeePence: z.number().int().min(0).optional(),
+  donationsEnabled: z.boolean().optional(),
+});
 
 /** Resolve a show slug to its UUID (passthrough if already UUID) */
 async function resolveShowId(db: Database, idOrSlug: string): Promise<string> {
@@ -36,6 +71,21 @@ async function resolveShowId(db: Database, idOrSlug: string): Promise<string> {
   });
   if (!show) throw new TRPCError({ code: 'NOT_FOUND', message: 'Show not found' });
   return show.id;
+}
+
+/**
+ * Resolves the effective value of a nullable update-input field against its
+ * stored counterpart: `undefined` means the field wasn't sent this call
+ * (fall back to whatever's already stored), `null` means it was explicitly
+ * cleared (no value, don't fall back). Used in `shows.update` for the
+ * entry-close / postal-close floor check, which has to reason about dates
+ * this call isn't itself touching. Two independent type params — not one —
+ * because the wire value (`entryCloseDate`: ISO string) and the stored DB
+ * value (`storedShow.entryCloseDate`: Date, a `timestamp` column) are
+ * different types; `isCloseDateWithinFloor` already accepts either.
+ */
+function effectiveOrStored<S, T>(sent: S | null | undefined, stored: T | null | undefined): S | T | null {
+  return sent !== undefined ? sent : (stored ?? null);
 }
 
 export const showsRouter = createTRPCRouter({
@@ -52,17 +102,8 @@ export const showsRouter = createTRPCRouter({
             'championship',
           ])
           .optional(),
-        status: z
-          .enum([
-            'draft',
-            'published',
-            'entries_open',
-            'entries_closed',
-            'in_progress',
-            'completed',
-            'cancelled',
-          ])
-          .optional(),
+        // draft/cancelled deliberately absent — see PUBLIC_SHOW_STATUSES.
+        status: z.enum(PUBLIC_SHOW_STATUSES).optional(),
         search: z.string().max(200).optional(),
         breedId: z.string().uuid().optional(),
         breedIds: z.array(z.string().uuid()).max(20).optional(),
@@ -191,7 +232,7 @@ export const showsRouter = createTRPCRouter({
       const items = await ctx.db.query.shows.findMany({
         where,
         with: {
-          organisation: true,
+          organisation: { columns: publicOrgColumns },
           venue: true,
         },
         orderBy: [asc(statusPriority), asc(dateSort)],
@@ -224,9 +265,10 @@ export const showsRouter = createTRPCRouter({
           ? eq(shows.id, input.id)
           : eq(shows.slug, input.id),
         with: {
-          organisation: true,
+          organisation: { columns: publicOrgColumns },
           venue: true,
           breed: true,
+          discountGroups: true,
           showClasses: {
             with: {
               classDefinition: true,
@@ -277,7 +319,23 @@ export const showsRouter = createTRPCRouter({
         });
       }
 
-      return show;
+      // Surface whether this show has any published results — drives the
+      // public-facing "LIVE RESULTS" banner. One small COUNT, much cheaper
+      // than fetching all live results just to test for non-empty.
+      const publishedCount = await ctx.db
+        .select({ n: sql<number>`count(*)::int` })
+        .from(results)
+        .innerJoin(entryClasses, eq(entryClasses.id, results.entryClassId))
+        .innerJoin(entries, eq(entries.id, entryClasses.entryId))
+        .where(
+          and(
+            eq(entries.showId, show.id),
+            isNotNull(results.publishedAt),
+          ),
+        );
+      const hasPublishedResults = (publishedCount[0]?.n ?? 0) > 0;
+
+      return { ...show, hasPublishedResults };
     }),
 
   getClasses: publicProcedure
@@ -308,48 +366,6 @@ export const showsRouter = createTRPCRouter({
         },
         orderBy: [asc(showClasses.sortOrder)],
       });
-    }),
-
-  upcoming: publicProcedure
-    .input(
-      z.object({
-        limit: z.number().min(1).max(50).default(10),
-        cursor: z.number().min(0).default(0),
-      })
-    )
-    .query(async ({ ctx, input }) => {
-      const today = new Date().toISOString().split('T')[0]!;
-      const where = and(
-        gte(shows.startDate, today),
-        inArray(shows.status, ['published', 'entries_open'])
-      );
-
-      const items = await ctx.db.query.shows.findMany({
-        where,
-        with: {
-          organisation: true,
-          venue: true,
-        },
-        orderBy: [asc(shows.startDate)],
-        limit: input.limit,
-        offset: input.cursor,
-      });
-
-      const countResult = await ctx.db
-        .select({ count: sql<number>`count(*)` })
-        .from(shows)
-        .where(where);
-
-      const total = Number(countResult[0]?.count ?? 0);
-
-      return {
-        items,
-        total,
-        nextCursor:
-          input.cursor + input.limit < total
-            ? input.cursor + input.limit
-            : null,
-      };
     }),
 
   nearby: publicProcedure
@@ -482,6 +498,7 @@ export const showsRouter = createTRPCRouter({
         onCallVet: z.string().optional(),
         acceptsPostalEntries: z.boolean().optional(),
         classSexArrangement: z.enum(['separate_sex', 'combined_sex']).optional(),
+        showRuleset: z.enum(['rkc', 'wusv']).optional().default('rkc'),
         classDefinitionIds: z.array(z.string().uuid()).optional(),
         entryFee: z.number().int().min(0).optional(),
         firstEntryFee: z.number().int().min(0).optional(),
@@ -493,6 +510,7 @@ export const showsRouter = createTRPCRouter({
           breedIds: z.array(z.string().uuid()),
           classDefinitionIds: z.array(z.string().uuid()),
           splitBySex: z.boolean().default(false),
+          ccBreedIds: z.array(z.string().uuid()).default([]),
         }).optional(),
       })
     )
@@ -533,6 +551,23 @@ export const showsRouter = createTRPCRouter({
 
       const { classDefinitionIds, entryFee, firstEntryFee, subsequentEntryFee, nfcEntryFee, juniorHandlerFee, allBreedClassData, ...showData } = input;
 
+      // Mandy's hard rule (2026-08-04, "two weeks give or take a day"): entries
+      // — and postal entries — must close at least 13 calendar days before the
+      // show starts, every show type. This also subsumes the older "close date
+      // must be before the show start date" check (13 days is always > 0).
+      if (showData.entryCloseDate && !isCloseDateWithinFloor(showData.entryCloseDate, showData.startDate)) {
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: entryCloseFloorMessage(showData.startDate, 'entry close date'),
+        });
+      }
+      if (showData.postalCloseDate && !isCloseDateWithinFloor(showData.postalCloseDate, showData.startDate)) {
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: entryCloseFloorMessage(showData.startDate, 'postal close date'),
+        });
+      }
+
       // Generate a unique slug
       const baseSlug = generateShowSlug(showData.name, showData.startDate);
       let slug = baseSlug;
@@ -560,6 +595,19 @@ export const showsRouter = createTRPCRouter({
           subsequentEntryFee: subsequentEntryFee ?? null,
           nfcEntryFee: nfcEntryFee ?? null,
           juniorHandlerFee: juniorHandlerFee ?? null,
+          // Regional shows get the BRG tiered scale + BRG membership out of the
+          // box (editable by the club afterwards). RKC shows leave it null and
+          // use the first/subsequent fee model above.
+          regionalFeeConfig:
+            showData.showRuleset === 'wusv'
+              ? ({
+                  tiers: DEFAULT_REGIONAL_FEE_TIERS,
+                  memberships: [{ label: 'BRG/League member', requiresNumber: true }],
+                  firstTimeEnabled: false,
+                  firstTimeFeePence: 0,
+                  donationsEnabled: false,
+                } satisfies RegionalFeeConfig)
+              : null,
         })
         .returning();
 
@@ -575,9 +623,27 @@ export const showsRouter = createTRPCRouter({
         const classDefTypeMap = new Map(classDefs.map((cd) => [cd.id, cd.type]));
 
         const isSeparateSex = showData.classSexArrangement === 'separate_sex';
-        const values: { showId: string; classDefinitionId: string; entryFee: number; sortOrder: number; sex?: 'dog' | 'bitch'; classNumber: number }[] = [];
+        const values: { showId: string; classDefinitionId: string; entryFee: number; sortOrder: number; sex?: 'dog' | 'bitch'; classNumber: number | null }[] = [];
         let sortOrder = 0;
+        // Junior Handler and Special Award Classes sit OUTSIDE the RKC-numbered
+        // breed-class sequence (they render as JHA/JHB or A/B/C), so they keep
+        // classNumber:null and don't consume a number — otherwise the breed
+        // numbering shows gaps and the secretary has to click "auto number"
+        // (Mandy 2026-06-01). JH classes also take the show's junior-handler
+        // fee, not the general entry fee. Mirrors autoAssignClassNumbers so the
+        // result is correct at creation without a manual renumber pass.
+        let classNumber = 0;
         const addedJhIds = new Set<string>();
+        const defInfo = new Map(classDefs.map((cd) => [cd.id, { type: cd.type, name: cd.name }]));
+        const isUnnumberedDef = (id: string) => {
+          const d = defInfo.get(id);
+          return (
+            d?.type === 'junior_handler' ||
+            (d?.type === 'special' && (d?.name?.startsWith('Special Award Class') ?? false))
+          );
+        };
+        const feeForDef = (id: string) =>
+          defInfo.get(id)?.type === 'junior_handler' ? (juniorHandlerFee ?? 0) : (entryFee ?? 0);
 
         if (isSeparateSex) {
           for (const sex of ['dog', 'bitch'] as const) {
@@ -590,19 +656,19 @@ export const showsRouter = createTRPCRouter({
                   values.push({
                     showId: show!.id,
                     classDefinitionId: classDefId,
-                    entryFee: entryFee ?? 0,
+                    entryFee: feeForDef(classDefId),
                     sortOrder: sortOrder++,
-                    classNumber: sortOrder,
+                    classNumber: null,
                   });
                 }
               } else {
                 values.push({
                   showId: show!.id,
                   classDefinitionId: classDefId,
-                  entryFee: entryFee ?? 0,
+                  entryFee: feeForDef(classDefId),
                   sortOrder: sortOrder++,
                   sex,
-                  classNumber: sortOrder,
+                  classNumber: isUnnumberedDef(classDefId) ? null : ++classNumber,
                 });
               }
             }
@@ -612,9 +678,9 @@ export const showsRouter = createTRPCRouter({
             values.push({
               showId: show!.id,
               classDefinitionId: classDefId,
-              entryFee: entryFee ?? 0,
+              entryFee: feeForDef(classDefId),
               sortOrder: sortOrder++,
-              classNumber: sortOrder,
+              classNumber: isUnnumberedDef(classDefId) ? null : ++classNumber,
             });
           }
         }
@@ -626,6 +692,19 @@ export const showsRouter = createTRPCRouter({
 
       // Create show classes for all-breed shows (per-breed classes)
       if (allBreedClassData && allBreedClassData.breedIds.length > 0 && allBreedClassData.classDefinitionIds.length > 0) {
+        const selectedBreedIds = new Set(allBreedClassData.breedIds);
+        const ccBreedIds = new Set(
+          allBreedClassData.ccBreedIds.filter((breedId) => selectedBreedIds.has(breedId)),
+        );
+        await ctx.db.insert(showBreeds).values(
+          allBreedClassData.breedIds.map((breedId, displayOrder) => ({
+            showId: show!.id,
+            breedId,
+            ccOffered: showData.showType === 'championship' && ccBreedIds.has(breedId),
+            displayOrder,
+          })),
+        );
+
         const isSeparateSex = allBreedClassData.splitBySex;
         const fee = entryFee ?? 0;
         const allValues: {
@@ -678,6 +757,45 @@ export const showsRouter = createTRPCRouter({
           batches.push(ctx.db.insert(showClasses).values(allValues.slice(i, i + BATCH_SIZE)));
         }
         await Promise.all(batches);
+      }
+
+      // SV/WUSV ruleset auto-setup: spin up the full SV age-class structure
+      // (Baby Puppy → Working, split by sex × coat type) so SV secretaries
+      // don't have to tick every class one at a time. They can then
+      // customise on /secretary/shows/[id]/wusv-classes (Amanda 2026-05-19).
+      if (showData.showRuleset === 'wusv') {
+        const svAgeDefs = await ctx.db.query.classDefinitions.findMany({
+          where: eq(classDefinitions.type, 'sv_age'),
+          orderBy: [asc(classDefinitions.sortOrder)],
+        });
+        const fee = firstEntryFee ?? entryFee ?? 0;
+        const svValues: Array<{
+          showId: string;
+          classDefinitionId: string;
+          sex: 'dog' | 'bitch' | null;
+          svCoatType: 'stock' | 'long_stock' | null;
+          entryFee: number;
+          sortOrder: number;
+          classNumber: number;
+        }> = [];
+        let idx = 0;
+        for (const def of svAgeDefs) {
+          for (const { sex, coat } of SV_CLASS_AUTO_CREATE_COMBOS) {
+            svValues.push({
+              showId: show!.id,
+              classDefinitionId: def.id,
+              sex,
+              svCoatType: coat,
+              entryFee: fee,
+              sortOrder: idx,
+              classNumber: idx + 1,
+            });
+            idx++;
+          }
+        }
+        if (svValues.length > 0) {
+          await ctx.db.insert(showClasses).values(svValues);
+        }
       }
 
       return show!;
@@ -734,6 +852,11 @@ export const showsRouter = createTRPCRouter({
         subsequentEntryFee: z.number().int().min(0).nullable().optional(),
         nfcEntryFee: z.number().int().min(0).nullable().optional(),
         juniorHandlerFee: z.number().int().min(0).nullable().optional(),
+        multiDogThreshold: z.number().int().min(2).nullable().optional(),
+        multiDogPackagePence: z.number().int().min(0).nullable().optional(),
+        // Regional (SV/WUSV) tiered fee config — the club-editable per-dog scale
+        // + member column + first-time/donation options.
+        regionalFeeConfig: regionalFeeConfigSchema.nullable().optional(),
       })
     )
     .mutation(async ({ ctx, input }) => {
@@ -741,21 +864,94 @@ export const showsRouter = createTRPCRouter({
 
       await verifyShowAccess(ctx.db, ctx.session.user.id, id, { callerIsAdmin: ctx.callerIsAdmin });
 
-      // Validate that close dates are before the show start date
-      const effectiveStartDate = rest.startDate;
-      if (effectiveStartDate) {
-        const showStart = new Date(effectiveStartDate);
-        if (entryCloseDate && new Date(entryCloseDate) >= showStart) {
+      // Always load the stored show row — it's an indexed single-row lookup
+      // on a human-triggered save, and conditionally fetching it was a
+      // silent-bug trap: a future validation that needs storedShow but
+      // forgets to extend the fetch condition just gets `null` and no-ops.
+      const storedShow = await ctx.db.query.shows.findFirst({
+        where: eq(shows.id, id),
+        columns: {
+          organisationId: true,
+          startDate: true,
+          entryCloseDate: true,
+          postalCloseDate: true,
+          status: true,
+        },
+        with: {
+          organisation: {
+            columns: {
+              payoutSortCode: true,
+              payoutAccountNumber: true,
+              payoutAccountName: true,
+            },
+          },
+        },
+      });
+
+      // Gate: can't open entries unless the host club has saved their
+      // payout bank details. Remi is merchant of record, so clubs don't
+      // need a Stripe account — but we do need their sort code + account
+      // number so we can BACS them the entry fees after the show.
+      if (input.status === 'entries_open') {
+        if (
+          !storedShow?.organisation?.payoutSortCode ||
+          !storedShow.organisation.payoutAccountNumber ||
+          !storedShow.organisation.payoutAccountName
+        ) {
           throw new TRPCError({
-            code: 'BAD_REQUEST',
-            message: 'Entry close date must be before the show start date',
+            code: 'PRECONDITION_FAILED',
+            message:
+              "Add your club's bank details before opening entries — we need them to send the entry fees on to you after the show. Visit the Club page to add them.",
           });
         }
-        if (postalCloseDate && new Date(postalCloseDate) >= showStart) {
-          throw new TRPCError({
-            code: 'BAD_REQUEST',
-            message: 'Postal close date must be before the show start date',
-          });
+      }
+
+      // Mandy's hard rule (2026-08-04, "two weeks give or take a day"):
+      // entries — and postal entries — must close at least 13 calendar days
+      // before the show starts. Only re-validate when THIS call actually
+      // touches one of the three dates it depends on, or transitions to
+      // entries_open (which re-checks whatever is already stored) — never as
+      // a side effect of an unrelated save. Without that scoping, a
+      // pre-existing show whose stored dates already breach the floor (e.g.
+      // North Eastern GSD Club Championship Show 2026, created before this
+      // rule shipped — see entry-close-floor.test.ts) would become
+      // uneditable for EVERY field, not just the dates, now that storedShow
+      // is fetched unconditionally above.
+      const touchesCloseDateFloorInputs =
+        input.status === 'entries_open' ||
+        rest.startDate !== undefined ||
+        entryCloseDate !== undefined ||
+        postalCloseDate !== undefined;
+
+      if (touchesCloseDateFloorInputs) {
+        // startDate isn't nullable on this input (`z.string().optional()`,
+        // not `.nullable()`), so a plain `??` fallback to the stored value is
+        // exact — unlike the two close-date fields below, `undefined` is the
+        // only "not sent" case here, there's no "explicitly cleared" null.
+        const effectiveStartDate = rest.startDate ?? storedShow?.startDate;
+        const effectiveEntryCloseDate = effectiveOrStored(entryCloseDate, storedShow?.entryCloseDate);
+        const effectivePostalCloseDate = effectiveOrStored(postalCloseDate, storedShow?.postalCloseDate);
+        const closeDateErrorCode = input.status === 'entries_open' ? 'PRECONDITION_FAILED' : 'BAD_REQUEST';
+
+        if (effectiveStartDate) {
+          if (
+            effectiveEntryCloseDate &&
+            !isCloseDateWithinFloor(effectiveEntryCloseDate, effectiveStartDate)
+          ) {
+            throw new TRPCError({
+              code: closeDateErrorCode,
+              message: entryCloseFloorMessage(effectiveStartDate, 'entry close date'),
+            });
+          }
+          if (
+            effectivePostalCloseDate &&
+            !isCloseDateWithinFloor(effectivePostalCloseDate, effectiveStartDate)
+          ) {
+            throw new TRPCError({
+              code: closeDateErrorCode,
+              message: entryCloseFloorMessage(effectiveStartDate, 'postal close date'),
+            });
+          }
         }
       }
 
@@ -782,6 +978,36 @@ export const showsRouter = createTRPCRouter({
         .where(eq(shows.id, id))
         .returning();
 
+      // Amanda's spec 2026-04-17: catalogue numbers should lock in at
+      // the moment entries close. Fire syncCatalogueNumbers on any
+      // transition into entries_closed (or further along the lifecycle
+      // — in_progress / completed — for shows that skip that status).
+      if (
+        input.status &&
+        ['entries_closed', 'in_progress', 'completed'].includes(input.status)
+      ) {
+        const { syncCatalogueNumbers } = await import('@/server/services/catalogue-numbering');
+        await syncCatalogueNumbers(ctx.db, id);
+      }
+
+      // Materialise the catalogue in the background: on the transition into
+      // entries_closed, or on a catalogue-visible field change to a show
+      // that's already closed/in_progress — so the secretary's View button
+      // finds a finished render instead of waiting out a cold one. Fired
+      // last, after every DB write above has committed (see
+      // scheduleCatalogueRefresh's own comment for why it isn't awaited).
+      const CATALOGUE_VISIBLE_FIELDS = [
+        'name', 'startDate', 'endDate', 'venueId',
+        'secretaryName', 'secretaryEmail', 'secretaryAddress', 'secretaryPhone',
+        'showOpenTime', 'startTime', 'onCallVet',
+      ] as const;
+      const transitionedToClosed = input.status === 'entries_closed' && storedShow?.status !== 'entries_closed';
+      const alreadyRendering = storedShow?.status === 'entries_closed' || storedShow?.status === 'in_progress';
+      const touchedCatalogueField = CATALOGUE_VISIBLE_FIELDS.some((f) => input[f] !== undefined);
+      if (transitionedToClosed || (alreadyRendering && touchedCatalogueField)) {
+        scheduleCatalogueRefresh(ctx.db, id, 'show-update');
+      }
+
       return updated!;
     }),
 
@@ -798,45 +1024,14 @@ export const showsRouter = createTRPCRouter({
       });
     }),
 
-  getPublicStats: publicProcedure
+  /** Public list of a show's discount groups (used by the exhibitor checkout). */
+  getDiscountGroups: publicProcedure
     .input(z.object({ showId: z.string().uuid() }))
     .query(async ({ ctx, input }) => {
-      const show = await ctx.db.query.shows.findFirst({
-        where: and(
-          eq(shows.id, input.showId),
-          inArray(shows.status, ['entries_open', 'entries_closed', 'in_progress', 'completed'])
-        ),
-        columns: {
-          id: true,
-          status: true,
-          startDate: true,
-          entryCloseDate: true,
-        },
+      return ctx.db.query.showDiscountGroups.findMany({
+        where: eq(showDiscountGroups.showId, input.showId),
+        orderBy: [asc(showDiscountGroups.displayOrder)],
       });
-
-      if (!show) return null;
-
-      const stats = await ctx.db
-        .select({
-          totalDogs: sql<number>`count(distinct ${entries.dogId})`,
-          totalExhibitors: sql<number>`count(distinct ${entries.exhibitorId})`,
-        })
-        .from(entries)
-        .where(
-          and(
-            eq(entries.showId, input.showId),
-            eq(entries.status, 'confirmed'),
-            isNull(entries.deletedAt)
-          )
-        );
-
-      return {
-        totalDogs: Number(stats[0]?.totalDogs ?? 0),
-        totalExhibitors: Number(stats[0]?.totalExhibitors ?? 0),
-        entryCloseDate: show.entryCloseDate?.toISOString() ?? null,
-        startDate: show.startDate,
-        status: show.status,
-      };
     }),
 
   getShowSponsors: publicProcedure
@@ -866,35 +1061,6 @@ export const showsRouter = createTRPCRouter({
       });
     }),
 
-  getBreedEntryStats: publicProcedure
-    .input(z.object({ showId: z.string().uuid() }))
-    .query(async ({ ctx, input }) => {
-      const results = await ctx.db
-        .select({
-          breedId: breeds.id,
-          breedName: breeds.name,
-          dogCount: sql<number>`count(distinct ${entries.dogId})`,
-        })
-        .from(entries)
-        .innerJoin(dogs, eq(entries.dogId, dogs.id))
-        .innerJoin(breeds, eq(dogs.breedId, breeds.id))
-        .where(
-          and(
-            eq(entries.showId, input.showId),
-            eq(entries.status, 'confirmed'),
-            isNull(entries.deletedAt)
-          )
-        )
-        .groupBy(breeds.id, breeds.name)
-        .orderBy(desc(sql`count(distinct ${entries.dogId})`));
-
-      return results.map((r) => ({
-        breedId: r.breedId,
-        breedName: r.breedName,
-        dogCount: Number(r.dogCount),
-      }));
-    }),
-
   getCatalogueAccess: protectedProcedure
     .input(z.object({ showId: z.string().min(1) }))
     .query(async ({ ctx, input }) => {
@@ -918,13 +1084,29 @@ export const showsRouter = createTRPCRouter({
         showSlug: show.slug,
         startDate: show.startDate,
         hasPurchased,
-        isAvailable: CATALOGUE_AVAILABLE_STATUSES.has(show.status),
+        // Catalogue PDFs only unlock for exhibitors on the morning of the
+        // show (Amanda 2026-05-28). Even after entries close, exhibitors
+        // shouldn't see the field of competitors before show day.
+        isAvailable:
+          CATALOGUE_AVAILABLE_STATUSES.has(show.status) &&
+          isShowDayReached(show.startDate),
       };
     }),
 
   getShowDogPhotos: publicProcedure
     .input(z.object({ showId: z.string().uuid() }))
     .query(async ({ ctx, input }) => {
+      // Exhibit identities (dog names + breeds) are hidden from the public
+      // until the morning of the show — same fairness rule as the steward
+      // entry list (Amanda 2026-05-28).
+      const show = await ctx.db.query.shows.findFirst({
+        where: eq(shows.id, input.showId),
+        columns: { startDate: true },
+      });
+      if (!show || !isShowDayReached(show.startDate)) {
+        return [];
+      }
+
       const photos = await ctx.db
         .select({
           dogId: dogs.id,

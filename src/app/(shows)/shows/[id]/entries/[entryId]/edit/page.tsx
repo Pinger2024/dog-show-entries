@@ -26,6 +26,7 @@ import { Separator } from '@/components/ui/separator';
 import { StripeProvider } from '@/components/providers/stripe-provider';
 import { PaymentForm } from '@/app/(shows)/shows/[id]/enter/payment-form';
 import { cn } from '@/lib/utils';
+import { SE_H } from '@/components/show-experience/tokens';
 import { toast } from 'sonner';
 
 export default function EditEntryPage({
@@ -132,7 +133,7 @@ export default function EditEntryPage({
   if (clientSecret) {
     return (
       <div className="container mx-auto max-w-3xl px-4 py-6">
-        <h1 className="mb-6 text-lg font-bold sm:text-2xl">Additional Payment Required</h1>
+        <h1 className={cn(SE_H, 'mb-6 text-lg sm:text-2xl')}>Additional Payment Required</h1>
         <Card>
           <CardHeader>
             <CardTitle className="text-base">
@@ -170,7 +171,7 @@ export default function EditEntryPage({
           <ChevronLeft className="size-4" />
           Back to entry
         </Link>
-        <h1 className="mt-2 text-lg font-bold sm:text-2xl">Edit Classes</h1>
+        <h1 className={cn(SE_H, 'mt-2 text-lg sm:text-2xl')}>Edit Classes</h1>
         <p className="text-sm text-muted-foreground">
           {entry.show.name} &middot; {entry.dog?.registeredName ?? 'Junior Handler'}
         </p>
@@ -206,7 +207,7 @@ export default function EditEntryPage({
                           className={cn(
                             'flex cursor-pointer items-start gap-3 rounded-lg border p-3 transition-all hover:bg-accent/50',
                             isSelected && 'border-primary bg-primary/5',
-                            isSelected && !wasOriginal && 'ring-1 ring-green-500/30',
+                            isSelected && !wasOriginal && 'ring-1 ring-se-fresh/30',
                             !isSelected && wasOriginal && 'ring-1 ring-red-500/30'
                           )}
                         >
@@ -221,7 +222,7 @@ export default function EditEntryPage({
                                 {sc.classDefinition.name}
                               </span>
                               {isSelected && !wasOriginal && (
-                                <Badge className="bg-green-100 text-green-700 text-xs">
+                                <Badge className="bg-se-fresh-soft text-se-fresh-deep text-xs">
                                   Adding
                                 </Badge>
                               )}
@@ -267,7 +268,7 @@ export default function EditEntryPage({
               <span
                 className={cn(
                   feeDiff > 0 && 'text-orange-600',
-                  feeDiff < 0 && 'text-green-600'
+                  feeDiff < 0 && 'text-se-fresh-deep'
                 )}
               >
                 <span className="inline-flex items-center gap-1">

@@ -1,5 +1,6 @@
-import { beforeEach, vi } from 'vitest';
+import { afterAll, beforeEach, vi } from 'vitest';
 import { cleanDb } from './db';
+import { dbClient } from '@/server/db';
 
 // ── Safety: refuse to run tests against anything but localhost. ────────────
 const url = process.env.DATABASE_URL ?? '';
@@ -25,6 +26,7 @@ vi.mock('@/server/services/stripe', () => ({
       })),
     },
   })),
+  cancelPaymentIntent: vi.fn(async () => {}),
   createPaymentIntent: vi.fn(async (amount: number, metadata: Record<string, string>) => ({
     id: `pi_test_${Math.random().toString(36).slice(2, 10)}`,
     client_secret: `pi_test_${Math.random().toString(36).slice(2, 10)}_secret_x`,
@@ -33,6 +35,42 @@ vi.mock('@/server/services/stripe', () => ({
     metadata,
     status: 'requires_payment_method',
   })),
+  createEntryPaymentIntent: vi.fn(async (params: {
+    amount: number;
+    applicationFeeAmount: number;
+    connectedAccountId: string;
+    metadata: Record<string, string>;
+  }) => ({
+    id: `pi_test_${Math.random().toString(36).slice(2, 10)}`,
+    client_secret: `pi_test_${Math.random().toString(36).slice(2, 10)}_secret_x`,
+    amount: params.amount,
+    currency: 'gbp',
+    application_fee_amount: params.applicationFeeAmount,
+    transfer_data: { destination: params.connectedAccountId },
+    on_behalf_of: params.connectedAccountId,
+    metadata: params.metadata,
+    status: 'requires_payment_method',
+  })),
+  calculatePlatformFee: vi.fn((subtotal: number) => 100 + Math.round(subtotal * 0.01)),
+  createConnectAccount: vi.fn(async (params: { organisationId: string }) => ({
+    id: `acct_test_${Math.random().toString(36).slice(2, 10)}`,
+    object: 'account',
+    metadata: { organisationId: params.organisationId },
+  })),
+  createConnectOnboardingLink: vi.fn(async () => ({
+    object: 'account_link',
+    url: 'https://connect.stripe.test/onboard',
+    expires_at: Math.floor(Date.now() / 1000) + 300,
+  })),
+  retrieveConnectAccount: vi.fn(async (accountId: string) => ({
+    id: accountId,
+    object: 'account',
+    details_submitted: true,
+    charges_enabled: true,
+    payouts_enabled: true,
+    requirements: { disabled_reason: null },
+  })),
+  deriveAccountStatus: vi.fn(() => 'active'),
   getOrCreateStripeCustomer: vi.fn(async () => 'cus_test_stub'),
   createSubscriptionCheckout: vi.fn(async () => 'https://checkout.stripe.test/session'),
   createBillingPortalSession: vi.fn(async () => 'https://billing.stripe.test/portal'),
@@ -68,8 +106,10 @@ vi.mock('@/server/services/email', async (importOriginal) => {
     sendEntryConfirmationEmail: vi.fn(async () => undefined),
     sendSecretaryNotificationEmail: vi.fn(async () => undefined),
     sendPrintOrderConfirmationEmail: vi.fn(async () => undefined),
+    sendPrintOrderAdminNotificationEmail: vi.fn(async () => undefined),
     sendPrintOrderDispatchEmail: vi.fn(async () => undefined),
     sendJudgeApprovalRequestEmail: vi.fn(async () => undefined),
+    sendRefundFailedAlertEmail: vi.fn(async () => undefined),
   };
 });
 
@@ -87,4 +127,17 @@ vi.mock('@/lib/auth', () => ({
 
 beforeEach(async () => {
   await cleanDb();
+});
+
+// Vitest's default per-file module isolation re-evaluates src/server/db
+// for every test file, each creating its own postgres.js connection pool
+// (up to DATABASE_POOL_MAX/10 connections). Without closing it here, idle
+// pools from earlier files only get reaped after `idle_timeout` (20s), so
+// dozens of files' pools can be alive simultaneously and exhaust Postgres's
+// max_connections mid-run — surfacing as random, unrelated query failures
+// ("sorry, too many clients already") in whichever test happens to be
+// running when the limit is hit. Closing promptly at file teardown keeps
+// at most a couple of files' pools open at once.
+afterAll(async () => {
+  await dbClient?.end({ timeout: 1 });
 });

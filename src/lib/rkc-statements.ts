@@ -20,8 +20,28 @@ export interface RkcStatement {
 export const RKC_STATEMENT_CATEGORIES = [
   'Venue & Facilities',
   'Show-Specific',
-  'Judging',
 ] as const;
+
+/**
+ * This undertaking is mandatory in every RKC schedule. It used to be offered
+ * as an optional preset too, which allowed it to appear twice. Keep the
+ * recogniser tolerant of the older saved wording ("health or well being") so
+ * existing shows are cleaned up automatically when rendered.
+ */
+export const RKC_JUDGES_WELFARE_STATEMENT =
+  'All Judges at this show agree to abide by the following statement: “In assessing dogs, judges must penalise any features or exaggerations which they consider would be detrimental to the soundness, health and well being of the dog.”';
+
+export function isRkcJudgesWelfareStatement(statement: string): boolean {
+  const normalised = statement
+    .toLowerCase()
+    .replace(/[“”"]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  return normalised.includes('all judges at this show agree to abide by the following statement:')
+    && normalised.includes('judges must penalise any features or exaggerations')
+    && normalised.includes('soundness, health');
+}
 
 export const RKC_STATEMENTS: RkcStatement[] = [
   // ── Venue & Facilities ──
@@ -82,13 +102,5 @@ export const RKC_STATEMENTS: RkcStatement[] = [
     id: 'jh_proof_of_age',
     text: 'JUNIOR HANDLERS MAY BE ASKED TO PROVIDE PROOF OF AGE',
     category: 'Show-Specific',
-  },
-
-  // ── Judging ──
-  {
-    id: 'judges_assessment',
-    text: 'ALL JUDGES AT THIS SHOW AGREE TO ABIDE BY THE FOLLOWING STATEMENT: "IN ASSESSING DOGS, JUDGES MUST PENALISE ANY FEATURES OR EXAGGERATIONS WHICH THEY CONSIDER WOULD BE DETRIMENTAL TO THE SOUNDNESS, HEALTH OR WELL BEING OF THE DOG"',
-    category: 'Judging',
-    regulation: 'F.9',
   },
 ];

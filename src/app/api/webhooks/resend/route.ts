@@ -3,6 +3,7 @@ import { Webhook } from 'svix';
 import { Resend } from 'resend';
 import { db } from '@/server/db';
 import { feedback } from '@/server/db/schema';
+import { INBOUND_EMAIL_DOMAIN } from '@/lib/email-addresses';
 
 const resend = new Resend(process.env.RESEND_API_KEY);
 
@@ -12,11 +13,25 @@ interface ResendEmailReceivedPayload {
     email_id: string;
     from: string;
     to: string[];
+    cc?: string[];
     subject: string;
     text: string;
     html: string;
     created_at: string;
   };
+}
+
+// The Resend account is shared with other projects (e.g. Lettiva) — its
+// email.received webhook fires for every recipient on the account, not just
+// ours. Only ingest mail actually addressed to our inbound domain.
+function extractEmail(address: string): string {
+  const match = address.match(/<(.+)>/);
+  return (match ? match[1] : address).trim().toLowerCase();
+}
+
+function addressedToUs(recipients: string[]): boolean {
+  const domainSuffix = `@${INBOUND_EMAIL_DOMAIN.toLowerCase()}`;
+  return recipients.some((addr) => extractEmail(addr).endsWith(domainSuffix));
 }
 
 export async function POST(request: NextRequest) {
@@ -66,6 +81,14 @@ export async function POST(request: NextRequest) {
 
   const data = payload.data;
 
+  const recipients = [...(data.to ?? []), ...(data.cc ?? [])];
+  if (!addressedToUs(recipients)) {
+    console.log(
+      `[resend-webhook] Ignored — recipient not ours (to: ${(data.to ?? []).join(', ')}${data.cc ? `, cc: ${data.cc.join(', ')}` : ''})`
+    );
+    return NextResponse.json({ ignored: true, reason: 'recipient not ours' });
+  }
+
   // Parse sender — could be "Name <email>" or just "email"
   const fromMatch = data.from.match(/^(.+?)\s*<(.+)>$/);
   const fromName = fromMatch ? fromMatch[1].trim() : null;
@@ -90,7 +113,7 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    await db
+    const inserted = await db
       .insert(feedback)
       .values({
         resendEmailId: data.email_id,
@@ -101,15 +124,21 @@ export async function POST(request: NextRequest) {
         htmlBody,
         inReplyToSubject,
       })
-      .onConflictDoNothing({ target: feedback.resendEmailId });
+      .onConflictDoNothing({ target: feedback.resendEmailId })
+      .returning({ id: feedback.id });
+
+    // Empty when a duplicate delivery hit the unique resendEmailId. The DB
+    // write is idempotent, so the notification must be too — otherwise a
+    // Svix redelivery sends a second 'new feedback' email for one message.
+    const isNewFeedback = inserted.length > 0;
 
     console.log(
-      `[resend-webhook] Feedback stored from ${fromEmail}: "${data.subject}"`
+      `[resend-webhook] Feedback ${isNewFeedback ? 'stored' : 'already stored (duplicate delivery)'} from ${fromEmail}: "${data.subject}"`
     );
 
-    // Notify Michael about new feedback
+    // Notify Michael about new feedback — only on a genuinely new row.
     const notifyEmail = process.env.FEEDBACK_NOTIFY_EMAIL;
-    if (notifyEmail) {
+    if (isNewFeedback && notifyEmail) {
       // Escape HTML to prevent XSS via malicious email sender names/subjects
       const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
       const displaySender = fromName ? `${esc(fromName)} &lt;${esc(fromEmail)}&gt;` : esc(fromEmail);

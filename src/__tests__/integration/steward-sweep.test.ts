@@ -30,10 +30,20 @@ async function showWithSteward() {
     makeOrg(),
     makeBreed(),
   ]);
+  // In-progress means show day has arrived — set startDate to a recent
+  // past date so the show-day exhibits lock (Amanda 2026-05-28) is open
+  // by the time the steward tries to view entries.
+  const past = (() => {
+    const d = new Date();
+    d.setUTCDate(d.getUTCDate() - 14);
+    return d.toISOString().slice(0, 10);
+  })();
   const show = await makeShow({
     organisationId: org.id,
     breedId: breed.id,
     status: 'in_progress',
+    startDate: past,
+    endDate: past,
   });
   const [, showClass, dog] = await Promise.all([
     makeStewardAssignment({ userId: steward.id, showId: show.id }),
@@ -202,9 +212,11 @@ describe('steward.updateWinnerPhoto', () => {
 
 describe('steward.submitForJudgeApproval', () => {
   it('stamps approval token + status on assignments and sends an email', async () => {
-    const { steward, show, breed } = await showWithSteward();
+    const { steward, show, breed, ec } = await showWithSteward();
     const judge = await makeJudge({ contactEmail: 'judge@example.test' });
     await makeJudgeAssignment({ showId: show.id, judgeId: judge.id, breedId: breed.id });
+    // A result must exist before the judge can be asked to approve it.
+    await makeResult({ entryClassId: ec.id, placement: 1, recordedBy: steward.id });
     vi.mocked(emailService.sendJudgeApprovalRequestEmail).mockClear();
 
     const res = await createTestCaller(steward).steward.submitForJudgeApproval({

@@ -21,6 +21,8 @@ import {
   Activity,
   ListTodo,
   Rss,
+  Calculator,
+  Receipt,
 } from 'lucide-react';
 import { isUuid } from '@/lib/slugify';
 import { cn } from '@/lib/utils';
@@ -51,12 +53,15 @@ const personalNavItems = [
 
 const adminNavItems = [
   { href: '/admin', label: 'Overview', mobileLabel: 'Admin', icon: Activity },
+  { href: '/admin/shows', label: 'All Shows', mobileLabel: 'Shows', icon: CalendarDays },
   { href: '/admin/users', label: 'Users', mobileLabel: 'Users', icon: Users },
   { href: '/feedback', label: 'Feedback', mobileLabel: 'Feedback', icon: Inbox },
   { href: '/backlog', label: 'Backlog', mobileLabel: 'Backlog', icon: ListTodo },
   { href: '/admin/applications', label: 'Applications', mobileLabel: 'Apps', icon: ClipboardCheck },
   { href: '/admin/invitations', label: 'Invitations', mobileLabel: 'Invites', icon: UserPlus },
   { href: '/admin/reference-data', label: 'Reference Data', mobileLabel: 'Ref Data', icon: Database },
+  { href: '/admin/calculator', label: 'Calculator', mobileLabel: 'Calc', icon: Calculator },
+  { href: '/admin/invoices', label: 'Invoices', mobileLabel: 'Invoices', icon: Receipt },
 ];
 
 /** Mobile bottom bar: admin uses same items as sidebar (scrollable if needed) */
@@ -65,7 +70,7 @@ const adminMobileItems = adminNavItems;
 // Paths that are "top-level" — no back button shown
 const rootPaths = new Set([
   '/dashboard', '/dogs', '/entries', '/browse', '/feed', '/settings', '/apply',
-  '/admin', '/admin/users', '/admin/applications', '/admin/invitations', '/admin/reference-data',
+  '/admin', '/admin/shows', '/admin/users', '/admin/applications', '/admin/invitations', '/admin/reference-data', '/admin/calculator', '/admin/invoices',
   '/feedback', '/backlog',
 ]);
 
@@ -93,7 +98,7 @@ export function DashboardShell({ user, children }: DashboardShellProps) {
   const mobileTitle = getMobileTitle(pathname);
 
   return (
-    <div className="flex min-h-screen overflow-x-hidden">
+    <div className="flex min-h-screen overflow-x-clip">
       {/* Desktop Sidebar */}
       <aside className="hidden w-64 shrink-0 border-r bg-sidebar md:flex md:flex-col sticky top-0 h-screen overflow-y-auto">
         {/* Sidebar header */}
@@ -264,7 +269,7 @@ export function DashboardShell({ user, children }: DashboardShellProps) {
           </div>
           <div className="flex items-center gap-1.5">
             {(user.role === 'secretary' || user.role === 'admin' || user.role === 'steward') && (
-              <RoleSwitcherCompact activeView="exhibitor" showSteward={user.role === 'steward' || user.role === 'secretary' || user.role === 'admin'} />
+              <RoleSwitcherCompact activeView="exhibitor" showSteward={user.role === 'steward' || user.role === 'secretary' || user.role === 'admin'} preferRole={user.role} />
             )}
             <Button variant="ghost" size="sm" className="size-11" asChild>
               <Link href="/settings" aria-label="Settings">
@@ -285,7 +290,9 @@ export function DashboardShell({ user, children }: DashboardShellProps) {
 
         {/* Page content */}
         <main className="flex-1 overflow-y-auto">
-          <div className="mx-auto max-w-7xl px-2 py-4 pb-28 sm:px-4 sm:py-6 md:pb-8 lg:px-8">
+          {/* Full available width — matches secretary-shell; no centred cap
+              on the work surfaces (Michael, 2026-08-03). */}
+          <div className="px-2 py-4 pb-28 sm:px-4 sm:py-6 md:pb-8 lg:px-8">
             {children}
           </div>
         </main>

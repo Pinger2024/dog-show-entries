@@ -1,52 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import fs from 'fs';
 import path from 'path';
-
-const PROJECT_ROOT = path.resolve(__dirname, '../..');
-
-/**
- * Recursively find files matching an extension in a directory.
- */
-function findFiles(dir: string, extensions: string[]): string[] {
-  const fullDir = path.resolve(PROJECT_ROOT, dir);
-  if (!fs.existsSync(fullDir)) return [];
-
-  const entries = fs.readdirSync(fullDir, { withFileTypes: true, recursive: true });
-  return entries
-    .filter((e) => e.isFile() && extensions.some((ext) => e.name.endsWith(ext)))
-    .map((e) => path.join(e.parentPath ?? e.path, e.name));
-}
-
-interface Match {
-  /** Path relative to project root */
-  file: string;
-  line: number;
-  content: string;
-}
-
-/**
- * Scan files for a regex pattern, returning matches with file/line info.
- */
-function scanFiles(dirs: string[], extensions: string[], pattern: RegExp): Match[] {
-  const matches: Match[] = [];
-  for (const dir of dirs) {
-    const files = findFiles(dir, extensions);
-    for (const filePath of files) {
-      const content = fs.readFileSync(filePath, 'utf-8');
-      const lines = content.split('\n');
-      for (let i = 0; i < lines.length; i++) {
-        if (pattern.test(lines[i])) {
-          matches.push({
-            file: path.relative(PROJECT_ROOT, filePath),
-            line: i + 1,
-            content: lines[i].trim(),
-          });
-        }
-      }
-    }
-  }
-  return matches;
-}
+import { PROJECT_ROOT, scanFiles } from './helpers/static-scan';
 
 // ─── Test 1: No unprotected negative horizontal margins ─────────────
 
@@ -128,9 +83,15 @@ describe('mobile overflow protection', () => {
     }
   });
 
-  // ─── Test 3: Layout shells maintain overflow-x-hidden ─────────────
+  // ─── Test 3: Layout shells maintain a horizontal-overflow guard ────
+  //
+  // The guard is overflow-x-CLIP, not hidden: `hidden` turns the element
+  // into a scroll container, which silently disables every position:sticky
+  // descendant (the app sidebars never floated because of it — found
+  // 2026-08-03). `clip` guards against mobile horizontal overflow
+  // identically without breaking sticky.
 
-  it('should have overflow-x-hidden on layout shells', () => {
+  it('should have an overflow-x-clip guard on layout shells', () => {
     const shells = [
       'src/components/layout/dashboard-shell.tsx',
       'src/components/layout/secretary-shell.tsx',
@@ -141,28 +102,40 @@ describe('mobile overflow protection', () => {
       const filePath = path.resolve(PROJECT_ROOT, shell);
       const content = fs.readFileSync(filePath, 'utf-8');
       expect(
-        content.includes('overflow-x-hidden'),
-        `${shell} must contain overflow-x-hidden as a safety net against mobile horizontal overflow`,
+        content.includes('overflow-x-clip'),
+        `${shell} must contain overflow-x-clip as a safety net against mobile horizontal overflow (NOT overflow-x-hidden — that breaks position:sticky)`,
       ).toBe(true);
     }
   });
 
-  it('should have overflow-x: hidden on html and body in globals.css', () => {
+  it('guards html with hidden ONLY and body with hidden fallback + clip override', () => {
     const filePath = path.resolve(PROJECT_ROOT, 'src/app/globals.css');
     const content = fs.readFileSync(filePath, 'utf-8');
 
-    // Check html block has overflow-x: hidden
+    // html: `hidden` only. `clip` on the root broke position:fixed on iOS
+    // Safari — the mobile bottom nav detached and drifted mid-page
+    // (Mandy's phone, 2026-08-03). html's overflow value has no effect on
+    // sticky (measured live), so hidden costs nothing there.
     const htmlBlock = content.match(/html\s*\{[^}]*\}/s);
     expect(
       htmlBlock && htmlBlock[0].includes('overflow-x: hidden'),
-      'globals.css html {} must contain overflow-x: hidden',
+      'globals.css html {} must keep overflow-x: hidden',
+    ).toBe(true);
+    expect(
+      htmlBlock && !htmlBlock[0].includes('overflow-x: clip'),
+      'globals.css html {} must NOT use overflow-x: clip — it breaks position:fixed on iOS Safari',
     ).toBe(true);
 
-    // Check body block has overflow-x: hidden
+    // body: hidden fallback then clip override — `hidden` makes body a
+    // scroll container and disables every position:sticky descendant.
     const bodyBlock = content.match(/body\s*\{[^}]*\}/s);
     expect(
       bodyBlock && bodyBlock[0].includes('overflow-x: hidden'),
-      'globals.css body {} must contain overflow-x: hidden',
+      'globals.css body {} must keep the overflow-x: hidden fallback',
+    ).toBe(true);
+    expect(
+      bodyBlock && bodyBlock[0].indexOf('overflow-x: clip') > bodyBlock[0].indexOf('overflow-x: hidden'),
+      'globals.css body {} must override with overflow-x: clip after the hidden fallback',
     ).toBe(true);
   });
 

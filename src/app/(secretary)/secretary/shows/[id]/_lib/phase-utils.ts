@@ -91,9 +91,9 @@ export function formatDeadline(date: string | Date, label: string): { text: stri
 
 /** Phase display config */
 export const PHASE_CONFIG: Record<ShowPhase, { label: string; color: string; bgColor: string; borderColor: string }> = {
-  setup: { label: 'Setting Up', color: 'text-amber-700', bgColor: 'bg-amber-50', borderColor: 'border-amber-200' },
-  entries_open: { label: 'Entries Open', color: 'text-emerald-700', bgColor: 'bg-emerald-50', borderColor: 'border-emerald-200' },
-  pre_show: { label: 'Pre-Show Prep', color: 'text-blue-700', bgColor: 'bg-blue-50', borderColor: 'border-blue-200' },
+  setup: { label: 'Setting Up', color: 'text-se-honey-deep', bgColor: 'bg-se-honey-soft', borderColor: 'border-se-honey-line' },
+  entries_open: { label: 'Entries Open', color: 'text-se-fresh-deep', bgColor: 'bg-se-fresh-soft', borderColor: 'border-se-fresh-line' },
+  pre_show: { label: 'Pre-Show Prep', color: 'text-se-honey-deep', bgColor: 'bg-se-honey-soft', borderColor: 'border-se-honey-line' },
   show_day: { label: 'Show Day', color: 'text-primary', bgColor: 'bg-primary/5', borderColor: 'border-primary/20' },
   post_show: { label: 'Post-Show', color: 'text-muted-foreground', bgColor: 'bg-muted/30', borderColor: 'border-border' },
   cancelled: { label: 'Cancelled', color: 'text-destructive', bgColor: 'bg-destructive/5', borderColor: 'border-destructive/20' },

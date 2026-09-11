@@ -13,6 +13,7 @@ import { printOrderStatusEnum, printServiceLevelEnum } from './enums';
 import { shows } from './shows';
 import { users } from './users';
 import { organisations } from './organisations';
+import { documentRenderJobs } from './document-render-jobs';
 
 // ── Print specs stored as JSONB on each item ──
 export interface PrintSpecs {
@@ -40,7 +41,8 @@ export const printOrders = pgTable(
     markupAmount: integer('markup_amount').notNull().default(0),
     totalAmount: integer('total_amount').notNull().default(0),
 
-    // Stripe
+    // Payment
+    paymentMethod: text('payment_method'), // 'card' | 'deducted_from_payout' — null until paid
     stripePaymentIntentId: text('stripe_payment_intent_id'),
     stripePaymentStatus: text('stripe_payment_status'),
 
@@ -118,6 +120,13 @@ export const printOrderItems = pgTable(
     pdfStorageKey: text('pdf_storage_key'),
     pdfPublicUrl: text('pdf_public_url'),
     pdfGeneratedAt: timestamp('pdf_generated_at', { withTimezone: true }),
+    // Catalogue items render off-process (see document_render_jobs) — the
+    // worker backfills pdfStorageKey/pdfPublicUrl/pdfGeneratedAt above once
+    // the job it points at completes. Null for non-catalogue items, which
+    // still render synchronously in generateOrderItemProofs.
+    renderJobId: uuid('render_job_id').references(() => documentRenderJobs.id, {
+      onDelete: 'set null',
+    }),
 
     // Print specifications
     printSpecs: jsonb('print_specs').$type<PrintSpecs>(),

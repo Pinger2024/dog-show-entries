@@ -36,7 +36,7 @@ export async function POST(
 
   const show = await db.query.shows.findFirst({
     where: eq(shows.id, showId),
-    columns: { id: true, organisationId: true },
+    columns: { id: true, organisationId: true, scheduleData: true },
   });
   if (!show) return NextResponse.json({ error: 'not found' }, { status: 404 });
 
@@ -68,8 +68,39 @@ export async function POST(
     return NextResponse.json({ error: 'invalid json' }, { status: 400 });
   }
 
+  // Defence in depth against wipe-on-mount bugs: if the incoming
+  // payload is the default-form shape (no showManager, no officers,
+  // no user-entered text fields) AND the show already has meaningful
+  // content, refuse the write. The only legitimate way to land here
+  // is a freshly-opened form that the user never edited before
+  // navigating away — in which case the current DB is also blank and
+  // this guard is a no-op.
+  if (body.scheduleData && isLikelyUnintentionalWipe(body.scheduleData, show.scheduleData)) {
+    console.warn(
+      `[schedule-autosave] Refused suspicious wipe for show ${showId} ` +
+      `(incoming payload looks like unhydrated form defaults)`
+    );
+    return NextResponse.json({ ok: true, skipped: 'suspicious-wipe' });
+  }
+
   const updates: Record<string, unknown> = {};
-  if (body.scheduleData !== undefined) updates.scheduleData = body.scheduleData;
+  if (body.scheduleData !== undefined) {
+    // MERGE semantics rather than REPLACE. The beacon path is
+    // inherently partial-snapshot prone: the client's React Query
+    // cache may be stale, or an older tab may fire with an
+    // incomplete form state. By merging the incoming object with
+    // the current DB value, any field the client omits stays
+    // intact. This avoids cascade-wipes where one field goes
+    // missing and drags unrelated fields out with it.
+    //
+    // Trade-off: clearing a field via beacon now requires sending
+    // it as an explicit empty value (e.g. `welcomeNote: ''`)
+    // rather than omitting it. All current client sites on this
+    // route already send every field from loaded state, so this
+    // matches actual usage.
+    const existing = (show.scheduleData ?? {}) as Record<string, unknown>;
+    updates.scheduleData = { ...existing, ...body.scheduleData };
+  }
   if (body.showOpenTime !== undefined) updates.showOpenTime = body.showOpenTime || null;
   if (body.judgingStartTime !== undefined) updates.startTime = body.judgingStartTime || null;
   if (body.onCallVet !== undefined) updates.onCallVet = body.onCallVet || null;
@@ -80,4 +111,33 @@ export async function POST(
 
   await db.update(shows).set(updates).where(eq(shows.id, showId));
   return NextResponse.json({ ok: true });
+}
+
+const SCHEDULE_TEXT_FIELDS = [
+  'showManager', 'awardsDescription', 'prizeMoney', 'what3words',
+  'directions', 'catering', 'futureShowDates', 'additionalNotes',
+  'welcomeNote', 'benchingRemovalTime', 'latestArrivalTime',
+] as const;
+
+function hasUserContent(scheduleData: unknown): boolean {
+  const sd = (scheduleData ?? {}) as Record<string, unknown>;
+  const officers = Array.isArray(sd.officers) ? sd.officers : [];
+  const guarantors = Array.isArray(sd.guarantors) ? sd.guarantors : [];
+  if (officers.length > 0 || guarantors.length > 0) return true;
+  return SCHEDULE_TEXT_FIELDS.some((k) => {
+    const v = sd[k];
+    return typeof v === 'string' && v.trim().length > 0;
+  });
+}
+
+/**
+ * True when `incoming` looks like an unhydrated-form snapshot (no
+ * user-entered content) AND `existing` has meaningful content that
+ * the write would erase. Used to block the pre-load beacon path.
+ */
+function isLikelyUnintentionalWipe(
+  incoming: Record<string, unknown>,
+  existing: unknown,
+): boolean {
+  return !hasUserContent(incoming) && hasUserContent(existing);
 }

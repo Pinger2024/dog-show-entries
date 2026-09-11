@@ -6,6 +6,8 @@ import { useSearchParams } from 'next/navigation';
 import { trpc } from '@/lib/trpc';
 import { formatCurrency } from '@/lib/date-utils';
 import { toast } from 'sonner';
+import { cn } from '@/lib/utils';
+import { SE_H } from '@/components/show-experience/tokens';
 import { Button } from '@/components/ui/button';
 import {
   Card,
@@ -28,6 +30,7 @@ import {
   PoundSterling,
   ArrowRight,
 } from 'lucide-react';
+import { useActiveOrganisation } from '@/lib/use-active-organisation';
 
 function formatDate(date: Date | string) {
   return new Date(date).toLocaleDateString('en-GB', {
@@ -69,11 +72,14 @@ export default function BillingPage() {
     }
   }, [searchParams]);
 
-  // Get the user's organisations first
+  // Active org id drives which club's billing we're looking at. The raw
+  // dashboard query still powers the "Usage summary" totals (shows +
+  // entries). Those are currently cross-org aggregates; tightening them
+  // to the active org would need a getDashboard refactor — noted for later.
+  const { activeOrg, activeOrgId, organisations, isLoading: activeLoading } = useActiveOrganisation();
   const { data: dashboard, isLoading: dashboardLoading } =
     trpc.secretary.getDashboard.useQuery();
-
-  const orgId = dashboard?.organisations?.[0]?.id;
+  const orgId = activeOrgId;
 
   // Get subscription info for the first org
   const { data: subscription, isLoading: subLoading } =
@@ -101,7 +107,7 @@ export default function BillingPage() {
     onError: (err) => toast.error(err.message),
   });
 
-  const isLoading = dashboardLoading || (!!orgId && subLoading);
+  const isLoading = dashboardLoading || activeLoading || (!!orgId && subLoading);
 
   if (isLoading) {
     return (
@@ -130,11 +136,11 @@ export default function BillingPage() {
   }
 
   // No organisations
-  if (!orgId || !dashboard?.organisations?.length) {
+  if (!orgId || organisations.length === 0) {
     return (
       <div className="space-y-8 pb-16 md:pb-0">
         <div>
-          <h1 className="font-serif text-lg font-bold tracking-tight sm:text-2xl lg:text-3xl">
+          <h1 className={cn(SE_H, 'font-serif text-lg sm:text-2xl lg:text-3xl')}>
             Billing &amp; Subscription
           </h1>
           <p className="mt-1 text-sm text-muted-foreground sm:text-base">
@@ -161,7 +167,7 @@ export default function BillingPage() {
   const status = subscription?.subscriptionStatus ?? 'none';
   const statusInfo = statusConfig[status] ?? statusConfig.none;
   const hasActiveSub = status === 'active' || status === 'trial';
-  const orgName = subscription?.organisationName ?? dashboard?.organisations?.[0]?.name ?? 'Your club';
+  const orgName = subscription?.organisationName ?? activeOrg?.name ?? 'Your club';
 
   // Find the upgrade plan (if on DIY, show Managed; if no plan, show both)
   const currentTier = plan?.serviceTier;
@@ -182,7 +188,7 @@ export default function BillingPage() {
     <div className="space-y-8 pb-16 md:pb-0">
       {/* Header */}
       <div>
-        <h1 className="font-serif text-lg font-bold tracking-tight sm:text-2xl lg:text-3xl">
+        <h1 className={cn(SE_H, 'font-serif text-lg sm:text-2xl lg:text-3xl')}>
           Billing &amp; Subscription
         </h1>
         <p className="mt-1 text-sm text-muted-foreground sm:text-base">
@@ -467,7 +473,7 @@ export default function BillingPage() {
                             <p className="font-serif text-lg font-bold">
                               {upgradePlan.name}
                             </p>
-                            <Badge className="border-gold/30 bg-gold/15 text-gold">
+                            <Badge className="border-se-honey/30 bg-se-honey-soft text-se-honey-deep">
                               <Crown className="mr-0.5 size-3" />
                               Recommended
                             </Badge>

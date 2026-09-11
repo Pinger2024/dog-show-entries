@@ -34,7 +34,9 @@ beforeEach(() => {
   resendMocks.send.mockClear();
 });
 
-async function paidOrder() {
+async function paidOrder(
+  opts: { showSecretaryEmail?: string | null; orgContactEmail?: string | null } = {}
+) {
   const exhibitor = await makeUser({
     role: 'exhibitor',
     email: 'mandy@hundarkgsd.co.uk',
@@ -42,14 +44,15 @@ async function paidOrder() {
   });
   const org = await makeOrg({
     name: 'Clyde Valley GSD Club',
-    contactEmail: 'secretary@example.test',
+    contactEmail: 'orgContactEmail' in opts ? opts.orgContactEmail : 'secretary@example.test',
   });
   const breed = await makeBreed({ name: 'German Shepherd' });
   const show = await makeShow({
     organisationId: org.id,
     breedId: breed.id,
     name: 'Spring Open Show',
-    secretaryEmail: 'secretary@example.test',
+    secretaryEmail:
+      'showSecretaryEmail' in opts ? opts.showSecretaryEmail : 'secretary@example.test',
   });
   const showClass = await makeShowClass({ showId: show.id, breedId: breed.id });
   const dog = await makeDog({
@@ -105,6 +108,33 @@ describe('sendSecretaryNotificationEmail', () => {
     const html = String(payload.html ?? '');
     expect(html).toContain('Bonzo Of The Glen');
   });
+
+  // Paula's bug (Clyde Valley, 2026-07-21): the show's named secretary never
+  // received entry alerts because only the club contact address was used —
+  // and that address was dead. These two pin the resolution order.
+  it("prefers the show's named secretary over the club contact", async () => {
+    const { order } = await paidOrder({
+      showSecretaryEmail: 'paula@show.test',
+      orgContactEmail: 'club@org.test',
+    });
+    await sendSecretaryNotificationEmail(order.id);
+
+    expect(resendMocks.send).toHaveBeenCalledTimes(1);
+    const payload = resendMocks.send.mock.calls[0]?.[0] as Record<string, unknown>;
+    expect(payload.to).toBe('paula@show.test');
+  });
+
+  it('falls back to the club contact when the show has no named secretary', async () => {
+    const { order } = await paidOrder({
+      showSecretaryEmail: null,
+      orgContactEmail: 'club@org.test',
+    });
+    await sendSecretaryNotificationEmail(order.id);
+
+    expect(resendMocks.send).toHaveBeenCalledTimes(1);
+    const payload = resendMocks.send.mock.calls[0]?.[0] as Record<string, unknown>;
+    expect(payload.to).toBe('club@org.test');
+  });
 });
 
 describe('sendPrintOrderConfirmationEmail', () => {
@@ -158,7 +188,7 @@ describe('sendPrintOrderConfirmationEmail', () => {
 });
 
 describe('sendJudgeApprovalRequestEmail', () => {
-  it('sends to the judge with the show + breed list and approval link', async () => {
+  it('sends to the judge with the breed/classification lines and approval link', async () => {
     await sendJudgeApprovalRequestEmail({
       judge: { name: 'Judge Bob', email: 'bob@example.test' },
       show: {
@@ -169,7 +199,8 @@ describe('sendJudgeApprovalRequestEmail', () => {
         organisation: { name: 'Test Society' },
       },
       approvalToken: 'token-abc-123',
-      breeds: ['00000000-0000-0000-0000-000000000010'],
+      breedLine: 'German Shepherd Dog',
+      classificationLine: 'German Shepherd Dog Dogs & Bitches classes',
     });
 
     expect(resendMocks.send).toHaveBeenCalledTimes(1);
@@ -178,5 +209,29 @@ describe('sendJudgeApprovalRequestEmail', () => {
     const html = String(payload.html ?? '');
     expect(html).toContain('token-abc-123');
     expect(html).toContain('Test Show');
+    expect(html).toContain('German Shepherd Dog Dogs & Bitches classes');
+  });
+
+  it('renders a Junior Handling judge as Junior Handling, never "All breeds"', async () => {
+    // The 2026-08-03 regression shape: a JH judge (breed-null assignment)
+    // used to be told they were judging "All breeds".
+    await sendJudgeApprovalRequestEmail({
+      judge: { name: 'Mrs A McAteer', email: 'jh@example.test' },
+      show: {
+        name: 'North East Regional',
+        startDate: '2026-09-05',
+        slug: 'ne-regional',
+        id: '00000000-0000-0000-0000-000000000002',
+        organisation: { name: 'North East GSD Regional Group' },
+      },
+      approvalToken: 'token-jh-456',
+      breedLine: 'German Shepherd Dog',
+      classificationLine: 'Junior Handling',
+    });
+
+    const payload = resendMocks.send.mock.calls.at(-1)?.[0] as Record<string, unknown>;
+    const html = String(payload.html ?? '');
+    expect(html).toContain('Junior Handling');
+    expect(html).not.toContain('All breeds');
   });
 });

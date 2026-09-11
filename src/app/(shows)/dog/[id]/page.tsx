@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { notFound } from 'next/navigation';
 import { eq, and, isNull, sql } from 'drizzle-orm';
 import { db } from '@/server/db';
 import { dogs, dogPhotos, dogTitles, entries, entryClasses, results } from '@/server/db/schema';
@@ -85,5 +86,10 @@ export default async function DogProfilePage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
+  const exists = await db?.query.dogs.findFirst({
+    where: and(eq(dogs.id, id), isNull(dogs.deletedAt)),
+    columns: { id: true },
+  });
+  if (!exists) notFound();
   return <DogProfileClient id={id} />;
 }

@@ -7,6 +7,8 @@ import {
   makeSecretaryWithOrg,
   makeSecretaryWithOrgAndBreed,
   makeShow,
+  makeShowClass,
+  makeClassDef,
   makeJudge,
   makeJudgeAssignment,
   makeUser,
@@ -16,6 +18,42 @@ import {
 } from '../helpers/factories';
 
 describe('secretary.updateScheduleData', () => {
+  it('merges scheduleData — a partial payload does not wipe unrelated fields', async () => {
+    // Regression for the 2026-04-22 awardsDescription wipe: the
+    // sponsors/catalogue-settings pages send a partial scheduleData
+    // payload by spreading their React Query cache of show.scheduleData.
+    // If that cache was stale (e.g. missing a field that was written by
+    // another path), a REPLACE-semantics server would drag that field
+    // out of the DB. Merge semantics preserve it.
+    const { user, org } = await makeSecretaryWithOrg();
+    const show = await makeShow({
+      organisationId: org.id,
+      scheduleData: {
+        country: 'england',
+        showManager: 'Keep Me',
+        awardsDescription: 'Trophies 1st to 3rd in all classes',
+        officers: [{ name: 'Keep Me', position: 'President' }],
+      },
+    });
+
+    // Client sends a partial payload missing awardsDescription + officers
+    // (e.g. a stale cache from before those fields were written).
+    await createTestCaller(user).secretary.updateScheduleData({
+      showId: show.id,
+      scheduleData: {
+        country: 'england',
+        welcomeNote: 'Welcome!',
+      },
+    });
+
+    const dbShow = await testDb.query.shows.findFirst({ where: eq(shows.id, show.id) });
+    expect(dbShow?.scheduleData?.welcomeNote).toBe('Welcome!');
+    // Crucially, fields NOT in the incoming payload are preserved:
+    expect(dbShow?.scheduleData?.showManager).toBe('Keep Me');
+    expect(dbShow?.scheduleData?.awardsDescription).toBe('Trophies 1st to 3rd in all classes');
+    expect(dbShow?.scheduleData?.officers).toEqual([{ name: 'Keep Me', position: 'President' }]);
+  });
+
   it('saves scheduleData JSONB + show-level showOpenTime/judgingStartTime/onCallVet', async () => {
     const { user, org } = await makeSecretaryWithOrg();
     const show = await makeShow({ organisationId: org.id });
@@ -110,6 +148,44 @@ describe('secretary.getPhaseBlockers', () => {
     expect(typeof result).toBe('object');
     // At minimum: should report 'no_classes', 'no_judge', 'no_entry_fees', 'no_close_date'
   });
+
+  it('blocks opening entries when an advertised close date is fewer than seven days before the show', async () => {
+    const { user, org } = await makeSecretaryWithOrg();
+    const show = await makeShow({
+      organisationId: org.id,
+      startDate: '2030-06-01',
+      endDate: '2030-06-01',
+      entryCloseDate: new Date('2030-05-26T23:59:00.000Z'),
+    });
+    const openClass = await makeClassDef({ name: 'Open', type: 'achievement' });
+    await makeShowClass({ showId: show.id, classDefinitionId: openClass.id });
+
+    const result = await createTestCaller(user).secretary.getPhaseBlockers({ showId: show.id });
+    expect(result.openEntriesBlockers).toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: 'rkc_entry_closing_date', severity: 'required' }),
+    ]));
+  });
+});
+
+describe('secretary Challenge Certificate settings', () => {
+  it('lets a secretary record the RKC CC allocation for an existing championship breed', async () => {
+    const { user, org, breed } = await makeSecretaryWithOrgAndBreed();
+    const show = await makeShow({
+      organisationId: org.id,
+      showType: 'championship',
+      showScope: 'general',
+    });
+    await makeShowClass({ showId: show.id, breedId: breed.id });
+    const caller = createTestCaller(user);
+
+    expect(await caller.secretary.getShowBreedCcSettings({ showId: show.id })).toEqual([
+      expect.objectContaining({ breedId: breed.id, ccOffered: false }),
+    ]);
+    await caller.secretary.setShowBreedCc({ showId: show.id, breedId: breed.id, ccOffered: true });
+    expect(await caller.secretary.getShowBreedCcSettings({ showId: show.id })).toEqual([
+      expect.objectContaining({ breedId: breed.id, ccOffered: true }),
+    ]);
+  });
 });
 
 describe('secretary.updateJudgeExpenses', () => {
@@ -186,6 +262,62 @@ describe('secretary.resendJudgeOffer', () => {
     await expect(
       createTestCaller(user).secretary.resendJudgeOffer({ contractId: contract.id }),
     ).rejects.toThrow(/offer sent/);
+  });
+});
+
+// ── Backlog #101 — time-ordering validation ────────────────
+describe('secretary.updateScheduleData time validation', () => {
+  it('rejects judging start before or equal to show-open time', async () => {
+    const { user, org } = await makeSecretaryWithOrg();
+    const show = await makeShow({ organisationId: org.id });
+    await expect(
+      createTestCaller(user).secretary.updateScheduleData({
+        showId: show.id,
+        showOpenTime: '09:00',
+        judgingStartTime: '08:30',
+        scheduleData: { country: 'england' },
+      })
+    ).rejects.toThrow(/must be after/);
+  });
+
+  it('rejects latest arrival before show-open', async () => {
+    const { user, org } = await makeSecretaryWithOrg();
+    const show = await makeShow({ organisationId: org.id });
+    await expect(
+      createTestCaller(user).secretary.updateScheduleData({
+        showId: show.id,
+        showOpenTime: '09:00',
+        judgingStartTime: '10:00',
+        scheduleData: { country: 'england', latestArrivalTime: '08:45' },
+      })
+    ).rejects.toThrow(/before the show opens/);
+  });
+
+  it('rejects latest arrival after judging starts', async () => {
+    const { user, org } = await makeSecretaryWithOrg();
+    const show = await makeShow({ organisationId: org.id });
+    await expect(
+      createTestCaller(user).secretary.updateScheduleData({
+        showId: show.id,
+        showOpenTime: '09:00',
+        judgingStartTime: '10:00',
+        scheduleData: { country: 'england', latestArrivalTime: '10:30' },
+      })
+    ).rejects.toThrow(/must be before judging starts/);
+  });
+
+  it('accepts a sensible 09:00 / 09:30 / 10:00 ordering', async () => {
+    const { user, org } = await makeSecretaryWithOrg();
+    const show = await makeShow({ organisationId: org.id });
+    await createTestCaller(user).secretary.updateScheduleData({
+      showId: show.id,
+      showOpenTime: '09:00',
+      judgingStartTime: '10:00',
+      scheduleData: { country: 'england', latestArrivalTime: '09:30' },
+    });
+    const dbShow = await testDb.query.shows.findFirst({ where: eq(shows.id, show.id) });
+    expect(dbShow?.showOpenTime).toBe('09:00');
+    expect(dbShow?.startTime).toBe('10:00');
   });
 });
 

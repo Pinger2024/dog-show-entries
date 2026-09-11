@@ -3,6 +3,7 @@ import { eq, count } from 'drizzle-orm';
 import { createTRPCRouter } from '../init';
 import { protectedProcedure } from '../procedures';
 import { users, dogs, entries } from '@/server/db/schema';
+import { dogAccessCondition } from '@/server/dog-access';
 
 export const onboardingRouter = createTRPCRouter({
   getStatus: protectedProcedure.query(async ({ ctx }) => {
@@ -15,7 +16,7 @@ export const onboardingRouter = createTRPCRouter({
     const [dogCount] = await ctx.db
       .select({ count: count() })
       .from(dogs)
-      .where(eq(dogs.ownerId, userId));
+      .where(dogAccessCondition(ctx.db, userId));
 
     const [entryCount] = await ctx.db
       .select({ count: count() })

@@ -1,0 +1,78 @@
+diff --git a/node_modules/fontkit/dist/main.cjs b/node_modules/fontkit/dist/main.cjs
+index 851b2d2..4d3d0d6 100644
+--- a/node_modules/fontkit/dist/main.cjs
++++ b/node_modules/fontkit/dist/main.cjs
+@@ -12694,6 +12694,20 @@ class $0a8ef2660a6ce4b6$export$2e2bcd8739ae039 {
+         if (!this._glyphs[glyph]) {
+             if (this.directory.tables.glyf) this._glyphs[glyph] = new (0, $f680320fa07ef53d$export$2e2bcd8739ae039)(glyph, characters, this);
+             else if (this.directory.tables['CFF '] || this.directory.tables.CFF2) this._glyphs[glyph] = new (0, $7ee0705195f3b047$export$2e2bcd8739ae039)(glyph, characters, this);
++        } else if (characters.length > 0 && this._glyphs[glyph].codePoints.length === 0) {
++            // PATCH (patch-package, fontkit+2.0.4.patch) — see
++            // research/evidence-fontkit-codepoints-2026-09-02/README.md.
++            // A glyph cached earlier with NO characters (e.g. pdfkit's TTF
++            // subsetter walking composite-glyph components via
++            // getGlyph(gid)/_getBaseGlyph(gid) with no `characters` at
++            // font-embed time) would otherwise permanently lose its
++            // codePoints for the life of the process, corrupting every
++            // LATER document's ToUnicode text layer for that glyph
++            // ("friday" extracting as "fridy"). Backfill instead of
++            // trusting the stale empty-codePoints cache entry.
++            this._glyphs[glyph].codePoints = characters;
++            this._glyphs[glyph].isMark = characters.every((0, $elh9A$unicodeproperties.isMark));
++            this._glyphs[glyph].isLigature = characters.length > 1;
+         }
+         return this._glyphs[glyph] || null;
+     }
+@@ -12710,6 +12724,13 @@ class $0a8ef2660a6ce4b6$export$2e2bcd8739ae039 {
+             if (this.directory.tables.sbix) this._glyphs[glyph] = new (0, $55855d6d316b015e$export$2e2bcd8739ae039)(glyph, characters, this);
+             else if (this.directory.tables.COLR && this.directory.tables.CPAL) this._glyphs[glyph] = new (0, $42d9dbd2de9ee2d8$export$2e2bcd8739ae039)(glyph, characters, this);
+             else this._getBaseGlyph(glyph, characters);
++        } else if (characters.length > 0 && this._glyphs[glyph].codePoints.length === 0) {
++            // PATCH (patch-package, fontkit+2.0.4.patch) — see
++            // research/evidence-fontkit-codepoints-2026-09-02/README.md.
++            // Same backfill as _getBaseGlyph above, for the sbix/COLR paths.
++            this._glyphs[glyph].codePoints = characters;
++            this._glyphs[glyph].isMark = characters.every((0, $elh9A$unicodeproperties.isMark));
++            this._glyphs[glyph].isLigature = characters.length > 1;
+         }
+         return this._glyphs[glyph] || null;
+     }
+diff --git a/node_modules/fontkit/dist/module.mjs b/node_modules/fontkit/dist/module.mjs
+index fde88fc..5100c86 100644
+--- a/node_modules/fontkit/dist/module.mjs
++++ b/node_modules/fontkit/dist/module.mjs
+@@ -12677,6 +12677,20 @@ class $4c1709dee528ea76$export$2e2bcd8739ae039 {
+         if (!this._glyphs[glyph]) {
+             if (this.directory.tables.glyf) this._glyphs[glyph] = new (0, $69aac16029968692$export$2e2bcd8739ae039)(glyph, characters, this);
+             else if (this.directory.tables['CFF '] || this.directory.tables.CFF2) this._glyphs[glyph] = new (0, $62cc5109c6101893$export$2e2bcd8739ae039)(glyph, characters, this);
++        } else if (characters.length > 0 && this._glyphs[glyph].codePoints.length === 0) {
++            // PATCH (patch-package, fontkit+2.0.4.patch) — see
++            // research/evidence-fontkit-codepoints-2026-09-02/README.md.
++            // A glyph cached earlier with NO characters (e.g. pdfkit's TTF
++            // subsetter walking composite-glyph components via
++            // getGlyph(gid)/_getBaseGlyph(gid) with no `characters` at
++            // font-embed time) would otherwise permanently lose its
++            // codePoints for the life of the process, corrupting every
++            // LATER document's ToUnicode text layer for that glyph
++            // ("friday" extracting as "fridy"). Backfill instead of
++            // trusting the stale empty-codePoints cache entry.
++            this._glyphs[glyph].codePoints = characters;
++            this._glyphs[glyph].isMark = characters.every($52ZIf$isMark);
++            this._glyphs[glyph].isLigature = characters.length > 1;
+         }
+         return this._glyphs[glyph] || null;
+     }
+@@ -12693,6 +12707,13 @@ class $4c1709dee528ea76$export$2e2bcd8739ae039 {
+             if (this.directory.tables.sbix) this._glyphs[glyph] = new (0, $25d8f049c222084c$export$2e2bcd8739ae039)(glyph, characters, this);
+             else if (this.directory.tables.COLR && this.directory.tables.CPAL) this._glyphs[glyph] = new (0, $0d411f0165859681$export$2e2bcd8739ae039)(glyph, characters, this);
+             else this._getBaseGlyph(glyph, characters);
++        } else if (characters.length > 0 && this._glyphs[glyph].codePoints.length === 0) {
++            // PATCH (patch-package, fontkit+2.0.4.patch) — see
++            // research/evidence-fontkit-codepoints-2026-09-02/README.md.
++            // Same backfill as _getBaseGlyph above, for the sbix/COLR paths.
++            this._glyphs[glyph].codePoints = characters;
++            this._glyphs[glyph].isMark = characters.every($52ZIf$isMark);
++            this._glyphs[glyph].isLigature = characters.length > 1;
+         }
+         return this._glyphs[glyph] || null;
+     }

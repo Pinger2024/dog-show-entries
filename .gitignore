@@ -45,3 +45,16 @@ next-env.d.ts
 public/sw.js
 public/sw.js.map
 research/tradeprint-csvs/
+
+# generated script artefacts (PDFs, screenshots, etc.)
+/scripts/output/
+
+# golden-document test failure artefacts (page PNGs + diff.md) — regenerated
+# on every failing run, never committed. Baselines under
+# src/__tests__/golden/baseline/ ARE committed.
+/golden-output/
+
+# secrets — service account JSON keys, etc.
+/secrets/
+*-service-account.json
+*-service-account*.json

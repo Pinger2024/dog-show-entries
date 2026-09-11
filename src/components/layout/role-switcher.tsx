@@ -9,6 +9,9 @@ interface RoleSwitcherProps {
   activeView: 'exhibitor' | 'secretary' | 'steward';
   /** Whether to show the steward option */
   showSteward?: boolean;
+  /** The user's actual role — the compact switcher links here first so a
+   *  steward-role user isn't sent to a Secretary page that bounces them. */
+  preferRole?: string;
 }
 
 const views = [
@@ -53,7 +56,7 @@ export function RoleSwitcher({ activeView, showSteward }: RoleSwitcherProps) {
 }
 
 /** Compact version for mobile headers — cycles to the next available view */
-export function RoleSwitcherCompact({ activeView, showSteward }: RoleSwitcherProps) {
+export function RoleSwitcherCompact({ activeView, showSteward, preferRole }: RoleSwitcherProps) {
   // Show a link to the next logical context
   const targets = showSteward
     ? views.filter((v) => v.id !== activeView)
@@ -61,8 +64,10 @@ export function RoleSwitcherCompact({ activeView, showSteward }: RoleSwitcherPro
 
   if (targets.length === 0) return null;
 
-  // Show the first non-active target (secretary if on exhibitor, exhibitor if on secretary)
-  const target = targets[0];
+  // Prefer the target matching the user's real role (a steward lands on
+  // /steward, not the Secretary page that requireRole would bounce), otherwise
+  // fall back to the first non-active target.
+  const target = targets.find((v) => v.id === preferRole) ?? targets[0];
 
   return (
     <Link

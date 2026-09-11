@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import { invitations, users, memberships } from '@/server/db/schema';
 import { testDb } from '../helpers/db';
 import { createTestCaller } from '../helpers/context';
@@ -41,6 +41,40 @@ describe('invitations.send', () => {
     });
     expect(invite?.status).toBe('pending');
     expect(invite?.token).toBeTruthy();
+  });
+
+  it('rejects inviting into an organisation the caller does not belong to (cross-org escalation)', async () => {
+    const { user: secretaryA } = await makeSecretaryWithOrg();
+    const { org: orgB } = await makeSecretaryWithOrg(); // a different club's org
+    const target = await makeUser({ role: 'exhibitor', email: 'victim-escalation@test.local' });
+
+    // Secretary A must NOT be able to forge a membership in club B's org.
+    await expect(
+      createTestCaller(secretaryA).invitations.send({
+        email: target.email,
+        role: 'secretary',
+        organisationId: orgB.id,
+      })
+    ).rejects.toThrow(/access to this organisation/i);
+
+    // No membership row was forged in org B for either the target or secretary A.
+    const forged = await testDb.query.memberships.findFirst({
+      where: and(eq(memberships.userId, target.id), eq(memberships.organisationId, orgB.id)),
+    });
+    expect(forged).toBeUndefined();
+  });
+
+  it('allows an admin to invite into any organisation (bypasses membership check)', async () => {
+    const admin = await makeUser({ role: 'admin', email: 'platform-admin@test.local' });
+    const { org } = await makeSecretaryWithOrg(); // admin is not a member of this org
+    const target = await makeUser({ role: 'exhibitor', email: 'admin-invited@test.local' });
+
+    const invite = await createTestCaller(admin).invitations.send({
+      email: target.email,
+      role: 'secretary',
+      organisationId: org.id,
+    });
+    expect(invite?.status).toBe('accepted');
   });
 });
 

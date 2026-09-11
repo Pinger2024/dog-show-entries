@@ -21,11 +21,45 @@ export interface CatalogueEntry {
   sex: string | undefined;
   dateOfBirth: string | null | undefined;
   kcRegNumber: string | null | undefined;
+  /** Microchip / ID number — printed on SV regional catalogues alongside
+   *  the KC reg number (Amanda 2026-05-22). */
+  microchipNumber?: string | null;
+  /** SV/WUSV health profile — hips, elbows, DNA, koerung. Surfaced on
+   *  the SV catalogue's per-entry line ("Hips Normal · Elbows Normal").
+   *  Only present when the dog has been entered in a WUSV-ruleset show. */
+  svProfile?: {
+    hipGrade: string | null;
+    hipScore: string | null;
+    hipScoreOther: string | null;
+    elbowGrade: string | null;
+    elbowScore: string | null;
+    elbowScoreOther: string | null;
+    dna: string | null;
+    koerung: string | null;
+    /** Working title, Körung and the BH / AD / WB qualifications compose the
+     *  string printed after the dog's name — "IGP1 Current Year Kkl WB, BH,
+     *  AD" (Mandy 2026-08-19, from her own working-class catalogue). `dna` is
+     *  captured but deliberately never printed: no SV or WUSV catalogue
+     *  prints it. */
+    workingTitle: string | null;
+    bh: boolean;
+    ad: boolean;
+    wb: boolean;
+    otherQualifications: string | null;
+  } | null;
   colour: string | null | undefined;
   sire: string | null | undefined;
   dam: string | null | undefined;
   breeder: string | null | undefined;
-  owners: { name: string; address: string | null; userId: string | null }[];
+  /** Breeder town + postcode for the SV catalogue line "Breeder Name,
+   *  Town, Postcode" (Amanda 2026-05-23). Sourced from dogs.breederCity /
+   *  dogs.breederPostcode where populated. */
+  breederCity?: string | null;
+  breederPostcode?: string | null;
+  /** Titles earned by the dog — printed on the SV catalogue line 2
+   *  alongside hips/elbows. Comma-separated abbreviations. */
+  titles?: string[];
+  owners: { title: string | null; name: string; address: string | null; userId: string | null }[];
   exhibitorId: string | undefined;
   // handler comes from an optional related row — the name field there is
   // nullable, so the full join can yield null as well as undefined.
@@ -36,11 +70,27 @@ export interface CatalogueEntry {
     name: string | undefined;
     sex: string | null | undefined;
     classNumber: number | null | undefined;
+    classLabel?: string;
     sortOrder: number | undefined;
     showClassId?: string | undefined;
+    /** SV/WUSV coat variant — 'stock' or 'long_stock'. Null for non-SV
+     *  classes. Drives the "Short Coat" / "Long Coat" class header
+     *  label on the SV catalogue (Amanda 2026-05-23; wording updated
+     *  2026-08-11). */
+    svCoatType?: 'stock' | 'long_stock' | null;
+    /** `classDefinition.type` ('special' | 'junior_handler' | …) — carried
+     *  through so section bucketing (`sectionClasses`, lib/class-labels.ts)
+     *  can use the real predicates instead of matching a regex against the
+     *  display name. */
+    classDefinitionType?: string | null;
   }[];
   status: string;
   entryType: string;
+  /** Not-For-Competition entry — exhibited but not competing for placings.
+   *  NFC entries carry no classes, so they fall out of the by-class grouping
+   *  entirely; the catalogue lists them in their own "Not For Competition"
+   *  section instead (Mandy 2026-06-17). */
+  isNfc?: boolean;
   /** RKC F(1).11.b.(6)/(8) — when true, owner name and address are withheld from the catalogue */
   withholdFromPublication?: boolean;
 }
@@ -51,35 +101,74 @@ export interface ShowSponsorInfo {
   logoUrl: string | null;
   website: string | null;
   customTitle: string | null;
+  /** Show-tier sponsor's logo, pre-fetched server-side through the
+   *  SSRF-guarded `fetchClubImage()` (src/lib/safe-image-fetch.ts) rather
+   *  than handed to react-pdf as a bare URL. Only populated for the tier
+   *  that renders it prominently (the "With grateful thanks" / show-
+   *  particulars billing block) — null when there's no logo, the fetch
+   *  failed, or the host was blocked; renderers must degrade to a
+   *  text-only billing block in that case, never crash. */
+  logoBuffer?: Buffer | null;
 }
 
 /** A show class for rendering empty classes in the catalogue */
 export interface ShowClassInfo {
   className: string;
   classNumber: number | null;
+  classLabel?: string;
   sortOrder: number;
   sex: string | null;
+  /** SV/WUSV coat variant — 'stock' or 'long_stock'. Drives the
+   *  "Short Coat" / "Long Coat" label on the SV catalogue's
+   *  per-class header (Amanda 2026-05-23; wording updated 2026-08-11).
+   *  Null for non-SV classes. */
+  svCoatType?: 'stock' | 'long_stock' | null;
+  /** `classDefinition.type` ('special' | 'junior_handler' | …) — carried
+   *  through so section bucketing (`sectionClasses`, lib/class-labels.ts)
+   *  can use the real predicates instead of matching a regex against the
+   *  display name. */
+  classDefinitionType?: string | null;
 }
 
 /** Class-level sponsorship/trophy data used by the trophies page and inline class display */
 export interface ClassSponsorshipInfo {
   className: string;
   classNumber: number | null;
+  classLabel?: string;
   trophyName: string | null;
   trophyDonor: string | null;
   sponsorName: string | null;
   sponsorAffix: string | null;
   prizeDescription: string | null;
+  /** Optional landscape banner (e.g. HUNDARK festive strip) rendered
+   *  above the class header in the catalogue. Shared per (show, sponsor)
+   *  pair so the same banner appears on every class that sponsor backs
+   *  in the show (Amanda 2026-05-23). */
+  bannerImageUrl?: string | null;
 }
 
 export interface CatalogueShowInfo {
   name: string;
   showType: string | undefined;
+  /** RKC or WUSV/SV — when 'wusv' the catalogue renders the
+   *  Sieger-Editorial cover (3-logo masthead + tonal wash + club crest)
+   *  and switches the per-entry layout to include the SV health line
+   *  (Amanda 2026-05-23). */
+  showRuleset?: 'rkc' | 'wusv' | null;
   date: string;
   endDate?: string;
   venue: string | undefined;
   venueAddress: string | undefined;
+  /** what3words for the venue, printed under the address when present —
+   *  currently only supplied via generateCataloguePdf's venueOverride
+   *  (Mandy 2026-08-17: wanted on the cover for the Monteith Park move,
+   *  a venue exhibitors don't know). No DB column yet. */
+  venueWhat3words?: string;
   organisation: string | undefined;
+  /** Pre-baked tonal-wash background buffers for the SV cover + inside
+   *  pages, tinted with the club's brand colours. Same pattern as the
+   *  schedule's SvShowSchedule.washes prop. */
+  svWashes?: { cover: Buffer; inside: Buffer };
   kcLicenceNo: string | null | undefined;
   startTime?: string | null;
   logoUrl?: string;
@@ -107,6 +196,9 @@ export interface CatalogueShowInfo {
   customStatements?: string[];
   /** Show-level sponsors for the cover/front matter */
   showSponsors?: ShowSponsorInfo[];
+  /** Plain donors — name + optional kennel affix, no amount — thanked in the
+   *  catalogue under "With thanks for their kind donations" (Mandy 2026-06-17). */
+  donations?: { name: string; affix?: string | null }[];
   /** All show classes (for rendering empty classes) */
   allShowClasses?: ShowClassInfo[];
   /** Secretary's welcome note to exhibitors — shown in catalogue front matter */
@@ -119,6 +211,9 @@ export interface CatalogueShowInfo {
   outsideAttraction?: boolean;
   /** Show manager name */
   showManager?: string;
+  /** First aider name(s). One on a single-breed show, possibly 2+ on a
+   *  multi-breed show. RKC compliance per Amanda 2026-05-14. */
+  firstAiders?: string[];
   /** Docking statement per F(1).7.c(2) — varies by country and public admission */
   dockingStatement?: string;
 
@@ -160,4 +255,18 @@ export interface CatalogueShowInfo {
   country?: 'england' | 'wales' | 'scotland' | 'northern_ireland';
   /** Whether the show is open to the public (vs. exhibitors only) */
   publicAdmission?: boolean;
+  /** Full-page A5 adverts to slot into the catalogue at the chosen positions.
+   *  Secretaries upload these via /secretary/shows/[id]/adverts. The server
+   *  passes only catalogue-bound adverts here — both `'catalogue'` and
+   *  `'both'` document values match. */
+  adverts?: Array<{
+    id: string;
+    advertiserName: string;
+    position: 'inside_front' | 'inside_back' | 'last_page';
+    /** For landscape adverts this is a rotated portrait-shaped data URI (built
+     *  by prepareAdvertsForRender) so it fills a portrait A5 page; portrait
+     *  adverts keep their original URL. */
+    imageUrl: string | null;
+    sortOrder: number;
+  }>;
 }

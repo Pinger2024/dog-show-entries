@@ -14,6 +14,9 @@ import { NextRequest, NextResponse } from 'next/server';
  * does its own auth + data fetch, so anyone hitting this wrapper without a
  * valid session just gets an empty iframe. Nothing sensitive leaks from the
  * wrapper itself (it doesn't contain the show name, entries, or any PII).
+ * (An admin-only session check was briefly shipped here on 2026-07-30 based
+ * on a stale branch's UI; it locked secretaries out of the mobile print flow
+ * and was reverted the same day.)
  */
 export async function GET(
   request: NextRequest,

@@ -10,6 +10,7 @@ import {
 } from '@/server/db/schema';
 import { getStripe } from '@/server/services/stripe';
 import { isCcType, isRccType } from '@/lib/placements';
+import { effectiveCcType } from '@/lib/effective-achievement-type';
 
 // Remi Pro price — will be created in Stripe Dashboard
 // £4.99/month or £39.99/year
@@ -171,9 +172,11 @@ export const proRouter = createTRPCRouter({
         },
       });
 
-      // Also fetch manual achievements
+      // Also fetch manual achievements (with show type/scope so a single-breed
+      // championship Best Dog/Bitch counts as the CC — Mandy 2026-07-09).
       const dogAchievements = await ctx.db.query.achievements.findMany({
         where: eq(achievements.dogId, input.dogId),
+        with: { show: { columns: { showType: true, showScope: true } } },
       });
 
       const BOB_TYPE = 'best_of_breed';
@@ -220,7 +223,8 @@ export const proRouter = createTRPCRouter({
       // Also collect from achievements table (may have pre-Remi data)
       for (const ach of dogAchievements) {
         const achShowId = ach.showId ?? '';
-        if (isCcType(ach.type)) {
+        const achType = effectiveCcType(ach.type, ach.show?.showType, ach.show?.showScope);
+        if (isCcType(achType)) {
           // Avoid duplicates — normalize null showIds to empty string for comparison
           if (!ccAwards.some((a) => a.showId === achShowId && a.date === ach.date)) {
             ccAwards.push({
@@ -231,7 +235,7 @@ export const proRouter = createTRPCRouter({
               className: '',
             });
           }
-        } else if (isRccType(ach.type)) {
+        } else if (isRccType(achType)) {
           if (!rccAwards.some((a) => a.showId === achShowId && a.date === ach.date)) {
             rccAwards.push({
               showId: achShowId,

@@ -12,28 +12,29 @@ import {
   makeDog,
   makeEntry,
   makeEntryClass,
+  makeOrder,
+  makeSecretaryWithOrg,
+  makeMembership,
 } from '../helpers/factories';
 
 describe('dogs.create', () => {
-  it('creates a dog owned by the caller and a default primary owner row', async () => {
+  it('rejects creating a dog with no owners (owners are required)', async () => {
     const exhibitor = await makeUser({ role: 'exhibitor', name: 'Jane Owner', address: '1 High St' });
     const breed = await makeBreed();
     const caller = createTestCaller(exhibitor);
 
-    const dog = await caller.dogs.create({
-      registeredName: 'Rocky Of Hill',
-      breedId: breed.id,
-      sex: 'dog',
-      dateOfBirth: '2024-01-01',
-    });
-
-    expect(dog?.ownerId).toBe(exhibitor.id);
-    expect(dog?.registeredName).toBe('Rocky Of Hill');
-
-    const owners = await testDb.query.dogOwners.findMany({ where: eq(dogOwners.dogId, dog!.id) });
-    expect(owners).toHaveLength(1);
-    expect(owners[0]?.isPrimary).toBe(true);
-    expect(owners[0]?.ownerName).toBe('Jane Owner');
+    // The "default primary owner = caller" shortcut was removed when explicit
+    // owner details (name/address/email) became mandatory for RKC compound
+    // owner headings. The create form blocks submit unless an owner is added,
+    // so the procedure rejects an absent/empty owners array.
+    await expect(
+      caller.dogs.create({
+        registeredName: 'Rocky Of Hill',
+        breedId: breed.id,
+        sex: 'dog',
+        dateOfBirth: '2024-01-01',
+      })
+    ).rejects.toThrow();
   });
 
   it('accepts explicit owners and stores them in order with primary set', async () => {
@@ -46,6 +47,10 @@ describe('dogs.create', () => {
       breedId: breed.id,
       sex: 'bitch',
       dateOfBirth: '2024-01-01',
+      sireName: 'Sire A',
+      damName: 'Dam A',
+      breederName: 'Breeder A',
+      colour: 'Black & Tan',
       owners: [
         { ownerName: 'A First', ownerAddress: '1 St', ownerEmail: 'a@test.com', isPrimary: true },
         { ownerName: 'B Second', ownerAddress: '2 St', ownerEmail: 'b@test.com', isPrimary: false },
@@ -204,6 +209,81 @@ describe('entries.list', () => {
     const list = await createTestCaller(exhibitor).entries.list({});
     expect(list.items).toHaveLength(0);
   });
+
+  // Amanda 2026-05-28: an abandoned checkout (pending entry on an unpaid
+  // order) must NOT appear as a real entry — it surfaces in `unfinished`
+  // so the page can show a "finish your entry" notice instead.
+  it('moves abandoned-checkout entries out of items and into unfinished', async () => {
+    const [exhibitor, org, breed] = await Promise.all([
+      makeUser({ role: 'exhibitor' }),
+      makeOrg(),
+      makeBreed(),
+    ]);
+    const show = await makeShow({ organisationId: org.id, breedId: breed.id, status: 'entries_open' });
+    const dog = await makeDog({ ownerId: exhibitor.id, breedId: breed.id });
+    const unpaidOrder = await makeOrder({
+      showId: show.id,
+      exhibitorId: exhibitor.id,
+      status: 'pending_payment',
+    });
+    await makeEntry({
+      showId: show.id,
+      dogId: dog.id,
+      exhibitorId: exhibitor.id,
+      orderId: unpaidOrder.id,
+      status: 'pending',
+    });
+
+    const list = await createTestCaller(exhibitor).entries.list({});
+    expect(list.items).toHaveLength(0);
+    expect(list.unfinished).toHaveLength(1);
+    expect(list.unfinished[0]?.dogName).toBe(dog.registeredName);
+    expect(list.unfinished[0]?.showId).toBe(show.id);
+  });
+
+  it('keeps confirmed entries in items even alongside an abandoned one', async () => {
+    const { exhibitor, show, dog } = await entryFixture(); // confirmed entry
+    const unpaidOrder = await makeOrder({
+      showId: show.id,
+      exhibitorId: exhibitor.id,
+      status: 'pending_payment',
+    });
+    const dog2 = await makeDog({ ownerId: exhibitor.id, breedId: dog.breedId });
+    await makeEntry({
+      showId: show.id,
+      dogId: dog2.id,
+      exhibitorId: exhibitor.id,
+      orderId: unpaidOrder.id,
+      status: 'pending',
+    });
+
+    const list = await createTestCaller(exhibitor).entries.list({});
+    expect(list.items).toHaveLength(1); // the confirmed one only
+    expect(list.items[0]?.status).toBe('confirmed');
+    expect(list.unfinished).toHaveLength(1);
+  });
+});
+
+describe('entries.getForShow — secretary list', () => {
+  it('excludes entries on unpaid (pending_payment) orders', async () => {
+    const { user: secretary, org } = await makeSecretaryWithOrg();
+    const breed = await makeBreed();
+    const exhibitor = await makeUser({ role: 'exhibitor' });
+    const show = await makeShow({ organisationId: org.id, breedId: breed.id, status: 'entries_open' });
+    const dog = await makeDog({ ownerId: exhibitor.id, breedId: breed.id });
+
+    // One paid+confirmed entry, one abandoned pending entry on an unpaid order.
+    const paidOrder = await makeOrder({ showId: show.id, exhibitorId: exhibitor.id, status: 'paid' });
+    await makeEntry({ showId: show.id, dogId: dog.id, exhibitorId: exhibitor.id, orderId: paidOrder.id, status: 'confirmed' });
+
+    const dog2 = await makeDog({ ownerId: exhibitor.id, breedId: breed.id });
+    const unpaidOrder = await makeOrder({ showId: show.id, exhibitorId: exhibitor.id, status: 'pending_payment' });
+    await makeEntry({ showId: show.id, dogId: dog2.id, exhibitorId: exhibitor.id, orderId: unpaidOrder.id, status: 'pending' });
+
+    const res = await createTestCaller(secretary).entries.getForShow({ showId: show.id });
+    expect(res.items).toHaveLength(1);
+    expect(res.items[0]?.dogId).toBe(dog.id);
+  });
 });
 
 describe('entries.getById', () => {
@@ -220,9 +300,20 @@ describe('entries.getById', () => {
       .rejects.toThrow(/do not have access/);
   });
 
-  it('lets a secretary read any entry', async () => {
+  it('denies a secretary with no access to the show organisation (IDOR guard)', async () => {
+    // A global 'secretary' role is not enough — per-org access lives in
+    // memberships, so a secretary at another club must NOT read this club's
+    // entered-dog data (a pre-judging privacy risk).
     const { entry } = await entryFixture();
     const secretary = await makeUser({ role: 'secretary' });
+    await expect(createTestCaller(secretary).entries.getById({ id: entry.id }))
+      .rejects.toThrow(/access/i);
+  });
+
+  it('lets a secretary WITH access to the show organisation read the entry', async () => {
+    const { entry, org } = await entryFixture();
+    const secretary = await makeUser({ role: 'secretary' });
+    await makeMembership({ userId: secretary.id, organisationId: org.id });
     const fetched = await createTestCaller(secretary).entries.getById({ id: entry.id });
     expect(fetched.id).toBe(entry.id);
   });
