@@ -41,7 +41,7 @@ import {
   calculatePlatformFee,
 } from '@/server/services/stripe';
 import { executeStripeRefund } from '@/server/services/stripe-refunds';
-import { svEntryMissingRequirements, svEntryBlockedMessage } from '@/lib/sv-entry-validation';
+import { entryRequirementsMissing, entryBlockedMessage } from '@/lib/entry-requirements';
 import { pedigreeMissingForEntry } from '@/lib/sv-entry-readiness';
 import { hasJudgingConflict } from '@/lib/judge-exhibitor-conflict';
 import { getCompetitionAgeError } from '@/lib/date-utils';
@@ -327,9 +327,10 @@ export const entriesRouter = createTRPCRouter({
         const svProfile = await ctx.db.query.dogSvProfile.findFirst({
           where: eq(dogSvProfile.dogId, dog.id),
         });
-        const missing = svEntryMissingRequirements({
+        const missing = entryRequirementsMissing({
           dog,
           svProfile,
+          showRuleset: show.showRuleset,
           classNames: selectedClasses
             .map((sc) => sc.classDefinition?.name)
             .filter((n): n is string => !!n),
@@ -337,7 +338,7 @@ export const entriesRouter = createTRPCRouter({
         if (missing.length > 0) {
           throw new TRPCError({
             code: 'BAD_REQUEST',
-            message: svEntryBlockedMessage(dog.registeredName, missing),
+            message: entryBlockedMessage(dog.registeredName, missing),
           });
         }
       }
@@ -631,6 +632,10 @@ export const entriesRouter = createTRPCRouter({
           dog: {
             with: {
               breed: true,
+              // Needed to work out what each dog is still missing — the
+              // regional health triad lives here (see the requirementWarnings
+              // mapping below).
+              svProfile: true,
             },
           },
           exhibitor: true,
@@ -665,8 +670,31 @@ export const entriesRouter = createTRPCRouter({
 
       const total = Number(countResult[0]?.count ?? 0);
 
+      // A secretary may save an incomplete entry (Michael 2026-09-11, "a
+      // warning for now"), so the list has to show WHICH ones are incomplete —
+      // otherwise the warning toast is the only notice she ever gets and the
+      // blanks reach the catalogue unnoticed. Same declaration the entry gates
+      // read: lib/entry-requirements.ts.
+      const show = await ctx.db.query.shows.findFirst({
+        where: eq(shows.id, input.showId),
+        columns: { showRuleset: true },
+      });
+      const itemsWithWarnings = items.map((entry) => ({
+        ...entry,
+        requirementWarnings: entry.dog
+          ? entryRequirementsMissing({
+              dog: entry.dog,
+              svProfile: entry.dog.svProfile,
+              showRuleset: entry.isNfc ? null : show?.showRuleset,
+              classNames: entry.entryClasses
+                .map((ec) => ec.showClass?.classDefinition?.name)
+                .filter((n): n is string => !!n),
+            })
+          : [],
+      }));
+
       return {
-        items,
+        items: itemsWithWarnings,
         total,
         nextCursor:
           input.cursor + input.limit < total

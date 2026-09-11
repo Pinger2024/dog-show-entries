@@ -24,6 +24,7 @@ import {
   makeShowClass,
   makeClassDef,
   makeDog,
+  svReadyDogFields,
   makeSecretaryWithOrg,
 } from '../helpers/factories';
 
@@ -151,6 +152,7 @@ async function specialAwardShow() {
 /** An SV-compliant puppy of the show breed, born on `dob`. */
 async function makePuppy(ownerId: string, breedId: string, dob: string) {
   return makeDog({
+    ...svReadyDogFields,
     ownerId,
     breedId,
     dateOfBirth: dob,

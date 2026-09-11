@@ -18,6 +18,7 @@ import {
   makeShowClass,
   makeClassDef,
   makeDog,
+  svReadyDogFields,
   makeSecretaryWithOrg,
 } from '../helpers/factories';
 import type { RegionalFeeConfig } from '@/server/db/schema/shows';
@@ -71,6 +72,7 @@ async function regionalFixture(dogCount: number, config: RegionalFeeConfig = BRG
   const dogs = await Promise.all(
     Array.from({ length: dogCount }, (_, i) =>
       makeDog({
+        ...svReadyDogFields,
         ownerId: exhibitor.id,
         breedId: breed.id,
         kcRegNumber: `SZ${1000 + i}`,
@@ -198,6 +200,7 @@ describe('regional (SV/WUSV) entry fees — journey', () => {
         entryFee: bpFee,
       });
       const bpDog = await makeDog({
+        ...svReadyDogFields,
         ownerId: exhibitor.id,
         breedId: dogs[0]!.breedId,
         kcRegNumber: 'SZ9999',

@@ -350,6 +350,17 @@ export default function EntriesPage() {
                           <p className="truncate text-xs text-se-ink3">
                             {entry.dog?.breed?.name ?? ''} &middot; {entry.exhibitor?.name ?? '\u2014'}
                           </p>
+                          {/* A secretary may save an entry whose dog is
+                              incomplete, so the list has to show which ones \u2014
+                              otherwise the warning at save time is the only
+                              notice she ever gets and it prints blank in the
+                              catalogue. Spelled out rather than a bare icon:
+                              she should not have to hover or guess. */}
+                          {(entry.requirementWarnings?.length ?? 0) > 0 && (
+                            <p className="mt-1 text-xs text-se-honey-deep">
+                              Still needed: {entry.requirementWarnings.join(', ')}
+                            </p>
+                          )}
                         </div>
                         <div className="flex shrink-0 items-center gap-1.5">
                           <EntryStatusPill status={entry.status} />
@@ -775,8 +786,21 @@ function AddEntryDialog({
   });
 
   const createEntryMutation = trpc.secretary.createManualEntry.useMutation({
-    onSuccess: () => {
-      toast.success('Entry created successfully');
+    onSuccess: (result) => {
+      // The entry is saved either way — a postal entry is already in her hand
+      // and often paid for, so we never refuse it (Michael 2026-09-11). But
+      // the missing details print blank in the catalogue, so say so plainly
+      // and keep it on screen long enough to write down. The entries list
+      // marks the row too, so it can be found again after the toast has gone.
+      const missing = result.requirementWarnings ?? [];
+      if (missing.length > 0) {
+        toast.warning(`Entry created — ${missing.length} detail${missing.length === 1 ? '' : 's'} still needed`, {
+          description: `Still to add: ${missing.join(', ')}. These print blank in the catalogue until filled in.`,
+          duration: 12000,
+        });
+      } else {
+        toast.success('Entry created successfully');
+      }
       utils.entries.getForShow.invalidate({ showId });
       utils.secretary.getShowStats.invalidate({ showId });
       onClose();
