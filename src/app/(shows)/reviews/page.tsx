@@ -69,9 +69,9 @@ export default function ReviewsPage() {
                   <blockquote className="mt-4 font-serif text-lg leading-relaxed text-foreground sm:text-xl">
                     &ldquo;{r.quote}&rdquo;
                   </blockquote>
-                  <figcaption className="mt-5 flex items-baseline gap-2 text-sm text-muted-foreground">
+                  <figcaption className="mt-5 flex flex-col gap-0.5 text-sm text-muted-foreground sm:flex-row sm:items-baseline sm:gap-2">
                     <span className="font-semibold text-foreground">{r.name}</span>
-                    <span>&middot;</span>
+                    <span className="hidden sm:inline" aria-hidden="true">&middot;</span>
                     <span>{r.role}</span>
                   </figcaption>
                 </li>
