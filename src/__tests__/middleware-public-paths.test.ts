@@ -1,4 +1,6 @@
 import { describe, it, expect } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { config, isPublicRoute } from '@/middleware';
 
 /**
@@ -95,4 +97,30 @@ describe('isPublicRoute allows the unauthenticated health probe', () => {
   it('treats /api/health as public (no login redirect)', () => {
     expect(isPublicRoute('/api/health')).toBe(true);
   });
+});
+
+/**
+ * /reviews (2026-09-15): the footer has linked to /reviews since the page was
+ * added, but it was never in the public allowlist — every logged-out visitor
+ * who clicked "Reviews" was sent to /login, so the testimonials were only ever
+ * seen by people who had already signed up. The footer is shown to everyone,
+ * so every page it links to must be public. Reads the footer source so a new
+ * footer link can't repeat this.
+ */
+describe('isPublicRoute allows every page the footer links to', () => {
+  const footer = readFileSync(
+    join(process.cwd(), 'src/components/layout/footer.tsx'),
+    'utf8',
+  );
+  const links = [...footer.matchAll(/href="(\/[^"]*)"/g)].map((m) => m[1]);
+
+  it('finds the footer links', () => {
+    expect(links).toContain('/reviews');
+  });
+
+  for (const p of links) {
+    it(`treats footer link ${p} as public (no login redirect)`, () => {
+      expect(isPublicRoute(p)).toBe(true);
+    });
+  }
 });

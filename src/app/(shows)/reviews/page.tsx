@@ -19,6 +19,12 @@ export const metadata = {
 const REVIEWS: { quote: string; name: string; role: string }[] = [
   {
     quote:
+      'This is the second time I’ve used Remi this year for a breed ch show and an open breed show. As a Club Secretary using a new system if there was anything I couldn’t find, straight away they would get back to me explaining where to find it. Stewards are supplied with hard copy of the entries, much easier to use than a catalogue as so strong. Catalogues and placings cards are both top, top quality. A catalogue to submit to RKC for the CH show was even emailed to me that I could instantly forward. Great online platform that has everything to make a secretary’s job easier.',
+    name: 'Paula',
+    role: 'GSD club secretary',
+  },
+  {
+    quote:
       'I have just did my first entry through Remi — that’s just fantastic, so easy and quick. Amazing work 😀',
     name: 'Hammad',
     role: 'GSD exhibitor',
