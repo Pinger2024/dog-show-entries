@@ -364,3 +364,61 @@ describe('computeRegionalOrderFees — edge cases', () => {
     expect(r.entriesTotal).toBe(0);
   });
 });
+
+/**
+ * Dogs entered EARLIER, in a separate order, still count (Mandy 2026-09-16:
+ * "yes I think it should cater if they enter a dog later and should qualify
+ * for the discount"). The scale is per exhibitor per show, not per basket —
+ * before this, a 3rd dog added in a new order restarted at the 1st-dog price.
+ */
+describe('computeRegionalOrderFees — dogs already entered at this show', () => {
+  it('prices the 3rd dog as a 3rd dog when 2 are already entered', () => {
+    const r = computeRegionalOrderFees(dogs(1), { ...base, priorPayingDogCount: 2 });
+    expect(r.perEntry.map((e) => e.fee)).toEqual([1600]);
+    expect(r.perEntry[0]!.position).toBe(3);
+  });
+
+  it('gives a member their £11 third-dog rate across two orders', () => {
+    const r = computeRegionalOrderFees(dogs(1), {
+      ...base,
+      isMember: true,
+      priorPayingDogCount: 2,
+    });
+    expect(r.entriesTotal).toBe(1100);
+  });
+
+  it('charges nothing for a 4th dog added later', () => {
+    const r = computeRegionalOrderFees(dogs(1), { ...base, priorPayingDogCount: 3 });
+    expect(r.entriesTotal).toBe(0);
+  });
+
+  it('continues the scale for several dogs added later', () => {
+    const r = computeRegionalOrderFees(dogs(2), { ...base, priorPayingDogCount: 1 });
+    expect(r.perEntry.map((e) => e.fee)).toEqual([2000, 1600]);
+  });
+
+  it('does not re-apply the first-time free entry to a later order', () => {
+    const r = computeRegionalOrderFees(dogs(1), {
+      ...base,
+      firstTimeExhibitor: true,
+      firstTimeFeePence: 0,
+      priorPayingDogCount: 1,
+    });
+    expect(r.entriesTotal).toBe(2000);
+  });
+
+  it('counts prior dogs before a flat-priced Baby Puppy takes its notional slot', () => {
+    // 3 dogs already entered; a Baby Puppy (£10 flat) added later rides the
+    // free 4th slot, so it is charged £0, not £10.
+    const r = computeRegionalOrderFees(
+      [{ key: 'bp', kind: 'standard', flatFeePence: 1000 }],
+      { ...base, priorPayingDogCount: 3 },
+    );
+    expect(r.entriesTotal).toBe(0);
+  });
+
+  it('defaults to counting nothing when no prior dogs are given', () => {
+    const r = computeRegionalOrderFees(dogs(1), base);
+    expect(r.entriesTotal).toBe(2000);
+  });
+});

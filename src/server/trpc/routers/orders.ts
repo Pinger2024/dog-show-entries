@@ -6,6 +6,7 @@ import { protectedProcedure } from '../procedures';
 import { createTRPCRouter } from '../init';
 import { publicOrgColumns } from '../public-org-columns';
 import { syncCatalogueNumbers } from '@/server/services/catalogue-numbering';
+import { countPriorRegionalPayingDogs } from '@/server/services/regional-pricing';
 import {
   orders,
   entries,
@@ -653,12 +654,19 @@ export const ordersRouter = createTRPCRouter({
         const declared = regionalMembershipLabel
           ? membershipOptions.find((m) => m.label === regionalMembershipLabel)
           : undefined;
+        // Dogs this exhibitor already has at this show count towards the scale —
+        // the discount is per exhibitor per show, not per basket (Mandy
+        // 2026-09-16). ONE owner: countPriorRegionalPayingDogs.
         const regionalCtx: RegionalFeeContext = {
           tiers: declared?.tiers ?? regionalCfg.tiers,
           isMember: !!declared && !declared.tiers,
           firstTimeExhibitor: regionalFirstTime,
           firstTimeFeePence: regionalCfg.firstTimeFeePence ?? 0,
           juniorHandlerFeePence: show.juniorHandlerFee ?? 0,
+          priorPayingDogCount: await countPriorRegionalPayingDogs(ctx.db, {
+            showId: input.showId,
+            exhibitorId: ctx.session.user.id,
+          }),
         };
         // Regional dogs sit in exactly one class; a Baby Puppy class priced
         // away from the scale charges flat (Mandy 2026-07-10).

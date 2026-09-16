@@ -11,6 +11,8 @@ import { getBaseUrl } from '@/server/lib/utils';
 import { ACHIEVEMENT_TYPES } from '@/lib/placements';
 import { findClearedPedigreeFields, pedigreeClearMessage } from '@/lib/dog-pedigree';
 import { computeOrderFees, type FeeContext } from '@/lib/fee-calc';
+import { computeRegionalOrderFees, regionalClassFlatFee } from '@/lib/regional-fee-calc';
+import { countPriorRegionalPayingDogs } from '@/server/services/regional-pricing';
 import { formatAtcNumber } from '@/lib/registration-flags';
 import { computePrizeCardCounts } from '@/lib/prize-card-counts';
 import { BRAND } from '@/lib/brand';
@@ -3593,7 +3595,9 @@ export const secretaryRouter = createTRPCRouter({
           inArray(showClasses.id, input.classIds),
           eq(showClasses.showId, input.showId)
         ),
-        with: { classDefinition: { columns: { type: true } } },
+        // `name` as well as `type`: the regional flat-fee rule (Baby Puppy priced
+        // away from the scale) matches on the class name.
+        with: { classDefinition: { columns: { type: true, name: true } } },
       });
 
       if (selectedClasses.length !== input.classIds.length) {
@@ -3668,8 +3672,53 @@ export const secretaryRouter = createTRPCRouter({
         multiDogPackagePence: show.multiDogPackagePence,
         discountGroup: null,
       };
+      // Regional (SV/WUSV) shows price on the tiered per-dog scale, NOT the RKC
+      // first/subsequent-class fees — and until 2026-09-16 this path used the RKC
+      // engine regardless, so a manually-keyed regional dog was charged full
+      // price with no multi-dog scale at all (found on the NE Regional: four
+      // dogs keyed in one at a time, £20 each, when the scale says £20/£20/£16/£0).
+      //
+      // Member rates are an OPEN QUESTION for Mandy: a manual entry has nowhere
+      // to declare BRG/host-club membership, so it prices at the show's standard
+      // tiers. Ask before inventing a membership control here.
+      const regionalCfg =
+        show.showRuleset === 'wusv' ? show.regionalFeeConfig : null;
+      // A manual entry is always one dog in one class — there is no junior-handler
+      // or NFC variant on this path (regionals take no NFC entries at all).
+      const regionalFeeResult = regionalCfg
+        ? computeRegionalOrderFees(
+            [
+              {
+                key: 'manual',
+                kind: 'standard' as const,
+                flatFeePence: regionalClassFlatFee(
+                  {
+                    className: selectedClasses[0]?.classDefinition?.name,
+                    classType: selectedClasses[0]?.classDefinition?.type,
+                    entryFee: selectedClasses[0]?.entryFee ?? null,
+                  },
+                  regionalCfg.tiers,
+                ),
+              },
+            ],
+            {
+              tiers: regionalCfg.tiers,
+              isMember: false,
+              firstTimeExhibitor: false,
+              firstTimeFeePence: regionalCfg.firstTimeFeePence ?? 0,
+              juniorHandlerFeePence: show.juniorHandlerFee ?? 0,
+              // Same rule as checkout: the dogs this exhibitor already has at
+              // this show set the starting position on the scale.
+              priorPayingDogCount: await countPriorRegionalPayingDogs(ctx.db, {
+                showId: input.showId,
+                exhibitorId,
+              }),
+            },
+          )
+        : null;
+
       const feeResult =
-        show.firstEntryFee == null
+        regionalFeeResult != null || show.firstEntryFee == null
           ? null
           : computeOrderFees(
               [{
@@ -3684,10 +3733,13 @@ export const secretaryRouter = createTRPCRouter({
               }],
               feeCtx,
             );
-      const perClassFees = feeResult?.perEntry[0]?.perClassFees ?? null;
-      const classFee = feeResult
-        ? feeResult.total
-        : selectedClasses.reduce((sum, sc) => sum + sc.entryFee, 0);
+      const perClassFees =
+        regionalFeeResult?.perEntry[0]?.perClassFees ?? feeResult?.perEntry[0]?.perClassFees ?? null;
+      const classFee = regionalFeeResult
+        ? regionalFeeResult.entriesTotal
+        : feeResult
+          ? feeResult.total
+          : selectedClasses.reduce((sum, sc) => sum + sc.entryFee, 0);
       const sundryFee = selectedSundryItems.reduce((sum, s) => sum + s.priceInPence * s.quantity, 0);
       const totalAmount = classFee + sundryFee;
 

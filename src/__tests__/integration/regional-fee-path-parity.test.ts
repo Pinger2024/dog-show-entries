@@ -12,7 +12,7 @@
  */
 import { describe, it, expect } from 'vitest';
 import { eq } from 'drizzle-orm';
-import { entries } from '@/server/db/schema';
+import { entries, orders } from '@/server/db/schema';
 import { testDb } from '../helpers/db';
 import { createTestCaller } from '../helpers/context';
 import {
@@ -33,7 +33,7 @@ const TIERS = [
 ];
 
 async function regionalShow() {
-  const { org } = await makeSecretaryWithOrg();
+  const { user: secretary, org } = await makeSecretaryWithOrg();
   const breed = await makeBreed({ name: 'German Shepherd Dog' });
   const show = await makeShow({
     organisationId: org.id,
@@ -56,7 +56,7 @@ async function regionalShow() {
   const defB = await makeClassDef({ name: 'Open Bitch', type: 'achievement' });
   const classA = await makeShowClass({ showId: show.id, classDefinitionId: defA.id, breedId: breed.id, entryFee: 2000 });
   const classB = await makeShowClass({ showId: show.id, classDefinitionId: defB.id, breedId: breed.id, entryFee: 2000 });
-  return { org, breed, show, classA: classA!, classB: classB! };
+  return { secretary, org, breed, show, classA: classA!, classB: classB! };
 }
 
 const regionalDog = (ownerId: string, breedId: string, i: number) =>
@@ -127,5 +127,144 @@ describe('regional edit — the tier scale is honoured, no bogus top-up', () => 
     const edited = await createTestCaller(exhibitor).entries.update({ id: entry!.id, classIds: [classB.id] });
     expect(edited.newFee).toBe(2000); // still the 1st-dog price, not double-charged
     expect(edited.feeDiff).toBe(0);
+  });
+});
+
+/**
+ * Dogs entered EARLIER count towards the scale (Mandy 2026-09-16).
+ *
+ * The scale is per exhibitor per show, not per basket. Before this, an
+ * exhibitor who entered 2 dogs and came back later for a 3rd had that 3rd dog
+ * priced as their first — £20 instead of £16 — and a 4th charged £20 instead
+ * of free. Manual entry was worse: it never ran the regional engine at all, so
+ * every keyed-in dog paid the raw class fee (found on the NE Regional, four
+ * dogs keyed one at a time at £20 each).
+ */
+
+/**
+ * Settle an order the way Stripe's webhook does. Needed because `orders.checkout`
+ * clears an exhibitor's abandoned UNPAID order for the show when they start a new
+ * one — so an unpaid first basket is not "dogs already entered", it is a dropped
+ * basket. Only a paid entry holds its place on the scale.
+ */
+async function settleOrder(orderId: string) {
+  await testDb.update(orders).set({ status: 'paid' }).where(eq(orders.id, orderId));
+  await testDb.update(entries).set({ status: 'confirmed' }).where(eq(entries.orderId, orderId));
+}
+
+describe('regional scale spans separate orders', () => {
+  it('prices a 3rd dog entered in a LATER order as the 3rd dog', async () => {
+    const { breed, show, classA } = await regionalShow();
+    const exhibitor = await makeUser({ role: 'exhibitor' });
+    const [d1, d2, d3] = await Promise.all([1, 2, 3].map((i) => regionalDog(exhibitor.id, breed.id, i)));
+    const caller = createTestCaller(exhibitor);
+
+    const first = await caller.orders.checkout({
+      showId: show.id,
+      entries: [
+        { entryType: 'standard', dogId: d1.id, classIds: [classA.id], isNfc: false },
+        { entryType: 'standard', dogId: d2.id, classIds: [classA.id], isNfc: false },
+      ],
+    });
+    expect(first.totalAmount).toBe(4000); // £20 + £20
+    await settleOrder(first.orderId);
+
+    // A week later — separate basket, same show.
+    const second = await caller.orders.checkout({
+      showId: show.id,
+      entries: [{ entryType: 'standard', dogId: d3.id, classIds: [classA.id], isNfc: false }],
+    });
+    expect(second.totalAmount).toBe(1600); // 3rd dog, not a fresh 1st
+
+    const third = await testDb.query.entries.findFirst({ where: eq(entries.orderId, second.orderId) });
+    expect(third?.totalFee).toBe(1600);
+  });
+
+  it('charges nothing for a 4th dog entered later', async () => {
+    const { breed, show, classA } = await regionalShow();
+    const exhibitor = await makeUser({ role: 'exhibitor' });
+    const dogList = await Promise.all([1, 2, 3, 4].map((i) => regionalDog(exhibitor.id, breed.id, i)));
+    const caller = createTestCaller(exhibitor);
+
+    const seed = await caller.orders.checkout({
+      showId: show.id,
+      entries: dogList.slice(0, 3).map((d) => ({
+        entryType: 'standard' as const, dogId: d.id, classIds: [classA.id], isNfc: false,
+      })),
+    });
+    await settleOrder(seed.orderId);
+    const later = await caller.orders.checkout({
+      showId: show.id,
+      entries: [{ entryType: 'standard', dogId: dogList[3]!.id, classIds: [classA.id], isNfc: false }],
+    });
+    expect(later.totalAmount).toBe(0);
+  });
+
+  it('does not count a cancelled dog against the exhibitor', async () => {
+    const { breed, show, classA } = await regionalShow();
+    const exhibitor = await makeUser({ role: 'exhibitor' });
+    const [d1, d2, d3] = await Promise.all([1, 2, 3].map((i) => regionalDog(exhibitor.id, breed.id, i)));
+    const caller = createTestCaller(exhibitor);
+
+    const first = await caller.orders.checkout({
+      showId: show.id,
+      entries: [
+        { entryType: 'standard', dogId: d1.id, classIds: [classA.id], isNfc: false },
+        { entryType: 'standard', dogId: d2.id, classIds: [classA.id], isNfc: false },
+      ],
+    });
+    await settleOrder(first.orderId);
+    // Cancel one of the two — the next dog is now their 2nd, not their 3rd.
+    const seeded = await testDb.query.entries.findMany({ where: eq(entries.orderId, first.orderId) });
+    await testDb.update(entries).set({ status: 'cancelled' }).where(eq(entries.id, seeded[0]!.id));
+
+    const later = await caller.orders.checkout({
+      showId: show.id,
+      entries: [{ entryType: 'standard', dogId: d3.id, classIds: [classA.id], isNfc: false }],
+    });
+    expect(later.totalAmount).toBe(2000); // 2nd-dog price
+  });
+
+  it('prices a secretary-keyed manual entry on the regional scale, counting earlier dogs', async () => {
+    const { secretary: secretaryUser, breed, show, classA } = await regionalShow();
+    const exhibitor = await makeUser({ role: 'exhibitor' });
+    const [d1, d2, d3] = await Promise.all([1, 2, 3].map((i) => regionalDog(exhibitor.id, breed.id, i)));
+
+    const seed = await createTestCaller(exhibitor).orders.checkout({
+      showId: show.id,
+      entries: [
+        { entryType: 'standard', dogId: d1.id, classIds: [classA.id], isNfc: false },
+        { entryType: 'standard', dogId: d2.id, classIds: [classA.id], isNfc: false },
+      ],
+    });
+    await settleOrder(seed.orderId);
+
+    const manual = await createTestCaller(secretaryUser).secretary.createManualEntry({
+      showId: show.id,
+      dogId: d3.id,
+      classIds: [classA.id],
+      exhibitorEmail: exhibitor.email,
+    });
+    expect(manual.totalFee).toBe(1600); // 3rd dog on the scale, not the £20 class fee
+  });
+
+  it('prices the FIRST manually-keyed regional dog on the scale, not the raw class fee', async () => {
+    const { secretary: secretaryUser, breed, show, classA } = await regionalShow();
+    const exhibitor = await makeUser({ role: 'exhibitor' });
+    const dogList = await Promise.all([1, 2, 3, 4].map((i) => regionalDog(exhibitor.id, breed.id, i)));
+    const secCaller = createTestCaller(secretaryUser);
+
+    const fees: number[] = [];
+    for (const d of dogList) {
+      const m = await secCaller.secretary.createManualEntry({
+        showId: show.id,
+        dogId: d.id,
+        classIds: [classA.id],
+        exhibitorEmail: exhibitor.email,
+      });
+      fees.push(m.totalFee);
+    }
+    // The NE Regional case: four dogs keyed one at a time used to be £20 each.
+    expect(fees).toEqual([2000, 2000, 1600, 0]);
   });
 });
