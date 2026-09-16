@@ -1125,6 +1125,10 @@ export function CatalogueByClass({ show, entries, compact, judgeResults }: Props
                 </Text>
               )}
 
+              {sorted.length === 0 && (
+                <Text style={styles.classNoEntries}>No entries</Text>
+              )}
+
               {sorted.length > 0 && renderEntry(sorted[0], 0)}
               {/* A ONE-DOG class has its only dog up here in the atomic block,
                   so its placings line has no trailing dog to travel with and

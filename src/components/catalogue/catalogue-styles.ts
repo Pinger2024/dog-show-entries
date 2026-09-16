@@ -275,6 +275,18 @@ export const styles = StyleSheet.create({
     paddingLeft: 6,
   },
 
+  /** Printed under a class heading that drew no entries, so a bare heading
+   *  never reads as a mistake (Mandy 2026-09-16, Midland Regional: four empty
+   *  Yearling classes ran down one page with nothing under them). */
+  classNoEntries: {
+    fontFamily: 'Inter',
+    fontSize: 7,
+    fontStyle: 'italic',
+    color: C.textLight,
+    marginBottom: 2,
+    paddingLeft: 6,
+  },
+
   // Placements row appended after each class block. Mirrors the
   // traditional UK printed catalogue: "1st .....   2nd .....   3rd .....
   // Res .....   VHC .....", one row, evenly spaced, write-in lines for
