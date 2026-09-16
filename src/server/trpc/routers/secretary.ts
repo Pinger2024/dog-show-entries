@@ -3678,9 +3678,12 @@ export const secretaryRouter = createTRPCRouter({
       // price with no multi-dog scale at all (found on the NE Regional: four
       // dogs keyed in one at a time, £20 each, when the scale says £20/£20/£16/£0).
       //
-      // Member rates are an OPEN QUESTION for Mandy: a manual entry has nowhere
-      // to declare BRG/host-club membership, so it prices at the show's standard
-      // tiers. Ask before inventing a membership control here.
+      // Manual entries price at the show's STANDARD tiers — there is no member
+      // tick on this form, and Mandy 2026-09-16 decided not to add one: "if they
+      // only want to charge the lesser amount they can, but they will need to
+      // reconcile their fees against the account". A secretary who wants to give
+      // a postal member the member rate adjusts it themselves. Do not add a
+      // membership control here without asking her again.
       const regionalCfg =
         show.showRuleset === 'wusv' ? show.regionalFeeConfig : null;
       // A manual entry is always one dog in one class — there is no junior-handler
