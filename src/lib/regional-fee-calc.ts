@@ -57,6 +57,13 @@ export type RegionalFeeContext = {
   firstTimeFeePence?: number | null;
   /** Junior Handler flat fee. Null/undefined → £0. */
   juniorHandlerFeePence?: number | null;
+  /** Paying dogs this exhibitor ALREADY has at this show, from earlier orders
+   *  or a secretary's manual entry. The scale is per exhibitor per show, not
+   *  per basket (Mandy 2026-09-16), so a 3rd dog entered a week later is still
+   *  priced as their 3rd. Count it with `countPriorRegionalPayingDogs` in
+   *  server/services/regional-pricing.ts — never hand-roll the query.
+   *  Null/undefined → 0. Already-paid entries are never re-priced. */
+  priorPayingDogCount?: number | null;
 };
 
 export type RegionalEntryFeeBreakdown = {
@@ -95,7 +102,10 @@ export function computeRegionalOrderFees(
   entries: RegionalDogEntryInput[],
   ctx: RegionalFeeContext,
 ): RegionalOrderFeeResult {
-  let position = 0;
+  // Dogs already entered at this show occupy the cheap end of the scale, so
+  // the dogs being priced now continue from where those left off.
+  const priorDogs = Math.max(0, ctx.priorPayingDogCount ?? 0);
+  let position = priorDogs;
 
   // First pass — standard dogs consume the scale positions among themselves;
   // flat-priced special classes are deferred so they never shift a standard
@@ -137,7 +147,8 @@ export function computeRegionalOrderFees(
   });
 
   const entriesTotal = perEntry.reduce((sum, e) => sum + e.fee, 0);
-  return { entriesTotal, perEntry, payingDogCount: position };
+  // payingDogCount counts the dogs priced in THIS call, not the prior ones.
+  return { entriesTotal, perEntry, payingDogCount: position - priorDogs };
 }
 
 export type RegionalFeeLevel = {

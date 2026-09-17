@@ -7,6 +7,7 @@ import {
   secretaryProcedure,
 } from '../procedures';
 import { createTRPCRouter } from '../init';
+import { countPriorRegionalPayingDogs } from '@/server/services/regional-pricing';
 import { verifyShowAccess } from '../verify-show-access';
 import { publicOrgColumns } from '../public-org-columns';
 import {
@@ -867,6 +868,14 @@ export const entriesRouter = createTRPCRouter({
           firstTimeExhibitor: regionalFirstTime && !!regionalCfg.firstTimeEnabled,
           firstTimeFeePence: regionalCfg.firstTimeFeePence ?? 0,
           juniorHandlerFeePence: entry.show.juniorHandlerFee ?? 0,
+          // Dogs this exhibitor has at the show in OTHER orders keep their scale
+          // positions while this order is re-priced (Mandy 2026-09-16). The
+          // siblings below are this order's own dogs, so exclude it.
+          priorPayingDogCount: await countPriorRegionalPayingDogs(ctx.db, {
+            showId: entry.showId,
+            exhibitorId: entry.exhibitorId,
+            excludeOrderId: orderId,
+          }),
         };
 
         // Regional dogs sit in one class. Use the NEW class for the edited entry,
@@ -1158,6 +1167,21 @@ export const entriesRouter = createTRPCRouter({
     }),
 
   // ── Validate exhibitor profile for entry ──────────────────
+
+  /**
+   * Paying dogs this exhibitor already has at this show — what the regional
+   * scale starts from. The enter-page fee preview needs it so the price shown
+   * matches the price charged (same ONE owner as checkout: a 3rd dog quoted at
+   * £20 and charged £16 is its own kind of wrong).
+   */
+  regionalPriorDogCount: protectedProcedure
+    .input(z.object({ showId: z.string().uuid() }))
+    .query(async ({ ctx, input }) =>
+      countPriorRegionalPayingDogs(ctx.db, {
+        showId: input.showId,
+        exhibitorId: ctx.session.user.id,
+      }),
+    ),
 
   validateExhibitorForEntry: protectedProcedure
     .query(async ({ ctx }) => {

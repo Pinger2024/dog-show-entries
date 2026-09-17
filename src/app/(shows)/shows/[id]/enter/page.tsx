@@ -424,6 +424,13 @@ export default function EnterShowPage() {
   );
 
   // Pre-fetch sundry items from select_classes onwards so they're ready at cart_review
+  // Dogs already entered at this show set where the regional scale starts, so
+  // the quoted price matches what checkout charges (Mandy 2026-09-16).
+  const { data: regionalPriorDogCount } = trpc.entries.regionalPriorDogCount.useQuery(
+    { showId: showId as string },
+    { enabled: !!showId && show?.showRuleset === 'wusv' },
+  );
+
   const { data: sundryItemsData } = trpc.shows.getSundryItems.useQuery(
     { showId },
     { enabled: !!showId && (cart.step === 'select_classes' || cart.step === 'cart_review') }
@@ -495,6 +502,7 @@ export default function EnterShowPage() {
         firstTimeExhibitor: regionalFirstTime && !!regionalCfg.firstTimeEnabled,
         firstTimeFeePence: regionalCfg.firstTimeFeePence ?? 0,
         juniorHandlerFeePence: show?.juniorHandlerFee ?? 0,
+        priorPayingDogCount: regionalPriorDogCount ?? 0,
       };
       // Regional dogs sit in one class; a Baby Puppy class priced away from
       // the scale charges flat, outside the discount (Mandy 2026-07-10).
@@ -553,7 +561,7 @@ export default function EnterShowPage() {
     if (dogEntries.length === 0) return null;
     return computeOrderFees(dogEntries, feeCtx);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [show, regionalCfg, regionalMembership, regionalFirstTime, discountGroups, cart.discountGroupId, cart.entries, allShowClasses]);
+  }, [show, regionalCfg, regionalMembership, regionalFirstTime, regionalPriorDogCount, discountGroups, cart.discountGroupId, cart.entries, allShowClasses]);
 
   // Checkout preview totals. The club-collected subtotal is entries + add-ons +
   // donation — the exact base the server charges the platform fee on (orders
