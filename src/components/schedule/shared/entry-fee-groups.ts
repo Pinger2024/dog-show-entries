@@ -25,8 +25,13 @@ function groupNameFor(className: string): string {
   return className.trim();
 }
 
+/** The only fields this grouping actually reads off a class row — narrower
+ *  than the full {@link ScheduleClass} so non-schedule callers (e.g. the
+ *  public show preview) don't need to fabricate unrelated fields. */
+export type EntryFeeGroupClass = Pick<ScheduleClass, 'className' | 'classType' | 'entryFee'>;
+
 export function buildEntryFeeGroups(
-  classes: readonly ScheduleClass[],
+  classes: readonly EntryFeeGroupClass[],
   showFirstEntryFee: number | null,
 ): EntryFeeGroup[] {
   if (showFirstEntryFee == null) return [];
