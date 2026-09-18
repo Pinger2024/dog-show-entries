@@ -24,7 +24,8 @@ function getApiUrl(): string {
 }
 
 function getCredentials(): { email: string; password: string } | null {
-  const email = process.env.MIXAM_EMAIL;
+  // MIXAM_USERNAME is the legacy name still present in some envs
+  const email = process.env.MIXAM_EMAIL ?? process.env.MIXAM_USERNAME;
   const password = process.env.MIXAM_PASSWORD;
   if (!email || !password) return null;
   return { email, password };
@@ -35,11 +36,37 @@ function getCredentials(): { email: string; password: string } | null {
 interface CachedToken {
   token: string;
   fetchedAt: number;
+  ttlMs: number;
 }
 
-// JWT lifetime from Mixam isn't documented precisely; we assume
-// ~23 hours and refresh proactively to avoid a 401 race.
-const TOKEN_TTL_MS = 23 * 60 * 60 * 1000;
+// Used when the JWT payload can't be parsed. Mixam JWTs observed live
+// (2026-06-10) expire after 1 hour, so stay well inside that.
+const FALLBACK_TOKEN_TTL_MS = 45 * 60 * 1000;
+
+// Refresh this long before the JWT's real expiry to avoid a 401 race.
+const TOKEN_REFRESH_MARGIN_MS = 5 * 60 * 1000;
+
+/**
+ * Derive a cache TTL from the JWT's own `iat`/`exp` claims, minus a
+ * refresh margin. Exported for tests.
+ */
+export function tokenTtlMs(token: string): number {
+  const payload = token.split('.')[1];
+  if (!payload) return FALLBACK_TOKEN_TTL_MS;
+  try {
+    // atob (not Buffer) keeps this module client-bundle-safe
+    const claims = JSON.parse(
+      atob(payload.replace(/-/g, '+').replace(/_/g, '/')),
+    ) as { iat?: unknown; exp?: unknown };
+    if (typeof claims.iat === 'number' && typeof claims.exp === 'number') {
+      const lifetimeMs = (claims.exp - claims.iat) * 1000;
+      return Math.max(lifetimeMs - TOKEN_REFRESH_MARGIN_MS, 60 * 1000);
+    }
+  } catch {
+    // fall through to the conservative default
+  }
+  return FALLBACK_TOKEN_TTL_MS;
+}
 
 let cachedToken: CachedToken | null = null;
 // Single in-flight token fetch — de-duplicates parallel callers on a
@@ -47,7 +74,7 @@ let cachedToken: CachedToken | null = null;
 let tokenInFlight: Promise<string> | null = null;
 
 async function getAuthToken(): Promise<string> {
-  if (cachedToken && Date.now() - cachedToken.fetchedAt < TOKEN_TTL_MS) {
+  if (cachedToken && Date.now() - cachedToken.fetchedAt < cachedToken.ttlMs) {
     return cachedToken.token;
   }
   if (tokenInFlight) return tokenInFlight;
@@ -70,11 +97,14 @@ async function fetchAuthToken(): Promise<string> {
   // stays client-bundle-safe (print-products.ts is imported by client
   // components and would otherwise pull Node's Buffer into the bundle).
   const basicAuth = btoa(`${creds.email}:${creds.password}`);
+  // Accept must be permissive: the token endpoint returns the JWT as
+  // plain text and responds 406 to `Accept: application/json`
+  // (verified live 2026-06-10).
   const res = await fetch(`${getApiUrl()}/api/user/token`, {
     method: 'GET',
     headers: {
       Authorization: `Basic ${basicAuth}`,
-      Accept: 'application/json',
+      Accept: '*/*',
     },
   });
 
@@ -88,7 +118,7 @@ async function fetchAuthToken(): Promise<string> {
     throw new Error('[mixam] auth response did not contain a token');
   }
 
-  cachedToken = { token, fetchedAt: Date.now() };
+  cachedToken = { token, fetchedAt: Date.now(), ttlMs: tokenTtlMs(token) };
   return token;
 }
 
@@ -178,8 +208,13 @@ export const MIXAM_SUBSTRATE_WEIGHT = {
   '130gsm': 3,
   '150gsm': 4,
   '170gsm': 5,
+  '200gsm': 14,
+  '240gsm': 16,
   '250gsm': 7,
   '300gsm': 8,
+  '350gsm': 9,
+  '400gsm': 13,
+  '450gsm': 15,
 } as const;
 
 export interface MixamSubstrate {

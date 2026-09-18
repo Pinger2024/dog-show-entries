@@ -4,14 +4,16 @@ import Link from 'next/link';
 import { format, parseISO } from 'date-fns';
 import { CalendarDays, MapPin, Eye, Loader2, ChevronRight } from 'lucide-react';
 import { trpc } from '@/lib/trpc';
+import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
 import { EmptyState } from '@/components/ui/empty-state';
+import { SE_H } from '@/components/show-experience/tokens';
 
 const statusConfig: Record<string, { label: string; className: string }> = {
-  entries_closed: { label: 'Entries Closed', className: 'bg-amber-100 text-amber-800' },
-  in_progress: { label: 'Live', className: 'bg-green-100 text-green-800' },
-  completed: { label: 'Completed', className: 'bg-gray-100 text-gray-800' },
+  entries_closed: { label: 'Entries Closed', className: 'bg-se-honey-soft text-se-honey-deep' },
+  in_progress: { label: 'Live', className: 'bg-se-fresh-soft text-se-fresh-deep' },
+  completed: { label: 'Completed', className: 'bg-muted text-muted-foreground' },
 };
 
 export default function StewardDashboard() {
@@ -38,7 +40,7 @@ export default function StewardDashboard() {
 
   return (
     <div>
-      <h1 className="font-serif text-lg sm:text-xl lg:text-2xl font-bold tracking-tight">
+      <h1 className={cn(SE_H, 'text-lg sm:text-xl lg:text-2xl')}>
         My Shows
       </h1>
       <p className="mt-1 text-xs sm:text-sm text-muted-foreground">

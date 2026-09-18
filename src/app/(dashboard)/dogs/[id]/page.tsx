@@ -32,8 +32,9 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { trpc } from '@/lib/trpc';
-import { formatDogName, getTitleDisplay } from '@/lib/utils';
+import { cn, formatDogName, getTitleDisplay } from '@/lib/utils';
 import { getPlacementLabel, placementColors } from '@/lib/placements';
+import { SE_H } from '@/components/show-experience/tokens';
 import { Button } from '@/components/ui/button';
 import {
   Card,
@@ -72,6 +73,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
+import { DogSvHealthCard } from '@/components/dogs/dog-sv-health-card';
 
 function formatAge(dateOfBirth: string): string {
   const dob = parseISO(dateOfBirth);
@@ -101,10 +103,10 @@ function DetailRow({ label, value }: { label: string; value?: string | null }) {
 }
 
 const entryStatusColors: Record<string, string> = {
-  pending: 'bg-amber-100 text-amber-800',
-  confirmed: 'bg-emerald-100 text-emerald-800',
-  withdrawn: 'bg-gray-100 text-gray-600',
-  cancelled: 'bg-red-100 text-red-700',
+  pending: 'bg-se-honey-soft text-se-honey-deep',
+  confirmed: 'bg-se-fresh-soft text-se-fresh-deep',
+  withdrawn: 'bg-muted text-muted-foreground',
+  cancelled: 'bg-destructive/10 text-destructive',
 };
 
 function EntryHistoryCard({ dogId }: { dogId: string }) {
@@ -170,7 +172,7 @@ function EntryHistoryCard({ dogId }: { dogId: string }) {
                   <Badge
                     className={
                       entryStatusColors[entry.status] ??
-                      'bg-gray-100 text-gray-600'
+                      'bg-muted text-muted-foreground'
                     }
                   >
                     {entry.status}
@@ -230,7 +232,7 @@ function TitleProgressCard({ dogId }: { dogId: string }) {
               <Trophy className="size-4" />
               RKC Title Progress
               {isPro && (
-                <Badge className="bg-gradient-to-r from-amber-500 to-yellow-500 text-white text-xs gap-0.5">
+                <Badge className="bg-gradient-to-r from-se-honey to-se-honey-deep text-white text-xs gap-0.5">
                   <Crown className="size-3" />
                   PRO
                 </Badge>
@@ -262,11 +264,11 @@ function TitleProgressCard({ dogId }: { dogId: string }) {
                   <div className="flex items-center gap-1.5">
                     <span className="text-sm font-medium">{tp.title}</span>
                     {tp.proOnly && (
-                      <Crown className="size-3 text-amber-500" />
+                      <Crown className="size-3 text-se-honey" />
                     )}
                   </div>
                   {tp.milestoneReached && (
-                    <Badge className="bg-emerald-100 text-emerald-800 text-xs">
+                    <Badge className="bg-se-fresh-soft text-se-fresh-deep text-xs">
                       Milestone reached
                     </Badge>
                   )}
@@ -275,9 +277,9 @@ function TitleProgressCard({ dogId }: { dogId: string }) {
                   <div
                     className={`h-full rounded-full transition-all ${
                       tp.milestoneReached
-                        ? 'bg-emerald-500'
+                        ? 'bg-se-fresh'
                         : tp.proOnly
-                          ? 'bg-gradient-to-r from-amber-500 to-yellow-500'
+                          ? 'bg-gradient-to-r from-se-honey to-se-honey-deep'
                           : 'bg-primary'
                     }`}
                     style={{ width: `${Math.round(tp.progress * 100)}%` }}
@@ -289,8 +291,8 @@ function TitleProgressCard({ dogId }: { dogId: string }) {
 
                 {/* Pro: show alternative routes for Champion */}
                 {tp.routes && tp.routes.length > 0 && (
-                  <div className="mt-2 space-y-2 rounded-lg border border-amber-200 bg-amber-50/50 p-3 dark:border-amber-900 dark:bg-amber-950/20">
-                    <p className="text-xs font-medium text-amber-800 dark:text-amber-200">
+                  <div className="mt-2 space-y-2 rounded-lg border border-se-honey-line bg-se-honey-soft/50 p-3">
+                    <p className="text-xs font-medium text-se-honey-ink">
                       Championship Routes
                     </p>
                     {tp.routes.map((route) => (
@@ -298,15 +300,15 @@ function TitleProgressCard({ dogId }: { dogId: string }) {
                         <div className="flex items-center justify-between">
                           <span className="text-xs font-medium">{route.name}</span>
                           {route.met && (
-                            <Badge className="bg-emerald-100 text-emerald-800 text-xs px-1.5 py-0">
+                            <Badge className="bg-se-fresh-soft text-se-fresh-deep text-xs px-1.5 py-0">
                               Met
                             </Badge>
                           )}
                         </div>
-                        <div className="h-1.5 w-full overflow-hidden rounded-full bg-amber-200/50 dark:bg-amber-900/50">
+                        <div className="h-1.5 w-full overflow-hidden rounded-full bg-se-honey-line/50">
                           <div
                             className={`h-full rounded-full transition-all ${
-                              route.met ? 'bg-emerald-500' : 'bg-amber-500'
+                              route.met ? 'bg-se-fresh' : 'bg-se-honey'
                             }`}
                             style={{ width: `${Math.round(route.progress * 100)}%` }}
                           />
@@ -331,22 +333,22 @@ function TitleProgressCard({ dogId }: { dogId: string }) {
 
         {/* Pro upsell for non-Pro users */}
         {!isPro && (
-          <div className="rounded-lg border border-amber-200 bg-gradient-to-br from-amber-50 to-yellow-50 p-4 dark:border-amber-900 dark:from-amber-950/30 dark:to-yellow-950/20">
+          <div className="rounded-lg border border-se-honey-line bg-gradient-to-br from-se-honey-soft to-se-cream p-4">
             <div className="flex items-start gap-3">
-              <div className="flex size-9 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-amber-400 to-yellow-500 shadow-sm">
+              <div className="flex size-9 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-se-honey to-se-honey-deep shadow-sm">
                 <Crown className="size-4 text-white" />
               </div>
               <div className="min-w-0 flex-1">
-                <p className="text-sm font-semibold text-amber-900 dark:text-amber-100">
+                <p className="text-sm font-semibold text-se-honey-ink">
                   Unlock Remi Pro
                 </p>
-                <p className="mt-0.5 text-xs text-amber-700 dark:text-amber-300">
+                <p className="mt-0.5 text-xs text-se-honey-deep">
                   See alternative Champion routes, ShCEx progress, Veteran Warrant
                   tracking, unique judge counts, and detailed breakdowns.
                 </p>
                 <Button
                   size="sm"
-                  className="mt-2 h-8 bg-gradient-to-r from-amber-500 to-yellow-500 text-white hover:from-amber-600 hover:to-yellow-600"
+                  className="mt-2 h-8 bg-gradient-to-r from-se-honey to-se-honey-deep text-white hover:opacity-90"
                   asChild
                 >
                   <Link href="/settings?tab=pro">
@@ -539,7 +541,7 @@ function CropDialog({
       <div className="space-y-3">
         <p className="text-xs font-medium text-muted-foreground">Profile preview</p>
         <div
-          className="relative mx-auto aspect-[4/5] w-full max-w-[280px] cursor-crosshair overflow-hidden rounded-sm border bg-stone-100"
+          className="relative mx-auto aspect-[4/5] w-full max-w-[280px] cursor-crosshair overflow-hidden rounded-sm border bg-muted"
           onClick={handleTap}
         >
           <Image
@@ -729,7 +731,7 @@ function PhotoGalleryCard({ dogId }: { dogId: string }) {
                   onClick={() => setLightboxUrl(photo.url)}
                 />
                 {photo.isPrimary && (
-                  <div className="absolute left-1.5 top-1.5 rounded-full bg-yellow-400 p-1 shadow-sm">
+                  <div className="absolute left-1.5 top-1.5 rounded-full bg-se-honey p-1 shadow-sm">
                     <Star className="size-3 fill-white text-white" />
                   </div>
                 )}
@@ -745,7 +747,7 @@ function PhotoGalleryCard({ dogId }: { dogId: string }) {
                         className="min-h-[44px] min-w-[44px] rounded-full bg-white/90 p-2 shadow active:bg-white sm:min-h-0 sm:min-w-0 sm:p-1.5"
                         title="Set as profile photo"
                       >
-                        <Star className="size-4 text-yellow-600 sm:size-3.5" />
+                        <Star className="size-4 text-se-honey-deep sm:size-3.5" />
                       </button>
                     )}
                     <button
@@ -770,7 +772,7 @@ function PhotoGalleryCard({ dogId }: { dogId: string }) {
                     className="min-h-[44px] min-w-[44px] rounded-full bg-white/90 p-2 shadow active:bg-white sm:min-h-0 sm:min-w-0 sm:p-1.5"
                     title="Delete photo"
                   >
-                    <Trash2 className="size-4 text-red-600 sm:size-3.5" />
+                    <Trash2 className="size-4 text-destructive sm:size-3.5" />
                   </button>
                 </div>
               </div>
@@ -1149,7 +1151,7 @@ export default function DogDetailPage({
               </div>
             )}
             <div>
-              <h1 className="font-serif text-2xl font-bold tracking-tight sm:text-3xl">
+              <h1 className={cn(SE_H, 'text-2xl sm:text-3xl')}>
                 {formatDogName(dog)}
               </h1>
               <div className="mt-1 flex flex-wrap items-center gap-2">
@@ -1339,6 +1341,11 @@ export default function DogDetailPage({
 
       {/* RKC Title Progress */}
       <TitleProgressCard dogId={id} />
+
+      {/* SV Health & Working Titles — only for German Shepherds. */}
+      {/german\s+shepherd/i.test(dog.breed?.name ?? '') && (
+        <DogSvHealthCard dogId={id} isOwner={true} sex={dog.sex} />
+      )}
 
       {/* Achievements (with self-report) */}
       <AchievementsCard dogId={id} achievements={dog.achievements ?? []} />

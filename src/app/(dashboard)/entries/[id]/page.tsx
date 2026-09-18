@@ -16,7 +16,9 @@ import {
 import { useState } from 'react';
 import { toast } from 'sonner';
 import { trpc } from '@/lib/trpc/client';
+import { cn } from '@/lib/utils';
 import { formatCurrency } from '@/lib/date-utils';
+import { SE_H } from '@/components/show-experience/tokens';
 import { Button } from '@/components/ui/button';
 import {
   Card,
@@ -120,7 +122,7 @@ export default function EntryDetailPage() {
       {/* Header */}
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h1 className="text-lg font-bold sm:text-2xl">{entry.show.name}</h1>
+          <h1 className={cn(SE_H, 'text-lg sm:text-2xl')}>{entry.show.name}</h1>
           <div className="mt-1 flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
             <span className="flex items-center gap-1">
               <CalendarDays className="size-3.5" />

@@ -1,5 +1,6 @@
 import { Document, Page, Text, View, Image, StyleSheet, Font } from '@react-pdf/renderer';
 import path from 'path';
+import { formatLondonLongDate } from '@/lib/date-utils';
 
 /**
  * Prize Card OVERPRINT layer — text/logo-only PDF designed to be
@@ -116,12 +117,8 @@ const styles = StyleSheet.create({
 });
 
 export function PrizeCardOverprint({ show }: OverprintProps) {
-  const showDate = new Date(show.date).toLocaleDateString('en-GB', {
-    weekday: 'long',
-    day: 'numeric',
-    month: 'long',
-    year: 'numeric',
-  });
+  // Always Europe/London, never the process's own timezone (Michael 2026-09-03).
+  const showDate = formatLondonLongDate(show.date);
   const showTypeLabel = SHOW_TYPE_LABELS[show.showType] ?? show.showType;
 
   const formatJudge = (j: { name: string; affix?: string | null }) =>

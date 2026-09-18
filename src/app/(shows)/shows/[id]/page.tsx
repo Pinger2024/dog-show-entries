@@ -1,9 +1,9 @@
 import type { Metadata } from 'next';
-import { redirect } from 'next/navigation';
+import { notFound, redirect } from 'next/navigation';
 import { db } from '@/server/db';
 import { eq } from 'drizzle-orm';
 import { shows } from '@/server/db/schema';
-import { ShowDetailClient } from './show-detail';
+import { ShowPreviewClient } from './preview/show-preview';
 import { buildShowJsonLd } from '@/lib/show-json-ld';
 import { isUuid } from '@/lib/slugify';
 
@@ -62,13 +62,23 @@ export async function generateMetadata({
   const venue = show.venue?.name;
   const org = show.organisation?.name;
 
-  const title = `${show.name} — ${showType}`;
-  const description = [
-    showDate,
-    venue,
-    org,
-    show.status === 'entries_open' ? 'Now accepting entries on Remi.' : undefined,
-  ]
+  const title = org ? `${show.name} — ${org}` : `${show.name} — ${showType}`;
+
+  // Pick the metadata tagline based on the show's actual state — the
+  // status field can lag a few minutes after the close cron, so a
+  // status=entries_open show whose close date has passed should not
+  // still claim "now accepting entries".
+  const closeDatePast = show.entryCloseDate
+    ? new Date(show.entryCloseDate).getTime() < Date.now()
+    : false;
+  let tagline: string | undefined;
+  if (show.status === 'in_progress') tagline = 'Live results on Remi.';
+  else if (show.status === 'completed') tagline = 'Results on Remi.';
+  else if (show.status === 'cancelled') tagline = 'Cancelled.';
+  else if (show.status === 'entries_open' && !closeDatePast) tagline = 'Now accepting entries on Remi.';
+  else tagline = 'Entries closed.';
+
+  const description = [showDate, venue, org, tagline]
     .filter(Boolean)
     .join(' · ');
 
@@ -117,23 +127,19 @@ export default async function ShowDetailPage({
 
   const show = await resolveShow(id);
 
-  const showUrl = `https://remishowmanager.co.uk/shows/${show?.slug ?? id}`;
+  if (!show) notFound();
 
-  // JSON-LD is safe here: content is from our own database and
-  // JSON.stringify escapes all special characters, preventing XSS.
-  const jsonLd = show
-    ? JSON.stringify(buildShowJsonLd(show, showUrl, show.showSponsors))
-    : null;
+  const showUrl = `https://remishowmanager.co.uk/shows/${show.slug ?? id}`;
+
+  const jsonLd = JSON.stringify(buildShowJsonLd(show, showUrl, show.showSponsors));
 
   return (
     <>
-      {jsonLd && (
-        <script
-          type="application/ld+json"
-          dangerouslySetInnerHTML={{ __html: jsonLd }}
-        />
-      )}
-      <ShowDetailClient />
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: jsonLd }}
+      />
+      <ShowPreviewClient />
     </>
   );
 }

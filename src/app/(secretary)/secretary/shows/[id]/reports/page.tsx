@@ -1,11 +1,12 @@
 'use client';
 
 import { useState, useMemo } from 'react';
+import Link from 'next/link';
 import {
   BookOpen,
   ClipboardList,
-  Download,
   FileText,
+  FolderOpen,
   History,
   Loader2,
   PoundSterling,
@@ -15,6 +16,7 @@ import {
 } from 'lucide-react';
 import { trpc } from '@/lib/trpc';
 import { formatCurrency } from '@/lib/date-utils';
+import { membershipClaimLabel } from '@/lib/report-rows';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
@@ -35,15 +37,67 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { entryStatusConfig, formatDate, downloadCsv } from '../_lib/show-utils';
+import { entryStatusConfig, formatDate } from '../_lib/show-utils';
 import { useShowId } from '../_lib/show-context';
+import type { RouterOutputs } from '@/server/trpc/router';
+
+/** Printing and downloads moved to Documents & Reports (reports-merge) —
+ * these tabs keep their on-screen tables, but every export now lives on
+ * one page, always available regardless of show phase. */
+function DownloadsMovedNote({ showId }: { showId: string }) {
+  return (
+    <Link
+      href={`/secretary/shows/${showId}/documents`}
+      className="flex items-center gap-2 rounded-lg border bg-muted/40 px-4 py-3 text-sm font-medium text-foreground transition-colors hover:bg-muted min-h-[2.75rem]"
+    >
+      <FolderOpen className="size-4 shrink-0" />
+      Downloads have moved to Documents &amp; Reports
+    </Link>
+  );
+}
+
+type ReportRow = RouterOutputs['secretary']['getPaymentReport']['rows'][number];
+
+/**
+ * Groups consecutive rows by `orderId` so the UI can render each
+ * order as one "receipt" (entries + sundry together) with a single
+ * payment attached at the group level. Preserves row order within
+ * each group. Rows with no orderId each land in their own group so
+ * they still render.
+ */
+function groupByOrder(rows: ReportRow[]): Array<{
+  key: string;
+  rows: ReportRow[];
+  payments: ReportRow['payments'];
+  orderTotal: number;
+}> {
+  const groups: Array<{ key: string; rows: ReportRow[]; payments: ReportRow['payments']; orderTotal: number }> = [];
+  const byOrder = new Map<string, { key: string; rows: ReportRow[]; payments: ReportRow['payments']; orderTotal: number }>();
+  for (const row of rows) {
+    if (!row.orderId) {
+      groups.push({ key: row.id, rows: [row], payments: row.payments, orderTotal: row.total });
+      continue;
+    }
+    const existing = byOrder.get(row.orderId);
+    if (existing) {
+      existing.rows.push(row);
+      existing.orderTotal += row.total;
+      if (row.payments.length > 0) existing.payments = row.payments;
+    } else {
+      const group = { key: row.orderId, rows: [row], payments: row.payments, orderTotal: row.total };
+      byOrder.set(row.orderId, group);
+      groups.push(group);
+    }
+  }
+  return groups;
+}
 
 export default function ReportsPage() {
   const showId = useShowId();
 
   return (
     <Tabs defaultValue="entries" className="space-y-4">
-      <TabsList className="grid w-full grid-cols-5">
+      <TabsList className="lg:grid lg:w-full lg:grid-cols-6">
         <TabsTrigger value="entries" className="gap-1.5 text-xs sm:text-sm">
           <FileText className="size-3.5 hidden sm:block" />
           Entries
@@ -63,6 +117,11 @@ export default function ReportsPage() {
           <span className="sm:hidden">Cat.</span>
           <span className="hidden sm:inline">Catalogues</span>
         </TabsTrigger>
+        <TabsTrigger value="extras" className="gap-1.5 text-xs sm:text-sm">
+          <ClipboardList className="size-3.5 hidden sm:block" />
+          <span className="sm:hidden">Extras</span>
+          <span className="hidden sm:inline">Extras Summary</span>
+        </TabsTrigger>
         <TabsTrigger value="audit" className="gap-1.5 text-xs sm:text-sm">
           <History className="size-3.5 hidden sm:block" />
           <span className="sm:hidden">Audit</span>
@@ -81,6 +140,9 @@ export default function ReportsPage() {
       </TabsContent>
       <TabsContent value="catalogue">
         <CatalogueOrdersContent showId={showId} />
+      </TabsContent>
+      <TabsContent value="extras">
+        <ExtrasSummaryContent showId={showId} />
       </TabsContent>
       <TabsContent value="audit">
         <AuditLogViewer showId={showId} />
@@ -102,6 +164,11 @@ function LoadingCard() {
 function EntryReportContent({ showId }: { showId: string }) {
   const { data: entries, isLoading } =
     trpc.secretary.getEntryReport.useQuery({ showId });
+  // Headline figures come from the ONE canonical calculation — the same one the
+  // show page and the dashboard read. This page used to count the rows of its
+  // own list, a FOURTH definition of "entries", so it read 91 while the show
+  // page read 110 (Mandy 2026-07-27: "Still seeing that 91, should I be").
+  const { data: showStats } = trpc.secretary.getShowStats.useQuery({ showId });
   const [search, setSearch] = useState('');
   const [groupByExhibitor, setGroupByExhibitor] = useState(false);
 
@@ -153,53 +220,24 @@ function EntryReportContent({ showId }: { showId: string }) {
     return { total: entries.length, confirmed, pending, totalRevenue, uniqueExhibitors };
   }, [entries]);
 
-  function exportCsv() {
-    if (!filtered) return;
-    const headers = [
-      'Entry Date',
-      'Status',
-      'Exhibitor',
-      'Email',
-      'Dog',
-      'Breed',
-      'Group',
-      'Sex',
-      'Classes',
-      'Fee (£)',
-      'NFC',
-    ];
-    const rows = filtered.map((e) => [
-      formatDate(e.entryDate),
-      e.status,
-      e.exhibitor?.name ?? '',
-      e.exhibitor?.email ?? '',
-      e.dog?.registeredName ?? 'Junior Handler',
-      e.dog?.breed?.name ?? '',
-      e.dog?.breed?.group?.name ?? '',
-      e.dog?.sex ?? '',
-      e.entryClasses
-        .map((ec) => ec.showClass?.classDefinition?.name ?? '')
-        .filter(Boolean)
-        .join('; '),
-      (e.totalFee / 100).toFixed(2),
-      e.isNfc ? 'Yes' : 'No',
-    ]);
-
-    downloadCsv(headers, rows, `entry-report-${showId}`);
-  }
-
   if (isLoading) return <LoadingCard />;
 
   return (
     <div className="space-y-4">
+      <DownloadsMovedNote showId={showId} />
       {/* Summary stats */}
       {stats && (
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-          <StatCard label="Total Entries" value={stats.total} />
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+          {/* "Entries" and "Dogs" are the canonical figures, not a count of the
+              rows below — the list carries one row per entry, and a dog that
+              bought a Special Award separately has two. "Total Entries 91" over
+              a show announcing 110 was the fourth screen to invent its own
+              answer (Mandy 2026-07-27). */}
           <StatCard
-            label="Confirmed"
-            value={<span className="text-green-600 dark:text-green-400">{stats.confirmed}</span>}
+            label="Entries"
+            value={<span className="text-se-fresh-deep">{showStats?.classEntries ?? stats.total}</span>}
           />
+          <StatCard label="Dogs" value={showStats?.dogCount ?? stats.confirmed} />
           <StatCard label="Exhibitors" value={stats.uniqueExhibitors} />
           <StatCard label="Total Fees" value={formatCurrency(stats.totalRevenue)} />
         </div>
@@ -208,8 +246,14 @@ function EntryReportContent({ showId }: { showId: string }) {
       <Card>
         <CardHeader>
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            {/* Says what the list is counting. One row per entry, so a dog that
+                bought a Special Award separately appears twice — which is why
+                this can differ from both the entries and dogs figures above. */}
             <CardTitle className="text-base">
-              Entry Report {filtered.length !== (entries?.length ?? 0) ? `(${filtered.length} of ${entries?.length ?? 0})` : `(${entries?.length ?? 0})`}
+              Entry Report{' '}
+              {filtered.length !== (entries?.length ?? 0)
+                ? `(${filtered.length} of ${entries?.length ?? 0} entry records)`
+                : `(${entries?.length ?? 0} entry records)`}
             </CardTitle>
             <div className="flex items-center gap-2">
               <div className="relative flex-1 sm:w-56 sm:flex-initial">
@@ -229,10 +273,6 @@ function EntryReportContent({ showId }: { showId: string }) {
               >
                 <Users className="size-4" />
                 <span className="hidden sm:inline">By Exhibitor</span>
-              </Button>
-              <Button variant="outline" size="sm" onClick={exportCsv}>
-                <Download className="size-4" />
-                <span className="hidden sm:inline">Export CSV</span>
               </Button>
             </div>
           </div>
@@ -269,6 +309,11 @@ function EntryReportContent({ showId }: { showId: string }) {
                             </p>
                             {entry.isNfc && (
                               <Badge variant="outline" className="text-xs">NFC</Badge>
+                            )}
+                            {membershipClaimLabel(entry.order) && (
+                              <Badge variant="outline" className="text-xs">
+                                {membershipClaimLabel(entry.order)}
+                              </Badge>
                             )}
                             <Badge
                               variant={entryStatusConfig[entry.status]?.variant ?? 'outline'}
@@ -313,6 +358,11 @@ function EntryReportContent({ showId }: { showId: string }) {
                         <p className="text-xs text-muted-foreground truncate">
                           {entry.exhibitor?.name ?? '—'} · {entry.dog?.breed?.name ?? '—'}
                         </p>
+                        {membershipClaimLabel(entry.order) && (
+                          <p className="text-xs text-muted-foreground truncate">
+                            {membershipClaimLabel(entry.order)}
+                          </p>
+                        )}
                       </div>
                       <Badge
                         variant={entryStatusConfig[entry.status]?.variant ?? 'outline'}
@@ -360,6 +410,11 @@ function EntryReportContent({ showId }: { showId: string }) {
                           <div>
                             <p className="font-medium">{entry.exhibitor?.name ?? '—'}</p>
                             <p className="text-xs text-muted-foreground">{entry.exhibitor?.email ?? ''}</p>
+                            {membershipClaimLabel(entry.order) && (
+                              <p className="text-xs text-muted-foreground">
+                                {membershipClaimLabel(entry.order)}
+                              </p>
+                            )}
                           </div>
                         </TableCell>
                         <TableCell>
@@ -406,50 +461,29 @@ function PaymentReportContent({ showId }: { showId: string }) {
   const [search, setSearch] = useState('');
 
   const filtered = useMemo(() => {
-    if (!data?.entries) return [];
-    if (!search) return data.entries;
+    if (!data?.rows) return [];
+    if (!search) return data.rows;
     const q = search.toLowerCase();
-    return data.entries.filter(
-      (e) =>
-        e.exhibitor?.name?.toLowerCase().includes(q) ||
-        e.dog?.registeredName?.toLowerCase().includes(q)
+    return data.rows.filter(
+      (r) =>
+        r.exhibitor?.name?.toLowerCase().includes(q) ||
+        r.itemLabel.toLowerCase().includes(q)
     );
   }, [data, search]);
 
-  function exportCsv() {
-    if (!filtered) return;
-    const headers = [
-      'Exhibitor',
-      'Email',
-      'Dog',
-      'Status',
-      'Fee (£)',
-      'Payment Method',
-      'Payments',
-    ];
-    const rows = filtered.map((e) => [
-      e.exhibitor?.name ?? '',
-      e.exhibitor?.email ?? '',
-      e.dog?.registeredName ?? 'Junior Handler',
-      e.status,
-      (e.totalFee / 100).toFixed(2),
-      e.paymentMethod ?? '',
-      e.payments.map((p) => `${p.status}: £${(p.amount / 100).toFixed(2)}`).join('; '),
-    ]);
-
-    downloadCsv(headers, rows, `payment-report-${showId}`);
-  }
+  const grouped = useMemo(() => groupByOrder(filtered), [filtered]);
 
   if (isLoading) return <LoadingCard />;
 
   return (
     <div className="space-y-4">
+      <DownloadsMovedNote showId={showId} />
       {/* Summary stats */}
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <Card>
           <CardContent className="pt-4 pb-3">
             <p className="text-xs font-medium text-muted-foreground">Total Revenue</p>
-            <p className="text-2xl font-bold text-green-600 dark:text-green-400">
+            <p className="text-2xl font-bold text-se-fresh-deep">
               {formatCurrency(data?.summary.totalRevenue ?? 0)}
             </p>
           </CardContent>
@@ -463,7 +497,7 @@ function PaymentReportContent({ showId }: { showId: string }) {
         <Card>
           <CardContent className="pt-4 pb-3">
             <p className="text-xs font-medium text-muted-foreground">Pending</p>
-            <p className="text-2xl font-bold text-amber-600 dark:text-amber-400">
+            <p className="text-2xl font-bold text-se-honey-deep">
               {data?.summary.pendingCount ?? 0}
             </p>
           </CardContent>
@@ -490,10 +524,6 @@ function PaymentReportContent({ showId }: { showId: string }) {
                   className="pl-9 h-9"
                 />
               </div>
-              <Button variant="outline" size="sm" onClick={exportCsv}>
-                <Download className="size-4" />
-                <span className="hidden sm:inline">Export CSV</span>
-              </Button>
             </div>
           </div>
         </CardHeader>
@@ -504,37 +534,47 @@ function PaymentReportContent({ showId }: { showId: string }) {
             </p>
           ) : (
             <>
-              {/* Mobile card view */}
+              {/* Mobile: group rows by order so each order reads as a
+                  single "receipt" — entries and sundry together, with
+                  the order's single payment badge at the bottom. */}
               <div className="space-y-3 sm:hidden">
-                {filtered.map((entry) => {
-                  const entryTotal = entry.totalFee + (entry.sundryTotal ?? 0);
-                  return (
-                    <div key={entry.id} className="rounded-lg border p-3 space-y-2">
-                      <div className="flex items-start justify-between gap-2">
-                        <div className="min-w-0 flex-1">
-                          <p className="font-medium text-sm truncate">{entry.exhibitor?.name ?? '—'}</p>
-                          <p className="text-xs text-muted-foreground truncate">
-                            {entry.dog?.registeredName ?? 'Junior Handler'}
-                          </p>
+                {grouped.map((group) => (
+                  <div
+                    key={group.key}
+                    className="rounded-lg border overflow-hidden divide-y"
+                  >
+                    {group.rows.map((row, idx) => (
+                      <div key={row.id} className="p-3 space-y-1.5">
+                        {idx === 0 && (
+                          <p className="font-medium text-sm truncate">{row.exhibitor?.name ?? '—'}</p>
+                        )}
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="min-w-0 flex-1">
+                            <p className="text-sm truncate">{row.itemLabel}</p>
+                            {row.itemDetail && (
+                              <p className="text-[11px] text-muted-foreground truncate">
+                                {row.itemDetail}
+                              </p>
+                            )}
+                          </div>
+                          <Badge
+                            variant={entryStatusConfig[row.status]?.variant ?? 'outline'}
+                            className="shrink-0"
+                          >
+                            {entryStatusConfig[row.status]?.label ?? row.status}
+                          </Badge>
                         </div>
-                        <Badge
-                          variant={entryStatusConfig[entry.status]?.variant ?? 'outline'}
-                          className="shrink-0"
-                        >
-                          {entryStatusConfig[entry.status]?.label ?? entry.status}
-                        </Badge>
+                        <div className="text-xs text-muted-foreground">
+                          {row.kind === 'entry' ? 'Entry fee' : 'Add-ons'}{' '}
+                          <span className="font-medium text-foreground">{formatCurrency(row.total)}</span>
+                        </div>
                       </div>
-                      <div className="flex items-center justify-between text-xs">
-                        <div>
-                          <span className="font-medium">{formatCurrency(entryTotal)}</span>
-                          {(entry.sundryTotal ?? 0) > 0 && (
-                            <span className="ml-1 text-muted-foreground">
-                              (incl. {formatCurrency(entry.sundryTotal ?? 0)} add-ons)
-                            </span>
-                          )}
-                        </div>
+                    ))}
+                    {group.payments.length > 0 && (
+                      <div className="flex items-center justify-between gap-2 bg-muted/40 px-3 py-2 text-xs">
+                        <span className="text-muted-foreground">Payment</span>
                         <div className="flex flex-wrap gap-1 justify-end">
-                          {entry.payments.map((p, i) => (
+                          {group.payments.map((p, i) => (
                             <Badge
                               key={i}
                               variant={p.status === 'succeeded' ? 'default' : 'outline'}
@@ -545,68 +585,103 @@ function PaymentReportContent({ showId }: { showId: string }) {
                           ))}
                         </div>
                       </div>
-                    </div>
-                  );
-                })}
+                    )}
+                  </div>
+                ))}
               </div>
-              {/* Desktop table */}
+              {/* Desktop table — rows grouped by order with a thicker
+                  divider between orders, and the payment column is
+                  vertically spanned so one payment badge reads as the
+                  total for the whole group (matching how exhibitors
+                  actually paid: one transaction per order). */}
               <div className="hidden sm:block">
                 <Table>
                   <TableHeader>
                     <TableRow>
                       <TableHead>Exhibitor</TableHead>
-                      <TableHead>Dog</TableHead>
+                      <TableHead>Item</TableHead>
                       <TableHead>Entry Fee</TableHead>
                       <TableHead>Add-ons</TableHead>
                       <TableHead>Total</TableHead>
                       <TableHead>Status</TableHead>
-                      <TableHead>Payments</TableHead>
+                      <TableHead>Payment</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {filtered.map((entry) => {
-                      const entryTotal = entry.totalFee + (entry.sundryTotal ?? 0);
-                      return (
-                        <TableRow key={entry.id}>
-                          <TableCell>
-                            <div>
-                              <p className="font-medium">{entry.exhibitor?.name ?? '—'}</p>
-                              <p className="text-xs text-muted-foreground">{entry.exhibitor?.email ?? ''}</p>
-                            </div>
-                          </TableCell>
-                          <TableCell>
-                            {entry.dog?.registeredName ?? 'Junior Handler'}
-                          </TableCell>
-                          <TableCell>{formatCurrency(entry.totalFee)}</TableCell>
-                          <TableCell>
-                            {(entry.sundryTotal ?? 0) > 0
-                              ? formatCurrency(entry.sundryTotal ?? 0)
-                              : <span className="text-muted-foreground">—</span>}
-                          </TableCell>
-                          <TableCell className="font-medium">{formatCurrency(entryTotal)}</TableCell>
-                          <TableCell>
-                            <Badge
-                              variant={entryStatusConfig[entry.status]?.variant ?? 'outline'}
-                            >
-                              {entryStatusConfig[entry.status]?.label ?? entry.status}
-                            </Badge>
-                          </TableCell>
-                          <TableCell>
-                            <div className="flex flex-wrap gap-1">
-                              {entry.payments.map((p, i) => (
-                                <Badge
-                                  key={i}
-                                  variant={p.status === 'succeeded' ? 'default' : 'outline'}
-                                  className="text-xs"
-                                >
-                                  £{(p.amount / 100).toFixed(2)} ({p.status})
-                                </Badge>
-                              ))}
-                            </div>
-                          </TableCell>
-                        </TableRow>
-                      );
-                    })}
+                    {grouped.map((group) => (
+                      group.rows.map((row, idx) => {
+                        const isFirst = idx === 0;
+                        const isLast = idx === group.rows.length - 1;
+                        // Thicker bottom border on the final row of each
+                        // group creates a clear visual break between orders.
+                        const borderClass = isLast ? 'border-b-2 border-border' : 'border-b-0';
+                        return (
+                          <TableRow key={row.id} className={borderClass}>
+                            <TableCell className="align-top">
+                              {isFirst ? (
+                                <div>
+                                  <p className="font-medium">{row.exhibitor?.name ?? '—'}</p>
+                                  <p className="text-xs text-muted-foreground">{row.exhibitor?.email ?? ''}</p>
+                                </div>
+                              ) : null}
+                            </TableCell>
+                            <TableCell>
+                              <div>
+                                <p>{row.itemLabel}</p>
+                                {row.itemDetail && (
+                                  <p className="text-xs text-muted-foreground">{row.itemDetail}</p>
+                                )}
+                              </div>
+                            </TableCell>
+                            <TableCell>
+                              {row.entryFee > 0
+                                ? formatCurrency(row.entryFee)
+                                : <span className="text-muted-foreground">—</span>}
+                            </TableCell>
+                            <TableCell>
+                              {row.addons > 0
+                                ? formatCurrency(row.addons)
+                                : <span className="text-muted-foreground">—</span>}
+                            </TableCell>
+                            <TableCell className="font-medium">{formatCurrency(row.total)}</TableCell>
+                            <TableCell>
+                              <Badge
+                                variant={entryStatusConfig[row.status]?.variant ?? 'outline'}
+                              >
+                                {entryStatusConfig[row.status]?.label ?? row.status}
+                              </Badge>
+                            </TableCell>
+                            {isFirst && (
+                              <TableCell
+                                rowSpan={group.rows.length}
+                                className="align-middle"
+                              >
+                                <div className="space-y-1">
+                                  {group.payments.length > 0 ? (
+                                    group.payments.map((p, i) => (
+                                      <Badge
+                                        key={i}
+                                        variant={p.status === 'succeeded' ? 'default' : 'outline'}
+                                        className="text-xs block w-fit"
+                                      >
+                                        £{(p.amount / 100).toFixed(2)} ({p.status})
+                                      </Badge>
+                                    ))
+                                  ) : (
+                                    <span className="text-xs text-muted-foreground">—</span>
+                                  )}
+                                  {group.rows.length > 1 && (
+                                    <p className="text-[11px] text-muted-foreground">
+                                      Order total {formatCurrency(group.orderTotal)}
+                                    </p>
+                                  )}
+                                </div>
+                              </TableCell>
+                            )}
+                          </TableRow>
+                        );
+                      })
+                    ))}
                   </TableBody>
                 </Table>
               </div>
@@ -628,18 +703,10 @@ function CatalogueOrdersContent({ showId }: { showId: string }) {
   const online = data?.online ?? [];
   const totalOrders = printed.length + online.length;
 
-  function exportCsv() {
-    const headers = ['Type', 'Name', 'Email', 'Quantity'];
-    const rows = [
-      ...printed.map((p) => ['Printed', p.name, p.email, String(p.quantity)]),
-      ...online.map((o) => ['Online', o.name, o.email, String(o.quantity)]),
-    ];
-    downloadCsv(headers, rows, `catalogue-orders-${showId}`);
-  }
-
   return (
     <div className="space-y-4">
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 sm:gap-3">
+      <DownloadsMovedNote showId={showId} />
+      <div className="grid grid-cols-2 gap-2 lg:grid-cols-3 lg:gap-3">
         <Card>
           <CardContent className="pt-4 pb-3">
             <p className="text-xs font-medium text-muted-foreground">Total Orders</p>
@@ -663,19 +730,11 @@ function CatalogueOrdersContent({ showId }: { showId: string }) {
       {/* Printed Catalogues */}
       <Card>
         <CardHeader>
-          <div className="flex items-start justify-between">
-            <div>
-              <CardTitle className="text-base">Printed Catalogues ({printed.length})</CardTitle>
-              <CardDescription>
-                Exhibitors who ordered a printed catalogue
-              </CardDescription>
-            </div>
-            {totalOrders > 0 && (
-              <Button variant="outline" size="sm" onClick={exportCsv}>
-                <Download className="size-4" />
-                <span className="hidden sm:inline">Export CSV</span>
-              </Button>
-            )}
+          <div>
+            <CardTitle className="text-base">Printed Catalogues ({printed.length})</CardTitle>
+            <CardDescription>
+              Exhibitors who ordered a printed catalogue
+            </CardDescription>
           </div>
         </CardHeader>
         <CardContent>
@@ -779,45 +838,23 @@ function AbsenteeReportContent({ showId }: { showId: string }) {
 
   const absenteeCount = absentees?.length ?? 0;
 
-  function exportCsv() {
-    if (!absentees) return;
-    const headers = [
-      'Catalogue No',
-      'Dog Name',
-      'Breed',
-      'Sex',
-      'Classes',
-      'Owner',
-      'Exhibitor',
-      'Status',
-    ];
-    const rows = absentees.map((e) => [
-      e.catalogueNumber ?? '',
-      e.dog?.registeredName ?? 'Junior Handler',
-      e.dog?.breed?.name ?? '',
-      e.dog?.sex === 'dog' ? 'Dog' : e.dog?.sex === 'bitch' ? 'Bitch' : '',
-      (e.entryClasses ?? [])
-        .map((ec) => {
-          const num = ec.showClass?.classNumber;
-          const name = ec.showClass?.classDefinition?.name ?? '';
-          return num != null ? `${num}. ${name}` : name;
-        })
-        .filter(Boolean)
-        .join('; '),
-      e.dog?.owners?.map((o) => o.ownerName).join(' & ') ?? '',
-      e.exhibitor?.name ?? '',
-      e.status === 'withdrawn' ? 'Withdrawn' : 'Absent',
-    ]);
-
-    downloadCsv(headers, rows, `absentee-report-${showId}`);
+  // Withdrawal is a whole-entry status, so a withdrawn row lists every
+  // class she was entered in. "Absent" is per-class (Mandy 2026-08-12) — an
+  // entry can be absent from one class and present in another (e.g. her
+  // breed class vs. a Special Award) — so it lists only the classes she was
+  // actually marked absent from.
+  function classesToShow<T extends { absent: boolean }>(entry: { status: string; entryClasses?: T[] }) {
+    const classes = entry.entryClasses ?? [];
+    return entry.status === 'withdrawn' ? classes : classes.filter((ec) => ec.absent);
   }
 
   if (isLoading) return <LoadingCard />;
 
   return (
     <div className="space-y-4">
+      <DownloadsMovedNote showId={showId} />
       {/* Summary */}
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-3">
         <Card>
           <CardContent className="pt-4 pb-3">
             <p className="text-xs font-medium text-muted-foreground">Total Absentees</p>
@@ -827,15 +864,19 @@ function AbsenteeReportContent({ showId }: { showId: string }) {
         <Card>
           <CardContent className="pt-4 pb-3">
             <p className="text-xs font-medium text-muted-foreground">Absent</p>
-            <p className="text-2xl font-bold text-amber-600 dark:text-amber-400">
-              {absentees?.filter((e) => e.status !== 'withdrawn' && e.absent).length ?? 0}
+            <p className="text-2xl font-bold text-se-honey-deep">
+              {/* Every non-withdrawn row on this list is here because at least
+                  one of its classes is marked absent (Mandy 2026-08-12,
+                  per-class attendance) — status alone tells "Absent" from
+                  "Withdrawn" apart. */}
+              {absentees?.filter((e) => e.status !== 'withdrawn').length ?? 0}
             </p>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="pt-4 pb-3">
             <p className="text-xs font-medium text-muted-foreground">Withdrawn</p>
-            <p className="text-2xl font-bold text-red-600 dark:text-red-400">
+            <p className="text-2xl font-bold text-destructive">
               {absentees?.filter((e) => e.status === 'withdrawn').length ?? 0}
             </p>
           </CardContent>
@@ -850,18 +891,6 @@ function AbsenteeReportContent({ showId }: { showId: string }) {
               <CardDescription>
                 All entries marked as absent or withdrawn
               </CardDescription>
-            </div>
-            <div className="flex items-center gap-2">
-              <Button variant="outline" size="sm" onClick={exportCsv} disabled={absenteeCount === 0}>
-                <Download className="size-4" />
-                <span className="hidden sm:inline">Export CSV</span>
-              </Button>
-              <Button variant="outline" size="sm" asChild disabled={absenteeCount === 0}>
-                <a href={`/api/absentee-report/${showId}`} download>
-                  <Download className="size-4" />
-                  <span className="hidden sm:inline">Download CSV</span>
-                </a>
-              </Button>
             </div>
           </div>
         </CardHeader>
@@ -900,7 +929,7 @@ function AbsenteeReportContent({ showId }: { showId: string }) {
                       </Badge>
                     </div>
                     <div className="flex flex-wrap gap-1">
-                      {(entry.entryClasses ?? []).map((ec, i) => (
+                      {classesToShow(entry).map((ec, i) => (
                         <Badge key={i} variant="outline" className="text-xs">
                           {ec.showClass?.classNumber != null ? `${ec.showClass.classNumber}. ` : ''}
                           {ec.showClass?.classDefinition?.name ?? '?'}
@@ -943,7 +972,7 @@ function AbsenteeReportContent({ showId }: { showId: string }) {
                         </TableCell>
                         <TableCell>
                           <div className="flex flex-wrap gap-1">
-                            {(entry.entryClasses ?? []).map((ec, i) => (
+                            {classesToShow(entry).map((ec, i) => (
                               <Badge key={i} variant="outline" className="text-xs">
                                 {ec.showClass?.classNumber != null ? `${ec.showClass.classNumber}. ` : ''}
                                 {ec.showClass?.classDefinition?.name ?? '?'}
@@ -970,6 +999,157 @@ function AbsenteeReportContent({ showId }: { showId: string }) {
           )}
         </CardContent>
       </Card>
+    </div>
+  );
+}
+
+function ExtrasSummaryContent({ showId }: { showId: string }) {
+  const { data, isLoading } = trpc.secretary.getExtrasSummary.useQuery({ showId });
+
+  if (isLoading) return <LoadingCard />;
+  if (!data) return null;
+
+  const totalExtras = data.sundrySections.reduce((sum, s) => sum + s.totalPence, 0);
+  const totalBuyers = data.sundrySections.reduce((sum, s) => sum + s.buyers.length, 0);
+  const isEmpty =
+    data.sundrySections.length === 0 &&
+    data.classSponsors.length === 0 &&
+    data.showSponsors.length === 0;
+
+  return (
+    <div className="space-y-4">
+      <DownloadsMovedNote showId={showId} />
+      {/* Top totals */}
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-3">
+        <Card>
+          <CardContent className="pt-4 pb-3">
+            <p className="text-xs font-medium text-muted-foreground">Add-on revenue</p>
+            <p className="text-2xl font-bold">{formatCurrency(totalExtras)}</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="pt-4 pb-3">
+            <p className="text-xs font-medium text-muted-foreground">Buyers</p>
+            <p className="text-2xl font-bold">{totalBuyers}</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="pt-4 pb-3">
+            <p className="text-xs font-medium text-muted-foreground">Sponsors</p>
+            <p className="text-2xl font-bold">
+              {data.classSponsors.length + data.showSponsors.length}
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+
+      {isEmpty && (
+        <Card>
+          <CardContent className="pt-6 pb-6 text-center text-sm text-muted-foreground">
+            No add-ons, sponsors or extras have been recorded for this show yet.
+          </CardContent>
+        </Card>
+      )}
+
+      {/* One card per sundry item type */}
+      {data.sundrySections.map((section) => (
+        <Card key={section.label}>
+          <CardHeader className="pb-2">
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-base">{section.label}</CardTitle>
+              <Badge variant="secondary">
+                {section.totalQuantity} × {formatCurrency(section.totalPence / Math.max(section.totalQuantity, 1))} = {formatCurrency(section.totalPence)}
+              </Badge>
+            </div>
+          </CardHeader>
+          <CardContent className="pt-0">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Name</TableHead>
+                  <TableHead className="hidden sm:table-cell">Email</TableHead>
+                  <TableHead className="hidden sm:table-cell">Phone</TableHead>
+                  <TableHead className="text-right">Qty</TableHead>
+                  <TableHead className="text-right">Total</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {section.buyers.map((buyer, i) => (
+                  <TableRow key={i}>
+                    <TableCell className="font-medium">{buyer.name ?? '—'}</TableCell>
+                    <TableCell className="hidden sm:table-cell text-muted-foreground">{buyer.email ?? '—'}</TableCell>
+                    <TableCell className="hidden sm:table-cell text-muted-foreground">{buyer.phone ?? '—'}</TableCell>
+                    <TableCell className="text-right">{buyer.quantity}</TableCell>
+                    <TableCell className="text-right">{formatCurrency(buyer.quantity * buyer.unitPrice)}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+      ))}
+
+      {/* Class sponsors */}
+      {data.classSponsors.length > 0 && (
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base">Class Sponsors</CardTitle>
+            <CardDescription>Sponsorships you have recorded against individual classes.</CardDescription>
+          </CardHeader>
+          <CardContent className="pt-0">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Sponsor</TableHead>
+                  <TableHead>Class / Trophy</TableHead>
+                  <TableHead className="text-right">Prize</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {data.classSponsors.map((sp, i) => (
+                  <TableRow key={i}>
+                    <TableCell className="font-medium">{sp.sponsorName}</TableCell>
+                    <TableCell className="text-muted-foreground">{sp.detail}</TableCell>
+                    <TableCell className="text-right">{sp.amountPence ? formatCurrency(sp.amountPence) : '—'}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Show sponsors */}
+      {data.showSponsors.length > 0 && (
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base">Show Sponsors</CardTitle>
+            <CardDescription>Sponsors who back the show as a whole.</CardDescription>
+          </CardHeader>
+          <CardContent className="pt-0">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Sponsor</TableHead>
+                  <TableHead className="hidden sm:table-cell">Email</TableHead>
+                  <TableHead className="hidden sm:table-cell">Phone</TableHead>
+                  <TableHead>Detail</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {data.showSponsors.map((sp, i) => (
+                  <TableRow key={i}>
+                    <TableCell className="font-medium">{sp.sponsorName}</TableCell>
+                    <TableCell className="hidden sm:table-cell text-muted-foreground">{sp.email ?? '—'}</TableCell>
+                    <TableCell className="hidden sm:table-cell text-muted-foreground">{sp.phone ?? '—'}</TableCell>
+                    <TableCell className="text-muted-foreground">{sp.detail}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }

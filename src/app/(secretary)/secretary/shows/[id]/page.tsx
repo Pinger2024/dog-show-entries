@@ -21,19 +21,21 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { trpc } from '@/lib/trpc';
+import { format } from 'date-fns';
 import { formatDateRange, poundsToPence } from '@/lib/date-utils';
-import { showTypeLabels } from '@/lib/show-types';
+import {
+  isCloseDateWithinFloor,
+  latestPermissibleCloseDate,
+  latestPermissibleCloseDateInputValue,
+  entryCloseFloorMessage,
+  entryCloseAdjustedMessage,
+} from '@/lib/entry-close-rules';
+import { EntryCloseHint } from '@/components/shows/entry-close-hint';
+import { showTypeLabels, displayShowTypeLabel } from '@/lib/show-types';
 import { cn } from '@/lib/utils';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import {
   Select,
@@ -61,13 +63,17 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { uploadImage } from '@/lib/upload';
-import { PostcodeLookup, formatAddress } from '@/components/postcode-lookup';
+import { SECard, SecLabel, Eyebrow } from '@/components/show-experience/kit';
+import { SE_H } from '@/components/show-experience/tokens';
 import { formatDate } from './_lib/show-utils';
 import { useShowId } from './_lib/show-context';
 import { PhaseActionPanel } from './_components/phase-action-panel';
 import { SetupWizard } from './_components/setup-wizard';
-import { ClassManager, BulkClassCreator, AddIndividualClass } from './_components/class-manager';
+import { ClassManager, BulkClassCreator, AddIndividualClass, VarietyClassQuickAdd } from './_components/class-manager';
 import { SundryItemManager } from './_components/sundry-item-manager';
+import { DiscountsSection } from './_components/discounts-section';
+import { RegionalFeesEditor, type RegionalFeePayload } from './_components/regional-fees-editor';
+import type { RegionalFeeConfig } from '@/server/db/schema/shows';
 
 export default function OverviewPage() {
   const showId = useShowId();
@@ -112,139 +118,142 @@ export default function OverviewPage() {
       <PhaseActionPanel />
 
       {/* Show Details — compact "boarding pass" style */}
-      <Card className="overflow-hidden rounded-2xl shadow-sm">
-        {/* Hero strip — key info at a glance */}
-        <div className="border-b bg-gradient-to-br from-primary/[0.04] to-transparent px-4 py-4 sm:px-6">
-          <div className="flex items-start justify-between gap-3">
-            <div className="min-w-0 flex-1 space-y-2.5">
-              {/* Date — the most important thing */}
-              <div className="flex items-center gap-2.5">
-                <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary/10">
-                  <CalendarDays className="size-4 text-primary" />
+      <div>
+        <SecLabel>Show Details</SecLabel>
+        <SECard className="overflow-hidden">
+          {/* Hero strip — key info at a glance */}
+          <div className="border-b border-se-line bg-se-fresh-soft/30 px-4 py-4 sm:px-6">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0 flex-1 space-y-2.5">
+                {/* Date — the most important thing */}
+                <div className="flex items-center gap-2.5">
+                  <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-se-fresh-soft">
+                    <CalendarDays className="size-4 text-se-fresh-deep" />
+                  </div>
+                  <div className="min-w-0">
+                    <Eyebrow>Date</Eyebrow>
+                    <p className={cn(SE_H, 'truncate text-sm text-se-ink')}>{dateDisplay}</p>
+                  </div>
                 </div>
-                <div className="min-w-0">
-                  <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Date</p>
-                  <p className="truncate font-serif text-sm font-semibold tracking-tight">{dateDisplay}</p>
+
+                {/* Venue */}
+                <div className="flex items-center gap-2.5">
+                  <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-se-fresh-soft">
+                    <MapPin className="size-4 text-se-fresh-deep" />
+                  </div>
+                  <div className="min-w-0">
+                    <Eyebrow>Venue</Eyebrow>
+                    <p className="truncate text-sm font-medium text-se-ink">
+                      {venueDisplay}
+                      {show.venue?.postcode && (
+                        <span className="ml-1 text-xs text-se-ink3">({show.venue.postcode})</span>
+                      )}
+                    </p>
+                  </div>
                 </div>
               </div>
 
-              {/* Venue */}
-              <div className="flex items-center gap-2.5">
-                <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary/10">
-                  <MapPin className="size-4 text-primary" />
-                </div>
-                <div className="min-w-0">
-                  <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Venue</p>
-                  <p className="truncate text-sm font-medium">
-                    {venueDisplay}
-                    {show.venue?.postcode && (
-                      <span className="ml-1 text-xs text-muted-foreground">({show.venue.postcode})</span>
+              {/* Edit button */}
+              <EditShowDetailsDialog show={show} showId={showId} />
+            </div>
+
+            {/* Type / Scope / Structure badges — dense horizontal row */}
+            <div className="mt-3 flex flex-wrap gap-1.5">
+              <Badge variant="secondary" className="text-[11px] font-medium">
+                {displayShowTypeLabel(show.showType, show.showRuleset)}
+              </Badge>
+              <Badge variant="outline" className="text-[11px] font-medium capitalize">
+                {show.showScope.replace('_', ' ')}
+              </Badge>
+              {show.classSexArrangement && (
+                <Badge variant="outline" className="text-[11px] font-medium">
+                  {show.classSexArrangement === 'separate_sex' ? 'Separate Dog & Bitch' : 'Combined'}
+                </Badge>
+              )}
+              {show.showOpenTime && (
+                <Badge variant="outline" className="text-[11px] font-medium">
+                  <Clock className="mr-0.5 size-3" />
+                  Opens {show.showOpenTime}
+                </Badge>
+              )}
+            </div>
+          </div>
+
+          {/* Quick-reference row — close dates side by side */}
+          {(show.entryCloseDate || show.postalCloseDate) && (
+            <div className="grid grid-cols-2 divide-x divide-se-line border-b border-se-line text-center">
+              <div className="px-3 py-2.5">
+                <Eyebrow>Entries Close</Eyebrow>
+                <p className="mt-0.5 text-xs font-semibold text-se-ink">{formatDate(show.entryCloseDate)}</p>
+              </div>
+              <div className="px-3 py-2.5">
+                <Eyebrow>Postal Close</Eyebrow>
+                <p className="mt-0.5 text-xs font-semibold text-se-ink">{formatDate(show.postalCloseDate)}</p>
+              </div>
+            </div>
+          )}
+
+          {/* Expandable secondary details */}
+          {hasSecondaryDetails && (
+            <div>
+              <button
+                type="button"
+                onClick={() => setDetailsExpanded((v) => !v)}
+                className="flex w-full items-center justify-between px-4 py-2.5 text-xs font-medium text-se-ink3 transition-colors hover:bg-se-paper2/50 hover:text-se-ink sm:px-6"
+              >
+                <span>{detailsExpanded ? 'Hide details' : 'More details'}</span>
+                <ChevronDown
+                  className={`size-3.5 transition-transform duration-200 ${detailsExpanded ? 'rotate-180' : ''}`}
+                />
+              </button>
+
+              {detailsExpanded && (
+                <div className="animate-in slide-in-from-top-1 fade-in border-t border-se-line px-4 pb-4 pt-3 sm:px-6">
+                  <dl className="grid grid-cols-2 gap-x-4 gap-y-3 text-sm">
+                    {/* Secretary info */}
+                    {show.secretaryName && (
+                      <div className="min-w-0">
+                        <dt className="flex items-center gap-1">
+                          <Users className="size-3 text-se-ink3" /> <Eyebrow>Secretary</Eyebrow>
+                        </dt>
+                        <dd className="mt-0.5 truncate font-medium text-se-ink">{show.secretaryName}</dd>
+                      </div>
                     )}
-                  </p>
+                    {show.secretaryEmail && (
+                      <div className="min-w-0">
+                        <dt className="flex items-center gap-1">
+                          <Mail className="size-3 text-se-ink3" /> <Eyebrow>Email</Eyebrow>
+                        </dt>
+                        <dd className="mt-0.5 truncate text-xs text-se-ink">{show.secretaryEmail}</dd>
+                      </div>
+                    )}
+
+                    {/* Judges */}
+                    {uniqueJudges.length > 0 && (
+                      <div className="col-span-2 min-w-0">
+                        <dt className="flex items-center gap-1">
+                          <Gavel className="size-3 text-se-ink3" /> <Eyebrow>{uniqueJudges.length === 1 ? 'Judge' : 'Judges'}</Eyebrow>
+                        </dt>
+                        <dd className="mt-0.5 font-medium text-se-ink">{uniqueJudges.join(', ')}</dd>
+                      </div>
+                    )}
+
+                    {/* Description */}
+                    {show.description && (
+                      <div className="col-span-2 min-w-0">
+                        <dt><Eyebrow>Description</Eyebrow></dt>
+                        <dd className="mt-1 whitespace-pre-wrap text-xs leading-relaxed text-se-ink3">
+                          {show.description}
+                        </dd>
+                      </div>
+                    )}
+                  </dl>
                 </div>
-              </div>
+              )}
             </div>
-
-            {/* Edit button */}
-            <EditShowDetailsDialog show={show} showId={showId} />
-          </div>
-
-          {/* Type / Scope / Structure badges — dense horizontal row */}
-          <div className="mt-3 flex flex-wrap gap-1.5">
-            <Badge variant="secondary" className="text-[11px] font-medium">
-              {showTypeLabels[show.showType] ?? show.showType}
-            </Badge>
-            <Badge variant="outline" className="text-[11px] font-medium capitalize">
-              {show.showScope.replace('_', ' ')}
-            </Badge>
-            {show.classSexArrangement && (
-              <Badge variant="outline" className="text-[11px] font-medium">
-                {show.classSexArrangement === 'separate_sex' ? 'Separate Dog & Bitch' : 'Combined'}
-              </Badge>
-            )}
-            {show.showOpenTime && (
-              <Badge variant="outline" className="text-[11px] font-medium">
-                <Clock className="mr-0.5 size-3" />
-                Opens {show.showOpenTime}
-              </Badge>
-            )}
-          </div>
-        </div>
-
-        {/* Quick-reference row — close dates side by side */}
-        {(show.entryCloseDate || show.postalCloseDate) && (
-          <div className="grid grid-cols-2 divide-x border-b text-center">
-            <div className="px-3 py-2.5">
-              <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Entries Close</p>
-              <p className="mt-0.5 text-xs font-semibold">{formatDate(show.entryCloseDate)}</p>
-            </div>
-            <div className="px-3 py-2.5">
-              <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Postal Close</p>
-              <p className="mt-0.5 text-xs font-semibold">{formatDate(show.postalCloseDate)}</p>
-            </div>
-          </div>
-        )}
-
-        {/* Expandable secondary details */}
-        {hasSecondaryDetails && (
-          <div>
-            <button
-              type="button"
-              onClick={() => setDetailsExpanded((v) => !v)}
-              className="flex w-full items-center justify-between px-4 py-2.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground sm:px-6"
-            >
-              <span>{detailsExpanded ? 'Hide details' : 'More details'}</span>
-              <ChevronDown
-                className={`size-3.5 transition-transform duration-200 ${detailsExpanded ? 'rotate-180' : ''}`}
-              />
-            </button>
-
-            {detailsExpanded && (
-              <div className="animate-in slide-in-from-top-1 fade-in border-t px-4 pb-4 pt-3 sm:px-6">
-                <dl className="grid grid-cols-2 gap-x-4 gap-y-3 text-sm">
-                  {/* Secretary info */}
-                  {show.secretaryName && (
-                    <div className="min-w-0">
-                      <dt className="flex items-center gap-1 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
-                        <Users className="size-3" /> Secretary
-                      </dt>
-                      <dd className="mt-0.5 truncate font-medium">{show.secretaryName}</dd>
-                    </div>
-                  )}
-                  {show.secretaryEmail && (
-                    <div className="min-w-0">
-                      <dt className="flex items-center gap-1 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
-                        <Mail className="size-3" /> Email
-                      </dt>
-                      <dd className="mt-0.5 truncate text-xs">{show.secretaryEmail}</dd>
-                    </div>
-                  )}
-
-                  {/* Judges */}
-                  {uniqueJudges.length > 0 && (
-                    <div className="col-span-2 min-w-0">
-                      <dt className="flex items-center gap-1 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
-                        <Gavel className="size-3" /> {uniqueJudges.length === 1 ? 'Judge' : 'Judges'}
-                      </dt>
-                      <dd className="mt-0.5 font-medium">{uniqueJudges.join(', ')}</dd>
-                    </div>
-                  )}
-
-                  {/* Description */}
-                  {show.description && (
-                    <div className="col-span-2 min-w-0">
-                      <dt className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Description</dt>
-                      <dd className="mt-1 whitespace-pre-wrap text-xs leading-relaxed text-muted-foreground">
-                        {show.description}
-                      </dd>
-                    </div>
-                  )}
-                </dl>
-              </div>
-            )}
-          </div>
-        )}
-      </Card>
+          )}
+        </SECard>
+      </div>
 
       {/* Venue image upload */}
       {show.venue && (
@@ -257,18 +266,31 @@ export default function OverviewPage() {
       )}
 
       {/* Class management */}
-      <ClassManager showId={showId} showType={show.showType} classes={show.showClasses ?? []} />
+      <div>
+        <SecLabel>Classes</SecLabel>
+        <div className="space-y-6">
+          <ClassManager showId={showId} showType={show.showType} showScope={show.showScope} showRuleset={show.showRuleset} classes={show.showClasses ?? []} />
 
-      {/* Add classes — prominent when empty, folded into ClassManager when classes exist */}
-      {(show.showClasses?.length ?? 0) === 0 && (
-        <>
-          <BulkClassCreator showId={showId} />
-          <AddIndividualClass showId={showId} />
-        </>
-      )}
+          {/* Add classes — prominent when empty, folded into ClassManager when classes exist */}
+          {(show.showClasses?.length ?? 0) === 0 && (
+            <>
+              <BulkClassCreator showId={showId} />
+              <AddIndividualClass showId={showId} />
+            </>
+          )}
+
+          {/* Variety class quick-add for multi-breed shows */}
+          {show.showScope === 'general' && (
+            <VarietyClassQuickAdd showId={showId} />
+          )}
+        </div>
+      </div>
 
       {/* Sundry items management */}
-      <SundryItemManager showId={showId} />
+      <div id="sundry-items">
+        <SecLabel>Sundry Items</SecLabel>
+        <SundryItemManager showId={showId} />
+      </div>
 
       {/* Delete show (draft only) */}
       {show.status === 'draft' && (
@@ -324,17 +346,18 @@ function VenueImageUpload({
   }
 
   return (
-    <Card>
-      <CardHeader className="pb-3">
-        <CardTitle className="flex items-center gap-2 font-serif text-base">
-          <MapPin className="size-4 text-primary" />
-          Venue Photo — {venueName}
-        </CardTitle>
-        <CardDescription className="text-xs">
-          Shows on the public page in the venue section. Landscape images work best.
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
+    <div>
+      <SecLabel>Venue Photo</SecLabel>
+      <SECard className="p-4 sm:p-5">
+        <div className="mb-3 flex items-center gap-2">
+          <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-se-fresh-soft">
+            <MapPin className="size-4 text-se-fresh-deep" />
+          </div>
+          <div className="min-w-0">
+            <p className={cn(SE_H, 'truncate text-sm text-se-ink')}>{venueName}</p>
+            <p className="text-xs text-se-ink3">Shows on the public page. Landscape images work best.</p>
+          </div>
+        </div>
         <div
           className={cn(
             'group relative flex cursor-pointer items-center justify-center overflow-hidden rounded-lg border-2 border-dashed transition-all duration-200',
@@ -379,7 +402,7 @@ function VenueImageUpload({
         <input
           ref={fileRef}
           type="file"
-          accept="image/*"
+          accept="image/jpeg,image/png,image/webp"
           className="hidden"
           onChange={(e) => {
             const file = e.target.files?.[0];
@@ -412,12 +435,32 @@ function VenueImageUpload({
             </Button>
           </div>
         )}
-      </CardContent>
-    </Card>
+      </SECard>
+    </div>
   );
 }
 
 // ── Edit Show Details Dialog ──────────────────────────────
+
+/**
+ * Mandy's hard rule (2026-08-04): entries — and postal entries — must close
+ * at least two weeks before the show. Shared by the start-date onChange
+ * handler below for both the entry-close and postal-close fields: if moving
+ * the start date puts `closeDate` inside the floor, auto-adjust it to the
+ * latest date the floor still allows, rather than let the secretary save an
+ * invalid gap and hit the error on Save instead.
+ */
+function adjustCloseDateForFloor(
+  closeDate: string,
+  setCloseDate: (value: string) => void,
+  newStartDate: string,
+  field: 'entry close date' | 'postal close date',
+) {
+  if (!newStartDate || !closeDate || isCloseDateWithinFloor(closeDate, newStartDate)) return;
+  const adjusted = latestPermissibleCloseDate(newStartDate);
+  setCloseDate(`${format(adjusted, 'yyyy-MM-dd')}T23:59`);
+  toast.info(entryCloseAdjustedMessage(field, adjusted));
+}
 
 function EditShowDetailsDialog({
   show,
@@ -427,6 +470,7 @@ function EditShowDetailsDialog({
     name: string;
     showType: string;
     showScope: string;
+    showRuleset: string | null;
     classSexArrangement: string | null;
     secretaryEmail: string | null;
     secretaryName: string | null;
@@ -447,10 +491,17 @@ function EditShowDetailsDialog({
     subsequentEntryFee: number | null;
     nfcEntryFee: number | null;
     juniorHandlerFee: number | null;
+    multiDogThreshold: number | null;
+    multiDogPackagePence: number | null;
+    regionalFeeConfig: RegionalFeeConfig | null;
   };
   showId: string;
 }) {
   const [open, setOpen] = useState(false);
+  const isWusv = show.showRuleset === 'wusv';
+  // Embedded RegionalFeesEditor reports its config here so the dialog's single
+  // Save persists fees alongside everything else (no two-save-button trap).
+  const [regionalPayload, setRegionalPayload] = useState<RegionalFeePayload | null>(null);
   const [name, setName] = useState(show.name);
   const [showType, setShowType] = useState(show.showType);
   const [showScope, setShowScope] = useState(show.showScope);
@@ -483,6 +534,10 @@ function EditShowDetailsDialog({
   const [subsequentEntryFee, setSubsequentEntryFee] = useState(show.subsequentEntryFee != null ? (show.subsequentEntryFee / 100).toFixed(2) : '');
   const [nfcEntryFee, setNfcEntryFee] = useState(show.nfcEntryFee != null ? (show.nfcEntryFee / 100).toFixed(2) : '');
   const [juniorHandlerFee, setJuniorHandlerFee] = useState(show.juniorHandlerFee != null ? (show.juniorHandlerFee / 100).toFixed(2) : '');
+  const [multiDog, setMultiDog] = useState({
+    threshold: show.multiDogThreshold != null ? String(show.multiDogThreshold) : '',
+    packagePence: show.multiDogPackagePence != null ? (show.multiDogPackagePence / 100).toFixed(2) : '',
+  });
   const [startTime, setStartTime] = useState(show.startTime ?? '');
 
   const handleBannerUpload = useCallback(async (file: File) => {
@@ -509,13 +564,15 @@ function EditShowDetailsDialog({
   });
 
   function handleSave() {
-    // Validate close dates are before show start date
-    if (entryCloseDate && startDate && new Date(entryCloseDate) >= new Date(startDate)) {
-      toast.error('Entry close date must be before the show start date');
+    // Mandy's hard rule (2026-08-04): entries — and postal entries — must
+    // close at least two weeks before the show. Same helper + message the
+    // server uses, so this can never drift from what the server accepts.
+    if (entryCloseDate && startDate && !isCloseDateWithinFloor(entryCloseDate, startDate)) {
+      toast.error(entryCloseFloorMessage(startDate, 'entry close date'));
       return;
     }
-    if (postalCloseDate && startDate && new Date(postalCloseDate) >= new Date(startDate)) {
-      toast.error('Postal close date must be before the show start date');
+    if (postalCloseDate && startDate && !isCloseDateWithinFloor(postalCloseDate, startDate)) {
+      toast.error(entryCloseFloorMessage(startDate, 'postal close date'));
       return;
     }
     updateMutation.mutate({
@@ -541,10 +598,18 @@ function EditShowDetailsDialog({
       kcLicenceNo: kcLicenceNo || null,
       description: description || null,
       bannerImageUrl: bannerImageUrl || null,
-      firstEntryFee: firstEntryFee ? poundsToPence(Number(firstEntryFee)) : null,
-      subsequentEntryFee: subsequentEntryFee ? poundsToPence(Number(subsequentEntryFee)) : null,
-      nfcEntryFee: nfcEntryFee ? poundsToPence(Number(nfcEntryFee)) : null,
-      juniorHandlerFee: juniorHandlerFee ? poundsToPence(Number(juniorHandlerFee)) : null,
+      // Regional (SV/WUSV) shows price via regionalFeeConfig (reported up by the
+      // embedded RegionalFeesEditor); their RKC fee fields are left untouched
+      // (undefined) so the single Save never clobbers the regional config.
+      firstEntryFee: isWusv ? undefined : firstEntryFee ? poundsToPence(Number(firstEntryFee)) : null,
+      subsequentEntryFee: isWusv ? undefined : subsequentEntryFee ? poundsToPence(Number(subsequentEntryFee)) : null,
+      nfcEntryFee: isWusv ? undefined : nfcEntryFee ? poundsToPence(Number(nfcEntryFee)) : null,
+      juniorHandlerFee: isWusv
+        ? regionalPayload?.juniorHandlerFeePence ?? undefined
+        : juniorHandlerFee ? poundsToPence(Number(juniorHandlerFee)) : null,
+      regionalFeeConfig: isWusv ? regionalPayload?.config ?? undefined : undefined,
+      multiDogThreshold: isWusv ? undefined : multiDog.threshold ? Number(multiDog.threshold) : null,
+      multiDogPackagePence: isWusv ? undefined : multiDog.packagePence ? poundsToPence(Number(multiDog.packagePence)) : null,
       startTime: startTime || null,
     });
   }
@@ -649,7 +714,7 @@ function EditShowDetailsDialog({
               <input
                 ref={bannerFileRef}
                 type="file"
-                accept="image/*"
+                accept="image/jpeg,image/png,image/webp"
                 className="hidden"
                 onChange={(e) => {
                   const file = e.target.files?.[0];
@@ -692,61 +757,85 @@ function EditShowDetailsDialog({
                 onChange={(e) => setName(e.target.value)}
               />
             </div>
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div className="space-y-1.5">
-                <Label>Show Type</Label>
-                <Select value={showType} onValueChange={setShowType}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="companion">Companion</SelectItem>
-                    <SelectItem value="primary">Primary</SelectItem>
-                    <SelectItem value="limited">Limited</SelectItem>
-                    <SelectItem value="open">Open</SelectItem>
-                    <SelectItem value="premier_open">Premier Open</SelectItem>
-                    <SelectItem value="championship">Championship</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-1.5">
-                <Label>Show Scope</Label>
-                <Select value={showScope} onValueChange={setShowScope}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="single_breed">Single Breed</SelectItem>
-                    <SelectItem value="group">Group</SelectItem>
-                    <SelectItem value="general">General</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div className="space-y-1.5">
-                <Label>Class Structure</Label>
-                <Select value={classSexArrangement} onValueChange={setClassSexArrangement}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select class structure" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="separate_sex">Separate Dog & Bitch</SelectItem>
-                    <SelectItem value="combined_sex">Combined Dog & Bitch</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="edit-secretary-email">Secretary Contact Email</Label>
-                <Input
-                  id="edit-secretary-email"
-                  type="email"
-                  value={secretaryEmail}
-                  onChange={(e) => setSecretaryEmail(e.target.value)}
-                  placeholder="e.g. secretary@club.co.uk"
-                />
-              </div>
-            </div>
+            {isWusv ? (
+              <>
+                <div className="rounded-lg border border-se-honey-line bg-se-honey-soft p-3 text-sm">
+                  <p className="font-medium text-se-honey-ink">Show Format: Regional</p>
+                  <p className="mt-1 text-xs text-se-honey-ink/80">
+                    WUSV / SV ruleset — single breed (German Shepherd Dog), separate Dog &amp; Bitch classes,
+                    coat type split. These are fixed for Regional shows and aren&apos;t editable here.
+                  </p>
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="edit-secretary-email">Secretary Contact Email</Label>
+                  <Input
+                    id="edit-secretary-email"
+                    type="email"
+                    value={secretaryEmail}
+                    onChange={(e) => setSecretaryEmail(e.target.value)}
+                    placeholder="e.g. secretary@club.co.uk"
+                  />
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div className="space-y-1.5">
+                    <Label>Show Type</Label>
+                    <Select value={showType} onValueChange={setShowType}>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="companion">Companion</SelectItem>
+                        <SelectItem value="primary">Primary</SelectItem>
+                        <SelectItem value="limited">Limited</SelectItem>
+                        <SelectItem value="open">Open</SelectItem>
+                        <SelectItem value="premier_open">Premier Open</SelectItem>
+                        <SelectItem value="championship">Championship</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label>Show Scope</Label>
+                    <Select value={showScope} onValueChange={setShowScope}>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="single_breed">Single Breed</SelectItem>
+                        <SelectItem value="group">Group</SelectItem>
+                        <SelectItem value="general">General</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div className="space-y-1.5">
+                    <Label>Class Structure</Label>
+                    <Select value={classSexArrangement} onValueChange={setClassSexArrangement}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select class structure" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="separate_sex">Separate Dog & Bitch</SelectItem>
+                        <SelectItem value="combined_sex">Combined Dog & Bitch</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="edit-secretary-email">Secretary Contact Email</Label>
+                    <Input
+                      id="edit-secretary-email"
+                      type="email"
+                      value={secretaryEmail}
+                      onChange={(e) => setSecretaryEmail(e.target.value)}
+                      placeholder="e.g. secretary@club.co.uk"
+                    />
+                  </div>
+                </div>
+              </>
+            )}
 
             {/* Secretary & Schedule Details */}
             <div className="grid gap-4 sm:grid-cols-2">
@@ -772,18 +861,11 @@ function EditShowDetailsDialog({
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="edit-secretary-address">Secretary Address</Label>
-              <PostcodeLookup
-                compact
-                onSelect={(result) => {
-                  const full = [formatAddress(result), result.postcode].filter(Boolean).join(', ');
-                  setSecretaryAddress(full);
-                }}
-              />
               <Input
                 id="edit-secretary-address"
                 value={secretaryAddress}
                 onChange={(e) => setSecretaryAddress(e.target.value)}
-                placeholder="Full postal address for schedule"
+                placeholder="House/flat, street, town, postcode"
               />
             </div>
             <div className="grid gap-4 sm:grid-cols-2">
@@ -830,35 +912,8 @@ function EditShowDetailsDialog({
                   onChange={(e) => {
                     const newStartDate = e.target.value;
                     setStartDate(newStartDate);
-
-                    // If entry close date is on or after the new start date, auto-adjust
-                    if (newStartDate && entryCloseDate) {
-                      const closeDate = new Date(entryCloseDate);
-                      const showDate = new Date(newStartDate);
-                      if (closeDate >= showDate) {
-                        // Set entry close to 7 days before the new start date at 23:59
-                        const adjusted = new Date(showDate);
-                        adjusted.setDate(adjusted.getDate() - 7);
-                        const adjustedStr = adjusted.toISOString().slice(0, 11) + '23:59';
-                        setEntryCloseDate(adjustedStr);
-                        const displayDate = adjusted.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
-                        toast.info(`Entry close date adjusted to ${displayDate} — it can't be after the show date`);
-                      }
-                    }
-
-                    // Also check postal close date
-                    if (newStartDate && postalCloseDate) {
-                      const postalDate = new Date(postalCloseDate);
-                      const showDate = new Date(newStartDate);
-                      if (postalDate >= showDate) {
-                        const adjusted = new Date(showDate);
-                        adjusted.setDate(adjusted.getDate() - 10);
-                        const adjustedStr = adjusted.toISOString().slice(0, 11) + '23:59';
-                        setPostalCloseDate(adjustedStr);
-                        const displayDate = adjusted.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
-                        toast.info(`Postal close date adjusted to ${displayDate} — it can't be after the show date`);
-                      }
-                    }
+                    adjustCloseDateForFloor(entryCloseDate, setEntryCloseDate, newStartDate, 'entry close date');
+                    adjustCloseDateForFloor(postalCloseDate, setPostalCloseDate, newStartDate, 'postal close date');
                   }}
                 />
               </div>
@@ -872,42 +927,87 @@ function EditShowDetailsDialog({
                 />
               </div>
             </div>
+            {/* Separate date + time inputs (Mandy 2026-07-23): closes default
+                to 11:59pm on the chosen date. A combined datetime-local can't
+                deliver that on iOS — the wheel starts at an arbitrary time. */}
+            {startDate && <EntryCloseHint startDate={startDate} />}
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-1.5">
                 <Label htmlFor="edit-entry-close">Entry Close Date</Label>
-                <Input
-                  id="edit-entry-close"
-                  type="datetime-local"
-                  value={entryCloseDate}
-                  max={startDate ? `${startDate}T00:00` : undefined}
-                  onChange={(e) => {
-                    const newClose = e.target.value;
-                    if (newClose && startDate && new Date(newClose) >= new Date(startDate)) {
-                      toast.error('Entry close date must be before the show date');
-                      return;
+                <div className="flex gap-2">
+                  <Input
+                    id="edit-entry-close"
+                    type="date"
+                    className="flex-1"
+                    value={entryCloseDate.slice(0, 10)}
+                    max={startDate ? latestPermissibleCloseDateInputValue(startDate) : undefined}
+                    onChange={(e) => {
+                      const newClose = e.target.value
+                        ? `${e.target.value}T23:59`
+                        : '';
+                      if (newClose && startDate && !isCloseDateWithinFloor(newClose, startDate)) {
+                        toast.error(entryCloseFloorMessage(startDate, 'entry close date'));
+                        return;
+                      }
+                      setEntryCloseDate(newClose);
+                    }}
+                  />
+                  <Input
+                    aria-label="Closing time"
+                    type="time"
+                    className="w-28"
+                    value={entryCloseDate.length >= 16 ? entryCloseDate.slice(11, 16) : '23:59'}
+                    disabled={!entryCloseDate}
+                    onChange={(e) =>
+                      entryCloseDate &&
+                      setEntryCloseDate(`${entryCloseDate.slice(0, 10)}T${e.target.value || '23:59'}`)
                     }
-                    setEntryCloseDate(newClose);
-                  }}
-                />
+                  />
+                </div>
               </div>
               <div className="space-y-1.5">
                 <Label htmlFor="edit-postal-close">Postal Close Date</Label>
-                <Input
-                  id="edit-postal-close"
-                  type="datetime-local"
-                  value={postalCloseDate}
-                  max={startDate ? `${startDate}T00:00` : undefined}
-                  onChange={(e) => {
-                    const newClose = e.target.value;
-                    if (newClose && startDate && new Date(newClose) >= new Date(startDate)) {
-                      toast.error('Postal close date must be before the show date');
-                      return;
+                <div className="flex gap-2">
+                  <Input
+                    id="edit-postal-close"
+                    type="date"
+                    className="flex-1"
+                    value={postalCloseDate.slice(0, 10)}
+                    max={startDate ? latestPermissibleCloseDateInputValue(startDate) : undefined}
+                    onChange={(e) => {
+                      const newClose = e.target.value
+                        ? `${e.target.value}T23:59`
+                        : '';
+                      if (newClose && startDate && !isCloseDateWithinFloor(newClose, startDate)) {
+                        toast.error(entryCloseFloorMessage(startDate, 'postal close date'));
+                        return;
+                      }
+                      setPostalCloseDate(newClose);
+                    }}
+                  />
+                  <Input
+                    aria-label="Postal closing time"
+                    type="time"
+                    className="w-28"
+                    value={postalCloseDate.length >= 16 ? postalCloseDate.slice(11, 16) : '23:59'}
+                    disabled={!postalCloseDate}
+                    onChange={(e) =>
+                      postalCloseDate &&
+                      setPostalCloseDate(`${postalCloseDate.slice(0, 10)}T${e.target.value || '23:59'}`)
                     }
-                    setPostalCloseDate(newClose);
-                  }}
-                />
+                  />
+                </div>
               </div>
             </div>
+            {isWusv ? (
+              <RegionalFeesEditor
+                showId={showId}
+                config={show.regionalFeeConfig}
+                juniorHandlerFeePence={show.juniorHandlerFee}
+                onChange={setRegionalPayload}
+              />
+            ) : (
+              <>
             {/* Entry Fees */}
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-1.5">
@@ -976,6 +1076,14 @@ function EditShowDetailsDialog({
               </div>
             </div>
 
+            <DiscountsSection
+              showId={showId}
+              multiDog={multiDog}
+              onMultiDogChange={setMultiDog}
+            />
+              </>
+            )}
+
             <div className="space-y-1.5">
               <Label htmlFor="edit-kc">RKC Licence Number</Label>
               <Input
@@ -1028,16 +1136,16 @@ function DeleteShowSection({ showId, showName }: { showId: string; showName: str
 
   return (
     <>
-    <Card className="border-destructive/50">
-      <CardHeader>
-        <CardTitle className="text-destructive">Danger Zone</CardTitle>
-        <CardDescription>
+    <div>
+      <SecLabel>Danger Zone</SecLabel>
+      <SECard className="border-destructive/30 bg-destructive/5 p-4 sm:p-5">
+        <p className={cn(SE_H, 'text-sm text-destructive')}>Delete this show</p>
+        <p className="mt-1 text-xs text-se-ink3">
           Permanently delete this show and all associated classes. This action cannot be undone.
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
+        </p>
         <Button
           variant="destructive"
+          className="mt-3 min-h-[2.75rem]"
           onClick={() => setConfirmOpen(true)}
           disabled={deleteMutation.isPending}
         >
@@ -1047,8 +1155,8 @@ function DeleteShowSection({ showId, showName }: { showId: string; showName: str
           <Trash2 className="size-4" />
           Delete Show
         </Button>
-      </CardContent>
-    </Card>
+      </SECard>
+    </div>
 
     <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
       <AlertDialogContent>

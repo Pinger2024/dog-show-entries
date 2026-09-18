@@ -15,6 +15,17 @@ export const payments = pgTable(
     status: paymentStatusEnum('status').notNull().default('pending'),
     type: paymentTypeEnum('type').notNull().default('initial'),
     refundAmount: integer('refund_amount'),
+    // Stripe's actual per-charge economics — captured from the Charge's
+    // balance_transaction (never present on the PaymentIntent itself). We
+    // previously only estimated fees at 1.5%; these columns hold the truth.
+    // Nullable: legacy rows predate capture, and capture is deliberately
+    // best-effort (see the webhook's never-block comment) so a Stripe API
+    // hiccup must never leave these columns blocking anything else.
+    feePence: integer('fee_pence'),
+    netPence: integer('net_pence'),
+    balanceTransactionId: text('balance_transaction_id'),
+    cardBrand: text('card_brand'),
+    cardCountry: text('card_country'),
     createdAt: timestamp('created_at', { withTimezone: true })
       .defaultNow()
       .notNull(),

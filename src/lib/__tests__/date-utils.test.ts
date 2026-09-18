@@ -1,10 +1,15 @@
 import { describe, it, expect } from 'vitest';
 import {
   formatCurrency,
+  formatCloseTimeUK,
   formatDateRange,
   poundsToPence,
   penceToPounds,
   penceToPoundsString,
+  isAgeEligibleOnShowDay,
+  getAgeEligibilityDetail,
+  getCompetitionAgeError,
+  isAgeRestrictedClass,
 } from '../date-utils';
 
 describe('formatCurrency', () => {
@@ -118,5 +123,317 @@ describe('formatDateRange', () => {
     expect(formatDateRange('2025-12-30', '2026-01-02')).toBe(
       '30 Dec 2025 – 2 Jan 2026'
     );
+  });
+});
+
+describe('isAgeEligibleOnShowDay', () => {
+  // RKC Puppy = "of six and not exceeding twelve calendar months". The
+  // tricky case Amanda flagged 2026-05-28: a dog whose 1st birthday IS
+  // the show day should still count as a puppy.
+  it('includes a dog whose 1st birthday lands on show day in Puppy (6–12)', () => {
+    expect(isAgeEligibleOnShowDay('2025-07-04', '2026-07-04', 6, 12)).toBe(true);
+  });
+
+  it('excludes a dog who is one day past her 1st birthday from Puppy', () => {
+    expect(isAgeEligibleOnShowDay('2025-07-04', '2026-07-05', 6, 12)).toBe(false);
+  });
+
+  it('includes a dog who hits 6 months exactly on show day in Puppy', () => {
+    expect(isAgeEligibleOnShowDay('2026-01-04', '2026-07-04', 6, 12)).toBe(true);
+  });
+
+  it('excludes a dog who is one day under 6 months from Puppy', () => {
+    expect(isAgeEligibleOnShowDay('2026-01-05', '2026-07-04', 6, 12)).toBe(false);
+  });
+
+  it('includes a 12-month-old in Junior (6–18) and Yearling (12–24)', () => {
+    expect(isAgeEligibleOnShowDay('2025-07-04', '2026-07-04', 6, 18)).toBe(true);
+    expect(isAgeEligibleOnShowDay('2025-07-04', '2026-07-04', 12, 24)).toBe(true);
+  });
+
+  it('treats null bounds as open-ended', () => {
+    expect(isAgeEligibleOnShowDay('2018-01-01', '2026-07-04', null, null)).toBe(true);
+    expect(isAgeEligibleOnShowDay('2018-01-01', '2026-07-04', 84, null)).toBe(true); // Veteran 7y+
+    expect(isAgeEligibleOnShowDay('2022-01-01', '2026-07-04', 84, null)).toBe(false);
+  });
+});
+
+describe('getAgeEligibilityDetail', () => {
+  it('reports eligible with no failedBound when within both bounds', () => {
+    expect(getAgeEligibilityDetail('2025-07-04', '2026-07-04', 6, 12)).toEqual({
+      eligible: true,
+      failedBound: null,
+    });
+  });
+
+  it('reports failedBound "min" when under the minimum', () => {
+    expect(getAgeEligibilityDetail('2026-01-05', '2026-07-04', 6, 12)).toEqual({
+      eligible: false,
+      failedBound: 'min',
+    });
+  });
+
+  it('reports failedBound "max" when over the maximum', () => {
+    expect(getAgeEligibilityDetail('2025-07-04', '2026-07-05', 6, 12)).toEqual({
+      eligible: false,
+      failedBound: 'max',
+    });
+  });
+
+  it('includes a dog whose 1st birthday lands on show day (12-month anniversary edge)', () => {
+    // Same edge case as isAgeEligibleOnShowDay above — a dog turning 12
+    // months old ON the show day is still eligible for Puppy (6-12).
+    expect(getAgeEligibilityDetail('2025-07-04', '2026-07-04', 6, 12)).toEqual({
+      eligible: true,
+      failedBound: null,
+    });
+  });
+
+  it('treats null bounds as open-ended (eligible, no failedBound)', () => {
+    expect(getAgeEligibilityDetail('2018-01-01', '2026-07-04', null, null)).toEqual({
+      eligible: true,
+      failedBound: null,
+    });
+  });
+
+  it('a null min never fails "min" — a too-old dog against only a max bound reports "max"', () => {
+    expect(getAgeEligibilityDetail('2022-01-01', '2026-07-04', null, 24)).toEqual({
+      eligible: false,
+      failedBound: 'max',
+    });
+  });
+});
+
+describe('isAgeRestrictedClass', () => {
+  // Regression: a dog over 2 years old could be entered in "Special Award
+  // Class - Special Yearling" because the age gate only ever checked
+  // type === 'age' || 'sv_age', so a banded 'special' class was never
+  // enforced. The rule is now type-agnostic: any class with a min or max
+  // age band is age-restricted, full stop.
+  it('is restricted when a special class carries an age band', () => {
+    expect(
+      isAgeRestrictedClass({ minAgeMonths: 12, maxAgeMonths: 24 }),
+    ).toBe(true);
+  });
+
+  it('is unrestricted when a special class has no age band (Special Beginners etc.)', () => {
+    expect(
+      isAgeRestrictedClass({ minAgeMonths: null, maxAgeMonths: null }),
+    ).toBe(false);
+  });
+
+  it('is restricted when an age-type class carries an age band', () => {
+    expect(
+      isAgeRestrictedClass({ minAgeMonths: 4, maxAgeMonths: 6 }),
+    ).toBe(true);
+  });
+
+  it('is unrestricted when an age-type class has no age band', () => {
+    expect(
+      isAgeRestrictedClass({ minAgeMonths: null, maxAgeMonths: null }),
+    ).toBe(false);
+  });
+
+  it('is restricted with only a min bound set (no max)', () => {
+    expect(
+      isAgeRestrictedClass({ minAgeMonths: 84, maxAgeMonths: null }),
+    ).toBe(true);
+  });
+
+  it('is restricted with only a max bound set (no min)', () => {
+    expect(
+      isAgeRestrictedClass({ minAgeMonths: null, maxAgeMonths: 12 }),
+    ).toBe(true);
+  });
+});
+
+describe('getCompetitionAgeError', () => {
+  const babyPuppy = { name: 'Baby Puppy', type: 'sv_age', minAgeMonths: 4, maxAgeMonths: 6 };
+  const openClass = { name: 'Open', type: 'achievement', minAgeMonths: null, maxAgeMonths: null };
+
+  // The bug: a Baby Puppy (4–6 months) legitimately entered into her own class
+  // was blocked by the general "must be 6 months for competition" floor and
+  // shooed to NFC. Amanda 2026-07-18 — Raubahaus Xaris, born 30 Apr 2026, at
+  // the North East Regional on 5 Sept 2026 (4 months and 6 days old).
+  it('allows a 4-month-old Baby Puppy into her own class (the Xaris case)', () => {
+    expect(
+      getCompetitionAgeError({
+        dogName: 'Raubahaus Xaris',
+        dob: '2026-04-30',
+        showDate: '2026-09-05',
+        classes: [babyPuppy],
+      })
+    ).toBeNull();
+  });
+
+  it('allows a dog who turns exactly 4 months on show day into Baby Puppy', () => {
+    expect(
+      getCompetitionAgeError({
+        dogName: 'Pup',
+        dob: '2026-04-30',
+        showDate: '2026-08-30',
+        classes: [babyPuppy],
+      })
+    ).toBeNull();
+  });
+
+  it('rejects a dog one day under 4 months for Baby Puppy, suggesting NFC', () => {
+    const msg = getCompetitionAgeError({
+      dogName: 'Pup',
+      dob: '2026-04-30',
+      showDate: '2026-08-29',
+      classes: [babyPuppy],
+    });
+    expect(msg).toMatch(/too young for "Baby Puppy"/);
+    expect(msg).toMatch(/Not For Competition \(NFC\) instead/);
+  });
+
+  it('rejects a dog who has aged out of Baby Puppy (6 months + a day) as too old', () => {
+    const msg = getCompetitionAgeError({
+      dogName: 'Pup',
+      dob: '2026-04-30',
+      showDate: '2026-10-31',
+      classes: [babyPuppy],
+    });
+    expect(msg).toMatch(/too old for "Baby Puppy"/);
+  });
+
+  it('keeps the six-month floor for ordinary competition classes', () => {
+    // 5 months old → below the general floor, not an age class.
+    const msg = getCompetitionAgeError({
+      dogName: 'Pup',
+      dob: '2026-04-01',
+      showDate: '2026-09-01',
+      classes: [openClass],
+    });
+    expect(msg).toMatch(/at least 6 months old for competition classes/);
+    expect(msg).toMatch(/Not For Competition \(NFC\) instead/);
+  });
+
+  it('fully rejects an under-4-month dog entering an ordinary class', () => {
+    const msg = getCompetitionAgeError({
+      dogName: 'Pup',
+      dob: '2026-06-01',
+      showDate: '2026-09-01',
+      classes: [openClass],
+    });
+    expect(msg).toMatch(/at least 6 months old to enter competition classes/);
+  });
+
+  it('allows an adult into an ordinary competition class', () => {
+    expect(
+      getCompetitionAgeError({
+        dogName: 'Champ',
+        dob: '2022-01-01',
+        showDate: '2026-09-01',
+        classes: [openClass],
+      })
+    ).toBeNull();
+  });
+
+  it('treats an age-type class with no bounds as an ordinary class (6-month floor)', () => {
+    // Mirrors the test factories, where a Baby Puppy row may carry no min/max.
+    const boundless = { name: 'Baby Puppy', type: 'sv_age', minAgeMonths: null, maxAgeMonths: null };
+    expect(
+      getCompetitionAgeError({
+        dogName: 'Adult',
+        dob: '2022-01-01',
+        showDate: '2026-09-01',
+        classes: [boundless],
+      })
+    ).toBeNull();
+  });
+
+  it('blocks when a dog qualifies for one class but not another entered alongside it', () => {
+    // Eligible for Baby Puppy at 4 months, but Open needs six months.
+    const msg = getCompetitionAgeError({
+      dogName: 'Pup',
+      dob: '2026-04-30',
+      showDate: '2026-09-05',
+      classes: [babyPuppy, openClass],
+    });
+    expect(msg).toMatch(/at least 6 months old for competition classes/);
+  });
+
+  // Regression: a banded 'special' class (e.g. "Special Award Class -
+  // Special Yearling") must enforce its window exactly like an 'age'/'sv_age'
+  // class — the type filter that let this slip is gone.
+  it('rejects a dog over 2 years old entered in a banded "special" class', () => {
+    const specialYearling = {
+      name: 'Special Award Class - Special Yearling',
+      type: 'special',
+      minAgeMonths: 12,
+      maxAgeMonths: 24,
+    };
+    const msg = getCompetitionAgeError({
+      dogName: 'Rex',
+      dob: '2023-01-01',
+      showDate: '2026-09-05',
+      classes: [specialYearling],
+    });
+    expect(msg).toMatch(/too old for "Special Award Class - Special Yearling"/);
+  });
+
+  it('allows a young-enough dog into a banded "special" class', () => {
+    const specialYearling = {
+      name: 'Special Award Class - Special Yearling',
+      type: 'special',
+      minAgeMonths: 12,
+      maxAgeMonths: 24,
+    };
+    expect(
+      getCompetitionAgeError({
+        dogName: 'Rex',
+        dob: '2025-09-05',
+        showDate: '2026-09-05',
+        classes: [specialYearling],
+      })
+    ).toBeNull();
+  });
+
+  it('still accepts any adult dog into an unbanded "special" class', () => {
+    const unbandedSpecial = {
+      name: 'Special Award Class - Special Beginners',
+      type: 'special',
+      minAgeMonths: null,
+      maxAgeMonths: null,
+    };
+    expect(
+      getCompetitionAgeError({
+        dogName: 'Rex',
+        dob: '2018-01-01',
+        showDate: '2026-09-05',
+        classes: [unbandedSpecial],
+      })
+    ).toBeNull();
+  });
+});
+
+// Mandy 2026-07-21: countdowns must show WHEN the door shuts, UK time,
+// in words a 60-year-old secretary reads at a glance.
+describe('formatCloseTimeUK', () => {
+  it('reads 23:59 UK as 23:59 (BST date)', () => {
+    // 22:59 UTC in July = 23:59 BST
+    expect(formatCloseTimeUK(new Date('2026-07-26T22:59:00Z'))).toBe('23:59');
+  });
+  it('reads 00:00 UK as 00:00', () => {
+    expect(formatCloseTimeUK(new Date('2026-07-25T23:00:00Z'))).toBe('00:00');
+  });
+  it('reads 23:59 UK as 23:59 in winter (GMT)', () => {
+    expect(formatCloseTimeUK(new Date('2026-12-05T23:59:00Z'))).toBe('23:59');
+  });
+  it('reads 12:00 UK as noon', () => {
+    expect(formatCloseTimeUK(new Date('2026-07-26T11:00:00Z'))).toBe('noon');
+  });
+  it('drops :00 minutes — 5pm not 5:00pm', () => {
+    // 16:00 UTC in July = 5pm BST
+    expect(formatCloseTimeUK(new Date('2026-07-26T16:00:00Z'))).toBe('5pm');
+  });
+  it('keeps real minutes — 12:30pm', () => {
+    expect(formatCloseTimeUK(new Date('2026-07-26T11:30:00Z'))).toBe('12:30pm');
+  });
+  it('morning times get am', () => {
+    // 08:15 UTC July = 9:15am BST
+    expect(formatCloseTimeUK(new Date('2026-07-26T08:15:00Z'))).toBe('9:15am');
   });
 });

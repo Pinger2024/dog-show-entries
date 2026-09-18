@@ -9,6 +9,7 @@ import { Badge } from '@/components/ui/badge';
 import { statusConfig } from '../../_lib/show-utils';
 import { useShowId } from '../../_lib/show-context';
 import type { ActionPanelProps } from '../checklist-action-registry';
+import { ConfirmCloseEntries } from '../confirm-close-entries';
 
 /** Action keys that map to show status transitions */
 const STATUS_ACTIONS: Record<string, {
@@ -24,7 +25,7 @@ const STATUS_ACTIONS: Record<string, {
   entries_open: {
     targetStatus: 'entries_open',
     buttonLabel: 'Open Entries',
-    prerequisites: ['Show published', 'Classes created', 'Stripe connected'],
+    prerequisites: ['Show published', 'Classes created', 'Payout details added'],
   },
   entries_close: {
     targetStatus: 'entries_closed',
@@ -77,7 +78,7 @@ export function ShowStatusAction({ showId }: ActionPanelProps & { actionKey?: st
           if (prereq === 'Classes created') met = autoDetect?.classes_created ?? false;
           if (prereq === 'Venue confirmed') met = autoDetect?.venue_set ?? false;
           if (prereq === 'Show published') met = autoDetect?.show_published ?? false;
-          if (prereq === 'Stripe connected') met = !!show.stripeAccountId;
+          if (prereq === 'Payout details added') met = autoDetect?.payout_details_set ?? false;
           return { label: prereq, met };
         });
 
@@ -90,28 +91,41 @@ export function ShowStatusAction({ showId }: ActionPanelProps & { actionKey?: st
                 {prereqChecks.map((p) => (
                   <div key={p.label} className="flex items-center gap-1.5">
                     {p.met ? (
-                      <Check className="size-3 text-green-500" />
+                      <Check className="size-3 text-se-fresh-deep" />
                     ) : (
-                      <AlertTriangle className="size-3 text-amber-500" />
+                      <AlertTriangle className="size-3 text-se-honey-deep" />
                     )}
-                    <span className={p.met ? 'text-muted-foreground' : 'text-amber-600'}>
+                    <span className={p.met ? 'text-muted-foreground' : 'text-se-honey-deep'}>
                       {p.label}
                     </span>
                   </div>
                 ))}
               </div>
             )}
-            <Button
-              size="sm"
-              onClick={() => updateMutation.mutate({
-                id: realShowId,
-                status: action.targetStatus as 'published' | 'entries_open' | 'entries_closed',
-              })}
-              disabled={updateMutation.isPending || !allMet}
-            >
-              {updateMutation.isPending ? <Loader2 className="size-3.5 animate-spin" /> : null}
-              {action.buttonLabel}
-            </Button>
+            {action.targetStatus === 'entries_closed' ? (
+              // Closing entries is confirmed — a stray tap once shut a live
+              // show's entries by accident (Mandy 2026-07-12).
+              <ConfirmCloseEntries
+                onConfirm={() => updateMutation.mutate({ id: realShowId, status: 'entries_closed' })}
+              >
+                <Button size="sm" disabled={updateMutation.isPending || !allMet}>
+                  {updateMutation.isPending ? <Loader2 className="size-3.5 animate-spin" /> : null}
+                  {action.buttonLabel}
+                </Button>
+              </ConfirmCloseEntries>
+            ) : (
+              <Button
+                size="sm"
+                onClick={() => updateMutation.mutate({
+                  id: realShowId,
+                  status: action.targetStatus as 'published' | 'entries_open' | 'entries_closed',
+                })}
+                disabled={updateMutation.isPending || !allMet}
+              >
+                {updateMutation.isPending ? <Loader2 className="size-3.5 animate-spin" /> : null}
+                {action.buttonLabel}
+              </Button>
+            )}
           </div>
         );
       })}

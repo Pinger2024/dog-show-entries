@@ -145,4 +145,74 @@ describe('POST /api/webhooks/resend', () => {
     const rows = await testDb.query.feedback.findMany();
     expect(rows).toHaveLength(0);
   });
+
+  // The Resend account is shared with Lettiva — its email.received webhook
+  // fires for every recipient on the account, not just Remi's. Without a
+  // recipient filter, Lettiva's holiday-let enquiries land in Remi's
+  // feedback table.
+  describe('recipient filtering (shared Resend account)', () => {
+    it('ignores mail addressed to another project on the shared Resend account', async () => {
+      svixPayload = {
+        type: 'email.received',
+        data: {
+          email_id: 'em_test_lettiva',
+          from: 'michael@prometheus-it.com',
+          to: ['enquiries-bhhl-bcac@inbound.lettiva.com'],
+          subject: 'Fwd: Email re Forest House',
+          text: 'body', html: '',
+          created_at: new Date().toISOString(),
+        },
+      };
+      const res = await resendWebhookPOST(svixRequest() as never);
+      expect(res.status).toBe(200);
+      const json = await res.json();
+      expect(json).toEqual({ ignored: true, reason: 'recipient not ours' });
+
+      const rows = await testDb.query.feedback.findMany();
+      expect(rows).toHaveLength(0);
+    });
+
+    it('inserts mail addressed to our inbound domain', async () => {
+      svixPayload = {
+        type: 'email.received',
+        data: {
+          email_id: 'em_test_ours_to',
+          from: 'mandy@hundarkgsd.co.uk',
+          to: ['feedback@inbound.remishowmanager.co.uk'],
+          subject: 'A note',
+          text: 'body', html: '',
+          created_at: new Date().toISOString(),
+        },
+      };
+      const res = await resendWebhookPOST(svixRequest() as never);
+      expect(res.status).toBe(200);
+
+      const row = await testDb.query.feedback.findFirst({
+        where: eq(feedback.resendEmailId, 'em_test_ours_to'),
+      });
+      expect(row).toBeDefined();
+    });
+
+    it('inserts mail with our inbound domain only in cc', async () => {
+      svixPayload = {
+        type: 'email.received',
+        data: {
+          email_id: 'em_test_ours_cc',
+          from: 'someone@example.test',
+          to: ['someone-else@example.test'],
+          cc: ['feedback@inbound.remishowmanager.co.uk'],
+          subject: 'A cc note',
+          text: 'body', html: '',
+          created_at: new Date().toISOString(),
+        },
+      };
+      const res = await resendWebhookPOST(svixRequest() as never);
+      expect(res.status).toBe(200);
+
+      const row = await testDb.query.feedback.findFirst({
+        where: eq(feedback.resendEmailId, 'em_test_ours_cc'),
+      });
+      expect(row).toBeDefined();
+    });
+  });
 });

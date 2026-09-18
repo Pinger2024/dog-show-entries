@@ -3,6 +3,7 @@ import { Document, Page, View, Text, StyleSheet } from '@react-pdf/renderer';
 import { styles } from './catalogue-styles';
 import {
   CoverPage,
+  ShowInformationPage,
   JudgesListPage,
   ClassDefinitionsPage,
   TrophiesPage,
@@ -51,8 +52,14 @@ export interface MarkedCatalogueProps {
   entries: CatalogueEntry[];
   /** Results keyed by `${catalogueNumber}-${showClassId}` */
   results: Map<string, MarkedResult>;
-  /** Set of catalogue numbers marked absent */
+  /** Per-class attendance (Mandy 2026-08-12): entries keyed the same way as
+   *  `results` — `${catalogueNumber}-${showClassId}` — for that one class,
+   *  so a dog absent from her breed class but placed in a Special Award
+   *  shows ABS only under the breed class. */
   absentees: Set<string>;
+  /** `${catalogueNumber}-${showClassId}` → display label of the class the dog
+   *  was transferred to (she was catalogued here but judged there). */
+  transfers?: Map<string, string>;
   /** Show-level and breed-level achievements */
   achievements: MarkedAchievement[];
 }
@@ -85,6 +92,38 @@ function getResultMarker(result: MarkedResult | undefined): string | null {
   return null;
 }
 
+/**
+ * The ordered placings for one class, ready for the per-class PLACINGS block
+ * (Mandy 2026-07-05). Numeric placings (1st–VHC) come first in order, then any
+ * Withheld / Unplaced markers. Each carries its catalogue number and whether
+ * it's 1st (rendered in red).
+ */
+function classPlacings(
+  bucket: ClassBucket,
+  results: Map<string, MarkedResult>,
+): { marker: string; catNo: string; isFirst: boolean }[] {
+  const rows: { order: number; marker: string; catNo: string; isFirst: boolean }[] = [];
+  const seen = new Set<string>();
+  for (const entry of bucket.entries) {
+    const catNo = entry.catalogueNumber ?? '';
+    if (!catNo || !bucket.showClassId) continue;
+    const key = `${catNo}-${bucket.showClassId}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    const result = results.get(key);
+    const marker = getResultMarker(result);
+    if (!marker) continue;
+    rows.push({
+      order: result?.placement ?? 100,
+      marker,
+      catNo,
+      isFirst: result?.placement === 1,
+    });
+  }
+  rows.sort((a, b) => a.order - b.order);
+  return rows.map(({ marker, catNo, isFirst }) => ({ marker, catNo, isFirst }));
+}
+
 // ── Marked-specific styles ───────────────────────────────────
 
 const markedStyles = StyleSheet.create({
@@ -101,14 +140,30 @@ const markedStyles = StyleSheet.create({
     color: '#6b7280',
     marginLeft: 4,
   },
+  // "Transferred to <class>" — dog catalogued here, judged elsewhere.
+  // Same voice as the Abs. badge; italic grey so it reads as an
+  // annotation, not a placing.
+  transferBadge: {
+    fontSize: 7,
+    fontWeight: 'bold',
+    fontStyle: 'italic',
+    color: '#6b7280',
+    marginLeft: 4,
+  },
+  // Principal Winners (anything "best", "challenge certificate", or
+  // "reserve") render in red on the RKC submission catalogue per
+  // Amanda's spec 2026-05-14. Red matches the placement number colour
+  // used elsewhere on this catalogue so the eye can scan winners fast.
   specialAwardBadge: {
+    fontFamily: 'Inter',
     fontSize: 6.5,
     fontWeight: 'bold',
-    color: '#92400e',
+    color: '#b91c1c',
     paddingLeft: 22,
     marginBottom: 0.5,
   },
   achievementsSectionTitle: {
+    fontFamily: 'Inter',
     fontSize: 11,
     fontWeight: 'bold',
     textTransform: 'uppercase',
@@ -126,20 +181,28 @@ const markedStyles = StyleSheet.create({
     borderBottomColor: '#ddd',
   },
   achievementType: {
+    fontFamily: 'Inter',
     fontSize: 7.5,
     fontWeight: 'bold',
     width: '40%',
+    // Award name in red — Amanda's spec 2026-05-14 (Principal Winners).
+    color: '#b91c1c',
   },
   achievementDog: {
+    fontFamily: 'Inter',
     fontSize: 7.5,
+    fontWeight: 'bold',
     width: '35%',
+    color: '#b91c1c',
   },
   achievementBreed: {
+    fontFamily: 'Inter',
     fontSize: 7.5,
-    color: '#444',
+    color: '#b91c1c',
     width: '25%',
   },
   watermark: {
+    fontFamily: 'Inter',
     fontSize: 8,
     fontWeight: 'bold',
     color: '#b91c1c',
@@ -147,6 +210,59 @@ const markedStyles = StyleSheet.create({
     marginBottom: 4,
     letterSpacing: 1,
     textTransform: 'uppercase',
+  },
+  // "ABS" printed under the catalogue number in bold black for absentees
+  // (Mandy 2026-07-05 — replaces the old inline grey "Abs." after the name).
+  absentByNumber: {
+    fontFamily: 'Inter',
+    fontSize: 6.5,
+    fontWeight: 'bold',
+    color: '#000',
+    marginTop: 0.5,
+  },
+  // Per-class placings summary block (Mandy 2026-07-05 approved mockup):
+  // a green "PLACINGS" header over a bordered row of "1st 6  2nd 8 …",
+  // catalogue numbers pulled from the recorded results. 1st place in red.
+  placingsBlock: {
+    marginTop: 3,
+    marginBottom: 6,
+    borderWidth: 1,
+    borderColor: '#166534',
+    borderRadius: 4,
+  },
+  placingsHeader: {
+    backgroundColor: '#166534',
+    paddingVertical: 2,
+    paddingHorizontal: 6,
+    borderTopLeftRadius: 3,
+    borderTopRightRadius: 3,
+  },
+  placingsHeaderText: {
+    fontFamily: 'Inter',
+    fontSize: 6.5,
+    fontWeight: 'bold',
+    color: '#fff',
+    letterSpacing: 0.8,
+  },
+  placingsBody: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    paddingVertical: 4,
+    paddingHorizontal: 6,
+  },
+  placing: {
+    fontFamily: 'Inter',
+    fontSize: 8,
+    fontWeight: 'bold',
+    color: '#000',
+    marginRight: 14,
+  },
+  placingFirst: {
+    fontFamily: 'Inter',
+    fontSize: 8,
+    fontWeight: 'bold',
+    color: '#b91c1c',
+    marginRight: 14,
   },
 });
 
@@ -160,6 +276,17 @@ const ACHIEVEMENT_LABELS: Record<string, string> = {
   best_of_breed: 'Best of Breed',
   best_puppy_in_breed: 'Best Puppy in Breed',
   best_veteran_in_breed: 'Best Veteran in Breed',
+  // The Best Dog / Best Bitch awards ARE stored as best_dog / best_bitch /
+  // reserve_best_dog / reserve_best_bitch (see lib/top-awards.ts) — the map
+  // previously only had the dog_cc / bitch_cc variants, so these fell through
+  // and printed the raw enum key on the RKC copy (Mandy 2026-07-05).
+  best_dog: 'Best Dog',
+  best_bitch: 'Best Bitch',
+  reserve_best_dog: 'Reserve Best Dog',
+  reserve_best_bitch: 'Reserve Best Bitch',
+  best_veteran_in_show: 'Best Veteran in Show',
+  reserve_best_veteran_in_show: 'Reserve Best Veteran in Show',
+  best_veteran_in_group: 'Best Veteran in Group',
   dog_cc: 'Dog CC',
   reserve_dog_cc: 'Reserve Dog CC',
   bitch_cc: 'Bitch CC',
@@ -172,11 +299,58 @@ const ACHIEVEMENT_LABELS: Record<string, string> = {
   reserve_cc: 'Reserve CC',
 };
 
+/**
+ * The label for an award on the marked catalogue. At CHAMPIONSHIP shows the
+ * Best Dog / Best Bitch (and their reserves) ARE the Challenge Certificate and
+ * Reserve CC winners, so the RKC copy names them as such (Mandy 2026-07-05).
+ * Non-championship shows keep the plain "Best Dog" / "Best Bitch" wording.
+ */
+/**
+ * Canonical order for the Awards Summary page, per Mandy (2026-07-06): the
+ * show-level awards read Best in Show → Best Puppy in Show → Best Long Coat in
+ * Show; the breed/sex awards read Dog CC → Dog Reserve CC → Best Puppy Dog →
+ * Bitch CC → Bitch Reserve CC → Best Puppy Bitch → Best Veteran in Show (last).
+ * Lower number = higher up. Unknown types fall to the end.
+ */
+export const AWARD_ORDER: Record<string, number> = {
+  best_in_show: 1,
+  reserve_best_in_show: 2,
+  best_puppy_in_show: 3,
+  best_long_coat_in_show: 4,
+  best_dog: 10,
+  reserve_best_dog: 11,
+  best_puppy_dog: 12,
+  best_bitch: 13,
+  reserve_best_bitch: 14,
+  best_puppy_bitch: 15,
+  best_veteran_in_breed: 16,
+  reserve_best_veteran_in_breed: 17,
+  best_veteran_in_show: 20,
+  reserve_best_veteran_in_show: 21,
+};
+
+function achievementLabel(type: string, isChampionship: boolean): string {
+  if (isChampionship) {
+    switch (type) {
+      case 'best_dog':
+        return 'Dog Challenge Certificate';
+      case 'best_bitch':
+        return 'Bitch Challenge Certificate';
+      case 'reserve_best_dog':
+        return 'Dog Reserve Challenge Certificate';
+      case 'reserve_best_bitch':
+        return 'Bitch Reserve Challenge Certificate';
+    }
+  }
+  return ACHIEVEMENT_LABELS[type] ?? type;
+}
+
 // ── RKC layout grouping (same as catalogue-standard) ─────────
 
 interface ClassBucket {
   className: string;
   classNumber: number | null | undefined;
+  classLabel: string;
   sortOrder: number | undefined;
   sex: string | null | undefined;
   showClassId: string | undefined;
@@ -192,12 +366,25 @@ interface GroupBucket {
   breeds: Map<string, BreedBucket>;
 }
 
-function groupEntriesKC(entries: CatalogueEntry[]) {
+/** "Special Award Class - Post Graduate" → "Post Graduate" — the transfer
+ *  marker reads better without the family prefix ("Transferred to Post
+ *  Graduate", Mandy's wording 2026-08-12). */
+export function transferDisplayLabel(className: string): string {
+  return className.replace(/^Special Award Class\s*-\s*/i, '').trim() || className;
+}
+
+export function groupEntriesKC(entries: CatalogueEntry[]) {
   const groups = new Map<string, GroupBucket>();
 
   for (const entry of entries) {
-    const group = entry.group ?? 'Unclassified';
-    const breed = entry.breed ?? 'Unknown Breed';
+    // Junior Handling entries carry no dog, so group/breed are null — they
+    // used to fall into "Unclassified / Unknown Breed" on the RKC marked
+    // catalogue (Mandy 2026-08-12, South Western). Group them under their
+    // own name; the page render skips the breed line when it would just
+    // repeat the group band.
+    const isJH = entry.entryType === 'junior_handler';
+    const group = isJH ? 'Junior Handling' : (entry.group ?? 'Unclassified');
+    const breed = isJH ? 'Junior Handling' : (entry.breed ?? 'Unknown Breed');
 
     if (!groups.has(group)) {
       groups.set(group, { sortOrder: entry.groupSortOrder ?? 999, breeds: new Map() });
@@ -212,17 +399,19 @@ function groupEntriesKC(entries: CatalogueEntry[]) {
     // (e.g. Junior Handling) get their own section between Dogs and Bitches.
     for (const cls of entry.classes) {
       const className = cls.name ?? 'Unknown Class';
-      const classKey = `${cls.classNumber ?? ''}-${className}`;
+      const label = cls.classLabel ?? (cls.classNumber != null ? String(cls.classNumber) : '');
+      const classKey = `${label}-${className}`;
       const classSex = cls.sex === 'dog' ? 'dog' : cls.sex === 'bitch' ? 'bitch' : 'unknown';
 
       breedBucket.sexes[classSex] ??= [];
       let classBucket = breedBucket.sexes[classSex].find(
-        (cb) => `${cb.classNumber ?? ''}-${cb.className}` === classKey
+        (cb) => `${cb.classLabel}-${cb.className}` === classKey
       );
       if (!classBucket) {
         classBucket = {
           className,
           classNumber: cls.classNumber,
+          classLabel: label,
           sortOrder: cls.sortOrder,
           sex: cls.sex,
           showClassId: (cls as { showClassId?: string }).showClassId,
@@ -241,6 +430,7 @@ function groupEntriesKC(entries: CatalogueEntry[]) {
           if (a.classNumber != null && b.classNumber != null) return a.classNumber - b.classNumber;
           if (a.classNumber != null) return -1;
           if (b.classNumber != null) return 1;
+          if (a.classLabel && b.classLabel) return a.classLabel.localeCompare(b.classLabel);
           return (a.sortOrder ?? 0) - (b.sortOrder ?? 0);
         });
       }
@@ -256,10 +446,37 @@ function sortByCatNo(entries: CatalogueEntry[]) {
   );
 }
 
+/**
+ * All of a breed's class buckets, flattened and ordered exactly the way the
+ * printed catalogue numbers them: numbered classes first by classNumber (so a
+ * sex-neutral Veteran = class 1 leads), then unnumbered classes (Junior
+ * Handling etc.) by label/sortOrder. Mirrors catalogue-by-class so the marked
+ * catalogue reads in the same order rather than bucketing sex-neutral classes
+ * into a block after the dogs (Mandy 2026-07-06).
+ */
+export function orderedClasses(breedBucket: BreedBucket): ClassBucket[] {
+  const all: ClassBucket[] = [];
+  for (const sex of Object.keys(breedBucket.sexes)) {
+    all.push(...breedBucket.sexes[sex]);
+  }
+  return all.sort((a, b) => {
+    if (a.classNumber != null && b.classNumber != null) return a.classNumber - b.classNumber;
+    if (a.classNumber != null) return -1;
+    if (b.classNumber != null) return 1;
+    if (a.classLabel && b.classLabel) return a.classLabel.localeCompare(b.classLabel);
+    return (a.sortOrder ?? 0) - (b.sortOrder ?? 0);
+  });
+}
+
+/** Normalise a class bucket's raw sex to the render key. */
+function normSex(sex: string | null | undefined): 'dog' | 'bitch' | 'unknown' {
+  return sex === 'dog' ? 'dog' : sex === 'bitch' ? 'bitch' : 'unknown';
+}
+
 function classHeadingLabel(bucket: ClassBucket, sex: string) {
   const parts: string[] = [];
-  if (bucket.classNumber != null) {
-    parts.push(`Class ${bucket.classNumber}.`);
+  if (bucket.classLabel) {
+    parts.push(`Class ${bucket.classLabel}.`);
   }
   parts.push(bucket.className);
   if (sex === 'dog') parts.push('Dog');
@@ -271,7 +488,7 @@ function classHeadingLabel(bucket: ClassBucket, sex: string) {
 
 // ── Marked Catalogue Component ───────────────────────────────
 
-export function CatalogueMarked({ show, entries, results, absentees, achievements }: MarkedCatalogueProps) {
+export function CatalogueMarked({ show, entries, results, absentees, achievements, transfers }: MarkedCatalogueProps) {
   const grouped = groupEntriesKC(entries);
   const sortedGroups = [...grouped.entries()].sort(([, a], [, b]) => a.sortOrder - b.sortOrder);
 
@@ -283,45 +500,36 @@ export function CatalogueMarked({ show, entries, results, absentees, achievement
     groupName: string;
     breedName: string;
     judge: string | undefined;
-    breedBucket: BreedBucket;
-    sexLabel?: string;
+    classes: ClassBucket[];
   }[] = [];
-
-  function countBreedEntries(bucket: BreedBucket): number {
-    let total = 0;
-    for (const sex of ['dog', 'unknown', 'bitch']) {
-      for (const classBucket of bucket.sexes[sex] ?? []) {
-        total += classBucket.entries.length;
-      }
-    }
-    return total;
-  }
 
   for (const [groupName, { breeds }] of sortedGroups) {
     for (const [breedName, breedBucket] of [...breeds.entries()].sort(([a], [b]) => a.localeCompare(b))) {
-      const totalEntries = countBreedEntries(breedBucket);
       const judge = show.judgesByBreedName?.[breedName];
+      // Classes in catalogue order (Veteran = 1 first, JH last), NOT bucketed by
+      // sex — so a sex-neutral class keeps its numbered position (Mandy 2026-07-06).
+      const ordered = orderedClasses(breedBucket).filter((cb) => cb.entries.length > 0);
+      if (!ordered.length) continue;
+      const totalEntries = ordered.reduce((sum, cb) => sum + cb.entries.length, 0);
 
       if (totalEntries > PAGE_ENTRY_THRESHOLD) {
-        for (const sex of ['dog', 'unknown', 'bitch']) {
-          const classBuckets = breedBucket.sexes[sex];
-          if (!classBuckets?.length) continue;
-          const hasAnyEntries = classBuckets.some((cb) => cb.entries.length > 0);
-          if (!hasAnyEntries) continue;
-          const sexBucket: BreedBucket = {
-            ...breedBucket,
-            sexes: { [sex]: classBuckets },
-          };
-          breedPages.push({
-            groupName,
-            breedName,
-            judge,
-            breedBucket: sexBucket,
-            sexLabel: sex === 'dog' ? 'Dogs' : sex === 'bitch' ? 'Bitches' : undefined,
-          });
+        // Split into pages of <= threshold entries (whole classes) to dodge the
+        // @react-pdf coordinate-overflow crash on very long single pages, while
+        // keeping the classes in catalogue order across pages.
+        let chunk: ClassBucket[] = [];
+        let chunkCount = 0;
+        for (const cb of ordered) {
+          if (chunk.length && chunkCount + cb.entries.length > PAGE_ENTRY_THRESHOLD) {
+            breedPages.push({ groupName, breedName, judge, classes: chunk });
+            chunk = [];
+            chunkCount = 0;
+          }
+          chunk.push(cb);
+          chunkCount += cb.entries.length;
         }
+        if (chunk.length) breedPages.push({ groupName, breedName, judge, classes: chunk });
       } else {
-        breedPages.push({ groupName, breedName, judge, breedBucket });
+        breedPages.push({ groupName, breedName, judge, classes: ordered });
       }
     }
   }
@@ -329,19 +537,15 @@ export function CatalogueMarked({ show, entries, results, absentees, achievement
   // Pre-compute first-appearance tracking
   const firstSeenClass = new Map<string, string>();
   const firstAppearanceBucket = new Map<string, ClassBucket>();
-  for (const { breedBucket } of breedPages) {
-    for (const sex of ['dog', 'unknown', 'bitch']) {
-      const classBuckets = breedBucket.sexes[sex];
-      if (!classBuckets?.length) continue;
-      for (const bucket of classBuckets) {
-        bucket.entries = sortByCatNo(bucket.entries);
-        for (const entry of bucket.entries) {
-          const catNo = entry.catalogueNumber;
-          if (!catNo) continue;
-          if (!firstSeenClass.has(catNo)) {
-            firstSeenClass.set(catNo, bucket.classNumber != null ? `class ${bucket.classNumber}` : bucket.className);
-            firstAppearanceBucket.set(catNo, bucket);
-          }
+  for (const { classes } of breedPages) {
+    for (const bucket of classes) {
+      bucket.entries = sortByCatNo(bucket.entries);
+      for (const entry of bucket.entries) {
+        const catNo = entry.catalogueNumber;
+        if (!catNo) continue;
+        if (!firstSeenClass.has(catNo)) {
+          firstSeenClass.set(catNo, bucket.classLabel ? `class ${bucket.classLabel}` : bucket.className);
+          firstAppearanceBucket.set(catNo, bucket);
         }
       }
     }
@@ -351,8 +555,13 @@ export function CatalogueMarked({ show, entries, results, absentees, achievement
   const showLevelTypes = new Set([
     'best_in_show', 'reserve_best_in_show', 'best_puppy_in_show', 'best_long_coat_in_show',
   ]);
-  const showAwards = achievements.filter((a) => showLevelTypes.has(a.type));
-  const breedAwards = achievements.filter((a) => !showLevelTypes.has(a.type));
+  const awardRank = (t: string) => AWARD_ORDER[t] ?? 999;
+  const showAwards = achievements
+    .filter((a) => showLevelTypes.has(a.type))
+    .sort((a, b) => awardRank(a.type) - awardRank(b.type));
+  const breedAwards = achievements
+    .filter((a) => !showLevelTypes.has(a.type))
+    .sort((a, b) => awardRank(a.type) - awardRank(b.type));
 
   // RKC F(1).11.b(6) exhibitor index policy — see catalogue-standard.tsx.
   const isChampionship = show.showType === 'championship';
@@ -363,6 +572,7 @@ export function CatalogueMarked({ show, entries, results, absentees, achievement
     <Document>
       {/* Cover page with MARKED CATALOGUE subtitle */}
       <CoverPage show={{ ...show, name: `${show.name}\nMARKED CATALOGUE` }} />
+      <ShowInformationPage show={show} />
       <JudgesListPage show={show} />
       <ClassDefinitionsPage show={show} />
       {!show.skipTrophiesPage && (
@@ -372,15 +582,15 @@ export function CatalogueMarked({ show, entries, results, absentees, achievement
       {/* Achievements summary page */}
       {achievements.length > 0 && (
         <Page size="A5" style={styles.frontMatterPage} wrap>
-          <Text style={markedStyles.achievementsSectionTitle}>Awards Summary</Text>
+          <Text style={markedStyles.achievementsSectionTitle} minPresenceAhead={60}>Awards Summary</Text>
 
           {showAwards.length > 0 && (
             <View>
-              <Text style={{ ...styles.breedHeading, marginTop: 4 }}>Show Awards</Text>
+              <Text style={{ ...styles.breedHeading, marginTop: 4 }} minPresenceAhead={60}>Show Awards</Text>
               {showAwards.map((a, i) => (
-                <View key={i} style={markedStyles.achievementRow}>
+                <View key={i} style={markedStyles.achievementRow} wrap={false}>
                   <Text style={markedStyles.achievementType}>
-                    {ACHIEVEMENT_LABELS[a.type] ?? a.type}
+                    {achievementLabel(a.type, isChampionship)}
                   </Text>
                   <Text style={markedStyles.achievementDog}>{a.dogName}</Text>
                   <Text style={markedStyles.achievementBreed}>{a.breedName ?? ''}</Text>
@@ -391,11 +601,11 @@ export function CatalogueMarked({ show, entries, results, absentees, achievement
 
           {breedAwards.length > 0 && (
             <View>
-              <Text style={{ ...styles.breedHeading, marginTop: 8 }}>Breed Awards</Text>
+              <Text style={{ ...styles.breedHeading, marginTop: 8 }} minPresenceAhead={60}>Breed Awards</Text>
               {breedAwards.map((a, i) => (
-                <View key={i} style={markedStyles.achievementRow}>
+                <View key={i} style={markedStyles.achievementRow} wrap={false}>
                   <Text style={markedStyles.achievementType}>
-                    {ACHIEVEMENT_LABELS[a.type] ?? a.type}
+                    {achievementLabel(a.type, isChampionship)}
                   </Text>
                   <Text style={markedStyles.achievementDog}>{a.dogName}</Text>
                   <Text style={markedStyles.achievementBreed}>{a.breedName ?? ''}</Text>
@@ -415,45 +625,57 @@ export function CatalogueMarked({ show, entries, results, absentees, achievement
       )}
 
       {/* One <Page> per breed with result annotations */}
-      {breedPages.map(({ groupName, breedName, judge, breedBucket, sexLabel }, pageIdx) => (
-        <Fragment key={`${groupName}-${breedName}-${sexLabel ?? 'all'}-${pageIdx}`}>
+      {breedPages.map(({ groupName, breedName, judge, classes }, pageIdx) => {
+        // "Dogs"/"Bitches" headings print on the first class of each sex run; a
+        // sex-neutral class (Veteran, JH) prints none. Reset per page.
+        let prevSex: 'dog' | 'bitch' | 'unknown' | null = null;
+        return (
+        <Fragment key={`${groupName}-${breedName}-${pageIdx}`}>
           {renderBreedIndex(breedName)}
           <Page size="A5" style={styles.page} wrap>
           <Text style={markedStyles.watermark}>MARKED CATALOGUE</Text>
           <Text style={styles.groupHeading}>{groupName}</Text>
-          <Text style={styles.breedHeading}>{breedName}</Text>
+          {breedName !== groupName && (
+            <Text style={styles.breedHeading}>{breedName}</Text>
+          )}
           {judge && (
             <Text style={styles.judgeLabel}>Judge: {judge}</Text>
           )}
 
-          {['dog', 'unknown', 'bitch']
-            .filter((sex) => breedBucket.sexes[sex]?.length)
-            .map((sex) => (
-              <View key={sex}>
-                {sex !== 'unknown' && (
-                  <Text style={styles.sexHeading} minPresenceAhead={60}>
-                    {sex === 'dog' ? 'Dogs' : 'Bitches'}
-                  </Text>
-                )}
-
-                {breedBucket.sexes[sex].map((bucket) => {
+          {classes.map((bucket) => {
+                  const sex = normSex(bucket.sex);
+                  const showSexHeading =
+                    (sex === 'dog' || sex === 'bitch') && sex !== prevSex;
+                  prevSex = sex;
                   // Small classes stay atomic — never orphan the heading.
                   const keepTogether = bucket.entries.length <= 8;
+                  const placings = classPlacings(bucket, results);
                   return (
-                  <View key={`${bucket.classNumber}-${bucket.className}`} wrap={!keepTogether}>
-                    <Text style={styles.classHeadingInBreed} minPresenceAhead={60}>
+                  <View key={`${bucket.classLabel}-${bucket.className}`} wrap={!keepTogether}>
+                    {showSexHeading && (
+                      <Text style={styles.sexHeading} minPresenceAhead={130}>
+                        {sex === 'dog' ? 'Dogs' : 'Bitches'}
+                      </Text>
+                    )}
+                    {/* 120pt look-ahead: a marked entry row (with badges/
+                        placings) can exceed the old 60pt, which stranded the
+                        Open Bitch heading at a page foot (Mandy 2026-08-12). */}
+                    <Text style={styles.classHeadingInBreed} minPresenceAhead={120}>
                       {classHeadingLabel(bucket, sex)}
                     </Text>
 
                     {bucket.entries.map((entry, entryIdx) => {
                       const catNo = entry.catalogueNumber ?? '';
                       const isFirstAppearance = !catNo || firstAppearanceBucket.get(catNo) === bucket;
-                      const isAbsent = catNo ? absentees.has(catNo) : false;
+                      const isAbsent =
+                        catNo && bucket.showClassId ? absentees.has(`${catNo}-${bucket.showClassId}`) : false;
+                      const transferredTo =
+                        catNo && bucket.showClassId ? transfers?.get(`${catNo}-${bucket.showClassId}`) : undefined;
                       const isJH = entry.entryType === 'junior_handler';
                       const displayName = isJH
                         ? (entry.handler ?? entry.exhibitor ?? 'Unnamed Handler')
                         : (entry.dogName ?? 'Unnamed');
-                      const rowKey = `${bucket.classNumber ?? bucket.className}-${catNo || 'nocat'}-${entryIdx}`;
+                      const rowKey = `${bucket.classLabel || bucket.className}-${catNo || 'nocat'}-${entryIdx}`;
 
                       // Look up result for this entry in this class
                       const resultKey = catNo && bucket.showClassId
@@ -469,24 +691,21 @@ export function CatalogueMarked({ show, entries, results, absentees, achievement
                             style={{ ...styles.entryRowWrap, paddingLeft: 6 }}
                             wrap={false}
                           >
-                            <View style={{ flexDirection: 'row', alignItems: 'baseline' }}>
-                              <Text style={styles.catalogueNumber}>
-                                {catNo || '\u2014'}
-                              </Text>
+                            <View style={{ flexDirection: 'row', alignItems: 'flex-start' }}>
+                              <View style={{ width: 22 }}>
+                                <Text style={styles.catalogueNumber}>
+                                  {catNo || '\u2014'}
+                                </Text>
+                                {isAbsent && (
+                                  <Text style={markedStyles.absentByNumber}>ABS</Text>
+                                )}
+                              </View>
                               <Text style={styles.dogName}>
                                 {displayName}
                               </Text>
                               <Text style={styles.seeClassRef}>
                                 {'  '}[see {firstClass}]
                               </Text>
-                              {isAbsent && (
-                                <Text style={markedStyles.absentBadge}> Abs.</Text>
-                              )}
-                              {getResultMarker(result) && (
-                                <Text style={markedStyles.placementBadge}>
-                                  {' '}{getResultMarker(result)}
-                                </Text>
-                              )}
                             </View>
                           </View>
                         );
@@ -511,6 +730,9 @@ export function CatalogueMarked({ show, entries, results, absentees, achievement
                               {isAbsent && (
                                 <Text style={markedStyles.absentBadge}> Abs.</Text>
                               )}
+                              {transferredTo && (
+                                <Text style={markedStyles.transferBadge}> Transferred to {transferredTo}</Text>
+                              )}
                               {getResultMarker(result) && (
                                 <Text style={markedStyles.placementBadge}>
                                   {' '}{getResultMarker(result)}
@@ -528,7 +750,7 @@ export function CatalogueMarked({ show, entries, results, absentees, achievement
                                 <Text style={styles.entryDetailLabel}>
                                   Owner{entry.owners.length > 1 ? 's' : ''}:{' '}
                                 </Text>
-                                {formatOwnerKC(entry.owners, entry.exhibitorId)}
+                                {formatOwnerKC(entry.owners)}
                               </Text>
                             )}
                             {result?.specialAward && (
@@ -547,20 +769,20 @@ export function CatalogueMarked({ show, entries, results, absentees, achievement
                           style={styles.entryRowWrap}
                           wrap={false}
                         >
-                          <View style={{ flexDirection: 'row', alignItems: 'baseline' }}>
-                            <Text style={styles.catalogueNumber}>
-                              {catNo || '\u2014'}
-                            </Text>
+                          <View style={{ flexDirection: 'row', alignItems: 'flex-start' }}>
+                            <View style={{ width: 22 }}>
+                              <Text style={styles.catalogueNumber}>
+                                {catNo || '\u2014'}
+                              </Text>
+                              {isAbsent && (
+                                <Text style={markedStyles.absentByNumber}>ABS</Text>
+                              )}
+                            </View>
                             <Text style={styles.dogName}>
                               {displayName}
                             </Text>
-                            {isAbsent && (
-                              <Text style={markedStyles.absentBadge}> Abs.</Text>
-                            )}
-                            {getResultMarker(result) && (
-                              <Text style={markedStyles.placementBadge}>
-                                {' '}{getResultMarker(result)}
-                              </Text>
+                            {transferredTo && (
+                              <Text style={markedStyles.transferBadge}> Transferred to {transferredTo}</Text>
                             )}
                           </View>
 
@@ -591,7 +813,7 @@ export function CatalogueMarked({ show, entries, results, absentees, achievement
                               <Text style={styles.entryDetailLabel}>
                                 Owner{entry.owners.length > 1 ? 's' : ''}:{' '}
                               </Text>
-                              {formatOwnerKC(entry.owners, entry.exhibitorId)}
+                              {formatOwnerKC(entry.owners)}
                             </Text>
                           )}
 
@@ -611,11 +833,26 @@ export function CatalogueMarked({ show, entries, results, absentees, achievement
                         </View>
                       );
                     })}
+                    {placings.length > 0 && (
+                      <View style={markedStyles.placingsBlock} wrap={false}>
+                        <View style={markedStyles.placingsHeader}>
+                          <Text style={markedStyles.placingsHeaderText}>PLACINGS</Text>
+                        </View>
+                        <View style={markedStyles.placingsBody}>
+                          {placings.map((p, i) => (
+                            <Text
+                              key={i}
+                              style={p.isFirst ? markedStyles.placingFirst : markedStyles.placing}
+                            >
+                              {p.marker} {p.catNo}
+                            </Text>
+                          ))}
+                        </View>
+                      </View>
+                    )}
                   </View>
                   );
                 })}
-              </View>
-            ))}
 
             <Text
               style={styles.footer}
@@ -626,7 +863,8 @@ export function CatalogueMarked({ show, entries, results, absentees, achievement
             />
           </Page>
         </Fragment>
-      ))}
+        );
+      })}
 
       {/* Back matter: exhibitor index — moved to the end per backlog #93.
           Single-page version is for single-breed championship shows. The

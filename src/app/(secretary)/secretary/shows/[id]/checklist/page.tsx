@@ -77,8 +77,8 @@ const STATUS_ICONS: Record<ChecklistStatus, typeof Circle> = {
 
 const STATUS_COLORS: Record<ChecklistStatus, string> = {
   not_started: 'text-muted-foreground',
-  in_progress: 'text-blue-500',
-  complete: 'text-green-500',
+  in_progress: 'text-se-honey-deep',
+  complete: 'text-se-fresh-deep',
   not_applicable: 'text-muted-foreground/50',
 };
 
@@ -294,15 +294,15 @@ export default function ShowChecklistPage() {
     const stage = contract.stage;
     if (stage === 'offer_sent' && contract.offerSentAt) {
       const days = Math.floor((Date.now() - new Date(contract.offerSentAt).getTime()) / (1000 * 60 * 60 * 24));
-      return { text: `Offer sent ${days === 0 ? 'today' : days === 1 ? 'yesterday' : `${days} days ago`} — awaiting response`, color: 'text-amber-600' };
+      return { text: `Offer sent ${days === 0 ? 'today' : days === 1 ? 'yesterday' : `${days} days ago`} — awaiting response`, color: 'text-se-honey-deep' };
     }
     if (stage === 'offer_accepted' && contract.acceptedAt) {
       const totalExpenses = (contract.hotelCost ?? 0) + (contract.travelCost ?? 0) + (contract.otherExpenses ?? 0);
       const expenseStr = totalExpenses > 0 ? ` — expenses £${penceToPoundsString(totalExpenses)}` : '';
-      return { text: `Accepted on ${new Date(contract.acceptedAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}${expenseStr}`, color: 'text-green-600' };
+      return { text: `Accepted on ${new Date(contract.acceptedAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}${expenseStr}`, color: 'text-se-fresh-deep' };
     }
     if (stage === 'confirmed') {
-      return { text: `Confirmed${contract.confirmedAt ? ` on ${new Date(contract.confirmedAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}` : ''}`, color: 'text-green-600' };
+      return { text: `Confirmed${contract.confirmedAt ? ` on ${new Date(contract.confirmedAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}` : ''}`, color: 'text-se-fresh-deep' };
     }
     if (stage === 'declined') {
       return { text: `Declined${contract.declinedAt ? ` on ${new Date(contract.declinedAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}` : ''}`, color: 'text-destructive' };
@@ -429,7 +429,7 @@ export default function ShowChecklistPage() {
                 </Badge>
               )}
               {actionEntry && (
-                <Badge variant="outline" className="text-xs px-1.5 py-0 h-4 border-blue-200 text-blue-600">
+                <Badge variant="outline" className="text-xs px-1.5 py-0 h-4 border-se-honey-line text-se-honey-deep">
                   Action
                 </Badge>
               )}
@@ -448,7 +448,7 @@ export default function ShowChecklistPage() {
                     dueStatus === 'overdue'
                       ? 'text-destructive font-medium'
                       : dueStatus === 'soon'
-                        ? 'text-amber-600'
+                        ? 'text-se-honey-deep'
                         : 'text-muted-foreground'
                   )}
                 >
@@ -505,7 +505,7 @@ export default function ShowChecklistPage() {
                 )}
 
                 {item.isAutoDetected && (
-                  <p className="text-xs text-green-600 flex items-center gap-1">
+                  <p className="text-xs text-se-fresh-deep flex items-center gap-1">
                     <Sparkles className="size-3" />
                     Remi detected this automatically from your show data
                   </p>
@@ -524,7 +524,7 @@ export default function ShowChecklistPage() {
                     new Date(item.documentExpiryDate) < new Date()
                       ? 'text-destructive font-medium'
                       : new Date(item.documentExpiryDate) < new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
-                        ? 'text-amber-600'
+                        ? 'text-se-honey-deep'
                         : 'text-muted-foreground'
                   )}>
                     <FileText className="size-3" />
@@ -732,12 +732,12 @@ export default function ShowChecklistPage() {
                 </span>
               )}
               {dueSoonCount > 0 && (
-                <span className="flex items-center gap-1 text-amber-600">
+                <span className="flex items-center gap-1 text-se-honey-deep">
                   <Clock className="size-3.5" />
                   {dueSoonCount} due soon
                 </span>
               )}
-              <span className="flex items-center gap-1 text-green-600">
+              <span className="flex items-center gap-1 text-se-fresh-deep">
                 <CircleCheck className="size-3.5" />
                 {completedCount} done
               </span>
@@ -762,35 +762,35 @@ export default function ShowChecklistPage() {
                 <span className="text-destructive">{judgeSummary.summary.declined} declined</span>
               )}
               {judgeSummary.summary.offerSent > 0 && (
-                <span className="text-amber-600">{judgeSummary.summary.offerSent} awaiting response</span>
+                <span className="text-se-honey-deep">{judgeSummary.summary.offerSent} awaiting response</span>
               )}
               {judgeSummary.summary.accepted > 0 && (
-                <span className="text-blue-600">{judgeSummary.summary.accepted} accepted (need confirmation)</span>
+                <span className="text-se-honey-deep">{judgeSummary.summary.accepted} accepted (need confirmation)</span>
               )}
             </div>
             {/* Segmented progress bar */}
             <div className="flex h-2 rounded-full overflow-hidden bg-muted">
               {judgeSummary.summary.confirmed > 0 && (
                 <div
-                  className="bg-green-500 transition-all"
+                  className="bg-se-fresh transition-all"
                   style={{ width: `${(judgeSummary.summary.confirmed / judgeSummary.summary.total) * 100}%` }}
                 />
               )}
               {judgeSummary.summary.accepted > 0 && (
                 <div
-                  className="bg-blue-500 transition-all"
+                  className="bg-se-honey/60 transition-all"
                   style={{ width: `${(judgeSummary.summary.accepted / judgeSummary.summary.total) * 100}%` }}
                 />
               )}
               {judgeSummary.summary.offerSent > 0 && (
                 <div
-                  className="bg-amber-400 transition-all"
+                  className="bg-se-honey transition-all"
                   style={{ width: `${(judgeSummary.summary.offerSent / judgeSummary.summary.total) * 100}%` }}
                 />
               )}
               {judgeSummary.summary.declined > 0 && (
                 <div
-                  className="bg-red-400 transition-all"
+                  className="bg-destructive transition-all"
                   style={{ width: `${(judgeSummary.summary.declined / judgeSummary.summary.total) * 100}%` }}
                 />
               )}
@@ -801,9 +801,9 @@ export default function ShowChecklistPage() {
 
       {/* Auto-reseed banner */}
       {needsReseed && (
-        <div className="flex items-center gap-3 rounded-lg border border-blue-200 bg-blue-50 px-4 py-3">
-          <RefreshCw className="size-4 text-blue-600 shrink-0" />
-          <div className="flex-1 text-sm text-blue-800">
+        <div className="flex items-center gap-3 rounded-lg border border-se-honey-line bg-se-honey-soft px-4 py-3">
+          <RefreshCw className="size-4 text-se-honey-deep shrink-0" />
+          <div className="flex-1 text-sm text-se-honey-ink">
             New judges have been added. Sync the checklist to create per-judge items.
           </div>
           <Button
@@ -856,7 +856,7 @@ export default function ShowChecklistPage() {
                     </span>
                   )}
                   {isPast && phasePercent === 100 && (
-                    <span className="shrink-0 rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-semibold text-emerald-700">
+                    <span className="shrink-0 rounded-full bg-se-fresh-soft px-2 py-0.5 text-xs font-semibold text-se-fresh-deep">
                       Done
                     </span>
                   )}
@@ -867,7 +867,7 @@ export default function ShowChecklistPage() {
                 <Progress value={phasePercent} className="mt-1.5 h-1.5" />
               </div>
               {phasePercent === 100 && (
-                <CircleCheck className="size-5 shrink-0 text-green-500" />
+                <CircleCheck className="size-5 shrink-0 text-se-fresh-deep" />
               )}
             </button>
 

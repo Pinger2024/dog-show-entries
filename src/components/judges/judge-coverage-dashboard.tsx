@@ -17,7 +17,11 @@ import { sexLabel } from './utils';
 
 interface JudgeCoverageDashboardProps {
   showId: string;
-  onAddJudge?: (breedId: string | null, sex: string | null) => void;
+  onAddJudge?: (
+    breedId: string | null,
+    sex: string | null,
+    isSpecialAwards: boolean,
+  ) => void;
 }
 
 export function JudgeCoverageDashboard({ showId, onAddJudge }: JudgeCoverageDashboardProps) {
@@ -38,15 +42,15 @@ export function JudgeCoverageDashboard({ showId, onAddJudge }: JudgeCoverageDash
   const allCovered = data.coveredCount === data.totalCount;
 
   return (
-    <Card className={cn(allCovered ? 'border-green-200 bg-green-50/50 dark:border-green-900 dark:bg-green-950/20' : 'border-amber-200 bg-amber-50/50 dark:border-amber-900 dark:bg-amber-950/20')}>
+    <Card className={cn(allCovered ? 'border-se-fresh-line bg-se-fresh-soft/50' : 'border-se-honey-line bg-se-honey-soft/50')}>
       <CardHeader className="pb-3">
         <div className="flex items-center justify-between">
           <div>
             <CardTitle className="flex items-center gap-2 text-base">
               {allCovered ? (
-                <CheckCircle2 className="size-5 text-green-600" />
+                <CheckCircle2 className="size-5 text-se-fresh-deep" />
               ) : (
-                <AlertCircle className="size-5 text-amber-600" />
+                <AlertCircle className="size-5 text-se-honey-deep" />
               )}
               Judge Coverage
             </CardTitle>
@@ -56,7 +60,7 @@ export function JudgeCoverageDashboard({ showId, onAddJudge }: JudgeCoverageDash
                 : `${data.coveredCount} of ${data.totalCount} covered — ${data.totalCount - data.coveredCount} still need${data.totalCount - data.coveredCount === 1 ? 's' : ''} a judge`}
             </CardDescription>
           </div>
-          <Badge variant={allCovered ? 'default' : 'secondary'} className={cn(allCovered && 'bg-green-600')}>
+          <Badge variant={allCovered ? 'default' : 'secondary'} className={cn(allCovered && 'bg-se-fresh-deep')}>
             {data.coveredCount}/{data.totalCount}
           </Badge>
         </div>
@@ -68,15 +72,15 @@ export function JudgeCoverageDashboard({ showId, onAddJudge }: JudgeCoverageDash
             className={cn(
               'flex items-center justify-between rounded-md border px-3 py-2',
               item.covered
-                ? 'border-green-200 bg-white dark:border-green-900 dark:bg-green-950/10'
-                : 'border-amber-200 bg-white dark:border-amber-900 dark:bg-amber-950/10',
+                ? 'border-se-fresh-line bg-white'
+                : 'border-se-honey-line bg-white',
             )}
           >
             <div className="flex items-center gap-2 min-w-0">
               {item.covered ? (
-                <CheckCircle2 className="size-4 shrink-0 text-green-600" />
+                <CheckCircle2 className="size-4 shrink-0 text-se-fresh-deep" />
               ) : (
-                <AlertCircle className="size-4 shrink-0 text-amber-600" />
+                <AlertCircle className="size-4 shrink-0 text-se-honey-deep" />
               )}
               <div className="min-w-0">
                 <span className="text-sm font-medium">
@@ -95,14 +99,14 @@ export function JudgeCoverageDashboard({ showId, onAddJudge }: JudgeCoverageDash
             <div className="shrink-0 ml-2 flex items-center gap-2">
               {item.covered ? (
                 <>
-                  <span className="text-sm text-green-700 dark:text-green-400">
+                  <span className="text-sm text-se-fresh-deep">
                     {(item.judges?.length ?? 0) > 0
                       ? item.judges!.map((j: { judgeName: string }) => j.judgeName).join(', ')
                       : item.judgeName}
                   </span>
                   <button
                     type="button"
-                    onClick={() => onAddJudge?.(item.breedId, item.sex)}
+                    onClick={() => onAddJudge?.(item.breedId, item.sex, item.isSpecialAwards ?? false)}
                     className="rounded-md p-1 text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
                     title="Change judge"
                   >
@@ -114,7 +118,7 @@ export function JudgeCoverageDashboard({ showId, onAddJudge }: JudgeCoverageDash
                   size="sm"
                   variant="outline"
                   className="h-8 min-h-[2.75rem] text-xs"
-                  onClick={() => onAddJudge?.(item.breedId, item.sex)}
+                  onClick={() => onAddJudge?.(item.breedId, item.sex, item.isSpecialAwards ?? false)}
                 >
                   <Plus className="size-3" />
                   Add

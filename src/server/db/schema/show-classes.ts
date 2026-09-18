@@ -8,7 +8,7 @@ import {
   uuid,
 } from 'drizzle-orm/pg-core';
 import { relations } from 'drizzle-orm';
-import { sexEnum } from './enums';
+import { sexEnum, coatTypeEnum } from './enums';
 import { shows } from './shows';
 import { breeds } from './breeds';
 import { classDefinitions } from './class-definitions';
@@ -27,6 +27,7 @@ export const showClasses = pgTable(
       .notNull()
       .references(() => classDefinitions.id),
     sex: sexEnum('sex'),
+    svCoatType: coatTypeEnum('sv_coat_type'),
     entryFee: integer('entry_fee').notNull(),
     sortOrder: integer('sort_order').notNull().default(0),
     classGroup: text('class_group'),

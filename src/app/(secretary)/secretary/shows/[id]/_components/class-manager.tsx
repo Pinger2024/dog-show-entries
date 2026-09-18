@@ -14,6 +14,7 @@ import {
   GripVertical,
   Hash,
   Loader2,
+  Pencil,
   Plus,
   Trash2,
   TriangleAlert,
@@ -24,6 +25,7 @@ import { trpc } from '@/lib/trpc';
 import { formatCurrency, penceToPoundsString, poundsToPence } from '@/lib/date-utils';
 import { cn } from '@/lib/utils';
 import { CLASS_TEMPLATES, getRelevantTemplates } from '@/lib/class-templates';
+import { svCoatDisplayName } from '@/lib/class-labels';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
@@ -39,7 +41,9 @@ import { Badge } from '@/components/ui/badge';
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
+  SelectLabel,
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
@@ -59,18 +63,21 @@ import {
 interface ClassManagerProps {
   showId: string;
   showType: string;
+  showScope?: string;
+  showRuleset?: string | null;
   classes: {
     id: string;
     entryFee: number;
     sex: 'dog' | 'bitch' | null;
     sortOrder: number;
     classNumber?: number | null;
+    classGroup?: string | null;
     classDefinition?: { name: string; type: string } | null;
     breed?: { name: string; group?: { name: string; sortOrder: number } | null } | null;
   }[];
 }
 
-export function ClassManager({ showId, showType, classes }: ClassManagerProps) {
+export function ClassManager({ showId, showType, showScope, showRuleset, classes }: ClassManagerProps) {
   const [editingFees, setEditingFees] = useState<Record<string, string>>({});
   const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
   const [hasInitializedCollapse, setHasInitializedCollapse] = useState(false);
@@ -78,6 +85,21 @@ export function ClassManager({ showId, showType, classes }: ClassManagerProps) {
   const [optimisticOrder, setOptimisticOrder] = useState<Record<string, number> | null>(null);
   const [pendingAction, setPendingAction] = useState<{ message: string; action: () => void } | null>(null);
   const utils = trpc.useUtils();
+  const managesCcAllocations = showType === 'championship' && showScope !== 'single_breed' && showRuleset !== 'wusv';
+  const { data: ccBreedSettings = [] } = trpc.secretary.getShowBreedCcSettings.useQuery(
+    { showId },
+    { enabled: managesCcAllocations },
+  );
+  const ccMutation = trpc.secretary.setShowBreedCc.useMutation({
+    onSuccess: async () => {
+      await Promise.all([
+        utils.secretary.getShowBreedCcSettings.invalidate({ showId }),
+        utils.secretary.getPhaseBlockers.invalidate({ showId }),
+      ]);
+      toast.success('Challenge Certificate setting saved');
+    },
+    onError: (error) => toast.error(error.message || 'Could not save the Challenge Certificate setting'),
+  });
 
   const updateMutation = trpc.secretary.updateShowClass.useMutation({
     onSuccess: () => {
@@ -174,11 +196,16 @@ export function ClassManager({ showId, showType, classes }: ClassManagerProps) {
 
     if (multiBreed) {
       const breedMap = new Map<string, { groupSort: number; groupName: string; classes: typeof effectiveClasses }>();
+      const varietyClasses: typeof effectiveClasses = [];
       for (const sc of effectiveClasses) {
-        const breedName = sc.breed?.name ?? 'Other';
+        if (!sc.breed) {
+          varietyClasses.push(sc);
+          continue;
+        }
+        const breedName = sc.breed.name;
         const entry = breedMap.get(breedName) ?? {
-          groupSort: sc.breed?.group?.sortOrder ?? 999,
-          groupName: sc.breed?.group?.name ?? 'Other',
+          groupSort: sc.breed.group?.sortOrder ?? 999,
+          groupName: sc.breed.group?.name ?? 'Other',
           classes: [],
         };
         entry.classes.push(sc);
@@ -205,6 +232,12 @@ export function ClassManager({ showId, showType, classes }: ClassManagerProps) {
           return a.sortOrder - b.sortOrder;
         });
         groups.push({ key: `breed-${breedName}`, label: breedName, classes: sorted });
+      }
+
+      // Variety & special classes (no breed) at the end, in their own section
+      if (varietyClasses.length > 0) {
+        const sorted = [...varietyClasses].sort((a, b) => a.sortOrder - b.sortOrder);
+        groups.push({ key: 'variety', label: 'Variety & Special Classes', classes: sorted });
       }
     } else {
       // Group by sex only (no sub-grouping by type) so classes display
@@ -258,13 +291,23 @@ export function ClassManager({ showId, showType, classes }: ClassManagerProps) {
     setHasInitializedCollapse(true);
   }, [grouped, hasInitializedCollapse]);
 
-  // Championship shows: compute which breeds are missing required Open + Limit classes
+  // Championship shows: compute which breeds are missing required Open + Limit classes.
+  // For single-breed shows, classes may not carry an explicit breed FK — the breed is
+  // implicit via the show's scope. Resolve a fallback breed name so those classes still
+  // count toward their (single) breed's requirement.
   const championshipWarnings = useMemo(() => {
-    if (showType !== 'championship') return [];
+    // SV/WUSV regionals are championship shows but run under WUSV rules — the
+    // RKC "Open + Limit for each sex" requirement does not apply to them.
+    if (showType !== 'championship' || showRuleset === 'wusv') return [];
+
+    const fallbackBreedName = showScope === 'single_breed'
+      ? classes.find((c) => c.breed?.name)?.breed?.name ?? null
+      : null;
+
     const breedMap = new Map<string, { name: string; hasOpenDog: boolean; hasOpenBitch: boolean; hasLimitDog: boolean; hasLimitBitch: boolean }>();
     for (const sc of classes) {
-      if (!sc.breed) continue;
-      const breedName = sc.breed.name;
+      const breedName = sc.breed?.name ?? fallbackBreedName;
+      if (!breedName) continue;
       if (!breedMap.has(breedName)) {
         breedMap.set(breedName, { name: breedName, hasOpenDog: false, hasOpenBitch: false, hasLimitDog: false, hasLimitBitch: false });
       }
@@ -285,7 +328,7 @@ export function ClassManager({ showId, showType, classes }: ClassManagerProps) {
       if (missing.length > 0) warnings.push({ breed: entry.name, missing });
     }
     return warnings;
-  }, [showType, classes]);
+  }, [showType, showScope, showRuleset, classes]);
 
   if (classes.length === 0) {
     return (
@@ -356,6 +399,33 @@ export function ClassManager({ showId, showType, classes }: ClassManagerProps) {
 
   return (
     <>
+    {managesCcAllocations && ccBreedSettings.length > 0 && (
+      <Card className="border-primary/20 bg-primary/5">
+        <CardHeader>
+          <CardTitle>Challenge Certificates</CardTitle>
+          <CardDescription>
+            Tick each breed for which the RKC has allocated both Dog and Bitch Challenge Certificates at this show.
+            Remi will print the declaration and apply the stricter class checks.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+          {ccBreedSettings.map((breed) => (
+            <label key={breed.breedId} className="flex min-h-12 cursor-pointer items-center gap-3 rounded-lg border bg-background px-3 py-2.5 text-sm">
+              <Checkbox
+                checked={breed.ccOffered}
+                disabled={ccMutation.isPending}
+                onCheckedChange={(checked) => ccMutation.mutate({
+                  showId,
+                  breedId: breed.breedId,
+                  ccOffered: checked === true,
+                })}
+              />
+              <span className="font-medium">{breed.breedName}</span>
+            </label>
+          ))}
+        </CardContent>
+      </Card>
+    )}
     <Card>
       <CardHeader>
         <div className="flex items-center justify-between gap-3">
@@ -406,16 +476,16 @@ export function ClassManager({ showId, showType, classes }: ClassManagerProps) {
       </CardHeader>
       {/* Championship class requirement warning */}
       {championshipWarnings.length > 0 && (
-        <div className="mx-4 mb-3 rounded-md border border-amber-200 bg-amber-50 p-3 dark:border-amber-800 dark:bg-amber-950/30">
+        <div className="mx-4 mb-3 rounded-md border border-se-honey-line bg-se-honey-soft p-3">
           <div className="flex items-start gap-2">
-            <TriangleAlert className="mt-0.5 size-4 shrink-0 text-amber-600" />
+            <TriangleAlert className="mt-0.5 size-4 shrink-0 text-se-honey-deep" />
             <div className="min-w-0 space-y-1">
-              <p className="text-sm font-medium text-amber-800 dark:text-amber-200">
+              <p className="text-sm font-medium text-se-honey-deep">
                 Championship shows require Open and Limit classes for each sex per RKC regulations
               </p>
               <ul className="space-y-0.5">
                 {championshipWarnings.map((w) => (
-                  <li key={w.breed} className="text-xs text-amber-700 dark:text-amber-300">
+                  <li key={w.breed} className="text-xs text-se-honey-deep">
                     <span className="font-medium">{w.breed}</span>: missing {w.missing.join(', ')}
                   </li>
                 ))}
@@ -575,7 +645,7 @@ export function ClassManager({ showId, showType, classes }: ClassManagerProps) {
                                                 #{sc.classNumber ?? '—'}
                                               </span>
                                               <span className="truncate text-sm font-medium">
-                                                {sc.classDefinition?.name ?? 'Unknown'}
+                                                {(sc.classDefinition?.name ?? 'Unknown').replace(/^SV /, '')}
                                               </span>
                                             </div>
                                             <div className="mt-0.5 flex items-center gap-2">
@@ -586,6 +656,11 @@ export function ClassManager({ showId, showType, classes }: ClassManagerProps) {
                                               ) : (
                                                 <span className="text-xs text-muted-foreground">Any sex</span>
                                               )}
+                                              {(sc as { svCoatType?: 'stock' | 'long_stock' | null }).svCoatType && (
+                                                <Badge variant="outline" className="text-xs">
+                                                  {svCoatDisplayName((sc as { svCoatType?: 'stock' | 'long_stock' | null }).svCoatType)}
+                                                </Badge>
+                                              )}
                                               {!isMultiBreed && sc.breed && (
                                                 <span className="truncate text-xs text-muted-foreground">{sc.breed.name}</span>
                                               )}
@@ -593,13 +668,35 @@ export function ClassManager({ showId, showType, classes }: ClassManagerProps) {
                                           </div>
 
                                           <div className="flex shrink-0 items-center gap-1">
-                                            <button
-                                              type="button"
-                                              onClick={() => startEditFee(sc.id, sc.entryFee)}
-                                              className="rounded px-2 py-1 text-sm font-semibold transition-colors hover:bg-muted"
-                                            >
-                                              {formatCurrency(sc.entryFee)}
-                                            </button>
+                                            {editingFees[sc.id] !== undefined ? (
+                                              <input
+                                                type="text"
+                                                inputMode="decimal"
+                                                autoFocus
+                                                value={editingFees[sc.id]}
+                                                onChange={(e) =>
+                                                  setEditingFees((prev) => ({ ...prev, [sc.id]: e.target.value }))
+                                                }
+                                                onBlur={() => saveFee(sc.id)}
+                                                onKeyDown={(e) => {
+                                                  if (e.key === 'Enter') { e.preventDefault(); saveFee(sc.id); }
+                                                  else if (e.key === 'Escape') { e.preventDefault(); cancelEditFee(sc.id); }
+                                                }}
+                                                onClick={(e) => e.stopPropagation()}
+                                                aria-label="Entry fee in pounds"
+                                                className="w-20 rounded border border-primary px-2 py-1 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-primary/30"
+                                              />
+                                            ) : (
+                                              <button
+                                                type="button"
+                                                onClick={() => startEditFee(sc.id, sc.entryFee)}
+                                                title="Click to edit this class's entry fee"
+                                                className="inline-flex items-center gap-1 rounded border border-dashed border-muted-foreground/30 px-2 py-1 text-sm font-semibold transition-colors hover:border-primary hover:bg-primary/5 hover:text-primary"
+                                              >
+                                                {formatCurrency(sc.entryFee)}
+                                                <Pencil className="size-3 text-muted-foreground" />
+                                              </button>
+                                            )}
                                             <Button
                                               size="icon"
                                               variant="ghost"
@@ -784,7 +881,11 @@ export function BulkClassCreator({ showId }: { showId: string }) {
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-          {getRelevantTemplates(showData?.showType ?? undefined).map((t) => (
+          {getRelevantTemplates(
+            showData?.showType ?? undefined,
+            showData?.showScope ?? undefined,
+            (showData as { showRuleset?: 'rkc' | 'wusv' } | undefined)?.showRuleset,
+          ).map((t) => (
             <button
               key={t.id}
               type="button"
@@ -1033,6 +1134,8 @@ export function AddIndividualClass({ showId }: { showId: string }) {
 
   const { data: classDefs } = trpc.secretary.listClassDefinitions.useQuery();
   const { data: breeds } = trpc.breeds.list.useQuery();
+  const { data: showInfo } = trpc.shows.getById.useQuery({ id: showId });
+  const isWusvShow = showInfo?.showRuleset === 'wusv';
   const utils = trpc.useUtils();
 
   const createDefMutation = trpc.secretary.createClassDefinition.useMutation();
@@ -1103,11 +1206,49 @@ export function AddIndividualClass({ showId }: { showId: string }) {
                   <SelectValue placeholder="Select a class..." />
                 </SelectTrigger>
                 <SelectContent>
-                  {classDefs?.map((cd) => (
-                    <SelectItem key={cd.id} value={cd.id}>
-                      {cd.name}
-                    </SelectItem>
-                  ))}
+                  {(() => {
+                    // Group classes by sensible buckets so they are easier
+                    // to find — Amanda flagged Special Award Classes weren't
+                    // visibly distinct from the long list (2026-05-14).
+                    //
+                    // Filter out WUSV/SV-only class types unless this is
+                    // a WUSV-ruleset show; Amanda flagged them showing up
+                    // on RKC shows on 2026-05-15.
+                    const fullList = classDefs ?? [];
+                    const rulesetList = isWusvShow
+                      ? fullList
+                      : fullList.filter((cd) => cd.type !== 'sv_age');
+                    const list = showInfo?.showScope !== 'single_breed' && !isWusvShow
+                      ? rulesetList.filter((cd) => cd.name.trim().toLowerCase() !== 'baby puppy')
+                      : rulesetList;
+                    const buckets: Array<{ label: string; defs: typeof list }> = [];
+                    const age = list.filter((cd) => cd.type === 'age');
+                    const achievement = list.filter((cd) => cd.type === 'achievement');
+                    const specialAward = list.filter(
+                      (cd) => cd.type === 'special' && cd.name.startsWith('Special Award Class'),
+                    );
+                    const otherSpecial = list.filter(
+                      (cd) => cd.type === 'special' && !cd.name.startsWith('Special Award Class'),
+                    );
+                    const handler = list.filter((cd) => cd.type === 'junior_handler');
+                    const svAge = list.filter((cd) => cd.type === 'sv_age');
+                    if (age.length) buckets.push({ label: 'Age classes', defs: age });
+                    if (achievement.length) buckets.push({ label: 'Achievement classes', defs: achievement });
+                    if (specialAward.length) buckets.push({ label: 'Special Award classes', defs: specialAward });
+                    if (otherSpecial.length) buckets.push({ label: 'Other special classes', defs: otherSpecial });
+                    if (handler.length) buckets.push({ label: 'Junior Handler', defs: handler });
+                    if (svAge.length) buckets.push({ label: 'WUSV / SV classes', defs: svAge });
+                    return buckets.map((b) => (
+                      <SelectGroup key={b.label}>
+                        <SelectLabel>{b.label}</SelectLabel>
+                        {b.defs.map((cd) => (
+                          <SelectItem key={cd.id} value={cd.id}>
+                            {cd.name}
+                          </SelectItem>
+                        ))}
+                      </SelectGroup>
+                    ));
+                  })()}
                 </SelectContent>
               </Select>
               <Button
@@ -1204,6 +1345,149 @@ export function AddIndividualClass({ showId }: { showId: string }) {
           <Plus className="size-4" />
           Add Class
         </Button>
+      </CardContent>
+    </Card>
+  );
+}
+
+// ── Variety Class Quick-Add (multi-breed shows only) ──────────
+
+const VARIETY_CLASS_NAMES = [
+  'Any Variety Not Separately Classified',
+  'Any Variety Imported Breed Register',
+  'Variety Class',
+  'Rare Breeds',
+] as const;
+
+const VARIETY_CLASS_DESCRIPTIONS: Record<string, string> = {
+  'Any Variety Not Separately Classified': 'For breeds not separately classified at this show.',
+  'Any Variety Imported Breed Register': 'For breeds on the Imported Breed Register with an interim breed standard.',
+  'Variety Class': 'Mixed-breed variety class or Stakes class.',
+  'Rare Breeds': 'For breeds designated as Rare Breeds by the RKC.',
+};
+
+export function VarietyClassQuickAdd({ showId }: { showId: string }) {
+  const [feeInputs, setFeeInputs] = useState<Record<string, string>>({});
+  const [groupInputs, setGroupInputs] = useState<Record<string, string>>({});
+  const { data: classDefs } = trpc.secretary.listClassDefinitions.useQuery();
+  const { data: breeds } = trpc.breeds.list.useQuery();
+  const { data: showInfo } = trpc.shows.getById.useQuery({ id: showId });
+  const utils = trpc.useUtils();
+  const isGroupSystem = showInfo?.scheduleData?.judgedOnGroupSystem === true;
+  const breedGroups = Array.from(new Map(
+    (breeds ?? [])
+      .filter((breed) => breed.group?.name)
+      .map((breed) => [breed.group!.name, breed.group!]),
+  ).values()).sort((a, b) => a.sortOrder - b.sortOrder);
+
+  const addClassMutation = trpc.secretary.addShowClass.useMutation({
+    onSuccess: (_, vars) => {
+      toast.success('Variety class added');
+      setFeeInputs((prev) => {
+        const next = { ...prev };
+        delete next[vars.classDefinitionId];
+        return next;
+      });
+      setGroupInputs((prev) => {
+        const next = { ...prev };
+        delete next[vars.classDefinitionId];
+        return next;
+      });
+      utils.shows.getById.invalidate({ id: showId });
+    },
+    onError: (err) => toast.error(err.message ?? 'Failed to add class'),
+  });
+
+  const varietyDefs = (classDefs ?? []).filter((cd) =>
+    (VARIETY_CLASS_NAMES as readonly string[]).includes(cd.name)
+  );
+
+  if (varietyDefs.length === 0) return null;
+
+  function handleAdd(defId: string, defName: string) {
+    const raw = feeInputs[defId] ?? '5.00';
+    const pounds = parseFloat(raw);
+    if (isNaN(pounds) || pounds < 0) {
+      toast.error('Enter a valid fee in pounds');
+      return;
+    }
+    const needsGroup = isGroupSystem && /^(Any Variety Not Separately Classified|Any Variety Imported Breed Register)$/i.test(defName);
+    if (needsGroup && !groupInputs[defId]) {
+      toast.error('Choose the RKC breed group for this class');
+      return;
+    }
+    addClassMutation.mutate({
+      showId,
+      classDefinitionId: defId,
+      classGroup: needsGroup ? groupInputs[defId] : undefined,
+      entryFee: poundsToPence(pounds),
+    });
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Variety Classes</CardTitle>
+        <CardDescription>
+          Add AVNSC, AVIBR, Variety or Rare Breeds classes — these apply across all breeds with no
+          single-breed restriction.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        {varietyDefs.map((def) => (
+          <div key={def.id} className="flex flex-col gap-3 rounded-xl border bg-card p-4 sm:flex-row sm:items-center">
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-medium leading-tight">{def.name}</p>
+              <p className="mt-0.5 text-xs text-muted-foreground">
+                {VARIETY_CLASS_DESCRIPTIONS[def.name] ?? ''}
+              </p>
+            </div>
+            <div className="flex shrink-0 items-center gap-2">
+              {isGroupSystem && /^(Any Variety Not Separately Classified|Any Variety Imported Breed Register)$/i.test(def.name) && (
+                <Select
+                  value={groupInputs[def.id] ?? ''}
+                  onValueChange={(value) => setGroupInputs((prev) => ({ ...prev, [def.id]: value }))}
+                >
+                  <SelectTrigger className="h-9 w-32" aria-label={`RKC group for ${def.name}`}>
+                    <SelectValue placeholder="RKC group" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {breedGroups.map((group) => (
+                      <SelectItem key={group.name} value={group.name}>{group.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
+              <div className="w-20">
+                <Input
+                  type="number"
+                  min={0}
+                  step={0.01}
+                  placeholder="5.00"
+                  value={feeInputs[def.id] ?? ''}
+                  onChange={(e) =>
+                    setFeeInputs((prev) => ({ ...prev, [def.id]: e.target.value }))
+                  }
+                  className="h-9 text-sm"
+                  aria-label={`Fee for ${def.name}`}
+                />
+              </div>
+              <Button
+                size="sm"
+                className="min-h-[2.25rem] shrink-0"
+                onClick={() => handleAdd(def.id, def.name)}
+                disabled={addClassMutation.isPending}
+              >
+                {addClassMutation.isPending ? (
+                  <Loader2 className="size-3.5 animate-spin" />
+                ) : (
+                  <Plus className="size-3.5" />
+                )}
+                Add
+              </Button>
+            </div>
+          </div>
+        ))}
       </CardContent>
     </Card>
   );

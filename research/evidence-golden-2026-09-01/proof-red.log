@@ -1,0 +1,99 @@
+
+> remi@0.1.0 golden
+> vitest run src/__tests__/golden/documents.golden.test.ts
+
+
+ RUN  v3.2.4 /Users/michaeljames/Projects/dog-show-entries/.claude/worktrees/agent-a1709f8acdfb60424
+
+stderr | src/__tests__/golden/documents.golden.test.ts > golden documents: 'synthetic-rkc-champ'
+Node of type IMAGE can't wrap between pages and it's bigger than available page height
+Node of type IMAGE can't wrap between pages and it's bigger than available page height
+
+stderr | src/__tests__/golden/documents.golden.test.ts > golden documents: 'synthetic-rkc-champ'
+Node of type IMAGE can't wrap between pages and it's bigger than available page height
+Node of type IMAGE can't wrap between pages and it's bigger than available page height
+
+stdout | src/__tests__/golden/documents.golden.test.ts > golden documents: 'synthetic-rkc-champ'
+Prize cards PDF for show c2a36af6-279a-48e6-b594-62fbf20e6216: 43 pages, 1200KB
+
+ ❯ src/__tests__/golden/documents.golden.test.ts (17 tests | 3 failed) 6161ms
+   ✓ has at least one golden fixture to render 107ms
+   × golden documents: 'synthetic-rkc-champ' > catalogue-standard matches its baseline 617ms
+     → Golden document mismatch — show "synthetic-rkc-champ", document "catalogue-standard": page(s) 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 19 changed.
+See golden-output/synthetic-rkc-champ/catalogue-standard/diff.md and rendered page PNGs there.
+If this change is intentional: `npm run golden:update` and commit the new baseline.
+   × golden documents: 'synthetic-rkc-champ' > catalogue-by-class matches its baseline 181ms
+     → Golden document mismatch — show "synthetic-rkc-champ", document "catalogue-by-class": page(s) 3 changed.
+See golden-output/synthetic-rkc-champ/catalogue-by-class/diff.md and rendered page PNGs there.
+If this change is intentional: `npm run golden:update` and commit the new baseline.
+   ✓ golden documents: 'synthetic-rkc-champ' > catalogue-judging matches its baseline 135ms
+   ✓ golden documents: 'synthetic-rkc-champ' > catalogue-absentees matches its baseline 83ms
+   × golden documents: 'synthetic-rkc-champ' > catalogue-marked matches its baseline 158ms
+     → Golden document mismatch — show "synthetic-rkc-champ", document "catalogue-marked": page(s) 2 changed.
+See golden-output/synthetic-rkc-champ/catalogue-marked/diff.md and rendered page PNGs there.
+If this change is intentional: `npm run golden:update` and commit the new baseline.
+   ✓ golden documents: 'synthetic-rkc-champ' > schedule matches its baseline 125ms
+   ✓ golden documents: 'synthetic-rkc-champ' > judges-book matches its baseline 143ms
+   ✓ golden documents: 'synthetic-rkc-champ' > prize-cards matches its baseline 111ms
+   ✓ golden documents: 'synthetic-rkc-champ' > ring-numbers-multi-up matches its baseline 77ms
+   ✓ golden documents: 'synthetic-rkc-champ' > ring-numbers-single matches its baseline 113ms
+   ✓ golden documents: 'synthetic-rkc-champ' > ring-board matches its baseline 107ms
+   ✓ golden documents: 'synthetic-rkc-champ' > report-catalogue-order matches its baseline 105ms
+   ✓ golden documents: 'synthetic-rkc-champ' > report-class-breakdown matches its baseline 107ms
+   ✓ golden documents: 'synthetic-rkc-champ' > report-catalogue-orders matches its baseline 76ms
+   ✓ golden documents: 'synthetic-rkc-champ' > report-sh01 matches its baseline 110ms
+   ✓ golden documents: 'synthetic-rkc-champ' > invoice matches its baseline 83ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/__tests__/golden/documents.golden.test.ts > golden documents: 'synthetic-rkc-champ' > catalogue-standard matches its baseline
+AssertionError: Golden document mismatch — show "synthetic-rkc-champ", document "catalogue-standard": page(s) 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 19 changed.
+See golden-output/synthetic-rkc-champ/catalogue-standard/diff.md and rendered page PNGs there.
+If this change is intentional: `npm run golden:update` and commit the new baseline.
+ ❯ compareDocument src/__tests__/golden/documents.golden.test.ts:123:10
+    121|     : `page(s) ${diff.changedPages.map((p) => p.page).join(', ')}`;
+    122| 
+    123|   expect.fail(
+       |          ^
+    124|     `Golden document mismatch — show "${slug}", document "${docName}":…
+    125|       `See ${path.relative(process.cwd(), outDir)}/diff.md and rendere…
+ ❯ src/__tests__/golden/documents.golden.test.ts:166:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/3]⎯
+
+ FAIL  src/__tests__/golden/documents.golden.test.ts > golden documents: 'synthetic-rkc-champ' > catalogue-by-class matches its baseline
+AssertionError: Golden document mismatch — show "synthetic-rkc-champ", document "catalogue-by-class": page(s) 3 changed.
+See golden-output/synthetic-rkc-champ/catalogue-by-class/diff.md and rendered page PNGs there.
+If this change is intentional: `npm run golden:update` and commit the new baseline.
+ ❯ compareDocument src/__tests__/golden/documents.golden.test.ts:123:10
+    121|     : `page(s) ${diff.changedPages.map((p) => p.page).join(', ')}`;
+    122| 
+    123|   expect.fail(
+       |          ^
+    124|     `Golden document mismatch — show "${slug}", document "${docName}":…
+    125|       `See ${path.relative(process.cwd(), outDir)}/diff.md and rendere…
+ ❯ src/__tests__/golden/documents.golden.test.ts:166:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/3]⎯
+
+ FAIL  src/__tests__/golden/documents.golden.test.ts > golden documents: 'synthetic-rkc-champ' > catalogue-marked matches its baseline
+AssertionError: Golden document mismatch — show "synthetic-rkc-champ", document "catalogue-marked": page(s) 2 changed.
+See golden-output/synthetic-rkc-champ/catalogue-marked/diff.md and rendered page PNGs there.
+If this change is intentional: `npm run golden:update` and commit the new baseline.
+ ❯ compareDocument src/__tests__/golden/documents.golden.test.ts:123:10
+    121|     : `page(s) ${diff.changedPages.map((p) => p.page).join(', ')}`;
+    122| 
+    123|   expect.fail(
+       |          ^
+    124|     `Golden document mismatch — show "${slug}", document "${docName}":…
+    125|       `See ${path.relative(process.cwd(), outDir)}/diff.md and rendere…
+ ❯ src/__tests__/golden/documents.golden.test.ts:166:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/3]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  3 failed | 14 passed (17)
+   Start at  20:53:36
+   Duration  7.90s (transform 448ms, setup 321ms, collect 1.25s, tests 6.16s, environment 0ms, prepare 25ms)
+

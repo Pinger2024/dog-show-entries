@@ -49,6 +49,24 @@ export const ACHIEVEMENT_TYPES = [
   'best_long_coat_dog',
   'best_long_coat_bitch',
   'best_long_coat_in_show',
+  // SV/WUSV regional top awards (Amanda 2026-05-28). Regionals have NO
+  // Best of Breed / CCs / BIS — only these four.
+  'most_promising_young_dog',
+  'most_promising_young_bitch',
+  'best_dog',
+  'best_bitch',
+  // Reserve Best Dog/Bitch — non-CC shows (and some breed clubs like BAGSD)
+  // award "Best Dog/Bitch" + a reserve instead of CCs. Appended 2026-06-26.
+  'reserve_best_dog',
+  'reserve_best_bitch',
+  // Long-coat and baby-puppy top awards — configured by South Western GSD
+  // club and others but previously had no recordable type, so they printed
+  // in the catalogue/judges' book yet could never appear in results
+  // (found 2026-07-27 fixing the public results page). Appended at the end
+  // per the ordering rule above.
+  'best_long_coat_adult',
+  'best_long_coat_puppy',
+  'best_baby_puppy',
 ] as const;
 
 export type AchievementType = typeof ACHIEVEMENT_TYPES[number];
@@ -143,6 +161,16 @@ export const achievementLabels: Record<string, string> = {
   best_long_coat_in_show: 'Best Long Coat in Show',
   cc: 'CC',
   reserve_cc: 'Reserve CC',
+  // SV/WUSV regional top awards
+  most_promising_young_dog: 'Most Promising Young Dog',
+  most_promising_young_bitch: 'Most Promising Young Bitch',
+  best_dog: 'Best Dog',
+  best_bitch: 'Best Bitch',
+  reserve_best_dog: 'Reserve Best Dog',
+  reserve_best_bitch: 'Reserve Best Bitch',
+  best_long_coat_adult: 'Best Long Coat Adult',
+  best_long_coat_puppy: 'Best Long Coat Puppy',
+  best_baby_puppy: 'Best Baby Puppy',
 };
 
 export const placementColors: Record<number, string> = {
