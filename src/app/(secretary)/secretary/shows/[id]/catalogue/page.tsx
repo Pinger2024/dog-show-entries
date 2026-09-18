@@ -15,6 +15,7 @@ import { toast } from 'sonner';
 import { trpc } from '@/lib/trpc';
 import { formatDogName } from '@/lib/utils';
 import { appendRegistrationFlags } from '@/lib/registration-flags';
+import { effectiveShowStatus } from '@/lib/show-status';
 import { Button } from '@/components/ui/button';
 import {
   Card,
@@ -69,8 +70,10 @@ export default function CataloguePage() {
 
   const entries = catalogueData?.entries ?? [];
   const hasNumbers = entries.some((e) => e.catalogueNumber);
-  const entriesStillOpen = catalogueData?.show?.status === 'entries_open';
   const entryCloseDate = catalogueData?.show?.entryCloseDate;
+  const entriesStillOpen = catalogueData?.show
+    ? effectiveShowStatus(catalogueData.show) === 'entries_open'
+    : false;
   const numbersLocked = Boolean(catalogueData?.show?.catalogueNumbersLockedAt);
 
   // Auto-assign catalogue numbers when a secretary lands on the page and any

@@ -6,6 +6,7 @@ import { shows } from '@/server/db/schema';
 import { ShowPreviewClient } from './preview/show-preview';
 import { buildShowJsonLd } from '@/lib/show-json-ld';
 import { isUuid } from '@/lib/slugify';
+import { effectiveShowStatus } from '@/lib/show-status';
 
 const SHOW_TYPE_LABELS: Record<string, string> = {
   companion: 'Companion Show',
@@ -67,15 +68,13 @@ export async function generateMetadata({
   // Pick the metadata tagline based on the show's actual state — the
   // status field can lag a few minutes after the close cron, so a
   // status=entries_open show whose close date has passed should not
-  // still claim "now accepting entries".
-  const closeDatePast = show.entryCloseDate
-    ? new Date(show.entryCloseDate).getTime() < Date.now()
-    : false;
+  // still claim "now accepting entries". One owner: show-status.ts.
+  const displayStatus = effectiveShowStatus(show);
   let tagline: string | undefined;
-  if (show.status === 'in_progress') tagline = 'Live results on Remi.';
-  else if (show.status === 'completed') tagline = 'Results on Remi.';
-  else if (show.status === 'cancelled') tagline = 'Cancelled.';
-  else if (show.status === 'entries_open' && !closeDatePast) tagline = 'Now accepting entries on Remi.';
+  if (displayStatus === 'in_progress') tagline = 'Live results on Remi.';
+  else if (displayStatus === 'completed') tagline = 'Results on Remi.';
+  else if (displayStatus === 'cancelled') tagline = 'Cancelled.';
+  else if (displayStatus === 'entries_open') tagline = 'Now accepting entries on Remi.';
   else tagline = 'Entries closed.';
 
   const description = [showDate, venue, org, tagline]

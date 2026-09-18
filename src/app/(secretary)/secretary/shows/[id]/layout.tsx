@@ -47,6 +47,7 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { statusConfig } from './_lib/show-utils';
+import { effectiveShowStatus } from '@/lib/show-status';
 import { ShowIdProvider } from './_lib/show-context';
 import { ShowSectionNav } from './_components/show-section-nav';
 import { LifecycleBanner } from './_components/lifecycle-banner';
@@ -128,8 +129,13 @@ export default function ShowManagementLayout({
     );
   }
 
-  const showStatus = statusConfig[show.status] ?? {
-    label: show.status,
+  // Header badge is display-only — derive it so a show whose close date has
+  // passed shows "Entries closed" even before the once-daily cron flips the
+  // DB. One owner: show-status.ts. `show.status` itself (used below for the
+  // Select dropdown and transition gating) stays the raw DB value.
+  const displayStatus = effectiveShowStatus(show);
+  const showStatus = statusConfig[displayStatus] ?? {
+    label: displayStatus,
     variant: 'outline' as const,
   };
 

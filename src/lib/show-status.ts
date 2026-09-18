@@ -8,20 +8,29 @@
  *
  * Anything that shows the status to a user should derive it from the timestamp,
  * so "Entries Closed" appears the instant the deadline passes — no cron lag and
- * no cost. This is display-only: new-entry enforcement already keys off the
- * close date, not the stored status, and the cron still owns the real DB
- * transition (and the later in_progress/completed moves).
+ * no cost. This is display-only: new-entry enforcement (`orders.checkout`,
+ * `entries.create`, `secretary.createManualEntry`) already keys off the close
+ * date, not the stored status, and the cron still owns the real DB transition
+ * (and the later in_progress/completed moves). This is the ONE owner for "what
+ * status should a show DISPLAY as" — every badge/label site must call this
+ * instead of comparing `entryCloseDate` to `now` inline.
+ *
+ * Boundary: at the exact close instant this still reports `entries_open`
+ * (strict `<`, matching `orders.checkout`/`entries.create`, which reject new
+ * entries only once `entryCloseDate` is strictly in the past, and the public
+ * shows-list card, which used `< Date.now()` for "closed" too) — so the badge
+ * never shows "closed" a moment before checkout would actually refuse.
  */
 export function effectiveShowStatus(
-  status: string,
-  entryCloseDate: string | Date | null | undefined,
+  show: { status: string; entryCloseDate: string | Date | null | undefined },
+  now: Date = new Date(),
 ): string {
   if (
-    status === 'entries_open' &&
-    entryCloseDate &&
-    new Date(entryCloseDate).getTime() <= Date.now()
+    show.status === 'entries_open' &&
+    show.entryCloseDate &&
+    new Date(show.entryCloseDate).getTime() < now.getTime()
   ) {
     return 'entries_closed';
   }
-  return status;
+  return show.status;
 }

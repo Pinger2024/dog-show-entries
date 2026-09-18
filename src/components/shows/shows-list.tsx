@@ -8,6 +8,7 @@ import { cn } from '@/lib/utils';
 import { formatCurrency } from '@/lib/date-utils';
 import { PUBLIC_SHOW_STATUSES } from '@/lib/public-show-statuses';
 import { showTypeLabels, displayShowTypeLabel } from '@/lib/show-types';
+import { effectiveShowStatus } from '@/lib/show-status';
 import {
   MapPin,
   Search,
@@ -82,12 +83,6 @@ const radiusOptions = [
 
 /* ─── Date helpers ─────────────────────────────────── */
 
-function isEntryCloseDatePast(date: string | Date | null) {
-  if (!date) return false;
-  const d = typeof date === 'string' ? new Date(date) : date;
-  return d.getTime() < Date.now();
-}
-
 // True once a show's date has passed. Compared by calendar day so a show
 // happening *today* still reads as upcoming, not "recently held" (green
 // review 2026-07-13: an entries_closed show whose date had passed but wasn't
@@ -113,9 +108,9 @@ function getStatusPill(show: ShowListItem): {
   showClock?: boolean;
   showPulse?: boolean;
 } {
-  const closePassed = isEntryCloseDatePast(show.entryCloseDate);
+  const displayStatus = effectiveShowStatus(show);
 
-  if (show.status === 'entries_open' && !closePassed) {
+  if (displayStatus === 'entries_open') {
     if (show.entryCloseDate) {
       const closeDate =
         typeof show.entryCloseDate === 'string' ? new Date(show.entryCloseDate) : show.entryCloseDate;
@@ -126,7 +121,7 @@ function getStatusPill(show: ShowListItem): {
     return { tone: 'fresh', label: 'Entries open', showPulse: true };
   }
 
-  if (show.status === 'entries_open' && closePassed) {
+  if (displayStatus === 'entries_closed' && show.status === 'entries_open') {
     return { tone: 'light', label: 'Entries Closed' };
   }
 
@@ -588,13 +583,13 @@ export default function ShowsList() {
   // A show whose date has passed belongs in "Recently held" regardless of
   // status — the status may still be entries_closed/in_progress if results
   // haven't been finalised yet (green review 2026-07-13).
-  const openShows = filteredShows.filter((s) => s.status === 'entries_open' && !isEntryCloseDatePast(s.entryCloseDate) && !isShowDatePast(s.startDate));
+  const openShows = filteredShows.filter(
+    (s) => effectiveShowStatus(s) === 'entries_open' && !isShowDatePast(s.startDate),
+  );
   const aboutToRun = filteredShows.filter(
     (s) =>
       !isShowDatePast(s.startDate) &&
-      (s.status === 'entries_closed' ||
-        s.status === 'in_progress' ||
-        (s.status === 'entries_open' && isEntryCloseDatePast(s.entryCloseDate))),
+      (effectiveShowStatus(s) === 'entries_closed' || s.status === 'in_progress'),
   );
   const openingSoon = filteredShows.filter((s) => s.status === 'published' && !isShowDatePast(s.startDate));
   const recentlyHeld = filteredShows.filter((s) => s.status === 'completed' || isShowDatePast(s.startDate));

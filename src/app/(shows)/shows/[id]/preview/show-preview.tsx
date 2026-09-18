@@ -40,6 +40,7 @@ import { ShareKitDialog } from '@/components/show/share-kit-dialog';
 import { ShareKitCard } from '@/components/show/share-kit';
 import { cn } from '@/lib/utils';
 import { captureReferralSource } from '@/lib/referral-source';
+import { effectiveShowStatus } from '@/lib/show-status';
 import { useCountdown } from '@/components/show-experience/use-countdown';
 import { useInView, useStuckReveal } from '@/components/show-experience/use-in-view';
 import {
@@ -695,12 +696,11 @@ export function ShowPreviewClient() {
   const venue = show.venue;
   // entryCloseDate is derived earlier (before the loading early-return) so
   // the shared useCountdown() call above can use it.
-  const closeDatePast = entryCloseDate ? entryCloseDate.getTime() < Date.now() : false;
   // "Open" requires status=entries_open AND the close date not yet passed.
   // Show DB status can lag for a few minutes after the cron flips it, so
   // gating on the close date catches the window where the page would
-  // otherwise still offer entry past the deadline.
-  const isOpen = show.status === 'entries_open' && !closeDatePast;
+  // otherwise still offer entry past the deadline. One owner: show-status.ts.
+  const isOpen = effectiveShowStatus({ status: show.status, entryCloseDate }) === 'entries_open';
   const daysToClose = entryCloseDate ? differenceInDays(entryCloseDate, new Date()) : null;
   const showDate = format(parseISO(show.startDate), 'EEEE d MMMM yyyy');
   const showYear = format(parseISO(show.startDate), 'yyyy');

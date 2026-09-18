@@ -4,6 +4,7 @@ import { db } from '@/server/db';
 import { shows, entries, showSponsors } from '@/server/db/schema';
 import { isUuid } from '@/lib/slugify';
 import { toImageDataUri, loadShareImageFonts, SHARE_GREEN as G, type ShareImageFont } from '@/lib/share-image-data';
+import { effectiveShowStatus } from '@/lib/show-status';
 
 export const runtime = 'nodejs';
 export const alt = 'Preview card for a dog show listing on Remi';
@@ -239,7 +240,10 @@ export default async function OGImage({
     )];
 
     // Lifecycle-aware status badge — fresh = act now, honey = urgency,
-    // translucent cream = neutral, solid green = wrapped up.
+    // translucent cream = neutral, solid green = wrapped up. Display status
+    // (one owner: show-status.ts) so a show whose close date has passed but
+    // hasn't been flipped by the once-daily cron doesn't still say "Open".
+    const displayStatus = effectiveShowStatus(show);
     const closeDateMs = show.entryCloseDate ? new Date(show.entryCloseDate).getTime() : null;
     const hoursToClose = closeDateMs ? (closeDateMs - Date.now()) / 3600000 : Infinity;
     const closeDate = show.entryCloseDate
@@ -250,7 +254,7 @@ export default async function OGImage({
     let badgeBg = '';
     let badgeColor: string = G.cream;
 
-    if (show.status === 'entries_open') {
+    if (displayStatus === 'entries_open') {
       if (hoursToClose <= 72) {
         badgeText = `Closing ${closeDate}`;
         badgeBg = G.honey;
@@ -260,19 +264,19 @@ export default async function OGImage({
         badgeBg = G.fresh;
         badgeColor = '#0e2c19';
       }
-    } else if (show.status === 'entries_closed') {
+    } else if (displayStatus === 'entries_closed') {
       badgeText = 'Entries Closed';
       badgeBg = 'rgba(243,236,220,0.14)';
       badgeColor = G.cream;
-    } else if (show.status === 'in_progress') {
+    } else if (displayStatus === 'in_progress') {
       badgeText = 'Live Today';
       badgeBg = G.fresh;
       badgeColor = '#0e2c19';
-    } else if (show.status === 'completed') {
+    } else if (displayStatus === 'completed') {
       badgeText = 'Results Published';
       badgeBg = G.green;
       badgeColor = G.cream;
-    } else if (show.status === 'published') {
+    } else if (displayStatus === 'published') {
       badgeText = 'Coming Soon';
       badgeBg = 'rgba(243,236,220,0.14)';
       badgeColor = G.cream;
