@@ -9,8 +9,12 @@
  * Used by:
  *   - secretary.ts judge offer email (the original consumer)
  *   - judge-contract-pdf.ts (the signed contract PDF must match the email)
- *   - judge-section.tsx UI card (client-side equivalent that derives from
- *     pre-grouped data — see deriveJudgeLabels there)
+ *   - judge-section.tsx UI card (assignments card + offer preview) —
+ *     deriveJudgeLabels() there calls THIS function per judge; it used to
+ *     rebuild the grouping/labelling inline (one-owner fix 2026-09-18).
+ *
+ * This module is pure (no db/node imports) so it is safe to import from a
+ * client component as well as from server routers/services.
  */
 
 export interface JudgeAssignmentForClassification {
@@ -22,6 +26,10 @@ export interface JudgeAssignmentForClassification {
 export interface JudgeBreedAndClassification {
   breedLine: string;
   classificationLine: string;
+  /** Same content as classificationLine, unjoined — for callers (e.g. the
+   *  judge-section.tsx assignments card) that lay classifications out as
+   *  separate items instead of a single " / "-joined string. */
+  classifications: string[];
 }
 
 export function buildJudgeBreedAndClassification(
@@ -86,8 +94,10 @@ export function buildJudgeBreedAndClassification(
     classifications.add('Junior Handling');
   }
 
+  const classificationList = [...classifications];
   return {
     breedLine: breeds.size > 0 ? [...breeds].join(', ') : fallbackBreed,
-    classificationLine: classifications.size > 0 ? [...classifications].join(' / ') : 'TBC',
+    classificationLine: classificationList.length > 0 ? classificationList.join(' / ') : 'TBC',
+    classifications: classificationList,
   };
 }
