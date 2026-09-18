@@ -13,6 +13,7 @@ import { findClearedPedigreeFields, pedigreeClearMessage } from '@/lib/dog-pedig
 import { computeOrderFees, type FeeContext } from '@/lib/fee-calc';
 import { computeRegionalOrderFees, regionalClassFlatFee } from '@/lib/regional-fee-calc';
 import { countPriorRegionalPayingDogs } from '@/server/services/regional-pricing';
+import { validateSundrySelection } from '@/server/services/sundry-selection';
 import { formatAtcNumber } from '@/lib/registration-flags';
 import { computePrizeCardCounts } from '@/lib/prize-card-counts';
 import { BRAND } from '@/lib/brand';
@@ -3631,26 +3632,35 @@ export const secretaryRouter = createTRPCRouter({
         }
       }
 
-      // Validate and price sundry items
+      // Validate and price sundry items — ONE owner: validateSundrySelection
+      // (src/server/services/sundry-selection.ts), the same function
+      // `orders.checkout` uses. This path enforces existence / enabled /
+      // belongs-to-show, exactly as it always has.
+      //
+      // It deliberately does NOT enforce `over_max` (checkout's per-order
+      // cap, bug hunt #27) — that violation kind is available on
+      // `sundrySelection.violations` but is intentionally ignored here.
+      // 2026-09-18: whether/how a secretary path should ENFORCE vs WARN on
+      // rule violations is being decided on `feat-entry-requirements-one-gate`
+      // ("secretary warns, exhibitor refuses") — that branch owns wiring
+      // `over_max` (and any other secretary-side warning) into this call
+      // site. Do not add ad hoc enforcement here ahead of it.
       const sundryInputs = input.sundryItems ?? [];
       let selectedSundryItems: { id: string; name: string; priceInPence: number; quantity: number }[] = [];
       if (sundryInputs.length > 0) {
-        const sundryIds = sundryInputs.map((s) => s.sundryItemId);
-        const foundItems = await ctx.db.query.sundryItems.findMany({
-          where: and(
-            inArray(sundryItems.id, sundryIds),
-            eq(sundryItems.showId, input.showId),
-            eq(sundryItems.enabled, true)
-          ),
+        const sundrySelection = await validateSundrySelection(ctx.db, {
+          showId: input.showId,
+          items: sundryInputs,
         });
-        if (foundItems.length !== sundryIds.length) {
+        const blocking = sundrySelection.violations.filter((v) => v.kind !== 'over_max');
+        if (blocking.length > 0) {
           throw new TRPCError({ code: 'BAD_REQUEST', message: 'One or more sundry items are invalid' });
         }
-        selectedSundryItems = foundItems.map((item) => ({
-          id: item.id,
+        selectedSundryItems = sundrySelection.items.map((item) => ({
+          id: item.sundryItemId,
           name: item.name,
-          priceInPence: item.priceInPence,
-          quantity: sundryInputs.find((s) => s.sundryItemId === item.id)!.quantity,
+          priceInPence: item.unitPrice,
+          quantity: item.quantity,
         }));
       }
 

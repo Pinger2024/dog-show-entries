@@ -7,6 +7,7 @@ import { createTRPCRouter } from '../init';
 import { publicOrgColumns } from '../public-org-columns';
 import { syncCatalogueNumbers } from '@/server/services/catalogue-numbering';
 import { countPriorRegionalPayingDogs } from '@/server/services/regional-pricing';
+import { validateSundrySelection } from '@/server/services/sundry-selection';
 import { getLimitedShowEligibility } from '@/server/services/limited-show-eligibility';
 import {
   orders,
@@ -695,55 +696,44 @@ export const ordersRouter = createTRPCRouter({
 
       let totalAmount = entriesSubtotal + donationPence;
 
-      // Validate and calculate sundry items
-      let sundryTotal = 0;
-      const validatedSundryItems: { sundryItemId: string; quantity: number; unitPrice: number }[] = [];
-
-      if (input.sundryItems.length > 0) {
-        const requestedIds = input.sundryItems.map((s) => s.sundryItemId);
-        const availableItems = await ctx.db.query.sundryItems.findMany({
-          where: and(
-            inArray(sundryItems.id, requestedIds),
-            eq(sundryItems.showId, input.showId),
-            eq(sundryItems.enabled, true)
-          ),
-        });
-
-        const itemMap = new Map(availableItems.map((i) => [i.id, i]));
-
-        // Aggregate quantities per item before validating, so the per-order cap
-        // can't be bypassed by splitting a quantity across duplicate lines —
-        // e.g. two lines of 2 when maxPerOrder is 2 (bug hunt #27).
-        const qtyByItem = new Map<string, number>();
-        for (const requested of input.sundryItems) {
-          qtyByItem.set(
-            requested.sundryItemId,
-            (qtyByItem.get(requested.sundryItemId) ?? 0) + requested.quantity
-          );
-        }
-
-        for (const [sundryItemId, quantity] of qtyByItem) {
-          const item = itemMap.get(sundryItemId);
-          if (!item) {
-            throw new TRPCError({
-              code: 'BAD_REQUEST',
-              message: `Sundry item not found or not available: ${sundryItemId}`,
-            });
-          }
-          if (item.maxPerOrder != null && quantity > item.maxPerOrder) {
-            throw new TRPCError({
-              code: 'BAD_REQUEST',
-              message: `Maximum ${item.maxPerOrder} of "${item.name}" per order`,
-            });
-          }
-          sundryTotal += item.priceInPence * quantity;
-          validatedSundryItems.push({
-            sundryItemId: item.id,
-            quantity,
-            unitPrice: item.priceInPence,
+      // Validate and calculate sundry items — ONE owner:
+      // validateSundrySelection (src/server/services/sundry-selection.ts).
+      // Quantities are aggregated per item before the maxPerOrder check
+      // there, so the cap can't be bypassed by splitting a quantity across
+      // duplicate cart lines — e.g. two lines of 2 when maxPerOrder is 2
+      // (bug hunt #27).
+      const sundrySelection = await validateSundrySelection(ctx.db, {
+        showId: input.showId,
+        items: input.sundryItems,
+      });
+      // Checkout enforces every rule and keeps the same messages it always
+      // has: not_found/wrong_show/disabled collapse into one generic
+      // message, over_max gets its own. Only the FIRST violation is
+      // reported, matching the old inline loop which threw as soon as it
+      // hit a problem.
+      const firstViolation = sundrySelection.violations[0];
+      if (firstViolation) {
+        if (firstViolation.kind === 'over_max') {
+          throw new TRPCError({
+            code: 'BAD_REQUEST',
+            message: `Maximum ${firstViolation.max} of "${firstViolation.name}" per order`,
           });
         }
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: `Sundry item not found or not available: ${firstViolation.sundryItemId}`,
+        });
       }
+
+      const validatedSundryItems = sundrySelection.items.map((i) => ({
+        sundryItemId: i.sundryItemId,
+        quantity: i.quantity,
+        unitPrice: i.unitPrice,
+      }));
+      const sundryTotal = validatedSundryItems.reduce(
+        (sum, i) => sum + i.unitPrice * i.quantity,
+        0
+      );
 
       totalAmount += sundryTotal;
 
