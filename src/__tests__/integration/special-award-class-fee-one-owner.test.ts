@@ -43,7 +43,9 @@ const OWNER = join(SRC, 'lib', 'class-labels.ts');
 
 const FEE_SITES = [
   'server/trpc/routers/orders.ts',
-  'server/trpc/routers/entries.ts',
+  // entries.update's pricing moved into this service on 2026-09-18 (the
+  // entry-change one-owner fix), taking its specialAwardClassFee calls with it.
+  'server/services/entry-change-pricing.ts',
   'server/trpc/routers/secretary.ts',
   'app/(shows)/shows/[id]/enter/page.tsx',
 ];
