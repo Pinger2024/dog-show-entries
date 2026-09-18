@@ -11,6 +11,12 @@
  *
  * This test fails if a new caller of `computeRegionalOrderFees` appears without
  * the prior-dog count — i.e. if someone writes the rule down a fourth time.
+ *
+ * 2026-09-18: `entries.update`'s call moved into the extracted
+ * `priceEntryClassChange` (src/server/services/entry-change-pricing.ts) — see
+ * entry-change-pricing-one-owner.test.ts — so it now shows up here under that
+ * file instead of entries.ts. `entries.update` and `entries.previewUpdate`
+ * both still price a class change through it.
  */
 import { describe, it, expect } from 'vitest';
 import { readFileSync, readdirSync, statSync } from 'node:fs';
@@ -43,7 +49,7 @@ describe('regional pricing — one owner', () => {
     const rel = callers.map((f) => f.slice(SRC.length + 1)).sort();
     expect(rel).toEqual([
       'app/(shows)/shows/[id]/enter/page.tsx',
-      'server/trpc/routers/entries.ts',
+      'server/services/entry-change-pricing.ts',
       'server/trpc/routers/orders.ts',
       'server/trpc/routers/secretary.ts',
     ]);
