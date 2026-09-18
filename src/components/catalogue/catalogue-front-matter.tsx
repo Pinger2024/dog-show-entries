@@ -890,7 +890,7 @@ function SvCoverPage({ show, classCount }: { show: CatalogueShowInfo; classCount
             <Text style={[ss.bodySmall, { marginTop: 2 }]}>{affiliation}</Text>
           </View>
           <View style={{ width: '50%', paddingLeft: 8, marginBottom: '5mm' }}>
-            <Text style={[ss.eyebrow, { marginBottom: 3 }]}>Date</Text>
+            <Text style={[ss.eyebrow, { marginBottom: 3 }]}>Show Date</Text>
             <Text style={{ fontFamily: SV_FONTS.serif, fontSize: 13, lineHeight: 1.15, color: SV.ink }}>
               {dateDisplay}
             </Text>
@@ -931,13 +931,10 @@ function SvCoverPage({ show, classCount }: { show: CatalogueShowInfo; classCount
 
         <View style={{ flex: 1 }} />
 
-        {/* Bottom strip — Event Secretary contact */}
+        {/* Bottom strip — Event Secretary contact. The date lives ONCE, in the
+            info grid above (Mandy 2026-09-16: it read twice on the cover). */}
         <View style={{ height: 1, backgroundColor: SV.ink }} />
-        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginTop: '4mm' }}>
-          <View style={{ maxWidth: '50%' }}>
-            <Text style={[ss.eyebrow, { marginBottom: 3 }]}>Show Date</Text>
-            <Text style={{ fontFamily: SV_FONTS.serif, fontSize: 13, color: SV.ink }}>{formatCoverDate(show.date)}</Text>
-          </View>
+        <View style={{ flexDirection: 'row', justifyContent: 'flex-end', alignItems: 'flex-start', marginTop: '4mm' }}>
           <View style={{ alignItems: 'flex-end', maxWidth: '50%' }}>
             <Text style={[ss.eyebrow, { marginBottom: 3 }]}>Event Secretary</Text>
             <Text style={{ fontFamily: SV_FONTS.serif, fontSize: 13, lineHeight: 1.15, color: SV.ink }}>
