@@ -7,6 +7,7 @@ import { createTRPCRouter } from '../init';
 import { publicOrgColumns } from '../public-org-columns';
 import { syncCatalogueNumbers } from '@/server/services/catalogue-numbering';
 import { countPriorRegionalPayingDogs } from '@/server/services/regional-pricing';
+import { getLimitedShowEligibility } from '@/server/services/limited-show-eligibility';
 import {
   orders,
   entries,
@@ -22,7 +23,6 @@ import {
   judgeAssignments,
   judges,
   users,
-  achievements,
   showDiscountGroups,
   dogSvProfile,
 } from '@/server/db/schema';
@@ -341,52 +341,21 @@ export const ordersRouter = createTRPCRouter({
         }
       }
 
-      // Limited show eligibility check (2026 RKC rule)
+      // Limited show eligibility check (2026 RKC rule) — one owner:
+      // getLimitedShowEligibility (src/server/services/limited-show-eligibility.ts).
       if (show.showType === 'limited' && dogIds.length > 0) {
         for (const dogId of [...new Set(dogIds)]) {
-          const ccTypes = ['cc', 'dog_cc', 'bitch_cc'] as const;
-          const ccRows = await ctx.db
-            .select({ count: sql<number>`count(*)::int` })
-            .from(achievements)
-            .where(
-              and(
-                eq(achievements.dogId, dogId),
-                inArray(achievements.type, [...ccTypes])
-              )
-            );
-          const ccCount = ccRows[0]?.count ?? 0;
-
-          if (ccCount > 0) {
+          const eligibility = await getLimitedShowEligibility(ctx.db, dogId);
+          if (eligibility.ineligible) {
             const dog = await ctx.db.query.dogs.findFirst({
               where: eq(dogs.id, dogId),
               columns: { registeredName: true },
             });
-            throw new TRPCError({
-              code: 'BAD_REQUEST',
-              message: `${dog?.registeredName ?? 'This dog'} has won a CC and is ineligible for Limited shows`,
-            });
-          }
-
-          const rccTypes = ['reserve_cc', 'reserve_dog_cc', 'reserve_bitch_cc'] as const;
-          const rccRows = await ctx.db
-            .select({ judgeId: achievements.judgeId })
-            .from(achievements)
-            .where(
-              and(
-                eq(achievements.dogId, dogId),
-                inArray(achievements.type, [...rccTypes])
-              )
-            );
-          const distinctJudges = new Set(rccRows.map((r) => r.judgeId ?? 'unknown'));
-          if (distinctJudges.size >= 5) {
-            const dog = await ctx.db.query.dogs.findFirst({
-              where: eq(dogs.id, dogId),
-              columns: { registeredName: true },
-            });
-            throw new TRPCError({
-              code: 'BAD_REQUEST',
-              message: `${dog?.registeredName ?? 'This dog'} has 5+ RCCs under different judges and is ineligible for Limited shows (2026 rule)`,
-            });
+            const name = dog?.registeredName ?? 'This dog';
+            const message = eligibility.hasCC
+              ? `${name} has won a CC and is ineligible for Limited shows`
+              : `${name} has 5+ RCCs under different judges and is ineligible for Limited shows (2026 rule)`;
+            throw new TRPCError({ code: 'BAD_REQUEST', message });
           }
         }
       }
