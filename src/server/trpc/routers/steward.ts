@@ -30,6 +30,7 @@ import { publicOrgColumns } from '../public-org-columns';
 import { sendJudgeApprovalRequestEmail } from '@/server/services/email';
 import { deriveTopAwardJudge } from '@/server/services/derive-award-judge';
 import { isLiveEntry } from '@/lib/entry-counts';
+import { classResultsPublishState } from '@/lib/class-results-publish-state';
 
 /** Resolve a show slug or UUID to a UUID */
 async function resolveShowId(db: Database, idOrSlug: string): Promise<string> {
@@ -262,6 +263,14 @@ export const stewardRouter = createTRPCRouter({
         const absentCount = confirmedEntries.filter(
           (ec) => ec.absent
         ).length;
+        // ONE owner — src/lib/class-results-publish-state.ts (CLAUDE.md,
+        // "One owner per rule"). Published when every current result is
+        // live, partially published when some are live, and "dirty" when
+        // new results have been added since the steward last published.
+        const publishState = classResultsPublishState({
+          total: resultsCount,
+          published: publishedResults.length,
+        });
 
         return {
           id: sc.id,
@@ -274,11 +283,7 @@ export const stewardRouter = createTRPCRouter({
           absentCount,
           resultsCount,
           hasResults: resultsCount > 0,
-          // Publish status: published when every current result is live,
-          // partially published when some are live, and "dirty" when new
-          // results have been added since the steward last published.
-          isPublished: resultsCount > 0 && publishedResults.length === resultsCount,
-          hasUnpublishedChanges: publishedResults.length > 0 && publishedResults.length < resultsCount,
+          ...publishState,
         };
       });
     }),
@@ -388,10 +393,14 @@ export const stewardRouter = createTRPCRouter({
       );
 
       // Publish status — derived from per-result publishedAt timestamps.
+      // ONE owner — src/lib/class-results-publish-state.ts (CLAUDE.md, "One
+      // owner per rule").
       const allResults = confirmed.map((ec) => ec.result).filter((r): r is NonNullable<typeof r> => r != null);
       const publishedResults = allResults.filter((r) => r.publishedAt !== null);
-      const isPublished = allResults.length > 0 && publishedResults.length === allResults.length;
-      const hasUnpublishedChanges = publishedResults.length > 0 && publishedResults.length < allResults.length;
+      const { isPublished, hasUnpublishedChanges } = classResultsPublishState({
+        total: allResults.length,
+        published: publishedResults.length,
+      });
 
       return {
         showClass: {
