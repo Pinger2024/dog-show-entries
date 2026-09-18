@@ -6,7 +6,7 @@ import { db } from '@/server/db';
 import { entries, entryClasses, entryAuditLog, orders, payments, organisations, plans, users, printOrders, printOrderItems } from '@/server/db/schema';
 import { sendEntryConfirmationEmail, sendSecretaryNotificationEmail, sendPrintOrderConfirmationEmail, sendPrintOrderAdminNotificationEmail, sendRefundFailedAlertEmail } from '@/server/services/email';
 import { syncCatalogueNumbers } from '@/server/services/catalogue-numbering';
-import { formatOrderRef } from '@/lib/print-products';
+import { formatOrderRef, isPrintOrderPaid } from '@/lib/print-products';
 import type Stripe from 'stripe';
 
 /**
@@ -173,7 +173,7 @@ export async function POST(request: NextRequest) {
           where: eq(printOrders.id, printOrderId),
           columns: { status: true },
         });
-        const wasAlreadyPaid = existing?.status === 'paid' || existing?.status === 'submitted' || existing?.status === 'in_production' || existing?.status === 'dispatched' || existing?.status === 'delivered';
+        const wasAlreadyPaid = isPrintOrderPaid(existing?.status);
 
         // stripePaymentStatus is idempotent: the second succeeded event
         // sets the same value. Write it unconditionally so any future
@@ -399,7 +399,7 @@ export async function POST(request: NextRequest) {
           where: eq(printOrders.id, printOrderId),
           columns: { status: true },
         });
-        const advanced = ['paid', 'submitted', 'in_production', 'dispatched', 'delivered'].includes(existingPrint?.status ?? '');
+        const advanced = isPrintOrderPaid(existingPrint?.status);
         await db
           .update(printOrders)
           .set(
