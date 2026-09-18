@@ -4,6 +4,7 @@ import {
   formatSvClassName,
   classNameAbbreviation,
   specialAwardClassFee,
+  isUnnumberedClassDef,
 } from '../class-labels';
 
 /**
@@ -148,5 +149,37 @@ describe('specialAwardClassFee', () => {
         entryFee: 300,
       }),
     ).toBe(300);
+  });
+});
+
+/**
+ * ONE owner (bug-hunt #5, CLAUDE.md "One owner per rule") for "which class
+ * definitions carry no printed classNumber" — Junior Handler and Special
+ * Award Classes both sit outside the RKC-licensed count. Every numbering
+ * path (secretary.ts, shows.create) calls this instead of re-testing
+ * `type === 'junior_handler'` / the `'Special Award Class'` name prefix.
+ */
+describe('isUnnumberedClassDef', () => {
+  it('is true for a Junior Handler class definition', () => {
+    expect(isUnnumberedClassDef({ type: 'junior_handler', name: 'Junior Handling' })).toBe(true);
+  });
+
+  it('is true for a Special Award Class definition', () => {
+    expect(isUnnumberedClassDef({ type: 'special', name: 'Special Award Class 1' })).toBe(true);
+  });
+
+  it('is false for an ordinary breed class definition', () => {
+    expect(isUnnumberedClassDef({ type: 'age', name: 'Puppy Dog' })).toBe(false);
+  });
+
+  it('is false for other type: special definitions that are not Special Award Classes', () => {
+    // type: 'special' is a broader bucket — Special Beginners, AVNSC, Variety
+    // Class, GCDS, Rare Breeds, … are ordinary numbered classes.
+    expect(isUnnumberedClassDef({ type: 'special', name: 'Special Beginners' })).toBe(false);
+  });
+
+  it('is false for null/undefined class definitions', () => {
+    expect(isUnnumberedClassDef(null)).toBe(false);
+    expect(isUnnumberedClassDef(undefined)).toBe(false);
   });
 });

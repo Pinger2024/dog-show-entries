@@ -20,7 +20,7 @@ import { computePrizeCardCounts } from '@/lib/prize-card-counts';
 import { BRAND } from '@/lib/brand';
 import { FEEDBACK_REPLY_TO } from '@/lib/email-addresses';
 import { checkOwnerRecord, type OwnerCheckIssue } from '@/lib/catalogue-data-checks';
-import { SV_CLASS_AUTO_CREATE_COMBOS, specialAwardClassFee } from '@/lib/class-labels';
+import { SV_CLASS_AUTO_CREATE_COMBOS, specialAwardClassFee, isUnnumberedClassDef } from '@/lib/class-labels';
 import {
   shows,
   entries,
@@ -151,22 +151,6 @@ function statusFromEntries(orderEntries: ReadonlyArray<{ status: string }>): str
   if (orderEntries.some((e) => e.status === 'confirmed')) return 'confirmed';
   if (orderEntries.every((e) => e.status === 'withdrawn')) return 'withdrawn';
   return orderEntries[0]?.status ?? 'pending';
-}
-
-/**
- * RKC show licences count only breed classes. Junior Handler classes (rendered
- * JHA, JHB, …) and Special Award Classes (rendered A, B, C, …) sit outside the
- * licensed count and must carry classNumber = null. Single source of truth for
- * every class-numbering path (autoAssign / reorder / resort / bulkCreate) so
- * they can't drift apart and start numbering JH/SAC classes (bug hunt #5).
- */
-function isUnnumberedClassDef(
-  cd?: { type?: string | null; name?: string | null } | null
-): boolean {
-  return (
-    cd?.type === 'junior_handler' ||
-    (cd?.type === 'special' && (cd?.name?.startsWith('Special Award Class') ?? false))
-  );
 }
 
 export const secretaryRouter = createTRPCRouter({

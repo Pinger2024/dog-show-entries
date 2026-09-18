@@ -257,6 +257,27 @@ export function isSpecialAwardClass(cls: ClassKindInput): boolean {
   return type === 'special' && (name?.startsWith('Special Award Class') ?? false);
 }
 
+/**
+ * ONE owner for "which class definitions carry no printed class number"
+ * (bug-hunt #5, CLAUDE.md "One owner per rule"): RKC show licences count only
+ * breed classes, so Junior Handler classes (rendered JHA, JHB, …) and Special
+ * Award Classes (rendered A, B, C, …) both sit outside the licensed count and
+ * must carry `classNumber = null`. Built on {@link isJuniorHandler} and
+ * {@link isSpecialAwardClass} rather than re-testing `type === 'junior_handler'`
+ * or the `'Special Award Class'` name prefix inline, so every numbering path
+ * — `autoAssignClassNumbers`, `reorderClasses`/`resortShowClasses`, secretary
+ * `bulkCreateClasses`, and `shows.create`'s at-creation numbering — agrees
+ * with the label map above on what counts as unnumbered. Accepts the same
+ * loose `{ type, name }` shape the class-numbering call sites already pass
+ * (a `classDefinition` row, not a full `ClassKindInput`-shaped class).
+ */
+export function isUnnumberedClassDef(
+  cd?: { type?: string | null; name?: string | null } | null
+): boolean {
+  const input: ClassKindInput = { classType: cd?.type ?? null, className: cd?.name ?? null };
+  return isJuniorHandler(input) || isSpecialAwardClass(input);
+}
+
 /** {@link ClassKindInput} plus the class's own entry fee — the shape every
  *  fee-charging call site needs to price a class. */
 export type ClassFeeInput = ClassKindInput & { entryFee: number };
