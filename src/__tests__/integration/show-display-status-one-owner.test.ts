@@ -51,7 +51,6 @@ const KNOWN_DISPLAY_SITES = [
   'components/shows/shows-list.tsx',
   'app/(secretary)/secretary/page.tsx',
   'app/(secretary)/secretary/shows/[id]/_components/lifecycle-banner.tsx',
-  'app/(secretary)/secretary/shows/[id]/catalogue/page.tsx',
   'app/(secretary)/secretary/shows/[id]/layout.tsx',
   'app/(shows)/shows/[id]/page.tsx',
   'app/(shows)/shows/[id]/preview/show-preview.tsx',
