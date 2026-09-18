@@ -46,7 +46,7 @@ import { svEntryMissingRequirements, svEntryBlockedMessage } from '@/lib/sv-entr
 import { pedigreeMissingForEntry } from '@/lib/sv-entry-readiness';
 import { hasJudgingConflict } from '@/lib/judge-exhibitor-conflict';
 import { getCompetitionAgeError } from '@/lib/date-utils';
-import { svCoatDisplayName } from '@/lib/class-labels';
+import { svCoatDisplayName, specialAwardClassFee } from '@/lib/class-labels';
 import { dogAccessCondition } from '@/server/dog-access';
 
 export const entriesRouter = createTRPCRouter({
@@ -925,7 +925,7 @@ export const entriesRouter = createTRPCRouter({
             : 'standard';
 
         let discountGroup: FeeContext['discountGroup'] = null;
-        type SiblingClass = { id: string; showClass?: { entryFee: number; classDefinition?: { type: string } | null } | null };
+        type SiblingClass = { id: string; showClass?: { entryFee: number; classDefinition?: { type: string; name: string } | null } | null };
         let siblingEntries: { id: string; entryType: string; isNfc: boolean; entryClasses: SiblingClass[]; totalFee: number }[] = [
           {
             id: input.id,
@@ -947,7 +947,7 @@ export const entriesRouter = createTRPCRouter({
               with: {
                 entryClasses: {
                   columns: { id: true },
-                  with: { showClass: { columns: { entryFee: true }, with: { classDefinition: { columns: { type: true } } } } },
+                  with: { showClass: { columns: { entryFee: true }, with: { classDefinition: { columns: { type: true, name: true } } } } },
                 },
               },
             }),
@@ -978,13 +978,14 @@ export const entriesRouter = createTRPCRouter({
         };
 
         // Special Award Classes charge their own fee, not the tier (Mandy
-        // 2026-07-19). The edited entry's specials come from newClasses; each
-        // sibling's from its loaded show classes.
+        // 2026-07-19). ONE owner: specialAwardClassFee. The edited entry's
+        // specials come from newClasses; each sibling's from its loaded show
+        // classes.
         const specialFeesFor = (e: (typeof siblingEntries)[number]): (number | null)[] =>
           e.id === input.id
-            ? newClasses.map((sc) => (sc.classDefinition?.type === 'special' ? sc.entryFee : null))
+            ? newClasses.map((sc) => specialAwardClassFee(sc))
             : e.entryClasses.map((ec) =>
-                ec.showClass?.classDefinition?.type === 'special' ? ec.showClass.entryFee : null,
+                ec.showClass ? specialAwardClassFee(ec.showClass) : null,
               );
         const dogEntries: DogEntryInput[] = siblingEntries.map((e) => ({
           key: e.id,

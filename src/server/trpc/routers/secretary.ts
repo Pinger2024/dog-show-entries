@@ -18,7 +18,7 @@ import { computePrizeCardCounts } from '@/lib/prize-card-counts';
 import { BRAND } from '@/lib/brand';
 import { FEEDBACK_REPLY_TO } from '@/lib/email-addresses';
 import { checkOwnerRecord, type OwnerCheckIssue } from '@/lib/catalogue-data-checks';
-import { SV_CLASS_AUTO_CREATE_COMBOS } from '@/lib/class-labels';
+import { SV_CLASS_AUTO_CREATE_COMBOS, specialAwardClassFee } from '@/lib/class-labels';
 import {
   shows,
   entries,
@@ -3728,11 +3728,10 @@ export const secretaryRouter = createTRPCRouter({
                 key: 'manual',
                 kind: input.isNfc ? 'nfc' : 'standard',
                 classCount: selectedClasses.length,
-                // Special Award Classes charge their own fee (Mandy 2026-07-19),
-                // aligned to selectedClasses order (perClassFees[i] matches it).
-                specialClassFees: selectedClasses.map((sc) =>
-                  sc.classDefinition?.type === 'special' ? sc.entryFee : null,
-                ),
+                // Special Award Classes charge their own fee (Mandy 2026-07-19).
+                // ONE owner: specialAwardClassFee. Aligned to selectedClasses
+                // order (perClassFees[i] matches it).
+                specialClassFees: selectedClasses.map((sc) => specialAwardClassFee(sc)),
               }],
               feeCtx,
             );

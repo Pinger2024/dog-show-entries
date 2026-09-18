@@ -48,6 +48,7 @@ import { hasJudgingConflict } from '@/lib/judge-exhibitor-conflict';
 import { getCompetitionAgeError } from '@/lib/date-utils';
 import { isParkingSundry, PARKING_NAME_PATTERNS } from '@/lib/parking-utils';
 import { formatAtcNumber } from '@/lib/registration-flags';
+import { specialAwardClassFee } from '@/lib/class-labels';
 import { dogAccessCondition } from '@/server/dog-access';
 
 const cartEntrySchema = z.object({
@@ -664,10 +665,11 @@ export const ordersRouter = createTRPCRouter({
                 : 'standard',
           classCount: e.classIds.length,
           // Special Award Classes charge their own fee, not the tier (Mandy
-          // 2026-07-19). Aligned to classIds order so perClassFees[idx] matches.
+          // 2026-07-19). ONE owner: specialAwardClassFee. Aligned to classIds
+          // order so perClassFees[idx] matches.
           specialClassFees: e.classIds.map((cid) => {
             const c = classMap.get(cid);
-            return c?.classDefinition?.type === 'special' ? c.entryFee : null;
+            return c ? specialAwardClassFee(c) : null;
           }),
         }));
         const usePerClassFallback = show.firstEntryFee == null;

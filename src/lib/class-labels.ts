@@ -257,6 +257,34 @@ export function isSpecialAwardClass(cls: ClassKindInput): boolean {
   return type === 'special' && (name?.startsWith('Special Award Class') ?? false);
 }
 
+/** {@link ClassKindInput} plus the class's own entry fee — the shape every
+ *  fee-charging call site needs to price a class. */
+export type ClassFeeInput = ClassKindInput & { entryFee: number };
+
+/**
+ * ONE owner for "which classes charge their own flat fee instead of the
+ * first/subsequent tier" (co-founder ruling 2026-07-19): Special Award
+ * Classes charge their own entry fee and do NOT count as a paying class for
+ * the tier / multi-dog package.
+ *
+ * Returns the class's own fee when {@link isSpecialAwardClass} is true, else
+ * `null` (meaning: price this class on the normal tier/package rules).
+ *
+ * Why not `classDefinition.type === 'special'` alone: `type: 'special'` is a
+ * broader bucket than Special Award Classes — production carries nine other
+ * `type: 'special'` definitions (Special Beginners, Any Variety Not
+ * Separately Classified, Variety Class, Good Citizen Dog Scheme, Rare
+ * Breeds, …) that are ORDINARY classes for pricing purposes. Testing type
+ * alone would flat-price every one of them at its own class fee instead of
+ * the tier — nobody has been mischarged yet only because none of those nine
+ * is on a live show. Every fee path (checkout, manual entry, entry edit, the
+ * client fee preview) must call this helper rather than re-testing
+ * `type === 'special'` inline.
+ */
+export function specialAwardClassFee(cls: ClassFeeInput): number | null {
+  return isSpecialAwardClass(cls) ? cls.entryFee : null;
+}
+
 export type ClassSectionKey = 'dog' | 'bitch' | 'special' | 'jh' | 'other';
 
 export interface ClassSection<T> {

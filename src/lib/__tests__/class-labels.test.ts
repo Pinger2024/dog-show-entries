@@ -1,5 +1,10 @@
 import { describe, it, expect } from 'vitest';
-import { svCoatDisplayName, formatSvClassName, classNameAbbreviation } from '../class-labels';
+import {
+  svCoatDisplayName,
+  formatSvClassName,
+  classNameAbbreviation,
+  specialAwardClassFee,
+} from '../class-labels';
 
 /**
  * Regional coat-type WORDING (regional groups' decision 2026-08-11, via
@@ -80,5 +85,68 @@ describe('classNameAbbreviation', () => {
 
   it('is case-insensitive when matching the trailing sex word', () => {
     expect(classNameAbbreviation('Veteran dog', 'dog')).toBe('VD');
+  });
+});
+
+/**
+ * ONE owner for "which classes charge their own flat fee instead of the
+ * first/subsequent tier" (co-founder ruling 2026-07-19). The bug this guards:
+ * `classDefinition.type === 'special'` is a broader bucket than Special
+ * Award Classes — production has nine other `type: 'special'` definitions
+ * (Special Beginners, Any Variety Not Separately Classified, …) that are
+ * ORDINARY classes for pricing. Only a real Special Award Class (type
+ * 'special' AND name starting "Special Award Class") should return its own
+ * fee; every other 'special'-typed class must return null (priced on the
+ * normal tier).
+ */
+describe('specialAwardClassFee', () => {
+  it('returns the class own fee for a real Special Award Class', () => {
+    expect(
+      specialAwardClassFee({
+        classDefinition: { type: 'special', name: 'Special Award Class - Post Graduate' },
+        entryFee: 300,
+      }),
+    ).toBe(300);
+  });
+
+  it('returns null for an ordinary class of type "special" (e.g. Special Beginners)', () => {
+    expect(
+      specialAwardClassFee({
+        classDefinition: { type: 'special', name: 'Special Beginners' },
+        entryFee: 500,
+      }),
+    ).toBeNull();
+  });
+
+  it('returns null for other non-Special-Award "special"-typed definitions', () => {
+    for (const name of [
+      'Any Variety Not Separately Classified',
+      'Variety Class',
+      'Good Citizen Dog Scheme',
+      'Rare Breeds',
+    ]) {
+      expect(
+        specialAwardClassFee({ classDefinition: { type: 'special', name }, entryFee: 400 }),
+      ).toBeNull();
+    }
+  });
+
+  it('returns null for a regular (non-special) class', () => {
+    expect(
+      specialAwardClassFee({
+        classDefinition: { type: 'breed', name: 'Post Graduate Dog' },
+        entryFee: 2000,
+      }),
+    ).toBeNull();
+  });
+
+  it('works from the flat classType/className fallback fields too', () => {
+    expect(
+      specialAwardClassFee({
+        classType: 'special',
+        className: 'Special Award Class - Junior',
+        entryFee: 300,
+      }),
+    ).toBe(300);
   });
 });

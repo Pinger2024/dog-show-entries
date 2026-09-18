@@ -41,7 +41,7 @@ import { isWithinAgeRange, getAgeEligibilityDetail, handlerAgeYearsOnDate, forma
 import { svAgeClassAllowed, svMissingRequirements, hasWorkingTitle, pedigreeMissingForEntry } from '@/lib/sv-entry-readiness';
 import { SV_HEALTH_FROM_CLASSES } from '@/lib/sv-entry-validation';
 import { displayShowTypeLabel } from '@/lib/show-types';
-import { svCoatDisplayName } from '@/lib/class-labels';
+import { svCoatDisplayName, specialAwardClassFee, isSpecialAwardClass } from '@/lib/class-labels';
 import { trpc } from '@/lib/trpc/client';
 import { formatDogName } from '@/lib/utils';
 import { readReferralSource } from '@/lib/referral-source';
@@ -553,9 +553,10 @@ export default function EnterShowPage() {
         classCount: e.classIds.length,
         // Special Award Classes charge their own fee, not the tier — mirror the
         // server so the preview total matches the charge (Mandy 2026-07-19).
+        // ONE owner: specialAwardClassFee.
         specialClassFees: e.classIds.map((cid) => {
           const sc = classTypeById.get(cid);
-          return sc?.classDefinition.type === 'special' ? sc.entryFee : null;
+          return sc ? specialAwardClassFee(sc) : null;
         }),
       }));
     if (dogEntries.length === 0) return null;
@@ -799,11 +800,14 @@ export default function EnterShowPage() {
       // Special Award Classes charge their own fee, not the tier — mirror the
       // server + checkout preview so this running total matches the charge
       // (Mandy 2026-07-21: was showing the £20 tier rate for a £3 special).
+      // `isSpecial` feeds `computeClassSelectionTotal`'s fee calc, so it must
+      // be the real Special Award Class predicate, not a type-only check —
+      // ONE owner: isSpecialAwardClass.
       const classById = new Map((showClasses ?? []).map((sc) => [sc.id, sc]));
       const selectedClassesForPricing = selectedClassIds.map((cid) => {
         const sc = classById.get(cid);
         return {
-          isSpecial: sc?.classDefinition.type === 'special',
+          isSpecial: sc ? isSpecialAwardClass(sc) : false,
           entryFee: sc?.entryFee ?? 0,
         };
       });
