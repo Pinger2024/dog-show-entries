@@ -9,6 +9,7 @@ import { generateJudgeContractPdf } from '@/server/services/judge-contract-pdf';
 import { emailHeader } from '@/server/services/email';
 import { BRAND } from '@/lib/brand';
 import { FEEDBACK_REPLY_TO } from '@/lib/email-addresses';
+import { isContractOfferExpired } from '@/lib/judge-contract-offer';
 
 function renderPage(title: string, body: string) {
   return `
@@ -115,7 +116,7 @@ export async function GET(
   }
 
   // Check token expiry
-  if (contract.tokenExpiresAt && new Date() > contract.tokenExpiresAt) {
+  if (isContractOfferExpired(contract)) {
     return new NextResponse(
       renderPage('Link Expired', `
         <div class="banner"><h2>Link Expired</h2></div>
@@ -269,7 +270,7 @@ export async function POST(
     );
   }
 
-  if (contract.tokenExpiresAt && new Date() > contract.tokenExpiresAt) {
+  if (isContractOfferExpired(contract)) {
     return new NextResponse(
       renderPage('Link Expired', `
         <div class="banner"><h2>Link Expired</h2></div>
