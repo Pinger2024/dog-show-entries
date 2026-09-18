@@ -104,14 +104,18 @@ export function missingChampionshipClasses({
     let key: string | null;
     let breedId: string | null;
     let breedName: string;
-    if (sc.breedId) {
+    if (isSingleBreed) {
+      // A single-breed show IS one breed, whatever each row carries. Rows are
+      // allowed to have no breed FK, and a show can hold a MIX of rows with
+      // and without one — keyed by id those split into two half-empty groups
+      // that both read as incomplete (the old client merged them by name).
+      key = SINGLE_BREED_FALLBACK_KEY;
+      breedId = fallbackBreed?.breedId ?? sc.breedId ?? null;
+      breedName = fallbackBreed?.breedName?.trim() || sc.breedName?.trim() || 'the breed';
+    } else if (sc.breedId) {
       key = sc.breedId;
       breedId = sc.breedId;
       breedName = sc.breedName?.trim() || 'the breed';
-    } else if (isSingleBreed) {
-      key = SINGLE_BREED_FALLBACK_KEY;
-      breedId = fallbackBreed?.breedId ?? null;
-      breedName = fallbackBreed?.breedName?.trim() || sc.breedName?.trim() || 'the breed';
     } else if (sc.breedName) {
       // Multi-breed show, class row with no breed FK but a breed name to
       // hand — the client's class shape has no id at all, only a name, so
@@ -149,4 +153,25 @@ export function missingChampionshipClasses({
     }
   }
   return missing;
+}
+
+/**
+ * Is the championship class requirement SATISFIED — the yes/no the setup
+ * checklist ticks. Semantics kept from the original server check:
+ *  - rule does not apply (non-championship, WUSV) → true;
+ *  - NO classes yet → true ("not applicable" — adding classes is its own
+ *    checklist item, this one must not double-report it);
+ *  - classes exist but none can be tied to a breed (multi-breed rows with no
+ *    breed at all) → false: nothing is provably covered;
+ *  - otherwise → nothing missing.
+ *
+ * The live warning lists `missingChampionshipClasses`; anything that needs the
+ * tick calls THIS — do not re-derive it as `missing.length === 0`.
+ */
+export function championshipClassesComplete(input: ChampionshipClassRequirementsInput): boolean {
+  if (input.showType !== 'championship' || input.showRuleset === 'wusv') return true;
+  if (input.classes.length === 0) return true;
+  const hasABreedGroup =
+    input.showScope === 'single_breed' || input.classes.some((c) => c.breedId || c.breedName);
+  return hasABreedGroup && missingChampionshipClasses(input).length === 0;
 }

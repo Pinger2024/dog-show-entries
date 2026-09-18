@@ -1,5 +1,9 @@
 import { describe, it, expect } from 'vitest';
-import { missingChampionshipClasses, type ChampionshipClassInput } from '../championship-class-requirements';
+import {
+  missingChampionshipClasses,
+  championshipClassesComplete,
+  type ChampionshipClassInput,
+} from '../championship-class-requirements';
 
 function cls(overrides: Partial<ChampionshipClassInput>): ChampionshipClassInput {
   return {
@@ -132,5 +136,43 @@ describe('missingChampionshipClasses', () => {
       { breedId: 'breed-gsd', breedName: 'German Shepherd Dog', sex: 'bitch', className: 'Open' },
       { breedId: 'breed-gsd', breedName: 'German Shepherd Dog', sex: 'bitch', className: 'Limit' },
     ]);
+  });
+});
+
+/**
+ * Review follow-ups (2026-09-18) — two behaviours the extraction lost.
+ */
+describe('championshipClassesComplete / mixed single-breed rows', () => {
+  it('single-breed show with SOME rows carrying breedId and some not is ONE breed, not two', () => {
+    // The old client grouped by breed NAME, so mixed rows merged. Keyed by id
+    // they split into two half-empty groups and both read as incomplete.
+    const mixed = fullSet(GSD).map((c, i) => (i % 2 === 0 ? c : { ...c, breedId: null, breedName: null }));
+    expect(
+      missingChampionshipClasses({ showType: 'championship', showScope: 'single_breed', showRuleset: 'rkc', classes: mixed }),
+    ).toEqual([]);
+  });
+
+  it('NO classes yet → not applicable, so complete (adding classes is its own checklist item)', () => {
+    const input = { showType: 'championship' as const, showScope: 'single_breed' as const, showRuleset: 'rkc' as const, classes: [] };
+    expect(missingChampionshipClasses(input)).toEqual([]);
+    expect(championshipClassesComplete(input)).toBe(true);
+  });
+
+  it('multi-breed show whose classes cannot be tied to ANY breed is not complete', () => {
+    // Original server semantics: `breedClassMap.size > 0 && allBreedsComplete`.
+    const breedless = fullSet(GSD).map((c) => ({ ...c, breedId: null, breedName: null }));
+    const input = { showType: 'championship' as const, showScope: 'general' as const, showRuleset: 'rkc' as const, classes: breedless };
+    expect(championshipClassesComplete(input)).toBe(false);
+  });
+
+  it('complete show → complete; one class missing → not complete', () => {
+    const base = { showType: 'championship' as const, showScope: 'single_breed' as const, showRuleset: 'rkc' as const };
+    expect(championshipClassesComplete({ ...base, classes: fullSet(GSD) })).toBe(true);
+    expect(championshipClassesComplete({ ...base, classes: fullSet(GSD).slice(1) })).toBe(false);
+  });
+
+  it('non-championship and WUSV shows are never blocked by this rule', () => {
+    expect(championshipClassesComplete({ showType: 'open', showScope: 'single_breed', showRuleset: 'rkc', classes: [] })).toBe(true);
+    expect(championshipClassesComplete({ showType: 'championship', showScope: 'single_breed', showRuleset: 'wusv', classes: [] })).toBe(true);
   });
 });

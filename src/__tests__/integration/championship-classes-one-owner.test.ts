@@ -115,7 +115,11 @@ describe('championship classes — one owner', () => {
     const server = readFileSync(SERVER_ROUTER, 'utf8');
     const client = readFileSync(CLIENT_COMPONENT, 'utf8');
     expect(server).toContain("from '@/lib/championship-class-requirements'");
-    expect(server).toContain('missingChampionshipClasses(');
+    // The server needs the TICK, so it calls championshipClassesComplete — not
+    // `missingChampionshipClasses(...).length === 0`, which loses the
+    // "classes exist but none tie to a breed" case (review 2026-09-18).
+    expect(server).toContain('championshipClassesComplete(');
+    expect(server).not.toMatch(/missingChampionshipClasses\([\s\S]{0,400}?\)\s*\.length\s*===\s*0/);
     expect(client).toContain("from '@/lib/championship-class-requirements'");
     expect(client).toContain('missingChampionshipClasses(');
   });

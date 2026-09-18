@@ -87,7 +87,7 @@ import {
   withdrawnOrAbsentPaidWhere,
 } from '@/server/services/report-queries';
 import { validateRkcSchedule } from '@/lib/rkc-schedule-compliance';
-import { missingChampionshipClasses } from '@/lib/championship-class-requirements';
+import { championshipClassesComplete } from '@/lib/championship-class-requirements';
 
 /**
  * True if this judge has assignments with any organisation outside the
@@ -4149,7 +4149,7 @@ export const secretaryRouter = createTRPCRouter({
           with: { classDefinition: true, breed: true },
         });
 
-        const missing = missingChampionshipClasses({
+        detected.championship_classes_complete = championshipClassesComplete({
           showType: show.showType,
           showScope: show.showScope,
           showRuleset: (show as { showRuleset?: 'rkc' | 'wusv' }).showRuleset,
@@ -4160,7 +4160,6 @@ export const secretaryRouter = createTRPCRouter({
             sex: sc.sex,
           })),
         });
-        detected.championship_classes_complete = missing.length === 0;
       } else {
         // Non-championship shows or shows with no classes — not applicable, mark as complete
         detected.championship_classes_complete = true;
