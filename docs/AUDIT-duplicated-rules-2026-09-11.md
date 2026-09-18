@@ -315,6 +315,8 @@ everywhere fees are charged. That is the pattern.
 
 ## 10. Render helpers duplicated across catalogue formats
 
+> **18 Sept 2026:** the Judge Coverage copy is gone. It had been carried verbatim into `server/services/judge-coverage.ts` by the coverage extraction (a local function *shadowing* the canonical name, testing the name prefix only); it now imports `isSpecialAwardClass` from `lib/class-labels.ts`. Prod has six Special Award Class definitions, all `type = 'special'`, so results are unchanged. The other renderers in this section still stand.
+
 **Status: REPORTED**
 
 - **Exhibitor index — two builders, materially different content.** `catalogue-ringside.tsx:320`

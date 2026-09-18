@@ -25,6 +25,7 @@
 import { eq } from 'drizzle-orm';
 import type { db as Database } from '@/server/db';
 import { shows, showClasses, judgeAssignments } from '@/server/db/schema';
+import { isSpecialAwardClass } from '@/lib/class-labels';
 
 export type JudgeCoverageItem = {
   breedId: string | null;
@@ -93,8 +94,6 @@ export async function computeJudgeCoverage(
     isSpecialAwards: boolean;
   }>();
 
-  const isSpecialAwardClass = (sc: typeof classes[number]) =>
-    sc.classDefinition?.name?.startsWith('Special Award Class') ?? false;
 
   for (const sc of classes) {
     const sac = isSpecialAwardClass(sc);
