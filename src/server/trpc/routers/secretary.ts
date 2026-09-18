@@ -20,6 +20,7 @@ import { computePrizeCardCounts } from '@/lib/prize-card-counts';
 import { BRAND } from '@/lib/brand';
 import { FEEDBACK_REPLY_TO } from '@/lib/email-addresses';
 import { checkOwnerRecord, type OwnerCheckIssue } from '@/lib/catalogue-data-checks';
+import { requiredGuarantorCount, hasEnoughGuarantors, showFeesConfigured } from '@/lib/show-setup-requirements';
 import { SV_CLASS_AUTO_CREATE_COMBOS, specialAwardClassFee, isUnnumberedClassDef } from '@/lib/class-labels';
 import {
   shows,
@@ -4092,14 +4093,9 @@ export const secretaryRouter = createTRPCRouter({
         detected.judge_offers_sent = false;
       }
 
-      // Additional auto-detect keys for lifecycle gates. Regional (SV/WUSV)
-      // shows price via regionalFeeConfig, not firstEntryFee — count either
-      // (Mandy 2026-07-05: regional fees set but checklist said "not set").
-      const regionalFeesSet = !!(
-        (show as { regionalFeeConfig?: { tiers?: unknown[] } | null }).regionalFeeConfig?.tiers?.length
-      );
-      detected.entry_fees_set =
-        regionalFeesSet || (show.firstEntryFee != null && show.firstEntryFee > 0);
+      // Additional auto-detect keys for lifecycle gates. ONE owner —
+      // src/lib/show-setup-requirements.ts (CLAUDE.md, "One owner per rule").
+      detected.entry_fees_set = showFeesConfigured(show);
       detected.entry_close_date_set = show.entryCloseDate != null;
       detected.secretary_details_set = !!(show.secretaryName && show.secretaryEmail);
       // Post-show: the "Publish results" checklist item declares this autoDetectKey
@@ -4114,12 +4110,11 @@ export const secretaryRouter = createTRPCRouter({
       detected.sundry_items_reviewed = Number(sundryItemCount?.count) > 0;
       const scheduleData = show.scheduleData as Record<string, unknown> | null;
       const guarantors = (scheduleData?.guarantors as { name: string }[] | undefined) ?? [];
-      const minGuarantors = show.showType === 'championship' ? 6 : 3;
-      // SV/WUSV regional shows aren't licensed under the RKC F-rules
-      // framework that requires guarantors, so the check auto-passes
-      // (Amanda 2026-05-19/20).
-      const isWusvShow = (show as { showRuleset?: 'rkc' | 'wusv' }).showRuleset === 'wusv';
-      detected.guarantors_added = isWusvShow || guarantors.length >= minGuarantors;
+      // ONE owner — src/lib/show-setup-requirements.ts (CLAUDE.md, "One
+      // owner per rule"); requiredGuarantorCount returns 0 for SV/WUSV
+      // regional shows, which aren't licensed under the RKC F-rules
+      // framework that requires guarantors (Amanda 2026-05-19/20).
+      detected.guarantors_added = hasEnoughGuarantors(show, guarantors.length);
 
       // Championship shows: check Open + Limit for each sex per breed.
       // ONE owner — src/lib/championship-class-requirements.ts (CLAUDE.md,
@@ -4172,7 +4167,9 @@ export const secretaryRouter = createTRPCRouter({
 
       const scheduleData = show.scheduleData as Record<string, unknown> | null;
       const guarantors = (scheduleData?.guarantors as { name: string }[] | undefined) ?? [];
-      const minGuarantors = show.showType === 'championship' ? 6 : 3;
+      // ONE owner — src/lib/show-setup-requirements.ts (CLAUDE.md, "One
+      // owner per rule").
+      const minGuarantors = requiredGuarantorCount(show);
       // SV regional shows don't operate under the RKC F-rules framework,
       // so the guarantor + RKC class-minimum checks don't apply.
       const isWusvShow = (show as { showRuleset?: 'rkc' | 'wusv' }).showRuleset === 'wusv';
@@ -4202,12 +4199,11 @@ export const secretaryRouter = createTRPCRouter({
           actionPath: '/people', severity: 'required',
         });
       }
-      // Regional (SV/WUSV) shows price via regionalFeeConfig, not firstEntryFee
-      // — treat either as "fees set" (Mandy 2026-07-05).
-      const regionalFeesSet = !!(
-        (show as { regionalFeeConfig?: { tiers?: unknown[] } | null }).regionalFeeConfig?.tiers?.length
-      );
-      if (!regionalFeesSet && (!show.firstEntryFee || show.firstEntryFee <= 0)) {
+      // ONE owner — src/lib/show-setup-requirements.ts (CLAUDE.md, "One
+      // owner per rule"). Regional (SV/WUSV) shows price via
+      // regionalFeeConfig, not firstEntryFee — treat either as "fees set"
+      // (Mandy 2026-07-05).
+      if (!showFeesConfigured(show)) {
         openEntriesBlockers.push({
           key: 'no_entry_fees', label: 'Entry fees not set',
           detail: 'Click Edit on the main show page to set entry fees',
