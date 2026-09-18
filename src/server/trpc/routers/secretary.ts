@@ -87,6 +87,7 @@ import {
   withdrawnOrAbsentPaidWhere,
 } from '@/server/services/report-queries';
 import { validateRkcSchedule } from '@/lib/rkc-schedule-compliance';
+import { missingChampionshipClasses } from '@/lib/championship-class-requirements';
 
 /**
  * True if this judge has assignments with any organisation outside the
@@ -4136,34 +4137,30 @@ export const secretaryRouter = createTRPCRouter({
       const isWusvShow = (show as { showRuleset?: 'rkc' | 'wusv' }).showRuleset === 'wusv';
       detected.guarantors_added = isWusvShow || guarantors.length >= minGuarantors;
 
-      // Championship shows: check Open + Limit for each sex per breed
+      // Championship shows: check Open + Limit for each sex per breed.
+      // ONE owner — src/lib/championship-class-requirements.ts (CLAUDE.md,
+      // "One owner per rule") — also called by the class-manager live
+      // warning. This used to skip any class row with a null breedId, so a
+      // fully-classed single-breed show whose rows carried no breed FK (the
+      // normal case — see the lib doc comment) was reported NOT complete.
       if (show.showType === 'championship' && Number(classCount?.count) > 0) {
         const showClassRows = await ctx.db.query.showClasses.findMany({
           where: eq(showClasses.showId, input.showId),
-          with: { classDefinition: true },
+          with: { classDefinition: true, breed: true },
         });
 
-        let allBreedsComplete = true;
-        const breedClassMap = new Map<string, { hasOpenDog: boolean; hasOpenBitch: boolean; hasLimitDog: boolean; hasLimitBitch: boolean }>();
-        for (const sc of showClassRows) {
-          if (!sc.breedId) continue;
-          if (!breedClassMap.has(sc.breedId)) {
-            breedClassMap.set(sc.breedId, { hasOpenDog: false, hasOpenBitch: false, hasLimitDog: false, hasLimitBitch: false });
-          }
-          const entry = breedClassMap.get(sc.breedId)!;
-          const className = sc.classDefinition?.name?.toLowerCase() ?? '';
-          if (className === 'open' && sc.sex === 'dog') entry.hasOpenDog = true;
-          if (className === 'open' && sc.sex === 'bitch') entry.hasOpenBitch = true;
-          if (className === 'limit' && sc.sex === 'dog') entry.hasLimitDog = true;
-          if (className === 'limit' && sc.sex === 'bitch') entry.hasLimitBitch = true;
-        }
-        for (const [, entry] of breedClassMap) {
-          if (!entry.hasOpenDog || !entry.hasOpenBitch || !entry.hasLimitDog || !entry.hasLimitBitch) {
-            allBreedsComplete = false;
-            break;
-          }
-        }
-        detected.championship_classes_complete = breedClassMap.size > 0 && allBreedsComplete;
+        const missing = missingChampionshipClasses({
+          showType: show.showType,
+          showScope: show.showScope,
+          showRuleset: (show as { showRuleset?: 'rkc' | 'wusv' }).showRuleset,
+          classes: showClassRows.map((sc) => ({
+            breedId: sc.breedId,
+            breedName: sc.breed?.name ?? null,
+            classDefinitionName: sc.classDefinition?.name ?? null,
+            sex: sc.sex,
+          })),
+        });
+        detected.championship_classes_complete = missing.length === 0;
       } else {
         // Non-championship shows or shows with no classes — not applicable, mark as complete
         detected.championship_classes_complete = true;
