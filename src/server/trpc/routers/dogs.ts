@@ -8,7 +8,7 @@ import { deleteFromR2 } from '@/server/services/storage';
 import { searchKcDogs, fetchKcDogProfile, RkcUnavailableError } from '@/server/services/kc-lookup';
 import { isCcType, isRccType } from '@/lib/placements';
 import { effectiveCcType } from '@/lib/effective-achievement-type';
-import { isAgeEligibleOnShowDay, todayInLondon } from '@/lib/date-utils';
+import { isAgeEligibleOnShowDay, todayInLondon, ageInCompletedMonths } from '@/lib/date-utils';
 import { pickRecommendedAgeClass, type AgeClassOption } from '@/lib/class-recommendation';
 import { dogAccessCondition, dogRowGrantsAccess, userMayActOnDog } from '@/server/dog-access';
 import { findClearedPedigreeFields, pedigreeClearMessage } from '@/lib/dog-pedigree';
@@ -1038,9 +1038,7 @@ export const dogsRouter = createTRPCRouter({
         if (dog?.dateOfBirth && show?.startDate) {
           const showDate = new Date(show.startDate);
           const dob = new Date(dog.dateOfBirth);
-          const ageMonths = (showDate.getFullYear() - dob.getFullYear()) * 12
-            + showDate.getMonth() - dob.getMonth()
-            - (showDate.getDate() < dob.getDate() ? 1 : 0);
+          const ageMonths = ageInCompletedMonths(dob, showDate);
 
           // Get age classes available in this show's schedule
           const showAgeClasses = await ctx.db
@@ -1113,7 +1111,7 @@ export const dogsRouter = createTRPCRouter({
 
       const now = new Date();
       const dob = new Date(dog.dateOfBirth);
-      const ageMonths = (now.getFullYear() - dob.getFullYear()) * 12 + (now.getMonth() - dob.getMonth());
+      const ageMonths = ageInCompletedMonths(dob, now);
 
       // Count achievements by type. CCs at UK championship shows are
       // recorded as `dog_cc` / `bitch_cc` (sex-specific), so we need to

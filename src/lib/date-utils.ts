@@ -220,6 +220,57 @@ export function handlerAgeYearsOnDate(handlerDob: string, showDate: string): num
 }
 
 /**
+ * A dog's age in whole COMPLETED months on a given date — the rule behind
+ * "under 18 months" (Junior Warrant) and "84 months or older" (Veteran
+ * Warrant) gates in `dogs.getTitleProgress`, and the age-class suggestion in
+ * `dogs.getWinSummary`.
+ *
+ * ONE owner (CLAUDE.md "One owner per rule"): `getWinSummary` and
+ * `getTitleProgress` in `src/server/trpc/routers/dogs.ts` used to compute
+ * this by hand and disagreed — `getWinSummary` subtracted 1 when the
+ * on-date's day-of-month fell before the DOB's day-of-month (correct:
+ * floors to completed months), `getTitleProgress` omitted that adjustment
+ * and so overstated the dog's age by one month for roughly the first
+ * three-and-a-bit weeks of every month. That falsely aged a dog out of JW
+ * eligibility, or into Veteran eligibility, a few weeks early. This
+ * function is that one rule, lifted verbatim from `getWinSummary`'s
+ * (correct) formula.
+ *
+ * Rule: `(onYear - dobYear) * 12 + (onMonth - dobMonth)`, minus 1 if the
+ * on-date's day-of-month is earlier than the DOB's day-of-month. That last
+ * step is what makes it a COMPLETED-months count rather than a raw
+ * calendar-month-label difference.
+ *
+ * Month-end DOBs (e.g. the 31st): when the on-date falls in a shorter month
+ * that has no equivalent day, `getDate()` on the on-date is always less
+ * than 31, so the adjustment always fires — the "31st anniversary" is never
+ * reached until a month that actually has a 31st comes round. This matches
+ * `getWinSummary`'s existing behaviour exactly; it is not a new convention.
+ *
+ * Leap-day DOBs (29 Feb) get no special handling either — same mechanism,
+ * same existing behaviour: in a non-leap February, day 28 < day 29, so the
+ * dog is not counted as having turned the corner until March.
+ *
+ * Date basis: whatever `new Date(...)` does with the inputs — the same
+ * basis `getWinSummary` uses today, deliberately, so its results don't
+ * change. Callers pass either `Date` objects or the raw date strings as
+ * stored (dog DOB / show `startDate` are UK calendar dates, and the UK
+ * offset from UTC is never negative, so parsing a `YYYY-MM-DD` string as
+ * UTC midnight and reading date parts back in Europe/London never crosses a
+ * day boundary — see `parseLocalDate`'s doc comment for the general trap
+ * this avoids here).
+ */
+export function ageInCompletedMonths(dob: string | Date, onDate: string | Date): number {
+  const born = typeof dob === 'string' ? new Date(dob) : dob;
+  const on = typeof onDate === 'string' ? new Date(onDate) : onDate;
+  return (
+    (on.getFullYear() - born.getFullYear()) * 12 +
+    (on.getMonth() - born.getMonth()) -
+    (on.getDate() < born.getDate() ? 1 : 0)
+  );
+}
+
+/**
  * Converts any instant to the Europe/London calendar date it falls on, as a
  * YYYY-MM-DD string. {@link todayInLondon} delegates here for "now"; callers
  * with an arbitrary instant (e.g. entry-close-rules.ts, comparing a close
