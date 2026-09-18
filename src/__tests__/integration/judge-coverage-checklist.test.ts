@@ -38,7 +38,7 @@ async function makeBreedClasses(showId: string, breedId: string) {
 }
 
 async function makeSpecialAwardClass(showId: string, breedId: string) {
-  const sacDef = await makeClassDef({ name: `Special Award Class — Veteran ${Date.now()}-${Math.random()}`, type: 'age' });
+  const sacDef = await makeClassDef({ name: `Special Award Class — Veteran ${Date.now()}-${Math.random()}`, type: 'special' }); // real SAC definitions are ALWAYS type 'special' (prod: 6 of 6) — the canonical isSpecialAwardClass needs both
   return makeShowClass({ showId, breedId, classDefinitionId: sacDef.id, sex: null });
 }
 
