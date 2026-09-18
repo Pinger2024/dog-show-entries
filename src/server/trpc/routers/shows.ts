@@ -37,7 +37,7 @@ import { DEFAULT_REGIONAL_FEE_TIERS } from '@/lib/regional-fee-calc';
 import type { RegionalFeeConfig } from '@/server/db/schema/shows';
 import { PUBLIC_SHOW_STATUSES } from '@/lib/public-show-statuses';
 import { scheduleCatalogueRefresh } from '@/server/services/catalogue-jobs';
-import { SV_CLASS_AUTO_CREATE_COMBOS } from '@/lib/class-labels';
+import { SV_CLASS_AUTO_CREATE_COMBOS, isUnnumberedClassDef } from '@/lib/class-labels';
 import type { Database } from '@/server/db';
 
 /** Validation for the regional (SV/WUSV) tiered fee config jsonb — mirrors the
@@ -632,16 +632,13 @@ export const showsRouter = createTRPCRouter({
         // (Mandy 2026-06-01). JH classes also take the show's junior-handler
         // fee, not the general entry fee. Mirrors autoAssignClassNumbers so the
         // result is correct at creation without a manual renumber pass.
+        // isUnnumberedClassDef is the single source of truth for "no
+        // classNumber" (CLAUDE.md "One owner per rule", bug-hunt #5) — this
+        // used to hand-roll its own junior_handler/Special-Award-Class test.
         let classNumber = 0;
         const addedJhIds = new Set<string>();
         const defInfo = new Map(classDefs.map((cd) => [cd.id, { type: cd.type, name: cd.name }]));
-        const isUnnumberedDef = (id: string) => {
-          const d = defInfo.get(id);
-          return (
-            d?.type === 'junior_handler' ||
-            (d?.type === 'special' && (d?.name?.startsWith('Special Award Class') ?? false))
-          );
-        };
+        const isUnnumberedDef = (id: string) => isUnnumberedClassDef(defInfo.get(id));
         const feeForDef = (id: string) =>
           defInfo.get(id)?.type === 'junior_handler' ? (juniorHandlerFee ?? 0) : (entryFee ?? 0);
 

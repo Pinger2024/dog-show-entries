@@ -14,6 +14,7 @@ import { buildBestAwards } from '@/lib/best-awards';
 import { stripUnembeddedBase14Fonts } from '@/lib/pdf-pad';
 import { resolveJudgeForClass } from '@/lib/judge-resolution';
 import type { JudgeAssignmentInput, JudgeForClassInput, JudgeRef } from '@/lib/judge-resolution';
+import { isLiveEntry } from '@/lib/entry-counts';
 
 // Moved to src/lib/judge-resolution.ts 2026-07-30 so the Prize Cards PDF
 // could reuse it without importing a route file. Re-exported here so
@@ -121,7 +122,7 @@ export async function GET(
   const classes: JudgesBookClass[] = showClasses.map((sc) => {
     // Get confirmed entries for this class
     const exhibits = sc.entryClasses
-      .filter((ec) => ec.entry && ec.entry.status === 'confirmed' && !ec.entry.deletedAt)
+      .filter((ec) => isLiveEntry(ec.entry))
       .map((ec) => ({
         catalogueNumber: ec.entry!.catalogueNumber,
         dogName: ec.entry!.dog?.registeredName ?? 'Unknown',

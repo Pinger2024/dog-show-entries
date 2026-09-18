@@ -69,8 +69,15 @@ export default function CataloguePage() {
 
   const entries = catalogueData?.entries ?? [];
   const hasNumbers = entries.some((e) => e.catalogueNumber);
-  const entriesStillOpen = catalogueData?.show?.status === 'entries_open';
   const entryCloseDate = catalogueData?.show?.entryCloseDate;
+  // RAW database status on purpose — NOT effectiveShowStatus. This banner is
+  // about whether the CLOSE TRANSITION has actually run: the hourly cron
+  // (api/cron/route.ts) is what re-sorts and locks catalogue numbers and
+  // schedules the render. Between the close date passing and that cron, the
+  // catalogue genuinely is not final, so the warning must stay up until the DB
+  // status flips — a display-status shortcut here would tell the secretary the
+  // catalogue is final up to an hour early (2026-09-18).
+  const entriesStillOpen = catalogueData?.show?.status === 'entries_open';
   const numbersLocked = Boolean(catalogueData?.show?.catalogueNumbersLockedAt);
 
   // Auto-assign catalogue numbers when a secretary lands on the page and any

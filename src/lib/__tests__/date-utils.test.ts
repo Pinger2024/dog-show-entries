@@ -10,6 +10,7 @@ import {
   getAgeEligibilityDetail,
   getCompetitionAgeError,
   isAgeRestrictedClass,
+  ageInCompletedMonths,
 } from '../date-utils';
 
 describe('formatCurrency', () => {
@@ -411,6 +412,62 @@ describe('getCompetitionAgeError', () => {
 
 // Mandy 2026-07-21: countdowns must show WHEN the door shuts, UK time,
 // in words a 60-year-old secretary reads at a glance.
+describe('ageInCompletedMonths', () => {
+  it('is 0 on the day of birth', () => {
+    expect(ageInCompletedMonths('2025-01-15', '2025-01-15')).toBe(0);
+  });
+
+  it('turns over exactly on the monthly anniversary', () => {
+    expect(ageInCompletedMonths('2025-01-15', '2025-02-15')).toBe(1);
+  });
+
+  it('is one month short the day BEFORE the monthly anniversary', () => {
+    expect(ageInCompletedMonths('2025-01-15', '2025-02-14')).toBe(0);
+  });
+
+  it('is exactly 18 months on the 18-month anniversary — JW cutoff, still eligible', () => {
+    expect(ageInCompletedMonths('2024-03-10', '2025-09-10')).toBe(18);
+  });
+
+  it('is 17 months the day before the 18-month anniversary', () => {
+    expect(ageInCompletedMonths('2024-03-10', '2025-09-09')).toBe(17);
+  });
+
+  it('is exactly 84 months on the 84-month (7-year) anniversary — Veteran cutoff', () => {
+    expect(ageInCompletedMonths('2018-06-01', '2025-06-01')).toBe(84);
+  });
+
+  it('is 83 months the day before the 84-month anniversary', () => {
+    expect(ageInCompletedMonths('2018-06-01', '2025-05-31')).toBe(83);
+  });
+
+  it('DOB on the 31st: never reaches the "31st anniversary" in a 30-day month', () => {
+    // Born 31 Jan. By 30 Apr — the last day of a 30-day month — the 3-months
+    // label is reached but the day-of-month adjustment still fires because
+    // April has no 31st, so this matches getWinSummary's existing formula
+    // exactly (documented above), not a new convention.
+    expect(ageInCompletedMonths('2025-01-31', '2025-04-30')).toBe(2);
+  });
+
+  it('DOB on the 31st: reaches the label month once that month also has a 31st', () => {
+    expect(ageInCompletedMonths('2025-01-31', '2025-05-31')).toBe(4);
+    expect(ageInCompletedMonths('2025-01-31', '2025-05-30')).toBe(3);
+  });
+
+  it('leap-day DOB (29 Feb): non-leap February has no 29th, so the corner does not turn until March', () => {
+    expect(ageInCompletedMonths('2024-02-29', '2025-02-28')).toBe(11);
+    expect(ageInCompletedMonths('2024-02-29', '2025-03-01')).toBe(12);
+  });
+
+  it('leap-day DOB: on a leap year, turns over exactly on 29 Feb', () => {
+    expect(ageInCompletedMonths('2024-02-29', '2028-02-29')).toBe(48);
+  });
+
+  it('accepts Date objects the same as strings', () => {
+    expect(ageInCompletedMonths(new Date('2025-01-15'), new Date('2025-02-15'))).toBe(1);
+  });
+});
+
 describe('formatCloseTimeUK', () => {
   it('reads 23:59 UK as 23:59 (BST date)', () => {
     // 22:59 UTC in July = 23:59 BST

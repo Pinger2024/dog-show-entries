@@ -8,10 +8,11 @@ import { deleteFromR2 } from '@/server/services/storage';
 import { searchKcDogs, fetchKcDogProfile, RkcUnavailableError } from '@/server/services/kc-lookup';
 import { isCcType, isRccType } from '@/lib/placements';
 import { effectiveCcType } from '@/lib/effective-achievement-type';
-import { isAgeEligibleOnShowDay, todayInLondon } from '@/lib/date-utils';
+import { isAgeEligibleOnShowDay, todayInLondon, ageInCompletedMonths } from '@/lib/date-utils';
 import { pickRecommendedAgeClass, type AgeClassOption } from '@/lib/class-recommendation';
 import { dogAccessCondition, dogRowGrantsAccess, userMayActOnDog } from '@/server/dog-access';
 import { findClearedPedigreeFields, pedigreeClearMessage } from '@/lib/dog-pedigree';
+import { getLimitedShowEligibility } from '@/server/services/limited-show-eligibility';
 
 /**
  * Recommend the best class for a dog based on age eligibility first,
@@ -1037,9 +1038,7 @@ export const dogsRouter = createTRPCRouter({
         if (dog?.dateOfBirth && show?.startDate) {
           const showDate = new Date(show.startDate);
           const dob = new Date(dog.dateOfBirth);
-          const ageMonths = (showDate.getFullYear() - dob.getFullYear()) * 12
-            + showDate.getMonth() - dob.getMonth()
-            - (showDate.getDate() < dob.getDate() ? 1 : 0);
+          const ageMonths = ageInCompletedMonths(dob, showDate);
 
           // Get age classes available in this show's schedule
           const showAgeClasses = await ctx.db
@@ -1112,7 +1111,7 @@ export const dogsRouter = createTRPCRouter({
 
       const now = new Date();
       const dob = new Date(dog.dateOfBirth);
-      const ageMonths = (now.getFullYear() - dob.getFullYear()) * 12 + (now.getMonth() - dob.getMonth());
+      const ageMonths = ageInCompletedMonths(dob, now);
 
       // Count achievements by type. CCs at UK championship shows are
       // recorded as `dog_cc` / `bitch_cc` (sex-specific), so we need to
@@ -1602,39 +1601,10 @@ export const dogsRouter = createTRPCRouter({
     }),
 
   // ── Limited show eligibility check (2026 RKC rule) ──────
+  // Owner: getLimitedShowEligibility (src/server/services/limited-show-eligibility.ts).
   checkLimitedShowEligibility: protectedProcedure
     .input(z.object({ dogId: z.string().uuid() }))
-    .query(async ({ ctx, input }) => {
-      // Count CCs / RCCs, treating a single-breed championship Best Dog/Bitch
-      // (+ reserve) as the CC (+ RCC) it is (Mandy 2026-07-09). Fetch with show
-      // type/scope so the mapping can apply.
-      const limitedAchs = await ctx.db.query.achievements.findMany({
-        where: eq(achievements.dogId, input.dogId),
-        with: { show: { columns: { showType: true, showScope: true } } },
-      });
-      const limEffType = (a: (typeof limitedAchs)[number]) =>
-        effectiveCcType(a.type, a.show?.showType, a.show?.showScope);
-      const ccCount = limitedAchs.filter((a) => isCcType(limEffType(a))).length;
-
-      // Count RCCs with distinct judges.
-      const rccRows = limitedAchs.filter((a) => isRccType(limEffType(a)));
-      // Count distinct judges (null judgeId counts as one)
-      const distinctJudges = new Set(rccRows.map((r) => r.judgeId ?? 'unknown'));
-      const rccDistinctJudgeCount = distinctJudges.size;
-
-      return {
-        hasCC: ccCount > 0,
-        ccCount,
-        rccDistinctJudgeCount,
-        rccTotal: rccRows.length,
-        ineligible: ccCount > 0 || rccDistinctJudgeCount >= 5,
-        reason: ccCount > 0
-          ? 'This dog has won a CC and is ineligible for Limited shows'
-          : rccDistinctJudgeCount >= 5
-            ? 'This dog has 5+ RCCs under different judges and is ineligible for Limited shows (2026 rule)'
-            : null,
-      };
-    }),
+    .query(async ({ ctx, input }) => getLimitedShowEligibility(ctx.db, input.dogId)),
 
   // ── SV / WUSV profile ────────────────────────────────────
 

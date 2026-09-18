@@ -16,6 +16,7 @@ import { join } from 'node:path';
 import { db } from '@/server/db';
 import { shows, entries, showSponsors } from '@/server/db/schema';
 import { isUuid } from '@/lib/slugify';
+import { effectiveShowStatus } from '@/lib/show-status';
 import { HANKEN_GROTESK_FACES } from '@/lib/hanken-faces';
 import { BRAND } from '@/lib/brand';
 
@@ -254,6 +255,9 @@ export async function loadShareImageData(idOrSlug: string): Promise<ShareImageDa
     showDate,
     closeDateShort,
     hoursToClose,
-    status: deriveStatus(show.status, hoursToClose, closeDateShort),
+    // Pass the display status (one owner: show-status.ts), not the raw DB
+    // status, so a show whose close date has passed but hasn't been flipped
+    // by the once-daily cron doesn't still show "Entries Open"/"Closing soon".
+    status: deriveStatus(effectiveShowStatus(show), hoursToClose, closeDateShort),
   };
 }

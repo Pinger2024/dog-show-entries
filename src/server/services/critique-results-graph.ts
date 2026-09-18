@@ -25,6 +25,7 @@ import type { Database } from '@/server/db';
 import { showClasses } from '@/server/db/schema';
 import type { ClassListEntry } from '@/lib/critique-parse';
 import type { ResultsGraphEntry, ResultsGraphShowClass } from '@/lib/critique-match';
+import { isLiveEntry } from '@/lib/entry-counts';
 
 export interface ShowClassRow {
   id: string;
@@ -61,8 +62,7 @@ export async function loadShowClassRows(db: Database, showId: string): Promise<S
     entries: sc.entryClasses
       .filter(
         (ec) =>
-          ec.entry.status === 'confirmed' &&
-          !ec.entry.deletedAt &&
+          isLiveEntry(ec.entry) &&
           // Per-class attendance (Mandy 2026-08-12) — this class's own flag,
           // not the whole-entry roll-up (a dog absent from her breed class
           // but placed in a Special Award is still matchable there).

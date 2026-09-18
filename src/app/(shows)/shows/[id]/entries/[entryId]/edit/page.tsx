@@ -39,6 +39,10 @@ export default function EditEntryPage({
 
   const [selectedClassIds, setSelectedClassIds] = useState<string[] | null>(null);
   const [clientSecret, setClientSecret] = useState<string | null>(null);
+  // The server's feeDiff from the mutation result — used for the top-up
+  // payment screen so the amount shown always matches what Stripe charges
+  // (ONE owner: priceEntryClassChange via entries.update).
+  const [paymentFeeDiff, setPaymentFeeDiff] = useState<number | null>(null);
 
   const { data: entry, isLoading: entryLoading } = trpc.entries.getById.useQuery(
     { id: entryId }
@@ -54,6 +58,7 @@ export default function EditEntryPage({
   const updateEntry = trpc.entries.update.useMutation({
     onSuccess: (result) => {
       if (result.requiresPayment && result.clientSecret) {
+        setPaymentFeeDiff(result.feeDiff);
         setClientSecret(result.clientSecret);
       } else {
         toast.success('Entry updated', {
@@ -88,17 +93,23 @@ export default function EditEntryPage({
   }, [showClasses]);
 
   const currentTotal = entry?.totalFee ?? 0;
-  const newTotal = useMemo(() => {
-    if (!showClasses) return 0;
-    return showClasses
-      .filter((sc) => effectiveSelection.includes(sc.id))
-      .reduce((sum, sc) => sum + sc.entryFee, 0);
-  }, [showClasses, effectiveSelection]);
 
-  const feeDiff = newTotal - currentTotal;
   const hasChanges = selectedClassIds !== null &&
     (selectedClassIds.length !== currentClassIds.length ||
       selectedClassIds.some((id) => !currentClassIds.includes(id)));
+
+  // What the change will actually cost — the SAME computation `update` then
+  // charges (`priceEntryClassChange`, ONE owner). Never hand-sum class fees
+  // here: show_classes.entryFee is seeded to firstEntryFee, so a raw sum
+  // overstates the price whenever first/subsequent tiers, the regional
+  // scale, a discount group or the multi-dog package apply.
+  const { data: preview, isFetching: previewLoading } = trpc.entries.previewUpdate.useQuery(
+    { id: entryId, classIds: effectiveSelection },
+    { enabled: hasChanges && effectiveSelection.length > 0 }
+  );
+
+  const newTotal = preview?.newFee ?? currentTotal;
+  const feeDiff = preview?.feeDiff ?? 0;
 
   function toggleClass(classId: string) {
     const current = selectedClassIds ?? currentClassIds;
@@ -137,7 +148,7 @@ export default function EditEntryPage({
         <Card>
           <CardHeader>
             <CardTitle className="text-base">
-              Pay {formatCurrency(feeDiff)}
+              Pay {formatCurrency(paymentFeeDiff ?? 0)}
             </CardTitle>
             <CardDescription>
               Your class changes require an additional payment.
@@ -146,7 +157,7 @@ export default function EditEntryPage({
           <CardContent>
             <StripeProvider clientSecret={clientSecret}>
               <PaymentForm
-                amount={feeDiff}
+                amount={paymentFeeDiff ?? 0}
                 onSuccess={() => {
                   toast.success('Entry updated and payment processed');
                   router.push(`/entries/${entryId}`);
@@ -258,32 +269,41 @@ export default function EditEntryPage({
               <span className="text-muted-foreground">Current total</span>
               <span>{formatCurrency(currentTotal)}</span>
             </div>
-            <div className="flex justify-between text-sm">
-              <span className="text-muted-foreground">New total</span>
-              <span>{formatCurrency(newTotal)}</span>
-            </div>
-            <Separator />
-            <div className="flex items-center justify-between font-bold">
-              <span>Difference</span>
-              <span
-                className={cn(
-                  feeDiff > 0 && 'text-orange-600',
-                  feeDiff < 0 && 'text-se-fresh-deep'
-                )}
-              >
-                <span className="inline-flex items-center gap-1">
-                  {feeDiff > 0 ? (
-                    <ArrowUpRight className="size-4" />
-                  ) : feeDiff < 0 ? (
-                    <ArrowDownRight className="size-4" />
-                  ) : (
-                    <Minus className="size-4" />
-                  )}
-                  {feeDiff > 0 ? '+' : ''}
-                  {formatCurrency(feeDiff)}
-                </span>
-              </span>
-            </div>
+            {hasChanges && previewLoading && !preview ? (
+              <p className="flex items-center gap-2 py-1 text-sm text-muted-foreground">
+                <Loader2 className="size-3.5 animate-spin" />
+                Calculating…
+              </p>
+            ) : (
+              <>
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">New total</span>
+                  <span>{formatCurrency(newTotal)}</span>
+                </div>
+                <Separator />
+                <div className="flex items-center justify-between font-bold">
+                  <span>Difference</span>
+                  <span
+                    className={cn(
+                      feeDiff > 0 && 'text-orange-600',
+                      feeDiff < 0 && 'text-se-fresh-deep'
+                    )}
+                  >
+                    <span className="inline-flex items-center gap-1">
+                      {feeDiff > 0 ? (
+                        <ArrowUpRight className="size-4" />
+                      ) : feeDiff < 0 ? (
+                        <ArrowDownRight className="size-4" />
+                      ) : (
+                        <Minus className="size-4" />
+                      )}
+                      {feeDiff > 0 ? '+' : ''}
+                      {formatCurrency(feeDiff)}
+                    </span>
+                  </span>
+                </div>
+              </>
+            )}
             {feeDiff > 0 && (
               <p className="text-sm text-muted-foreground">
                 An additional payment of {formatCurrency(feeDiff)} will be required.
@@ -305,7 +325,12 @@ export default function EditEntryPage({
           <Button
             className="flex-1"
             onClick={handleSubmit}
-            disabled={!hasChanges || effectiveSelection.length === 0 || updateEntry.isPending}
+            disabled={
+              !hasChanges ||
+              effectiveSelection.length === 0 ||
+              updateEntry.isPending ||
+              (previewLoading && !preview)
+            }
           >
             {updateEntry.isPending ? (
               <>

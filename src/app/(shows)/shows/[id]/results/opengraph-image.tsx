@@ -5,6 +5,7 @@ import { shows, showClasses } from '@/server/db/schema';
 import { isUuid } from '@/lib/slugify';
 import { format } from 'date-fns';
 import { loadShareImageFonts, SHARE_GREEN as G } from '@/lib/share-image-data';
+import { isLiveEntry } from '@/lib/entry-counts';
 
 export const runtime = 'nodejs';
 export const contentType = 'image/png';
@@ -84,7 +85,7 @@ export default async function OGImage({
 
   for (const cls of classes ?? []) {
     const confirmed = cls.entryClasses.filter(
-      (ec) => ec.entry.status === 'confirmed' && !ec.entry.deletedAt
+      (ec) => isLiveEntry(ec.entry)
     );
     totalEntries += confirmed.length;
     if (confirmed.some((ec) => ec.result)) judgedCount++;

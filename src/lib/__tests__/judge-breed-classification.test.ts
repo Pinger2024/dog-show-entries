@@ -69,4 +69,45 @@ describe('buildJudgeBreedAndClassification', () => {
     expect(result.classificationLine).toBe('TBC');
     expect(result.breedLine).toBe('German Shepherd Dog');
   });
+
+  it('exposes the unjoined classifications array alongside the joined line', () => {
+    const result = buildJudgeBreedAndClassification(
+      [
+        { breed: { name: 'Labrador' }, sex: 'dog' },
+        { breed: null, sex: null, isSpecialAwardsClassesJudge: true },
+        { breed: null, sex: null },
+      ],
+      ['Labrador', 'Poodle'],
+    );
+    expect(result.classifications).toEqual([
+      'Labrador Dogs classes',
+      'Labrador Special Award Classes',
+      'Junior Handling',
+    ]);
+    expect(result.classificationLine).toBe(result.classifications.join(' / '));
+  });
+
+  // 2026-09-18 one-owner fix: judge-section.tsx's own deriveJudgeLabels
+  // (src/app/(secretary)/secretary/shows/[id]/_components/judge-section.tsx)
+  // used to fall back to the SHOW NAME on a general (multi-breed) show with
+  // no assignments yet, and to bare "Special Award Classes" with no breed
+  // prefix — because it only ever looked at showData.breed (null on a
+  // general show) rather than the full breed list. The shared function
+  // already used the richer showBreedNames-based fallback everywhere else
+  // (the offer email, the contract PDF); routing the client through it picks
+  // up that richer behaviour too. These cases assert what the client now
+  // renders, which is a real (desirable) change from what it rendered
+  // before this fix.
+  it('general (multi-breed) show: breedLine falls back to the full breed list, not the show name', () => {
+    const result = buildJudgeBreedAndClassification([], ['Labrador', 'Poodle'], 'Autumn All-Breeds Show');
+    expect(result.breedLine).toBe('Labrador, Poodle');
+  });
+
+  it('general (multi-breed) show: SAC classification is prefixed with a breed name, not bare', () => {
+    const result = buildJudgeBreedAndClassification(
+      [{ breed: null, sex: null, isSpecialAwardsClassesJudge: true }],
+      ['Labrador', 'Poodle'],
+    );
+    expect(result.classificationLine).toBe('Labrador Special Award Classes');
+  });
 });

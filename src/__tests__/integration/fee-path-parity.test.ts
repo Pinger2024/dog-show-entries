@@ -37,8 +37,9 @@ import {
 const FIRST = 2000; // £20
 const SUBSEQUENT = 1000; // £10
 const SPECIAL = 300; // £3 Special Award Class own fee
+const SPECIAL_BEGINNERS_FEE = 500; // £5 — an ORDINARY class that happens to be type 'special'
 
-type ClassSpec = { fee: number; type?: 'special' };
+type ClassSpec = { fee: number; type?: 'special'; name?: string };
 
 /**
  * Single-dog scenarios: a list of classes, and the total the dog must be
@@ -70,6 +71,17 @@ const SCENARIOS: { name: string; classes: ClassSpec[]; expected: number; perClas
     expected: SPECIAL + FIRST + SUBSEQUENT,
     perClass: [SPECIAL, FIRST, SUBSEQUENT],
   },
+  {
+    // Special Beginners is type 'special' in classDefinitions but is an
+    // ORDINARY class (not a Special Award Class) — the co-founder ruling
+    // (2026-07-19) only exempts Special Award Classes from the tier. A
+    // type-only check would flat-price it at SPECIAL_BEGINNERS_FEE; the
+    // correct charge is the normal first/subsequent tier.
+    name: 'regular + ordinary "special"-typed class (Special Beginners) → priced as ordinary tiers, not flat',
+    classes: [{ fee: FIRST }, { fee: SPECIAL_BEGINNERS_FEE, type: 'special', name: 'Special Beginners' }],
+    expected: FIRST + SUBSEQUENT,
+    perClass: [FIRST, SUBSEQUENT],
+  },
 ];
 
 async function setupShow() {
@@ -90,7 +102,7 @@ async function makeClasses(showId: string, breedId: string, specs: ClassSpec[]) 
   for (const s of specs) {
     const opts: Parameters<typeof makeShowClass>[0] = { showId, breedId, entryFee: s.fee };
     if (s.type === 'special') {
-      const def = await makeClassDef({ name: 'Special Award Class - Post Graduate', type: 'special' });
+      const def = await makeClassDef({ name: s.name ?? 'Special Award Class - Post Graduate', type: 'special' });
       opts.classDefinitionId = def.id;
     }
     const sc = await makeShowClass(opts);

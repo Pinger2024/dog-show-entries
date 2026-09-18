@@ -39,21 +39,24 @@ describe('NAF/TAF flags reach BOTH catalogue render paths', () => {
     ).toBe(true);
   });
 
-  it('catalogue print service appends the registration flags to dogName', () => {
+  it('catalogue print service builds no dog names of its own — it delegates to the snapshot path', () => {
+    // This used to demand that pdf-generation.ts import appendRegistrationFlags
+    // and wrap its own `dogName:` construction. Since 9cc33b60 collapsed the two
+    // catalogue render paths into one, pdf-generation.ts builds NO dog names:
+    // generateCataloguePdf calls buildCatalogueSnapshot + renderCatalogueFromSnapshot
+    // (catalogue-snapshot.ts), which the test above covers. The old assertion had
+    // been failing on main ever since — a guard for a second copy that no longer
+    // exists. What must stay true now is that the second copy never comes back.
     const relPath = 'src/server/services/pdf-generation.ts';
     const src = readFileSync(join(process.cwd(), relPath), 'utf8');
 
     expect(
-      src.includes("from '@/lib/registration-flags'"),
-      `${relPath} must import the shared registration-flags helper rather than hand-rolling the suffix`
+      src.includes('buildCatalogueSnapshot') && src.includes('renderCatalogueFromSnapshot'),
+      `${relPath} must render catalogues through the shared snapshot path`
     ).toBe(true);
-
-    // The dogName construction itself must be wrapped, not merely imported
-    // somewhere else in the file.
-    const dogNameBlock = src.slice(src.indexOf('dogName:'), src.indexOf('dogName:') + 400);
     expect(
-      dogNameBlock.includes('appendRegistrationFlags'),
-      `${relPath}: dogName is built without appendRegistrationFlags — the two catalogue paths would disagree`
-    ).toBe(true);
+      /\bdogName\s*:/.test(src),
+      `${relPath} builds a dogName itself — that is a second catalogue render path; NAF/TAF flags (and everything else) would drift from the snapshot path`
+    ).toBe(false);
   });
 });

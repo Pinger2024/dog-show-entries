@@ -10,6 +10,7 @@ import React from 'react';
 import { sanitizeFilename } from '@/lib/slugify';
 import { authenticatePdfRequest, makePdfResponse } from '@/lib/pdf-utils';
 import { buildClassLabelMap } from '@/lib/class-labels';
+import { isLiveEntry } from '@/lib/entry-counts';
 
 export async function GET(
   request: NextRequest,
@@ -105,7 +106,7 @@ export async function GET(
     }
 
     const confirmedEntries = sc.entryClasses.filter(
-      (ec) => ec.entry && ec.entry.status === 'confirmed' && !ec.entry.deletedAt
+      (ec) => isLiveEntry(ec.entry)
     ).length;
 
     breedGroup.get(breedKey)!.classes.push({

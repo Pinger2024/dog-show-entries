@@ -385,6 +385,30 @@ export const CANCELLABLE_STATUSES = ['draft', 'awaiting_payment'] as const;
 /** Statuses where an order is in-flight and can be polled for updates */
 export const PENDING_STATUSES = ['submitted', 'in_production'] as const;
 
+/**
+ * ONE owner (CLAUDE.md "One owner per rule") for "has this print order
+ * already been paid / advanced past payment" — every status from `paid`
+ * onward through fulfilment. Used to decide whether the Stripe webhook may
+ * still write a status transition (vs. only the payment-status column, so a
+ * retried/replayed webhook can't regress an order that has moved on), and
+ * whether an order counts as already paid for reporting/re-payment purposes.
+ *
+ * Previously hand-typed three times — twice in the Stripe print-order webhook
+ * handlers (one as an `||` chain, one as an inline array literal) and once as
+ * `PRINT_PAID_STATUSES` in admin-dashboard.ts. All three now import this.
+ */
+export const PRINT_ORDER_PAID_STATUSES = [
+  'paid',
+  'submitted',
+  'in_production',
+  'dispatched',
+  'delivered',
+] as const;
+
+export function isPrintOrderPaid(status: string | null | undefined): boolean {
+  return (PRINT_ORDER_PAID_STATUSES as readonly string[]).includes(status ?? '');
+}
+
 export const PRINT_PAYMENT_METHODS = {
   CARD: 'card',
   DEDUCTED_FROM_PAYOUT: 'deducted_from_payout',

@@ -36,10 +36,12 @@ import { Button } from '@/components/ui/button';
 import { displayShowTypeLabel } from '@/lib/show-types';
 import { formatCurrency, formatCloseTimeUK } from '@/lib/date-utils';
 import { buildRegionalFeeDisplay, buildRegionalSpecialClassFees } from '@/lib/regional-fee-calc';
+import { buildEntryFeeGroups } from '@/components/schedule/shared/entry-fee-groups';
 import { ShareKitDialog } from '@/components/show/share-kit-dialog';
 import { ShareKitCard } from '@/components/show/share-kit';
 import { cn } from '@/lib/utils';
 import { captureReferralSource } from '@/lib/referral-source';
+import { effectiveShowStatus } from '@/lib/show-status';
 import { useCountdown } from '@/components/show-experience/use-countdown';
 import { useInView, useStuckReveal } from '@/components/show-experience/use-in-view';
 import {
@@ -562,24 +564,24 @@ export function ShowPreviewClient() {
   /* Per-class fee groups — surfaces "Special Award classes £3",
    * "Baby Puppy classes £4" etc. in the public Entry Fees panel
    * when the secretary set a class fee override (Amanda 2026-05-27).
-   * Mirrors the same grouping the schedule PDF uses. */
+   * ONE owner — src/components/schedule/shared/entry-fee-groups.ts
+   * (CLAUDE.md, "One owner per rule"); this used to be a byte-for-byte
+   * mirror of that module. */
   const perClassFeeGroups = useMemo(() => {
     const showAny = show as { firstEntryFee?: number | null; showClasses?: Array<{ entryFee?: number | null; classDefinition?: { name?: string; type?: string } }> } | null;
     const firstFee = showAny?.firstEntryFee;
-    if (!showAny || firstFee == null) return [] as Array<{ label: string; fee: number }>;
-    const seen = new Map<string, { label: string; fee: number }>();
-    for (const sc of showAny.showClasses ?? []) {
-      if (sc.entryFee == null) continue;
-      if (sc.entryFee === firstFee) continue;
-      if (sc.classDefinition?.type === 'junior_handler') continue;
-      const rawName = sc.classDefinition?.name?.trim() ?? '';
-      if (!rawName) continue;
-      const groupName = rawName.startsWith('Special Award Class') ? 'Special Award' : rawName;
-      const key = `${groupName}|${sc.entryFee}`;
-      if (seen.has(key)) continue;
-      seen.set(key, { label: `${groupName} classes`, fee: sc.entryFee });
-    }
-    return Array.from(seen.values()).sort((a, b) => a.fee - b.fee || a.label.localeCompare(b.label));
+    if (!showAny || firstFee == null) return [];
+    const classes = (showAny.showClasses ?? [])
+      .map((sc) => ({ ...sc, className: sc.classDefinition?.name?.trim() ?? '' }))
+      .filter((sc) => sc.className !== '');
+    return buildEntryFeeGroups(
+      classes.map((sc) => ({
+        className: sc.className,
+        classType: sc.classDefinition?.type ?? null,
+        entryFee: sc.entryFee ?? null,
+      })),
+      firstFee,
+    );
   }, [show]);
 
   /* Regional (SV/WUSV) fee config → the same fee levels the schedule PDF and
@@ -695,12 +697,11 @@ export function ShowPreviewClient() {
   const venue = show.venue;
   // entryCloseDate is derived earlier (before the loading early-return) so
   // the shared useCountdown() call above can use it.
-  const closeDatePast = entryCloseDate ? entryCloseDate.getTime() < Date.now() : false;
   // "Open" requires status=entries_open AND the close date not yet passed.
   // Show DB status can lag for a few minutes after the cron flips it, so
   // gating on the close date catches the window where the page would
-  // otherwise still offer entry past the deadline.
-  const isOpen = show.status === 'entries_open' && !closeDatePast;
+  // otherwise still offer entry past the deadline. One owner: show-status.ts.
+  const isOpen = effectiveShowStatus({ status: show.status, entryCloseDate }) === 'entries_open';
   const daysToClose = entryCloseDate ? differenceInDays(entryCloseDate, new Date()) : null;
   const showDate = format(parseISO(show.startDate), 'EEEE d MMMM yyyy');
   const showYear = format(parseISO(show.startDate), 'yyyy');

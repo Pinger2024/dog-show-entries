@@ -17,6 +17,7 @@ import {
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { trpc } from '@/lib/trpc';
+import { effectiveShowStatus } from '@/lib/show-status';
 import { ConfirmCloseEntries } from './confirm-close-entries';
 import type { ScheduleData } from '@/server/db/schema/shows';
 import { Button } from '@/components/ui/button';
@@ -71,9 +72,8 @@ export function LifecycleBanner({ show, entryStats, onOpenEntries }: LifecycleBa
   const config = PHASE_CONFIG[phase];
 
   // Detect overdue entries: status is entries_open but close date has passed
-  const entriesOverdue = phase === 'entries_open'
-    && !!show.entryCloseDate
-    && new Date(show.entryCloseDate).getTime() < Date.now();
+  // (the once-daily cron hasn't flipped the DB yet). One owner: show-status.ts.
+  const entriesOverdue = effectiveShowStatus(show) === 'entries_closed';
 
   const Icon = entriesOverdue ? AlertTriangle : phaseIcons[phase];
 

@@ -21,6 +21,7 @@ import {
 import { toast } from 'sonner';
 import { trpc } from '@/lib/trpc';
 import { cn } from '@/lib/utils';
+import { buildJudgeBreedAndClassification } from '@/lib/judge-breed-classification';
 import { formatCurrency, poundsToPence, penceToPoundsString } from '@/lib/date-utils';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -365,64 +366,25 @@ export function JudgesSection({ showId }: { showId: string }) {
       contactEmail: string | null;
       contactPhone: string | null;
       kennelClubAffix: string | null;
-      breeds: string[];
-      // Sexes covered per breed — used to derive the classification label
-      // (Dogs / Bitches / Dogs & Bitches) per Amanda's spec 2026-05-15.
-      breedSexes: Map<string, Set<'dog' | 'bitch' | 'both'>>;
       rings: string[];
       assignmentIds: string[];
-      hasSpecialAwards: boolean;
-      hasJuniorHandling: boolean;
-      hasBreedAssignment: boolean;
       subjectToRkcApproval: boolean;
     };
-    // SV regional shows have only one implicit breed (German Shepherd Dog) —
-    // judge_assignments don't carry an explicit breed FK so the "main
-    // classes" judge looks like breed=null+sex=dog/bitch. Treat that pattern
-    // as a main-classes assignment using the show's overall breed (Amanda
-    // 2026-05-19 fix).
-    const showBreedName = showData?.breed?.name ?? null;
 
     const seen = new Map<string, JudgeRow>();
     for (const a of assignments ?? []) {
       // Group-level assignments (with a judgeRoleId) are shown in GroupJudgesPanel, not here
       if (a.judgeRole) continue;
-      const isSac = (a as { isSpecialAwardsClassesJudge?: boolean }).isSpecialAwardsClassesJudge === true;
-      const isJhShape = !isSac && a.breed === null && a.sex === null;
-      // Single-breed show (RKC or SV): breed-class assignments are stored with
-      // breed=null because the breed is implicit on the shows row. Treat
-      // breed=null + sex as a main breed-class assignment using the show's
-      // breed. This was gated to SV shows only, so RKC single-breed shows
-      // showed a BLANK Classification in the offer preview (Mandy 2026-07-20);
-      // the server lib buildJudgeBreedAndClassification already handles it.
-      const isImplicitBreedMainClass =
-        !isSac && showBreedName != null && a.breed === null && (a.sex === 'dog' || a.sex === 'bitch');
-      const effectiveBreed = a.breed?.name ?? (isImplicitBreedMainClass ? showBreedName : null);
       const existing = seen.get(a.judgeId);
       if (existing) {
-        if (effectiveBreed && !isSac && !existing.breeds.includes(effectiveBreed)) {
-          existing.breeds.push(effectiveBreed);
-        }
-        if (effectiveBreed && !isSac) {
-          const set = existing.breedSexes.get(effectiveBreed) ?? new Set();
-          set.add(a.sex === 'dog' ? 'dog' : a.sex === 'bitch' ? 'bitch' : 'both');
-          existing.breedSexes.set(effectiveBreed, set);
-        }
         if (a.ring && !existing.rings.includes(`Ring ${a.ring.number}`)) {
           existing.rings.push(`Ring ${a.ring.number}`);
         }
         existing.assignmentIds.push(a.id);
-        if (isSac) existing.hasSpecialAwards = true;
-        if (isJhShape) existing.hasJuniorHandling = true;
-        if ((a.breed && !isSac) || isImplicitBreedMainClass) existing.hasBreedAssignment = true;
         if ((a as { subjectToRkcApproval?: boolean }).subjectToRkcApproval) {
           existing.subjectToRkcApproval = true;
         }
       } else {
-        const breedSexes = new Map<string, Set<'dog' | 'bitch' | 'both'>>();
-        if (effectiveBreed && !isSac) {
-          breedSexes.set(effectiveBreed, new Set([a.sex === 'dog' ? 'dog' : a.sex === 'bitch' ? 'bitch' : 'both']));
-        }
         seen.set(a.judgeId, {
           judgeId: a.judgeId,
           name: a.judge.name,
@@ -430,58 +392,41 @@ export function JudgesSection({ showId }: { showId: string }) {
           contactEmail: a.judge.contactEmail,
           contactPhone: a.judge.contactPhone,
           kennelClubAffix: a.judge.kennelClubAffix,
-          breeds: effectiveBreed && !isSac ? [effectiveBreed] : [],
-          breedSexes,
           rings: a.ring ? [`Ring ${a.ring.number}`] : [],
           assignmentIds: [a.id],
-          hasSpecialAwards: isSac,
-          hasJuniorHandling: isJhShape,
-          hasBreedAssignment: (!!a.breed && !isSac) || isImplicitBreedMainClass,
           subjectToRkcApproval: (a as { subjectToRkcApproval?: boolean }).subjectToRkcApproval === true,
         });
       }
     }
     return Array.from(seen.values());
-  }, [assignments, showData]);
+  }, [assignments]);
+
+  // The show's breed list for buildJudgeBreedAndClassification — mirrors the
+  // server derivation in secretary.ts (sendJudgeOffer etc): a single-breed
+  // show's breed comes straight off the shows row; a general show's breed
+  // list comes from the distinct breeds on its showClasses.
+  const showBreedNames = useMemo(() => {
+    if (showData?.breed?.name) return [showData.breed.name];
+    return [...new Set((showData?.showClasses ?? []).filter((sc) => sc.breed).map((sc) => sc.breed!.name))];
+  }, [showData]);
 
   // Build the breed + classification labels Amanda wants shown on the
   // assignments card and inside the offer email preview (2026-05-15).
-  // breed line = the actual breed(s); classification = what kind of
-  // judging (breed classes / Special Awards / Junior Handling).
+  // breed line = the actual breed(s); classification = what kind of judging
+  // (breed classes / Special Awards / Junior Handling). ONE owner for this
+  // label: buildJudgeBreedAndClassification (src/lib/judge-breed-classification.ts)
+  // — this used to be reimplemented inline here, which let the assignments
+  // card and the offer email/contract PDF drift apart (fixed 2026-09-18).
   function deriveJudgeLabels(j: typeof uniqueJudges[number]): {
     breedLine: string;
     classificationLines: string[];
   } {
-    const showBreed = showData?.breed?.name ?? null;
-    const breedsForDisplay = j.breeds.length > 0
-      ? j.breeds
-      : (showBreed ? [showBreed] : []);
-    const breedLine = breedsForDisplay.length > 0
-      ? breedsForDisplay.join(', ')
-      : (showData?.name ?? 'All breeds');
-
-    const classifications: string[] = [];
-    if (j.hasBreedAssignment) {
-      for (const breed of j.breeds) {
-        const sexes = j.breedSexes.get(breed);
-        let sexLabel = '';
-        if (sexes) {
-          const hasDog = sexes.has('dog');
-          const hasBitch = sexes.has('bitch');
-          const hasBoth = sexes.has('both');
-          if (hasBoth || (hasDog && hasBitch)) sexLabel = 'Dogs & Bitches';
-          else if (hasDog) sexLabel = 'Dogs';
-          else if (hasBitch) sexLabel = 'Bitches';
-        }
-        classifications.push(sexLabel ? `${breed} ${sexLabel} classes` : `${breed} classes`);
-      }
-    }
-    if (j.hasSpecialAwards) {
-      classifications.push(showBreed ? `${showBreed} Special Award Classes` : 'Special Award Classes');
-    }
-    if (j.hasJuniorHandling) {
-      classifications.push('Junior Handling');
-    }
+    const judgeAssignments = (assignments ?? []).filter((a) => a.judgeId === j.judgeId && !a.judgeRole);
+    const { breedLine, classifications } = buildJudgeBreedAndClassification(
+      judgeAssignments,
+      showBreedNames,
+      showData?.name,
+    );
     return { breedLine, classificationLines: classifications };
   }
 

@@ -35,13 +35,13 @@ import {
   Star,
   Lock,
 } from 'lucide-react';
-import { differenceInMonths, differenceInWeeks, format, parseISO } from 'date-fns';
+import { differenceInMonths, format, parseISO } from 'date-fns';
 import { toast } from 'sonner';
-import { isWithinAgeRange, getAgeEligibilityDetail, handlerAgeYearsOnDate, formatCurrency, isAgeRestrictedClass } from '@/lib/date-utils';
+import { isWithinAgeRange, getAgeEligibilityDetail, handlerAgeYearsOnDate, formatCurrency, isAgeRestrictedClass, isOldEnoughForNfc, NFC_MIN_AGE_WEEKS } from '@/lib/date-utils';
 import { svAgeClassAllowed, svMissingRequirements, hasWorkingTitle, pedigreeMissingForEntry } from '@/lib/sv-entry-readiness';
 import { SV_HEALTH_FROM_CLASSES } from '@/lib/sv-entry-validation';
 import { displayShowTypeLabel } from '@/lib/show-types';
-import { svCoatDisplayName } from '@/lib/class-labels';
+import { svCoatDisplayName, specialAwardClassFee, isSpecialAwardClass } from '@/lib/class-labels';
 import { trpc } from '@/lib/trpc/client';
 import { formatDogName } from '@/lib/utils';
 import { readReferralSource } from '@/lib/referral-source';
@@ -553,9 +553,10 @@ export default function EnterShowPage() {
         classCount: e.classIds.length,
         // Special Award Classes charge their own fee, not the tier — mirror the
         // server so the preview total matches the charge (Mandy 2026-07-19).
+        // ONE owner: specialAwardClassFee.
         specialClassFees: e.classIds.map((cid) => {
           const sc = classTypeById.get(cid);
-          return sc?.classDefinition.type === 'special' ? sc.entryFee : null;
+          return sc ? specialAwardClassFee(sc) : null;
         }),
       }));
     if (dogEntries.length === 0) return null;
@@ -799,11 +800,14 @@ export default function EnterShowPage() {
       // Special Award Classes charge their own fee, not the tier — mirror the
       // server + checkout preview so this running total matches the charge
       // (Mandy 2026-07-21: was showing the £20 tier rate for a £3 special).
+      // `isSpecial` feeds `computeClassSelectionTotal`'s fee calc, so it must
+      // be the real Special Award Class predicate, not a type-only check —
+      // ONE owner: isSpecialAwardClass.
       const classById = new Map((showClasses ?? []).map((sc) => [sc.id, sc]));
       const selectedClassesForPricing = selectedClassIds.map((cid) => {
         const sc = classById.get(cid);
         return {
-          isSpecial: sc?.classDefinition.type === 'special',
+          isSpecial: sc ? isSpecialAwardClass(sc) : false,
           entryFee: sc?.entryFee ?? 0,
         };
       });
@@ -1218,8 +1222,9 @@ export default function EnterShowPage() {
                 const showDate = show?.startDate ? new Date(show.startDate) : null;
                 const dob = dog.dateOfBirth ? new Date(dog.dateOfBirth) : null;
                 const ageMonths = showDate && dob ? differenceInMonths(showDate, dob) : null;
-                const ageWeeks = showDate && dob ? differenceInWeeks(showDate, dob) : null;
-                const tooYoungForAll = ageWeeks !== null && ageWeeks < 12;
+                // ONE owner — src/lib/date-utils.ts (CLAUDE.md, "One owner
+                // per rule").
+                const tooYoungForAll = showDate && dob ? !isOldEnoughForNfc(dob, showDate) : false;
                 // A sub-6-month pup isn't "NFC only" if the show runs an age
                 // class she qualifies for (e.g. Baby Puppy, 4–6 months).
                 // Amanda 2026-07-18 (North East Regional).
@@ -1311,7 +1316,7 @@ export default function EnterShowPage() {
                       )}
                       {tooYoungForAll && (
                         <p className="mt-1 text-xs font-medium text-destructive">
-                          Too young to enter — must be at least 12 weeks old
+                          Too young to enter — must be at least {NFC_MIN_AGE_WEEKS} weeks old
                         </p>
                       )}
                       {tooYoungForCompetition && (

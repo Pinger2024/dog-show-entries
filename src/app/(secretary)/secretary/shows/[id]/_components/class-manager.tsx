@@ -26,6 +26,7 @@ import { formatCurrency, penceToPoundsString, poundsToPence } from '@/lib/date-u
 import { cn } from '@/lib/utils';
 import { CLASS_TEMPLATES, getRelevantTemplates } from '@/lib/class-templates';
 import { svCoatDisplayName } from '@/lib/class-labels';
+import { missingChampionshipClasses } from '@/lib/championship-class-requirements';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
@@ -291,43 +292,28 @@ export function ClassManager({ showId, showType, showScope, showRuleset, classes
     setHasInitializedCollapse(true);
   }, [grouped, hasInitializedCollapse]);
 
-  // Championship shows: compute which breeds are missing required Open + Limit classes.
-  // For single-breed shows, classes may not carry an explicit breed FK — the breed is
-  // implicit via the show's scope. Resolve a fallback breed name so those classes still
-  // count toward their (single) breed's requirement.
+  // Championship shows: compute which breeds are missing required Open + Limit
+  // classes. ONE owner — src/lib/championship-class-requirements.ts (CLAUDE.md,
+  // "One owner per rule") — also called server-side by getChecklistAutoDetect.
   const championshipWarnings = useMemo(() => {
-    // SV/WUSV regionals are championship shows but run under WUSV rules — the
-    // RKC "Open + Limit for each sex" requirement does not apply to them.
-    if (showType !== 'championship' || showRuleset === 'wusv') return [];
-
-    const fallbackBreedName = showScope === 'single_breed'
-      ? classes.find((c) => c.breed?.name)?.breed?.name ?? null
-      : null;
-
-    const breedMap = new Map<string, { name: string; hasOpenDog: boolean; hasOpenBitch: boolean; hasLimitDog: boolean; hasLimitBitch: boolean }>();
-    for (const sc of classes) {
-      const breedName = sc.breed?.name ?? fallbackBreedName;
-      if (!breedName) continue;
-      if (!breedMap.has(breedName)) {
-        breedMap.set(breedName, { name: breedName, hasOpenDog: false, hasOpenBitch: false, hasLimitDog: false, hasLimitBitch: false });
-      }
-      const entry = breedMap.get(breedName)!;
-      const className = sc.classDefinition?.name?.toLowerCase() ?? '';
-      if (className === 'open' && sc.sex === 'dog') entry.hasOpenDog = true;
-      if (className === 'open' && sc.sex === 'bitch') entry.hasOpenBitch = true;
-      if (className === 'limit' && sc.sex === 'dog') entry.hasLimitDog = true;
-      if (className === 'limit' && sc.sex === 'bitch') entry.hasLimitBitch = true;
+    const missing = missingChampionshipClasses({
+      showType,
+      showScope,
+      showRuleset,
+      classes: classes.map((sc) => ({
+        breedId: null, // this row shape carries no breed id, only a name — see lib doc comment
+        breedName: sc.breed?.name ?? null,
+        classDefinitionName: sc.classDefinition?.name ?? null,
+        sex: sc.sex,
+      })),
+    });
+    const byBreed = new Map<string, { breed: string; missing: string[] }>();
+    for (const m of missing) {
+      const key = m.breedName;
+      if (!byBreed.has(key)) byBreed.set(key, { breed: m.breedName, missing: [] });
+      byBreed.get(key)!.missing.push(`${m.className} ${m.sex === 'dog' ? 'Dog' : 'Bitch'}`);
     }
-    const warnings: { breed: string; missing: string[] }[] = [];
-    for (const [, entry] of breedMap) {
-      const missing: string[] = [];
-      if (!entry.hasOpenDog) missing.push('Open Dog');
-      if (!entry.hasOpenBitch) missing.push('Open Bitch');
-      if (!entry.hasLimitDog) missing.push('Limit Dog');
-      if (!entry.hasLimitBitch) missing.push('Limit Bitch');
-      if (missing.length > 0) warnings.push({ breed: entry.name, missing });
-    }
-    return warnings;
+    return [...byBreed.values()];
   }, [showType, showScope, showRuleset, classes]);
 
   if (classes.length === 0) {

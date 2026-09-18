@@ -1,4 +1,4 @@
-import { format, parseISO, formatDistanceToNow, differenceInMonths, isToday, isYesterday, addMonths } from 'date-fns';
+import { format, parseISO, formatDistanceToNow, differenceInMonths, differenceInWeeks, isToday, isYesterday, addMonths } from 'date-fns';
 
 /** Parse a YYYY-MM-DD date string as local (not UTC) — avoids off-by-one from ISO parsing.
  *  Also accepts Date objects and ISO timestamp strings so it's safe to pass superjson-hydrated
@@ -213,10 +213,87 @@ export function getCompetitionAgeError(params: {
 }
 
 /**
+ * RKC 2026 regulations: the minimum age for a Not For Competition (NFC)
+ * entry is 12 weeks old on show day. ONE owner (CLAUDE.md "One owner per
+ * rule") — `entries.create` and `orders.checkout`
+ * (src/server/trpc/routers/{entries,orders}.ts) used to hand-type this
+ * constant, the `differenceInWeeks` check and the rejection message
+ * identically in two places; the enter page (`shows/[id]/enter/page.tsx`)
+ * hand-typed the same 12-week floor as its "too young to enter at all"
+ * gate. Centralised here; each site keeps its own `differenceInWeeks` call
+ * (it already has `showDate`/`dob` in scope for other purposes) but the
+ * threshold and the server-facing message text now live in one place.
+ */
+export const NFC_MIN_AGE_WEEKS = 12;
+
+/** Is this dog at least {@link NFC_MIN_AGE_WEEKS} old on the show date? */
+export function isOldEnoughForNfc(dob: string | Date, showDate: string | Date): boolean {
+  const dobDate = typeof dob === 'string' ? parseLocalDate(dob) : dob;
+  const show = typeof showDate === 'string' ? parseLocalDate(showDate) : showDate;
+  return differenceInWeeks(show, dobDate) >= NFC_MIN_AGE_WEEKS;
+}
+
+/** The rejection message for an NFC entry that fails {@link isOldEnoughForNfc}. */
+export function nfcMinAgeMessage(dogName: string, ageWeeks: number): string {
+  return `${dogName} will only be ${ageWeeks} weeks old on show day. Dogs must be at least ${NFC_MIN_AGE_WEEKS} weeks old for NFC entries.`;
+}
+
+/**
  * Computes a handler's age in whole years on the show date.
  */
 export function handlerAgeYearsOnDate(handlerDob: string, showDate: string): number {
   return Math.floor(differenceInMonths(new Date(showDate), new Date(handlerDob)) / 12);
+}
+
+/**
+ * A dog's age in whole COMPLETED months on a given date — the rule behind
+ * "under 18 months" (Junior Warrant) and "84 months or older" (Veteran
+ * Warrant) gates in `dogs.getTitleProgress`, and the age-class suggestion in
+ * `dogs.getWinSummary`.
+ *
+ * ONE owner (CLAUDE.md "One owner per rule"): `getWinSummary` and
+ * `getTitleProgress` in `src/server/trpc/routers/dogs.ts` used to compute
+ * this by hand and disagreed — `getWinSummary` subtracted 1 when the
+ * on-date's day-of-month fell before the DOB's day-of-month (correct:
+ * floors to completed months), `getTitleProgress` omitted that adjustment
+ * and so overstated the dog's age by one month for roughly the first
+ * three-and-a-bit weeks of every month. That falsely aged a dog out of JW
+ * eligibility, or into Veteran eligibility, a few weeks early. This
+ * function is that one rule, lifted verbatim from `getWinSummary`'s
+ * (correct) formula.
+ *
+ * Rule: `(onYear - dobYear) * 12 + (onMonth - dobMonth)`, minus 1 if the
+ * on-date's day-of-month is earlier than the DOB's day-of-month. That last
+ * step is what makes it a COMPLETED-months count rather than a raw
+ * calendar-month-label difference.
+ *
+ * Month-end DOBs (e.g. the 31st): when the on-date falls in a shorter month
+ * that has no equivalent day, `getDate()` on the on-date is always less
+ * than 31, so the adjustment always fires — the "31st anniversary" is never
+ * reached until a month that actually has a 31st comes round. This matches
+ * `getWinSummary`'s existing behaviour exactly; it is not a new convention.
+ *
+ * Leap-day DOBs (29 Feb) get no special handling either — same mechanism,
+ * same existing behaviour: in a non-leap February, day 28 < day 29, so the
+ * dog is not counted as having turned the corner until March.
+ *
+ * Date basis: whatever `new Date(...)` does with the inputs — the same
+ * basis `getWinSummary` uses today, deliberately, so its results don't
+ * change. Callers pass either `Date` objects or the raw date strings as
+ * stored (dog DOB / show `startDate` are UK calendar dates, and the UK
+ * offset from UTC is never negative, so parsing a `YYYY-MM-DD` string as
+ * UTC midnight and reading date parts back in Europe/London never crosses a
+ * day boundary — see `parseLocalDate`'s doc comment for the general trap
+ * this avoids here).
+ */
+export function ageInCompletedMonths(dob: string | Date, onDate: string | Date): number {
+  const born = typeof dob === 'string' ? new Date(dob) : dob;
+  const on = typeof onDate === 'string' ? new Date(onDate) : onDate;
+  return (
+    (on.getFullYear() - born.getFullYear()) * 12 +
+    (on.getMonth() - born.getMonth()) -
+    (on.getDate() < born.getDate() ? 1 : 0)
+  );
 }
 
 /**

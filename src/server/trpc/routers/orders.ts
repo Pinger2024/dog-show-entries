@@ -7,6 +7,8 @@ import { createTRPCRouter } from '../init';
 import { publicOrgColumns } from '../public-org-columns';
 import { syncCatalogueNumbers } from '@/server/services/catalogue-numbering';
 import { countPriorRegionalPayingDogs } from '@/server/services/regional-pricing';
+import { validateSundrySelection } from '@/server/services/sundry-selection';
+import { getLimitedShowEligibility } from '@/server/services/limited-show-eligibility';
 import {
   orders,
   entries,
@@ -22,7 +24,6 @@ import {
   judgeAssignments,
   judges,
   users,
-  achievements,
   showDiscountGroups,
   dogSvProfile,
 } from '@/server/db/schema';
@@ -45,9 +46,10 @@ import {
 import { svEntryMissingRequirements, svEntryBlockedMessage } from '@/lib/sv-entry-validation';
 import { pedigreeMissingForEntry } from '@/lib/sv-entry-readiness';
 import { hasJudgingConflict } from '@/lib/judge-exhibitor-conflict';
-import { getCompetitionAgeError } from '@/lib/date-utils';
+import { getCompetitionAgeError, isOldEnoughForNfc, nfcMinAgeMessage } from '@/lib/date-utils';
 import { isParkingSundry, PARKING_NAME_PATTERNS } from '@/lib/parking-utils';
 import { formatAtcNumber } from '@/lib/registration-flags';
+import { specialAwardClassFee } from '@/lib/class-labels';
 import { dogAccessCondition } from '@/server/dog-access';
 
 const cartEntrySchema = z.object({
@@ -313,15 +315,16 @@ export const ordersRouter = createTRPCRouter({
           if (!dog?.dateOfBirth) continue;
 
           const dob = new Date(dog.dateOfBirth);
-          const ageWeeks = differenceInWeeks(showDate, dob);
           const dogName = dog.registeredName ?? 'This dog';
 
           if (entryInput.isNfc) {
-            // NFC entries: minimum 12 weeks (RKC 2026 regulations)
-            if (ageWeeks < 12) {
+            // NFC entries: minimum 12 weeks (RKC 2026 regulations). ONE
+            // owner — src/lib/date-utils.ts (CLAUDE.md, "One owner per rule").
+            if (!isOldEnoughForNfc(dob, showDate)) {
+              const ageWeeks = differenceInWeeks(showDate, dob);
               throw new TRPCError({
                 code: 'BAD_REQUEST',
-                message: `${dogName} will only be ${ageWeeks} weeks old on show day. Dogs must be at least 12 weeks old for NFC entries.`,
+                message: nfcMinAgeMessage(dogName, ageWeeks),
               });
             }
           } else {
@@ -341,52 +344,21 @@ export const ordersRouter = createTRPCRouter({
         }
       }
 
-      // Limited show eligibility check (2026 RKC rule)
+      // Limited show eligibility check (2026 RKC rule) — one owner:
+      // getLimitedShowEligibility (src/server/services/limited-show-eligibility.ts).
       if (show.showType === 'limited' && dogIds.length > 0) {
         for (const dogId of [...new Set(dogIds)]) {
-          const ccTypes = ['cc', 'dog_cc', 'bitch_cc'] as const;
-          const ccRows = await ctx.db
-            .select({ count: sql<number>`count(*)::int` })
-            .from(achievements)
-            .where(
-              and(
-                eq(achievements.dogId, dogId),
-                inArray(achievements.type, [...ccTypes])
-              )
-            );
-          const ccCount = ccRows[0]?.count ?? 0;
-
-          if (ccCount > 0) {
+          const eligibility = await getLimitedShowEligibility(ctx.db, dogId);
+          if (eligibility.ineligible) {
             const dog = await ctx.db.query.dogs.findFirst({
               where: eq(dogs.id, dogId),
               columns: { registeredName: true },
             });
-            throw new TRPCError({
-              code: 'BAD_REQUEST',
-              message: `${dog?.registeredName ?? 'This dog'} has won a CC and is ineligible for Limited shows`,
-            });
-          }
-
-          const rccTypes = ['reserve_cc', 'reserve_dog_cc', 'reserve_bitch_cc'] as const;
-          const rccRows = await ctx.db
-            .select({ judgeId: achievements.judgeId })
-            .from(achievements)
-            .where(
-              and(
-                eq(achievements.dogId, dogId),
-                inArray(achievements.type, [...rccTypes])
-              )
-            );
-          const distinctJudges = new Set(rccRows.map((r) => r.judgeId ?? 'unknown'));
-          if (distinctJudges.size >= 5) {
-            const dog = await ctx.db.query.dogs.findFirst({
-              where: eq(dogs.id, dogId),
-              columns: { registeredName: true },
-            });
-            throw new TRPCError({
-              code: 'BAD_REQUEST',
-              message: `${dog?.registeredName ?? 'This dog'} has 5+ RCCs under different judges and is ineligible for Limited shows (2026 rule)`,
-            });
+            const name = dog?.registeredName ?? 'This dog';
+            const message = eligibility.hasCC
+              ? `${name} has won a CC and is ineligible for Limited shows`
+              : `${name} has 5+ RCCs under different judges and is ineligible for Limited shows (2026 rule)`;
+            throw new TRPCError({ code: 'BAD_REQUEST', message });
           }
         }
       }
@@ -695,10 +667,11 @@ export const ordersRouter = createTRPCRouter({
                 : 'standard',
           classCount: e.classIds.length,
           // Special Award Classes charge their own fee, not the tier (Mandy
-          // 2026-07-19). Aligned to classIds order so perClassFees[idx] matches.
+          // 2026-07-19). ONE owner: specialAwardClassFee. Aligned to classIds
+          // order so perClassFees[idx] matches.
           specialClassFees: e.classIds.map((cid) => {
             const c = classMap.get(cid);
-            return c?.classDefinition?.type === 'special' ? c.entryFee : null;
+            return c ? specialAwardClassFee(c) : null;
           }),
         }));
         const usePerClassFallback = show.firstEntryFee == null;
@@ -724,55 +697,44 @@ export const ordersRouter = createTRPCRouter({
 
       let totalAmount = entriesSubtotal + donationPence;
 
-      // Validate and calculate sundry items
-      let sundryTotal = 0;
-      const validatedSundryItems: { sundryItemId: string; quantity: number; unitPrice: number }[] = [];
-
-      if (input.sundryItems.length > 0) {
-        const requestedIds = input.sundryItems.map((s) => s.sundryItemId);
-        const availableItems = await ctx.db.query.sundryItems.findMany({
-          where: and(
-            inArray(sundryItems.id, requestedIds),
-            eq(sundryItems.showId, input.showId),
-            eq(sundryItems.enabled, true)
-          ),
-        });
-
-        const itemMap = new Map(availableItems.map((i) => [i.id, i]));
-
-        // Aggregate quantities per item before validating, so the per-order cap
-        // can't be bypassed by splitting a quantity across duplicate lines —
-        // e.g. two lines of 2 when maxPerOrder is 2 (bug hunt #27).
-        const qtyByItem = new Map<string, number>();
-        for (const requested of input.sundryItems) {
-          qtyByItem.set(
-            requested.sundryItemId,
-            (qtyByItem.get(requested.sundryItemId) ?? 0) + requested.quantity
-          );
-        }
-
-        for (const [sundryItemId, quantity] of qtyByItem) {
-          const item = itemMap.get(sundryItemId);
-          if (!item) {
-            throw new TRPCError({
-              code: 'BAD_REQUEST',
-              message: `Sundry item not found or not available: ${sundryItemId}`,
-            });
-          }
-          if (item.maxPerOrder != null && quantity > item.maxPerOrder) {
-            throw new TRPCError({
-              code: 'BAD_REQUEST',
-              message: `Maximum ${item.maxPerOrder} of "${item.name}" per order`,
-            });
-          }
-          sundryTotal += item.priceInPence * quantity;
-          validatedSundryItems.push({
-            sundryItemId: item.id,
-            quantity,
-            unitPrice: item.priceInPence,
+      // Validate and calculate sundry items — ONE owner:
+      // validateSundrySelection (src/server/services/sundry-selection.ts).
+      // Quantities are aggregated per item before the maxPerOrder check
+      // there, so the cap can't be bypassed by splitting a quantity across
+      // duplicate cart lines — e.g. two lines of 2 when maxPerOrder is 2
+      // (bug hunt #27).
+      const sundrySelection = await validateSundrySelection(ctx.db, {
+        showId: input.showId,
+        items: input.sundryItems,
+      });
+      // Checkout enforces every rule and keeps the same messages it always
+      // has: not_found/wrong_show/disabled collapse into one generic
+      // message, over_max gets its own. Only the FIRST violation is
+      // reported, matching the old inline loop which threw as soon as it
+      // hit a problem.
+      const firstViolation = sundrySelection.violations[0];
+      if (firstViolation) {
+        if (firstViolation.kind === 'over_max') {
+          throw new TRPCError({
+            code: 'BAD_REQUEST',
+            message: `Maximum ${firstViolation.max} of "${firstViolation.name}" per order`,
           });
         }
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: `Sundry item not found or not available: ${firstViolation.sundryItemId}`,
+        });
       }
+
+      const validatedSundryItems = sundrySelection.items.map((i) => ({
+        sundryItemId: i.sundryItemId,
+        quantity: i.quantity,
+        unitPrice: i.unitPrice,
+      }));
+      const sundryTotal = validatedSundryItems.reduce(
+        (sum, i) => sum + i.unitPrice * i.quantity,
+        0
+      );
 
       totalAmount += sundryTotal;
 

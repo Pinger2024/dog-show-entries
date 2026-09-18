@@ -13,12 +13,15 @@ import { findClearedPedigreeFields, pedigreeClearMessage } from '@/lib/dog-pedig
 import { computeOrderFees, type FeeContext } from '@/lib/fee-calc';
 import { computeRegionalOrderFees, regionalClassFlatFee } from '@/lib/regional-fee-calc';
 import { countPriorRegionalPayingDogs } from '@/server/services/regional-pricing';
+import { validateSundrySelection } from '@/server/services/sundry-selection';
+import { computeJudgeCoverage } from '@/server/services/judge-coverage';
 import { formatAtcNumber } from '@/lib/registration-flags';
 import { computePrizeCardCounts } from '@/lib/prize-card-counts';
 import { BRAND } from '@/lib/brand';
 import { FEEDBACK_REPLY_TO } from '@/lib/email-addresses';
 import { checkOwnerRecord, type OwnerCheckIssue } from '@/lib/catalogue-data-checks';
-import { SV_CLASS_AUTO_CREATE_COMBOS } from '@/lib/class-labels';
+import { requiredGuarantorCount, hasEnoughGuarantors, showFeesConfigured } from '@/lib/show-setup-requirements';
+import { SV_CLASS_AUTO_CREATE_COMBOS, specialAwardClassFee, isUnnumberedClassDef } from '@/lib/class-labels';
 import {
   shows,
   entries,
@@ -85,6 +88,7 @@ import {
   withdrawnOrAbsentPaidWhere,
 } from '@/server/services/report-queries';
 import { validateRkcSchedule } from '@/lib/rkc-schedule-compliance';
+import { championshipClassesComplete } from '@/lib/championship-class-requirements';
 
 /**
  * True if this judge has assignments with any organisation outside the
@@ -148,22 +152,6 @@ function statusFromEntries(orderEntries: ReadonlyArray<{ status: string }>): str
   if (orderEntries.some((e) => e.status === 'confirmed')) return 'confirmed';
   if (orderEntries.every((e) => e.status === 'withdrawn')) return 'withdrawn';
   return orderEntries[0]?.status ?? 'pending';
-}
-
-/**
- * RKC show licences count only breed classes. Junior Handler classes (rendered
- * JHA, JHB, …) and Special Award Classes (rendered A, B, C, …) sit outside the
- * licensed count and must carry classNumber = null. Single source of truth for
- * every class-numbering path (autoAssign / reorder / resort / bulkCreate) so
- * they can't drift apart and start numbering JH/SAC classes (bug hunt #5).
- */
-function isUnnumberedClassDef(
-  cd?: { type?: string | null; name?: string | null } | null
-): boolean {
-  return (
-    cd?.type === 'junior_handler' ||
-    (cd?.type === 'special' && (cd?.name?.startsWith('Special Award Class') ?? false))
-  );
 }
 
 export const secretaryRouter = createTRPCRouter({
@@ -3094,131 +3082,11 @@ export const secretaryRouter = createTRPCRouter({
     .query(async ({ ctx, input }) => {
       await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId, { callerIsAdmin: ctx.callerIsAdmin });
 
-      // Get the show (for single-breed name) and all classes + assignments in parallel
-      const [show, classes, assignmentRows] = await Promise.all([
-        ctx.db.query.shows.findFirst({
-          where: eq(shows.id, input.showId),
-          columns: { showScope: true },
-        }),
-        ctx.db.query.showClasses.findMany({
-          where: eq(showClasses.showId, input.showId),
-          with: { breed: true, classDefinition: true },
-        }),
-        ctx.db.query.judgeAssignments.findMany({
-          where: eq(judgeAssignments.showId, input.showId),
-          with: { judge: true, breed: true },
-        }),
-      ]);
-      const assignments = assignmentRows;
-
-      // Build unique requirements from classes. Split by:
-      //   1. breedId + sex (the original axes)
-      //   2. AND whether the class is a Special Award Class — those need
-      //      a separate "Special Awards Classes" judge per Amanda's spec
-      //      2026-05-14, and must never be lumped with the breed's
-      //      regular null-sex classes (e.g. Veteran).
-      const requirementsMap = new Map<string, {
-        breedId: string | null;
-        breedName: string | null;
-        label: string;
-        sex: string | null;
-        classCount: number;
-        isSpecialAwards: boolean;
-      }>();
-
-      const isSpecialAwardClass = (sc: typeof classes[number]) =>
-        sc.classDefinition?.name?.startsWith('Special Award Class') ?? false;
-
-      for (const sc of classes) {
-        const sac = isSpecialAwardClass(sc);
-        const key = sac
-          ? `sac:${sc.breedId ?? 'all'}`
-          : `${sc.breedId ?? 'all'}:${sc.sex ?? 'both'}`;
-        const existing = requirementsMap.get(key);
-        if (existing) {
-          existing.classCount++;
-        } else {
-          // For breed-less classes: use breed name, class name (JH), or scope-aware fallback
-          const isJuniorHandling = sc.classDefinition?.type === 'junior_handler';
-          const label = sac
-            ? (sc.breed?.name ? `${sc.breed.name} — Special Awards Classes` : 'Special Awards Classes')
-            : (sc.breed?.name
-                ?? (isJuniorHandling ? 'Junior Handling'
-                  : show?.showScope === 'single_breed' ? 'Breed Classes' : 'All Breeds'));
-          requirementsMap.set(key, {
-            breedId: sc.breedId,
-            breedName: sc.breed?.name ?? null,
-            label,
-            sex: sac ? null : sc.sex,
-            classCount: 1,
-            isSpecialAwards: sac,
-          });
-        }
-      }
-
-      // Check which requirements are covered by assignments
-      const coverage = Array.from(requirementsMap.values()).map((req) => {
-        // SAC assignments and "regular breed-judge" assignments live in
-        // different lanes — keep them apart so a SAC assignment doesn't
-        // appear to cover Junior Handling and vice versa.
-        const lanedAssignments = req.isSpecialAwards
-          ? assignments.filter((a) => a.isSpecialAwardsClassesJudge)
-          : assignments.filter((a) => !a.isSpecialAwardsClassesJudge);
-
-        // Find ALL matching assignments. breed=null or sex=null on an
-        // assignment is treated as a catch-all — "any breed" / "any sex".
-        const matching = lanedAssignments.filter((a) => {
-          const breedMatch = req.breedId
-            ? a.breedId === req.breedId || a.breedId === null
-            : a.breedId === null;
-          const sexMatch = req.sex === null
-            ? a.sex === null
-            : (a.sex === null || a.sex === req.sex);
-          return breedMatch && sexMatch;
-        });
-
-        // Prefer assignments that match BOTH breed and sex exactly over
-        // catch-all matches. Without this, a null-breed null-sex assignment
-        // (e.g. Junior Handling) wrongly claims coverage of a breed-
-        // specific mixed-sex class like Veteran — they have the same
-        // shape in the DB. Exact breed + exact sex wins; catch-alls
-        // only appear when nothing more specific exists.
-        const exact = matching.filter(
-          (a) =>
-            a.sex === req.sex &&
-            (req.breedId ? a.breedId === req.breedId : a.breedId === null),
-        );
-        const best = exact.length > 0 ? exact : matching;
-
-        // Deduplicate by judge
-        const seen = new Set<string>();
-        const judges: { judgeId: string; judgeName: string; assignmentId: string }[] = [];
-        for (const a of best) {
-          if (!seen.has(a.judgeId)) {
-            seen.add(a.judgeId);
-            judges.push({ judgeId: a.judgeId, judgeName: a.judge.name, assignmentId: a.id });
-          }
-        }
-
-        return {
-          breedId: req.breedId,
-          breedName: req.breedName,
-          label: req.label,
-          sex: req.sex,
-          classCount: req.classCount,
-          isSpecialAwards: req.isSpecialAwards,
-          covered: judges.length > 0,
-          judges,
-          // Keep flat fields for backwards compat
-          judgeName: judges[0]?.judgeName ?? null,
-          judgeId: judges[0]?.judgeId ?? null,
-        };
-      });
-
-      const coveredCount = coverage.filter((c) => c.covered).length;
-      const totalCount = coverage.length;
-
-      return { coverage, coveredCount, totalCount };
+      // ONE owner for judge-coverage computation — see
+      // src/server/services/judge-coverage.ts ("One owner per rule",
+      // CLAUDE.md). getChecklistAutoDetect's judges_assigned tick uses the
+      // same function's `allCovered`.
+      return computeJudgeCoverage(ctx.db, input.showId);
     }),
 
   // ─── RKC Judge Lookup ────────────────────────────────
@@ -3631,26 +3499,35 @@ export const secretaryRouter = createTRPCRouter({
         }
       }
 
-      // Validate and price sundry items
+      // Validate and price sundry items — ONE owner: validateSundrySelection
+      // (src/server/services/sundry-selection.ts), the same function
+      // `orders.checkout` uses. This path enforces existence / enabled /
+      // belongs-to-show, exactly as it always has.
+      //
+      // It deliberately does NOT enforce `over_max` (checkout's per-order
+      // cap, bug hunt #27) — that violation kind is available on
+      // `sundrySelection.violations` but is intentionally ignored here.
+      // 2026-09-18: whether/how a secretary path should ENFORCE vs WARN on
+      // rule violations is being decided on `feat-entry-requirements-one-gate`
+      // ("secretary warns, exhibitor refuses") — that branch owns wiring
+      // `over_max` (and any other secretary-side warning) into this call
+      // site. Do not add ad hoc enforcement here ahead of it.
       const sundryInputs = input.sundryItems ?? [];
       let selectedSundryItems: { id: string; name: string; priceInPence: number; quantity: number }[] = [];
       if (sundryInputs.length > 0) {
-        const sundryIds = sundryInputs.map((s) => s.sundryItemId);
-        const foundItems = await ctx.db.query.sundryItems.findMany({
-          where: and(
-            inArray(sundryItems.id, sundryIds),
-            eq(sundryItems.showId, input.showId),
-            eq(sundryItems.enabled, true)
-          ),
+        const sundrySelection = await validateSundrySelection(ctx.db, {
+          showId: input.showId,
+          items: sundryInputs,
         });
-        if (foundItems.length !== sundryIds.length) {
+        const blocking = sundrySelection.violations.filter((v) => v.kind !== 'over_max');
+        if (blocking.length > 0) {
           throw new TRPCError({ code: 'BAD_REQUEST', message: 'One or more sundry items are invalid' });
         }
-        selectedSundryItems = foundItems.map((item) => ({
-          id: item.id,
+        selectedSundryItems = sundrySelection.items.map((item) => ({
+          id: item.sundryItemId,
           name: item.name,
-          priceInPence: item.priceInPence,
-          quantity: sundryInputs.find((s) => s.sundryItemId === item.id)!.quantity,
+          priceInPence: item.unitPrice,
+          quantity: item.quantity,
         }));
       }
 
@@ -3728,11 +3605,10 @@ export const secretaryRouter = createTRPCRouter({
                 key: 'manual',
                 kind: input.isNfc ? 'nfc' : 'standard',
                 classCount: selectedClasses.length,
-                // Special Award Classes charge their own fee (Mandy 2026-07-19),
-                // aligned to selectedClasses order (perClassFees[i] matches it).
-                specialClassFees: selectedClasses.map((sc) =>
-                  sc.classDefinition?.type === 'special' ? sc.entryFee : null,
-                ),
+                // Special Award Classes charge their own fee (Mandy 2026-07-19).
+                // ONE owner: specialAwardClassFee. Aligned to selectedClasses
+                // order (perClassFees[i] matches it).
+                specialClassFees: selectedClasses.map((sc) => specialAwardClassFee(sc)),
               }],
               feeCtx,
             );
@@ -4155,16 +4031,15 @@ export const secretaryRouter = createTRPCRouter({
         .from(sundryItems)
         .where(eq(sundryItems.showId, input.showId));
 
-      // Use the same coverage logic as getJudgeCoverage — query classes + assignments
-      const [showClassRows, assignmentRows, stewardCountRow, ringCountRow] = await Promise.all([
-        ctx.db.query.showClasses.findMany({
-          where: eq(showClasses.showId, input.showId),
-          columns: { breedId: true, sex: true },
-        }),
-        ctx.db.query.judgeAssignments.findMany({
-          where: eq(judgeAssignments.showId, input.showId),
-          columns: { judgeId: true, breedId: true, sex: true },
-        }),
+      // ONE owner for judge coverage — see src/server/services/judge-coverage.ts
+      // ("One owner per rule", CLAUDE.md). This used to re-derive coverage
+      // inline with no Special-Award-Classes lane and any breedId===null
+      // assignment matching any breed, so a show whose only assignment was
+      // a Special-Award-Classes-only judge wrongly ticked this box while the
+      // coverage dashboard (getJudgeCoverage) still showed the breed
+      // uncovered.
+      const [judgeCoverage, stewardCountRow, ringCountRow, assignmentRows] = await Promise.all([
+        computeJudgeCoverage(ctx.db, input.showId),
         ctx.db
           .select({ count: sql<number>`count(*)` })
           .from(stewardAssignments)
@@ -4173,26 +4048,15 @@ export const secretaryRouter = createTRPCRouter({
           .select({ count: sql<number>`count(*)` })
           .from(rings)
           .where(eq(rings.showId, input.showId)),
+        ctx.db.query.judgeAssignments.findMany({
+          where: eq(judgeAssignments.showId, input.showId),
+          columns: { judgeId: true },
+        }),
       ]);
 
       const [stewardCount] = stewardCountRow;
       const [ringCount] = ringCountRow;
-
-      // Full judge coverage: every unique breed+sex combo from classes must have a matching assignment
-      const requiredCombos = new Map<string, { breedId: string | null; sex: string | null }>();
-      for (const sc of showClassRows) {
-        const key = `${sc.breedId ?? 'all'}:${sc.sex ?? 'null'}`;
-        if (!requiredCombos.has(key)) requiredCombos.set(key, { breedId: sc.breedId, sex: sc.sex });
-      }
-      let allJudgesCovered = requiredCombos.size > 0;
-      for (const req of requiredCombos.values()) {
-        const covered = assignmentRows.some((a) => {
-          const breedMatch = req.breedId === null ? a.breedId === null : (a.breedId === req.breedId || a.breedId === null);
-          const sexMatch = req.sex === null ? a.sex === null : (a.sex === null || a.sex === req.sex);
-          return breedMatch && sexMatch;
-        });
-        if (!covered) { allJudgesCovered = false; break; }
-      }
+      const allJudgesCovered = judgeCoverage.allCovered;
 
       const detected: Record<string, boolean> = {
         venue_set: !!show.venueId,
@@ -4229,14 +4093,9 @@ export const secretaryRouter = createTRPCRouter({
         detected.judge_offers_sent = false;
       }
 
-      // Additional auto-detect keys for lifecycle gates. Regional (SV/WUSV)
-      // shows price via regionalFeeConfig, not firstEntryFee — count either
-      // (Mandy 2026-07-05: regional fees set but checklist said "not set").
-      const regionalFeesSet = !!(
-        (show as { regionalFeeConfig?: { tiers?: unknown[] } | null }).regionalFeeConfig?.tiers?.length
-      );
-      detected.entry_fees_set =
-        regionalFeesSet || (show.firstEntryFee != null && show.firstEntryFee > 0);
+      // Additional auto-detect keys for lifecycle gates. ONE owner —
+      // src/lib/show-setup-requirements.ts (CLAUDE.md, "One owner per rule").
+      detected.entry_fees_set = showFeesConfigured(show);
       detected.entry_close_date_set = show.entryCloseDate != null;
       detected.secretary_details_set = !!(show.secretaryName && show.secretaryEmail);
       // Post-show: the "Publish results" checklist item declares this autoDetectKey
@@ -4251,41 +4110,35 @@ export const secretaryRouter = createTRPCRouter({
       detected.sundry_items_reviewed = Number(sundryItemCount?.count) > 0;
       const scheduleData = show.scheduleData as Record<string, unknown> | null;
       const guarantors = (scheduleData?.guarantors as { name: string }[] | undefined) ?? [];
-      const minGuarantors = show.showType === 'championship' ? 6 : 3;
-      // SV/WUSV regional shows aren't licensed under the RKC F-rules
-      // framework that requires guarantors, so the check auto-passes
-      // (Amanda 2026-05-19/20).
-      const isWusvShow = (show as { showRuleset?: 'rkc' | 'wusv' }).showRuleset === 'wusv';
-      detected.guarantors_added = isWusvShow || guarantors.length >= minGuarantors;
+      // ONE owner — src/lib/show-setup-requirements.ts (CLAUDE.md, "One
+      // owner per rule"); requiredGuarantorCount returns 0 for SV/WUSV
+      // regional shows, which aren't licensed under the RKC F-rules
+      // framework that requires guarantors (Amanda 2026-05-19/20).
+      detected.guarantors_added = hasEnoughGuarantors(show, guarantors.length);
 
-      // Championship shows: check Open + Limit for each sex per breed
+      // Championship shows: check Open + Limit for each sex per breed.
+      // ONE owner — src/lib/championship-class-requirements.ts (CLAUDE.md,
+      // "One owner per rule") — also called by the class-manager live
+      // warning. This used to skip any class row with a null breedId, so a
+      // fully-classed single-breed show whose rows carried no breed FK (the
+      // normal case — see the lib doc comment) was reported NOT complete.
       if (show.showType === 'championship' && Number(classCount?.count) > 0) {
         const showClassRows = await ctx.db.query.showClasses.findMany({
           where: eq(showClasses.showId, input.showId),
-          with: { classDefinition: true },
+          with: { classDefinition: true, breed: true },
         });
 
-        let allBreedsComplete = true;
-        const breedClassMap = new Map<string, { hasOpenDog: boolean; hasOpenBitch: boolean; hasLimitDog: boolean; hasLimitBitch: boolean }>();
-        for (const sc of showClassRows) {
-          if (!sc.breedId) continue;
-          if (!breedClassMap.has(sc.breedId)) {
-            breedClassMap.set(sc.breedId, { hasOpenDog: false, hasOpenBitch: false, hasLimitDog: false, hasLimitBitch: false });
-          }
-          const entry = breedClassMap.get(sc.breedId)!;
-          const className = sc.classDefinition?.name?.toLowerCase() ?? '';
-          if (className === 'open' && sc.sex === 'dog') entry.hasOpenDog = true;
-          if (className === 'open' && sc.sex === 'bitch') entry.hasOpenBitch = true;
-          if (className === 'limit' && sc.sex === 'dog') entry.hasLimitDog = true;
-          if (className === 'limit' && sc.sex === 'bitch') entry.hasLimitBitch = true;
-        }
-        for (const [, entry] of breedClassMap) {
-          if (!entry.hasOpenDog || !entry.hasOpenBitch || !entry.hasLimitDog || !entry.hasLimitBitch) {
-            allBreedsComplete = false;
-            break;
-          }
-        }
-        detected.championship_classes_complete = breedClassMap.size > 0 && allBreedsComplete;
+        detected.championship_classes_complete = championshipClassesComplete({
+          showType: show.showType,
+          showScope: show.showScope,
+          showRuleset: (show as { showRuleset?: 'rkc' | 'wusv' }).showRuleset,
+          classes: showClassRows.map((sc) => ({
+            breedId: sc.breedId,
+            breedName: sc.breed?.name ?? null,
+            classDefinitionName: sc.classDefinition?.name ?? null,
+            sex: sc.sex,
+          })),
+        });
       } else {
         // Non-championship shows or shows with no classes — not applicable, mark as complete
         detected.championship_classes_complete = true;
@@ -4314,7 +4167,9 @@ export const secretaryRouter = createTRPCRouter({
 
       const scheduleData = show.scheduleData as Record<string, unknown> | null;
       const guarantors = (scheduleData?.guarantors as { name: string }[] | undefined) ?? [];
-      const minGuarantors = show.showType === 'championship' ? 6 : 3;
+      // ONE owner — src/lib/show-setup-requirements.ts (CLAUDE.md, "One
+      // owner per rule").
+      const minGuarantors = requiredGuarantorCount(show);
       // SV regional shows don't operate under the RKC F-rules framework,
       // so the guarantor + RKC class-minimum checks don't apply.
       const isWusvShow = (show as { showRuleset?: 'rkc' | 'wusv' }).showRuleset === 'wusv';
@@ -4344,12 +4199,11 @@ export const secretaryRouter = createTRPCRouter({
           actionPath: '/people', severity: 'required',
         });
       }
-      // Regional (SV/WUSV) shows price via regionalFeeConfig, not firstEntryFee
-      // — treat either as "fees set" (Mandy 2026-07-05).
-      const regionalFeesSet = !!(
-        (show as { regionalFeeConfig?: { tiers?: unknown[] } | null }).regionalFeeConfig?.tiers?.length
-      );
-      if (!regionalFeesSet && (!show.firstEntryFee || show.firstEntryFee <= 0)) {
+      // ONE owner — src/lib/show-setup-requirements.ts (CLAUDE.md, "One
+      // owner per rule"). Regional (SV/WUSV) shows price via
+      // regionalFeeConfig, not firstEntryFee — treat either as "fees set"
+      // (Mandy 2026-07-05).
+      if (!showFeesConfigured(show)) {
         openEntriesBlockers.push({
           key: 'no_entry_fees', label: 'Entry fees not set',
           detail: 'Click Edit on the main show page to set entry fees',

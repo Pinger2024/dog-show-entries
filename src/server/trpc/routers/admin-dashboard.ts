@@ -14,6 +14,7 @@ import { z } from 'zod';
 import { adminProcedure } from '../procedures';
 import { createTRPCRouter } from '../init';
 import { formatCurrency } from '@/lib/date-utils';
+import { PRINT_ORDER_PAID_STATUSES } from '@/lib/print-products';
 import {
   users,
   shows,
@@ -42,9 +43,6 @@ function getDelta(
     positive: pct >= 0,
   };
 }
-
-/** Print order statuses where payment has been received */
-const PRINT_PAID_STATUSES = ['paid', 'submitted', 'in_production', 'dispatched', 'delivered'] as const;
 
 /** Print order statuses excluded from admin reporting views */
 const PRINT_EXCLUDED_STATUSES = ['draft', 'cancelled'] as const;
@@ -370,7 +368,7 @@ export const adminDashboardRouter = createTRPCRouter({
         .from(printOrders)
         .where(
           and(
-            inArray(printOrders.status, PRINT_PAID_STATUSES),
+            inArray(printOrders.status, PRINT_ORDER_PAID_STATUSES),
             gte(printOrders.createdAt, thisMonthStart)
           )
         ),
@@ -382,7 +380,7 @@ export const adminDashboardRouter = createTRPCRouter({
         .from(printOrders)
         .where(
           and(
-            inArray(printOrders.status, PRINT_PAID_STATUSES),
+            inArray(printOrders.status, PRINT_ORDER_PAID_STATUSES),
             gte(printOrders.createdAt, lastMonthStart),
             lt(printOrders.createdAt, thisMonthStart)
           )
@@ -393,12 +391,12 @@ export const adminDashboardRouter = createTRPCRouter({
           v: sql<number>`coalesce(sum(${printOrders.totalAmount}), 0)::int`,
         })
         .from(printOrders)
-        .where(inArray(printOrders.status, PRINT_PAID_STATUSES)),
+        .where(inArray(printOrders.status, PRINT_ORDER_PAID_STATUSES)),
       // ── Print order count ──────────────────────────────────
       ctx.db
         .select({ v: sql<number>`count(*)::int` })
         .from(printOrders)
-        .where(inArray(printOrders.status, PRINT_PAID_STATUSES)),
+        .where(inArray(printOrders.status, PRINT_ORDER_PAID_STATUSES)),
       // ── Print order pipeline ───────────────────────────────
       ctx.db
         .select({
@@ -416,7 +414,7 @@ export const adminDashboardRouter = createTRPCRouter({
         .from(printOrders)
         .where(
           and(
-            inArray(printOrders.status, PRINT_PAID_STATUSES),
+            inArray(printOrders.status, PRINT_ORDER_PAID_STATUSES),
             gte(printOrders.createdAt, thirtyDaysAgo)
           )
         )

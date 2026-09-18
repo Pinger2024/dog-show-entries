@@ -14,6 +14,7 @@ import type {
   SvJudgeRowInput,
   SvCoat,
 } from '@/lib/sv-results';
+import { isLiveEntry } from '@/lib/entry-counts';
 
 export interface SvResultsLoad {
   show: {
@@ -75,7 +76,7 @@ export async function loadSvResultsData(
 
   // Only confirmed, non-deleted entries appear in results.
   const mappedEntries: SvEntryInput[] = entries
-    .filter((e) => e.status === 'confirmed' && !e.deletedAt)
+    .filter((e) => isLiveEntry(e))
     .map((e) => ({
       id: e.id,
       absent: e.absent,

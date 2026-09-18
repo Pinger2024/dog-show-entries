@@ -16,6 +16,7 @@ import { trpc } from '@/lib/trpc';
 import { cn } from '@/lib/utils';
 import { formatCurrency, formatCloseTimeUK } from '@/lib/date-utils';
 import { displayShowTitle } from '@/lib/show-types';
+import { effectiveShowStatus } from '@/lib/show-status';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   Eyebrow,
@@ -51,7 +52,9 @@ function getStatusPill(show: DashboardShow): {
   showClock?: boolean;
   dangerText?: boolean;
 } {
-  if (show.status === 'entries_open') {
+  const displayStatus = effectiveShowStatus(show);
+
+  if (displayStatus === 'entries_open') {
     if (show.entryCloseDate) {
       const days = differenceInDays(new Date(show.entryCloseDate), new Date());
       if (days <= 0) return { tone: 'honey', label: 'Closes today!', showClock: true };
@@ -59,16 +62,16 @@ function getStatusPill(show: DashboardShow): {
     }
     return { tone: 'fresh', label: 'Entries open', showPulse: true };
   }
-  if (show.status === 'in_progress') return { tone: 'fresh', label: 'In progress', showPulse: true };
-  if (show.status === 'published') {
+  if (displayStatus === 'in_progress') return { tone: 'fresh', label: 'In progress', showPulse: true };
+  if (displayStatus === 'published') {
     if (show.entriesOpenDate) {
       return { tone: 'light', label: `Opens ${format(new Date(show.entriesOpenDate), 'd MMM')}` };
     }
     return { tone: 'light', label: 'Published' };
   }
-  if (show.status === 'entries_closed') return { tone: 'light', label: 'Entries closed' };
-  if (show.status === 'completed') return { tone: 'light', label: 'Completed' };
-  if (show.status === 'cancelled') return { tone: 'light', label: 'Cancelled', dangerText: true };
+  if (displayStatus === 'entries_closed') return { tone: 'light', label: 'Entries closed' };
+  if (displayStatus === 'completed') return { tone: 'light', label: 'Completed' };
+  if (displayStatus === 'cancelled') return { tone: 'light', label: 'Cancelled', dangerText: true };
   return { tone: 'light', label: 'Draft' };
 }
 
