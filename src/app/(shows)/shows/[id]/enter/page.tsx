@@ -35,9 +35,9 @@ import {
   Star,
   Lock,
 } from 'lucide-react';
-import { differenceInMonths, differenceInWeeks, format, parseISO } from 'date-fns';
+import { differenceInMonths, format, parseISO } from 'date-fns';
 import { toast } from 'sonner';
-import { isWithinAgeRange, getAgeEligibilityDetail, handlerAgeYearsOnDate, formatCurrency, isAgeRestrictedClass } from '@/lib/date-utils';
+import { isWithinAgeRange, getAgeEligibilityDetail, handlerAgeYearsOnDate, formatCurrency, isAgeRestrictedClass, isOldEnoughForNfc, NFC_MIN_AGE_WEEKS } from '@/lib/date-utils';
 import { svAgeClassAllowed, svMissingRequirements, hasWorkingTitle, pedigreeMissingForEntry } from '@/lib/sv-entry-readiness';
 import { SV_HEALTH_FROM_CLASSES } from '@/lib/sv-entry-validation';
 import { displayShowTypeLabel } from '@/lib/show-types';
@@ -1222,8 +1222,9 @@ export default function EnterShowPage() {
                 const showDate = show?.startDate ? new Date(show.startDate) : null;
                 const dob = dog.dateOfBirth ? new Date(dog.dateOfBirth) : null;
                 const ageMonths = showDate && dob ? differenceInMonths(showDate, dob) : null;
-                const ageWeeks = showDate && dob ? differenceInWeeks(showDate, dob) : null;
-                const tooYoungForAll = ageWeeks !== null && ageWeeks < 12;
+                // ONE owner — src/lib/date-utils.ts (CLAUDE.md, "One owner
+                // per rule").
+                const tooYoungForAll = showDate && dob ? !isOldEnoughForNfc(dob, showDate) : false;
                 // A sub-6-month pup isn't "NFC only" if the show runs an age
                 // class she qualifies for (e.g. Baby Puppy, 4–6 months).
                 // Amanda 2026-07-18 (North East Regional).
@@ -1315,7 +1316,7 @@ export default function EnterShowPage() {
                       )}
                       {tooYoungForAll && (
                         <p className="mt-1 text-xs font-medium text-destructive">
-                          Too young to enter — must be at least 12 weeks old
+                          Too young to enter — must be at least {NFC_MIN_AGE_WEEKS} weeks old
                         </p>
                       )}
                       {tooYoungForCompetition && (

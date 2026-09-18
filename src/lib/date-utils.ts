@@ -1,4 +1,4 @@
-import { format, parseISO, formatDistanceToNow, differenceInMonths, isToday, isYesterday, addMonths } from 'date-fns';
+import { format, parseISO, formatDistanceToNow, differenceInMonths, differenceInWeeks, isToday, isYesterday, addMonths } from 'date-fns';
 
 /** Parse a YYYY-MM-DD date string as local (not UTC) — avoids off-by-one from ISO parsing.
  *  Also accepts Date objects and ISO timestamp strings so it's safe to pass superjson-hydrated
@@ -210,6 +210,32 @@ export function getCompetitionAgeError(params: {
   }
 
   return null;
+}
+
+/**
+ * RKC 2026 regulations: the minimum age for a Not For Competition (NFC)
+ * entry is 12 weeks old on show day. ONE owner (CLAUDE.md "One owner per
+ * rule") — `entries.create` and `orders.checkout`
+ * (src/server/trpc/routers/{entries,orders}.ts) used to hand-type this
+ * constant, the `differenceInWeeks` check and the rejection message
+ * identically in two places; the enter page (`shows/[id]/enter/page.tsx`)
+ * hand-typed the same 12-week floor as its "too young to enter at all"
+ * gate. Centralised here; each site keeps its own `differenceInWeeks` call
+ * (it already has `showDate`/`dob` in scope for other purposes) but the
+ * threshold and the server-facing message text now live in one place.
+ */
+export const NFC_MIN_AGE_WEEKS = 12;
+
+/** Is this dog at least {@link NFC_MIN_AGE_WEEKS} old on the show date? */
+export function isOldEnoughForNfc(dob: string | Date, showDate: string | Date): boolean {
+  const dobDate = typeof dob === 'string' ? parseLocalDate(dob) : dob;
+  const show = typeof showDate === 'string' ? parseLocalDate(showDate) : showDate;
+  return differenceInWeeks(show, dobDate) >= NFC_MIN_AGE_WEEKS;
+}
+
+/** The rejection message for an NFC entry that fails {@link isOldEnoughForNfc}. */
+export function nfcMinAgeMessage(dogName: string, ageWeeks: number): string {
+  return `${dogName} will only be ${ageWeeks} weeks old on show day. Dogs must be at least ${NFC_MIN_AGE_WEEKS} weeks old for NFC entries.`;
 }
 
 /**

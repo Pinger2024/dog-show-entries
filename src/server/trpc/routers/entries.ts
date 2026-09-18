@@ -34,7 +34,7 @@ import { executeStripeRefund } from '@/server/services/stripe-refunds';
 import { svEntryMissingRequirements, svEntryBlockedMessage } from '@/lib/sv-entry-validation';
 import { pedigreeMissingForEntry } from '@/lib/sv-entry-readiness';
 import { hasJudgingConflict } from '@/lib/judge-exhibitor-conflict';
-import { getCompetitionAgeError } from '@/lib/date-utils';
+import { getCompetitionAgeError, isOldEnoughForNfc, nfcMinAgeMessage } from '@/lib/date-utils';
 import { svCoatDisplayName } from '@/lib/class-labels';
 import { dogAccessCondition } from '@/server/dog-access';
 
@@ -181,12 +181,13 @@ export const entriesRouter = createTRPCRouter({
         const dogName = dog.registeredName ?? 'This dog';
 
         if (input.isNfc) {
-          // NFC entries: minimum 12 weeks (RKC 2026 regulations)
-          const ageWeeks = differenceInWeeks(showDate, dob);
-          if (ageWeeks < 12) {
+          // NFC entries: minimum 12 weeks (RKC 2026 regulations). ONE
+          // owner — src/lib/date-utils.ts (CLAUDE.md, "One owner per rule").
+          if (!isOldEnoughForNfc(dob, showDate)) {
+            const ageWeeks = differenceInWeeks(showDate, dob);
             throw new TRPCError({
               code: 'BAD_REQUEST',
-              message: `${dogName} will only be ${ageWeeks} weeks old on show day. Dogs must be at least 12 weeks old for NFC entries.`,
+              message: nfcMinAgeMessage(dogName, ageWeeks),
             });
           }
         } else {
