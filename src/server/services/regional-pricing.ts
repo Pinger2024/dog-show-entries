@@ -13,20 +13,21 @@
  *
  * Every path that prices a regional entry MUST call `countPriorRegionalPayingDogs`
  * and pass the result as `priorPayingDogCount`. Do not hand-roll the query: the
- * exclusions below (cancelled, deleted, junior handlers, the order being
- * re-priced) are the rule, and a second copy of them is a second rule.
+ * exclusions below (cancelled, deleted, junior handlers, unsettled orders, the
+ * order being re-priced) are the rule, and a second copy of them is a second rule.
  *
  * Already-paid entries are never re-priced — this only affects the dogs being
  * priced now.
  */
-import { and, eq, isNull, ne, or, notInArray, count, type SQL } from 'drizzle-orm';
+import { and, eq, isNull, ne, or, notInArray, inArray, count, type SQL } from 'drizzle-orm';
 import type { db as Database } from '@/server/db';
-import { entries } from '@/server/db/schema';
+import { entries, orders } from '@/server/db/schema';
 
 /**
  * Paying dogs this exhibitor already has at this show.
  *
- * Counted: confirmed/pending entries in competitive classes.
+ * Counted: confirmed/pending entries in competitive classes whose order has
+ * SETTLED (`paid` or `refunded`), plus entries with no order at all.
  * Not counted:
  *  - soft-deleted entries (`deletedAt`),
  *  - cancelled or withdrawn entries — the dog is no longer at the show, so it
@@ -34,6 +35,19 @@ import { entries } from '@/server/db/schema';
  *    the dog moved class, it did not leave),
  *  - junior-handler entries — they never consume a scale position (see the
  *    engine's `kind: 'junior_handler'` branch),
+ *  - entries whose order has NOT settled (`draft`, `pending_payment`,
+ *    `failed`, `cancelled`) — `orders.checkout`
+ *    (src/server/trpc/routers/orders.ts) sweeps an exhibitor's stale
+ *    `pending_payment`/`failed` orders for the show before pricing a new
+ *    basket: it soft-deletes their entries and cancels the orders. A dog only
+ *    holds a place on the scale if checkout would NOT sweep it away first, so
+ *    an unsettled order must not count here either — otherwise the fee
+ *    preview and the charge disagree (found on demo: a member's 3rd dog was
+ *    quoted £0.00 as a "4th dog" because an abandoned unpaid basket held its
+ *    place, then checkout swept that basket and correctly charged £11).
+ *    `refunded` still counts: the order went through and the dog WAS at the
+ *    show — whether it later left is `entries.status` ('cancelled' /
+ *    'withdrawn'), already excluded above, not the order's payment state.
  *  - entries belonging to `excludeOrderId`, used when re-pricing that order so
  *    its own dogs are not counted twice.
  */
@@ -54,6 +68,9 @@ export async function countPriorRegionalPayingDogs(
     // push the next dog down the scale. 'transferred' (moved class) still is.
     notInArray(entries.status, ['cancelled', 'withdrawn']),
     ne(entries.entryType, 'junior_handler'),
+    // Only a SETTLED order holds the dog's place — see the doc comment above.
+    // No order at all (secretary-created entries, order_id NULL) still counts.
+    or(isNull(entries.orderId), inArray(orders.status, ['paid', 'refunded']))!,
   ];
 
   if (params.excludeOrderId) {
@@ -69,6 +86,7 @@ export async function countPriorRegionalPayingDogs(
   const [row] = await database
     .select({ n: count() })
     .from(entries)
+    .leftJoin(orders, eq(entries.orderId, orders.id))
     .where(and(...conditions));
 
   return row?.n ?? 0;

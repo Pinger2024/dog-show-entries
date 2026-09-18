@@ -248,6 +248,71 @@ describe('regional scale spans separate orders', () => {
     expect(manual.totalFee).toBe(1600); // 3rd dog on the scale, not the £20 class fee
   });
 
+  it('does not count a dog sitting in an abandoned UNPAID basket (preview and charge must agree)', async () => {
+    const { breed, show, classA } = await regionalShow();
+    const exhibitor = await makeUser({ role: 'exhibitor' });
+    const [d1, d2, d3] = await Promise.all([1, 2, 3].map((i) => regionalDog(exhibitor.id, breed.id, i)));
+    const caller = createTestCaller(exhibitor);
+
+    // 2 dogs paid for.
+    const first = await caller.orders.checkout({
+      showId: show.id,
+      entries: [
+        { entryType: 'standard', dogId: d1.id, classIds: [classA.id], isNfc: false },
+        { entryType: 'standard', dogId: d2.id, classIds: [classA.id], isNfc: false },
+      ],
+    });
+    await settleOrder(first.orderId);
+
+    // A 3rd dog is entered but the basket is abandoned — never settled. Its
+    // order is left sitting at 'pending_payment', exactly as it would be if
+    // the exhibitor closed the tab before paying.
+    const abandoned = await caller.orders.checkout({
+      showId: show.id,
+      entries: [{ entryType: 'standard', dogId: d3.id, classIds: [classA.id], isNfc: false }],
+    });
+    expect(abandoned.totalAmount).toBe(1600); // priced as the 3rd dog at checkout time
+    // Left unsettled — do NOT call settleOrder.
+
+    // The fee preview must NOT count the abandoned 3rd dog as "already entered".
+    const priorCount = await caller.entries.regionalPriorDogCount({ showId: show.id });
+    expect(priorCount).toBe(2);
+
+    // A fresh checkout of a genuine 3rd dog (checkout sweeps the abandoned
+    // basket first) must charge the same £16 the preview implied — not double
+    // count the swept dog and jump to the 4th-dog free tier.
+    const d4 = await regionalDog(exhibitor.id, breed.id, 4);
+    const real = await caller.orders.checkout({
+      showId: show.id,
+      entries: [{ entryType: 'standard', dogId: d4.id, classIds: [classA.id], isNfc: false }],
+    });
+    expect(real.totalAmount).toBe(1600); // preview (2) and charge agree — 3rd dog, £16
+  });
+
+  it('counts a secretary manual entry (its order is created paid) towards the scale immediately', async () => {
+    const { secretary: secretaryUser, breed, show, classA } = await regionalShow();
+    const exhibitor = await makeUser({ role: 'exhibitor' });
+    const [d1, d2] = await Promise.all([1, 2].map((i) => regionalDog(exhibitor.id, breed.id, i)));
+
+    await createTestCaller(secretaryUser).secretary.createManualEntry({
+      showId: show.id,
+      dogId: d1.id,
+      classIds: [classA.id],
+      exhibitorEmail: exhibitor.email,
+    });
+
+    const priorCount = await createTestCaller(exhibitor).entries.regionalPriorDogCount({ showId: show.id });
+    expect(priorCount).toBe(1);
+
+    const manual2 = await createTestCaller(secretaryUser).secretary.createManualEntry({
+      showId: show.id,
+      dogId: d2.id,
+      classIds: [classA.id],
+      exhibitorEmail: exhibitor.email,
+    });
+    expect(manual2.totalFee).toBe(2000); // 2nd dog, still on the paying tier — manual entries count
+  });
+
   it('prices the FIRST manually-keyed regional dog on the scale, not the raw class fee', async () => {
     const { secretary: secretaryUser, breed, show, classA } = await regionalShow();
     const exhibitor = await makeUser({ role: 'exhibitor' });
