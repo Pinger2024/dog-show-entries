@@ -29,6 +29,7 @@ import { buildClassLabelMap, svDisplayAge } from '@/lib/class-labels';
 import { publicOrgColumns } from '../public-org-columns';
 import { sendJudgeApprovalRequestEmail } from '@/server/services/email';
 import { deriveTopAwardJudge } from '@/server/services/derive-award-judge';
+import { isLiveEntry } from '@/lib/entry-counts';
 
 /** Resolve a show slug or UUID to a UUID */
 async function resolveShowId(db: Database, idOrSlug: string): Promise<string> {
@@ -247,7 +248,7 @@ export const stewardRouter = createTRPCRouter({
 
       return filtered.map((sc) => {
         const confirmedEntries = sc.entryClasses.filter(
-          (ec) => ec.entry.status === 'confirmed' && !ec.entry.deletedAt
+          (ec) => isLiveEntry(ec.entry)
         );
         const resultsRows = confirmedEntries
           .map((ec) => ec.result)
@@ -383,7 +384,7 @@ export const stewardRouter = createTRPCRouter({
 
       // Filter to confirmed, non-deleted entries
       const confirmed = classEntries.filter(
-        (ec) => ec.entry.status === 'confirmed' && !ec.entry.deletedAt
+        (ec) => isLiveEntry(ec.entry)
       );
 
       // Publish status — derived from per-result publishedAt timestamps.
@@ -495,7 +496,7 @@ export const stewardRouter = createTRPCRouter({
         });
       }
 
-      if (ec.entry.status !== 'confirmed' || ec.entry.deletedAt) {
+      if (!isLiveEntry(ec.entry)) {
         throw new TRPCError({
           code: 'BAD_REQUEST',
           message: 'Cannot record result for a non-confirmed entry',
@@ -1182,7 +1183,7 @@ export const stewardRouter = createTRPCRouter({
         // Per-class (Mandy 2026-08-12): a dog absent from THIS class still
         // counts forward in any other class she's entered in.
         const confirmedEntries = sc.entryClasses.filter(
-          (ec) => ec.entry.status === 'confirmed' && !ec.entry.deletedAt
+          (ec) => isLiveEntry(ec.entry)
         );
         const dogsForward = confirmedEntries.filter(
           (ec) => !ec.absent
@@ -1192,8 +1193,7 @@ export const stewardRouter = createTRPCRouter({
           .filter(
             (ec) =>
               ec.result !== null &&
-              ec.entry.status === 'confirmed' &&
-              !ec.entry.deletedAt &&
+              isLiveEntry(ec.entry) &&
               // An absent dog is never placed — if a placement was recorded and
               // then the dog marked absent, the stale result must not surface as
               // a winner on public/live results.
@@ -1381,8 +1381,7 @@ export const stewardRouter = createTRPCRouter({
         sc.entryClasses.some(
           (ec) =>
             ec.result !== null &&
-            ec.entry.status === 'confirmed' &&
-            !ec.entry.deletedAt
+            isLiveEntry(ec.entry)
         )
       ).length;
 

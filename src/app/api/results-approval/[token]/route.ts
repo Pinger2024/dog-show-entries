@@ -17,6 +17,7 @@ import { buildClassLabelMap, svCoatDisplayName, svDisplayAge } from '@/lib/class
 import { resend, FROM, emailHeader } from '@/server/services/email';
 import { BRAND } from '@/lib/brand';
 import { FEEDBACK_REPLY_TO } from '@/lib/email-addresses';
+import { isLiveEntry } from '@/lib/entry-counts';
 
 function esc(s: string) {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -243,13 +244,13 @@ export async function GET(
     }
 
     const confirmed = sc.entryClasses.filter(
-      (ec) => ec.entry.status === 'confirmed' && !ec.entry.deletedAt
+      (ec) => isLiveEntry(ec.entry)
     );
     // Per-class attendance (Mandy 2026-08-12) — this class's own flag.
     const dogsForward = confirmed.filter((ec) => !ec.absent).length;
 
     const resultRows = sc.entryClasses
-      .filter((ec) => ec.result && ec.entry.status === 'confirmed' && !ec.entry.deletedAt)
+      .filter((ec) => ec.result && isLiveEntry(ec.entry))
       .sort((a, b) => (a.result!.placement ?? 99) - (b.result!.placement ?? 99))
       .map((ec) => {
         const r = ec.result!;

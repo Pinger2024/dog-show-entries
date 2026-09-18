@@ -15,6 +15,7 @@ import { buildPrizeCardPages, type PrizeCardClassInput } from '@/lib/prize-card-
 import { sectionClasses, buildClassLabelMap } from '@/lib/class-labels';
 import { fetchClubImage } from '@/lib/safe-image-fetch';
 import { setSimplexViewerPreference } from '@/lib/pdf-pad';
+import { isLiveEntry } from '@/lib/entry-counts';
 
 // Above this, log loudly — a runaway page count (e.g. a bug that stops the
 // image-embed cache from matching, or a genuinely enormous show) should be
@@ -123,7 +124,7 @@ export async function GET(
     // Same "true catalogue entry" filter as secretary.getPrizeCardCounts:
     // status='confirmed' AND not soft-deleted.
     const confirmedCount = sc.entryClasses.filter(
-      (ec) => ec.entry && ec.entry.status === 'confirmed' && !ec.entry.deletedAt
+      (ec) => isLiveEntry(ec.entry)
     ).length;
     const judge = judgeForClass(sc);
     const number = classLabelMap.get(sc.id);

@@ -45,6 +45,7 @@ import {
   buildSh01Xlsx,
   buildFinancialStatementXlsx,
 } from '@/lib/reports-xlsx';
+import { isLiveEntry } from '@/lib/entry-counts';
 
 const PDF_TYPES = ['catalogue-order', 'class-breakdown', 'catalogue-orders', 'sh01'] as const;
 const SV_TYPES = ['sv-results', 'sv-results-xlsx', 'grading-cards'] as const;
@@ -248,7 +249,7 @@ export async function GET(
   }));
 
   const classLabelMap = buildClassLabelMap(showClasses, show.showRuleset);
-  const confirmed = entries.filter((e) => e.status === 'confirmed' && !e.deletedAt);
+  const confirmed = entries.filter((e) => isLiveEntry(e));
 
   const info: ShowReportInfo = {
     showName: show.name,
