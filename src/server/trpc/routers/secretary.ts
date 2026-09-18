@@ -14,6 +14,7 @@ import { computeOrderFees, type FeeContext } from '@/lib/fee-calc';
 import { computeRegionalOrderFees, regionalClassFlatFee } from '@/lib/regional-fee-calc';
 import { countPriorRegionalPayingDogs } from '@/server/services/regional-pricing';
 import { validateSundrySelection } from '@/server/services/sundry-selection';
+import { computeJudgeCoverage } from '@/server/services/judge-coverage';
 import { formatAtcNumber } from '@/lib/registration-flags';
 import { computePrizeCardCounts } from '@/lib/prize-card-counts';
 import { BRAND } from '@/lib/brand';
@@ -3095,131 +3096,11 @@ export const secretaryRouter = createTRPCRouter({
     .query(async ({ ctx, input }) => {
       await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId, { callerIsAdmin: ctx.callerIsAdmin });
 
-      // Get the show (for single-breed name) and all classes + assignments in parallel
-      const [show, classes, assignmentRows] = await Promise.all([
-        ctx.db.query.shows.findFirst({
-          where: eq(shows.id, input.showId),
-          columns: { showScope: true },
-        }),
-        ctx.db.query.showClasses.findMany({
-          where: eq(showClasses.showId, input.showId),
-          with: { breed: true, classDefinition: true },
-        }),
-        ctx.db.query.judgeAssignments.findMany({
-          where: eq(judgeAssignments.showId, input.showId),
-          with: { judge: true, breed: true },
-        }),
-      ]);
-      const assignments = assignmentRows;
-
-      // Build unique requirements from classes. Split by:
-      //   1. breedId + sex (the original axes)
-      //   2. AND whether the class is a Special Award Class — those need
-      //      a separate "Special Awards Classes" judge per Amanda's spec
-      //      2026-05-14, and must never be lumped with the breed's
-      //      regular null-sex classes (e.g. Veteran).
-      const requirementsMap = new Map<string, {
-        breedId: string | null;
-        breedName: string | null;
-        label: string;
-        sex: string | null;
-        classCount: number;
-        isSpecialAwards: boolean;
-      }>();
-
-      const isSpecialAwardClass = (sc: typeof classes[number]) =>
-        sc.classDefinition?.name?.startsWith('Special Award Class') ?? false;
-
-      for (const sc of classes) {
-        const sac = isSpecialAwardClass(sc);
-        const key = sac
-          ? `sac:${sc.breedId ?? 'all'}`
-          : `${sc.breedId ?? 'all'}:${sc.sex ?? 'both'}`;
-        const existing = requirementsMap.get(key);
-        if (existing) {
-          existing.classCount++;
-        } else {
-          // For breed-less classes: use breed name, class name (JH), or scope-aware fallback
-          const isJuniorHandling = sc.classDefinition?.type === 'junior_handler';
-          const label = sac
-            ? (sc.breed?.name ? `${sc.breed.name} — Special Awards Classes` : 'Special Awards Classes')
-            : (sc.breed?.name
-                ?? (isJuniorHandling ? 'Junior Handling'
-                  : show?.showScope === 'single_breed' ? 'Breed Classes' : 'All Breeds'));
-          requirementsMap.set(key, {
-            breedId: sc.breedId,
-            breedName: sc.breed?.name ?? null,
-            label,
-            sex: sac ? null : sc.sex,
-            classCount: 1,
-            isSpecialAwards: sac,
-          });
-        }
-      }
-
-      // Check which requirements are covered by assignments
-      const coverage = Array.from(requirementsMap.values()).map((req) => {
-        // SAC assignments and "regular breed-judge" assignments live in
-        // different lanes — keep them apart so a SAC assignment doesn't
-        // appear to cover Junior Handling and vice versa.
-        const lanedAssignments = req.isSpecialAwards
-          ? assignments.filter((a) => a.isSpecialAwardsClassesJudge)
-          : assignments.filter((a) => !a.isSpecialAwardsClassesJudge);
-
-        // Find ALL matching assignments. breed=null or sex=null on an
-        // assignment is treated as a catch-all — "any breed" / "any sex".
-        const matching = lanedAssignments.filter((a) => {
-          const breedMatch = req.breedId
-            ? a.breedId === req.breedId || a.breedId === null
-            : a.breedId === null;
-          const sexMatch = req.sex === null
-            ? a.sex === null
-            : (a.sex === null || a.sex === req.sex);
-          return breedMatch && sexMatch;
-        });
-
-        // Prefer assignments that match BOTH breed and sex exactly over
-        // catch-all matches. Without this, a null-breed null-sex assignment
-        // (e.g. Junior Handling) wrongly claims coverage of a breed-
-        // specific mixed-sex class like Veteran — they have the same
-        // shape in the DB. Exact breed + exact sex wins; catch-alls
-        // only appear when nothing more specific exists.
-        const exact = matching.filter(
-          (a) =>
-            a.sex === req.sex &&
-            (req.breedId ? a.breedId === req.breedId : a.breedId === null),
-        );
-        const best = exact.length > 0 ? exact : matching;
-
-        // Deduplicate by judge
-        const seen = new Set<string>();
-        const judges: { judgeId: string; judgeName: string; assignmentId: string }[] = [];
-        for (const a of best) {
-          if (!seen.has(a.judgeId)) {
-            seen.add(a.judgeId);
-            judges.push({ judgeId: a.judgeId, judgeName: a.judge.name, assignmentId: a.id });
-          }
-        }
-
-        return {
-          breedId: req.breedId,
-          breedName: req.breedName,
-          label: req.label,
-          sex: req.sex,
-          classCount: req.classCount,
-          isSpecialAwards: req.isSpecialAwards,
-          covered: judges.length > 0,
-          judges,
-          // Keep flat fields for backwards compat
-          judgeName: judges[0]?.judgeName ?? null,
-          judgeId: judges[0]?.judgeId ?? null,
-        };
-      });
-
-      const coveredCount = coverage.filter((c) => c.covered).length;
-      const totalCount = coverage.length;
-
-      return { coverage, coveredCount, totalCount };
+      // ONE owner for judge-coverage computation — see
+      // src/server/services/judge-coverage.ts ("One owner per rule",
+      // CLAUDE.md). getChecklistAutoDetect's judges_assigned tick uses the
+      // same function's `allCovered`.
+      return computeJudgeCoverage(ctx.db, input.showId);
     }),
 
   // ─── RKC Judge Lookup ────────────────────────────────
@@ -4164,16 +4045,15 @@ export const secretaryRouter = createTRPCRouter({
         .from(sundryItems)
         .where(eq(sundryItems.showId, input.showId));
 
-      // Use the same coverage logic as getJudgeCoverage — query classes + assignments
-      const [showClassRows, assignmentRows, stewardCountRow, ringCountRow] = await Promise.all([
-        ctx.db.query.showClasses.findMany({
-          where: eq(showClasses.showId, input.showId),
-          columns: { breedId: true, sex: true },
-        }),
-        ctx.db.query.judgeAssignments.findMany({
-          where: eq(judgeAssignments.showId, input.showId),
-          columns: { judgeId: true, breedId: true, sex: true },
-        }),
+      // ONE owner for judge coverage — see src/server/services/judge-coverage.ts
+      // ("One owner per rule", CLAUDE.md). This used to re-derive coverage
+      // inline with no Special-Award-Classes lane and any breedId===null
+      // assignment matching any breed, so a show whose only assignment was
+      // a Special-Award-Classes-only judge wrongly ticked this box while the
+      // coverage dashboard (getJudgeCoverage) still showed the breed
+      // uncovered.
+      const [judgeCoverage, stewardCountRow, ringCountRow, assignmentRows] = await Promise.all([
+        computeJudgeCoverage(ctx.db, input.showId),
         ctx.db
           .select({ count: sql<number>`count(*)` })
           .from(stewardAssignments)
@@ -4182,26 +4062,15 @@ export const secretaryRouter = createTRPCRouter({
           .select({ count: sql<number>`count(*)` })
           .from(rings)
           .where(eq(rings.showId, input.showId)),
+        ctx.db.query.judgeAssignments.findMany({
+          where: eq(judgeAssignments.showId, input.showId),
+          columns: { judgeId: true },
+        }),
       ]);
 
       const [stewardCount] = stewardCountRow;
       const [ringCount] = ringCountRow;
-
-      // Full judge coverage: every unique breed+sex combo from classes must have a matching assignment
-      const requiredCombos = new Map<string, { breedId: string | null; sex: string | null }>();
-      for (const sc of showClassRows) {
-        const key = `${sc.breedId ?? 'all'}:${sc.sex ?? 'null'}`;
-        if (!requiredCombos.has(key)) requiredCombos.set(key, { breedId: sc.breedId, sex: sc.sex });
-      }
-      let allJudgesCovered = requiredCombos.size > 0;
-      for (const req of requiredCombos.values()) {
-        const covered = assignmentRows.some((a) => {
-          const breedMatch = req.breedId === null ? a.breedId === null : (a.breedId === req.breedId || a.breedId === null);
-          const sexMatch = req.sex === null ? a.sex === null : (a.sex === null || a.sex === req.sex);
-          return breedMatch && sexMatch;
-        });
-        if (!covered) { allJudgesCovered = false; break; }
-      }
+      const allJudgesCovered = judgeCoverage.allCovered;
 
       const detected: Record<string, boolean> = {
         venue_set: !!show.venueId,
