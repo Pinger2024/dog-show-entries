@@ -119,4 +119,39 @@ describe('dogs.getWinSummary — Champion dogs are Open only', () => {
     expect(summary.recommendation.suggested).toBe('Open');
     expect(summary.recommendation.reason).not.toMatch(/JHA/);
   });
+
+  it('a stock-coat Champion is suggested Open with NO Long Coat runner-up; a long-coat one is steered to Special Long Coat Open', async () => {
+    // Demo Winterfest, 21 Sept 2026: the banner read "We suggest Open or
+    // Special Long Coat Open" for a stock-coat dog — the client was picking a
+    // runner-up from the raw eligible list, outside the coat rule
+    // (preferCoatDivision, lib/class-recommendation.ts).
+    const { owner, breed, show } = await makeAchievementShow();
+    const lc = await makeClassDef({ name: 'Special Long Coat Open', type: 'achievement' });
+    await makeShowClass({ showId: show.id, breedId: breed.id, classDefinitionId: lc.id });
+
+    const stock = await makeDog({
+      ownerId: owner.id,
+      breedId: breed.id,
+      registeredName: 'CH STOCK COAT DOG',
+      coatType: 'stock',
+    });
+    const stockRec = (
+      await createTestCaller(owner).dogs.getWinSummary({ dogId: stock.id, showId: show.id })
+    ).recommendation;
+    expect(stockRec.eligible).toEqual(['Open', 'Special Long Coat Open']);
+    expect(stockRec.suggested).toBe('Open');
+    expect(stockRec.alternatives).toEqual([]);
+
+    const long = await makeDog({
+      ownerId: owner.id,
+      breedId: breed.id,
+      registeredName: 'CH LONG COAT DOG',
+      coatType: 'long_stock',
+    });
+    const longRec = (
+      await createTestCaller(owner).dogs.getWinSummary({ dogId: long.id, showId: show.id })
+    ).recommendation;
+    expect(longRec.suggested).toBe('Special Long Coat Open');
+    expect(longRec.alternatives).toEqual([]);
+  });
 });

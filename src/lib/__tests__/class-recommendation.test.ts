@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
+  preferCoatDivision,
   pickRecommendedAgeClass,
   type AgeClassOption,
 } from '../class-recommendation';
@@ -68,3 +69,18 @@ describe('pickRecommendedAgeClass', () => {
   });
 });
 
+describe('preferCoatDivision — the one coat rule', () => {
+  const names = ['Open', 'Special Long Coat Open'];
+  it('drops Long Coat classes for a stock or unknown-coat dog', () => {
+    expect(preferCoatDivision(names, (n) => n, 'stock')).toEqual(['Open']);
+    expect(preferCoatDivision(names, (n) => n, null)).toEqual(['Open']);
+    expect(preferCoatDivision(names, (n) => n, undefined)).toEqual(['Open']);
+  });
+  it('keeps only Long Coat classes for a long-coat dog', () => {
+    expect(preferCoatDivision(names, (n) => n, 'long_stock')).toEqual(['Special Long Coat Open']);
+  });
+  it('falls back to everything when the preferred division is empty', () => {
+    expect(preferCoatDivision(['Special Long Coat Open'], (n) => n, 'stock')).toEqual(['Special Long Coat Open']);
+    expect(preferCoatDivision(['Open'], (n) => n, 'long_stock')).toEqual(['Open']);
+  });
+});

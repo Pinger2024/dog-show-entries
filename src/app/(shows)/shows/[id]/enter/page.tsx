@@ -1742,15 +1742,14 @@ export default function EnterShowPage() {
                 <>
                   {winSummary && (groupedClasses.age.length > 0 || groupedClasses.achievement.length > 0) && (() => {
                     const rec = winSummary.recommendation;
-                    // Multi-class copy: when the suggestion is an achievement
-                    // class (i.e. it's in the achievement `eligible` list —
-                    // age-class suggestions aren't) and there's a runner-up,
-                    // phrase it as "we suggest X or Y". Single-class + the
-                    // existing reason string stay as the fallback.
+                    // Multi-class copy: when the server offers a runner-up
+                    // (achievement suggestions only — age-class suggestions
+                    // never do; and never a Long Coat class for a stock-coat
+                    // dog, that rule is the server's), phrase it as "we
+                    // suggest X or Y". Single-class + the reason string stay
+                    // as the fallback.
                     const isAchievementSuggestion = !!rec.suggested && rec.eligible.includes(rec.suggested);
-                    const second = isAchievementSuggestion
-                      ? rec.eligible.find((name) => name !== rec.suggested)
-                      : undefined;
+                    const second = rec.alternatives[0];
                     return (
                       <div className="flex gap-2.5 rounded-[12px] border border-se-honey-line bg-se-honey-soft p-[11px_13px]">
                         <Star className="mt-0.5 size-[18px] shrink-0 text-se-honey-deep" />

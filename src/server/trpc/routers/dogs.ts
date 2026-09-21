@@ -9,7 +9,7 @@ import { searchKcDogs, fetchKcDogProfile, RkcUnavailableError } from '@/server/s
 import { isCcType, isRccType } from '@/lib/placements';
 import { effectiveCcType } from '@/lib/effective-achievement-type';
 import { isAgeEligibleOnShowDay, todayInLondon } from '@/lib/date-utils';
-import { pickRecommendedAgeClass, type AgeClassOption } from '@/lib/class-recommendation';
+import { pickRecommendedAgeClass, preferCoatDivision, type AgeClassOption } from '@/lib/class-recommendation';
 import { dogAccessCondition, dogRowGrantsAccess, userMayActOnDog } from '@/server/dog-access';
 import { findClearedPedigreeFields, pedigreeClearMessage } from '@/lib/dog-pedigree';
 import { isShowChampion, DOG_TITLE_TYPES } from '@/lib/dog-champion-status';
@@ -42,9 +42,17 @@ function getClassRecommendation(
    *  changes the wording of `reason` only; the eligibility rule is
    *  identical either way (see `isShowChampion`, `lib/dog-champion-status.ts`). */
   isChampionTitle = false,
+  /** Dog's coat when known — drives which of the eligible achievement
+   *  classes are SUGGESTED (never a Long Coat class for a stock/unknown-coat
+   *  dog); `eligible` itself stays the full RKC-rule list. */
+  dogCoat?: 'stock' | 'long_stock' | null,
 ): {
   eligible: string[];
   suggested: string | null;
+  /** Coat-appropriate eligible classes after `suggested`, in order — the
+   *  enter page shows the first as "or …". Owned here so the client never
+   *  re-derives a runner-up from the raw `eligible` list. */
+  alternatives: string[];
   reason: string;
 } {
   // Check age classes first — if the dog qualifies for an age class, suggest it
@@ -61,6 +69,7 @@ function getClassRecommendation(
       return {
         eligible: achievementEligible,
         suggested: bestAgeClass.name,
+        alternatives: [],
         reason: `${ageInfo.ageMonths} months old — eligible for ${bestAgeClass.name}`,
       };
     }
@@ -68,7 +77,7 @@ function getClassRecommendation(
 
   // No age class eligible — fall back to achievement classes
   const eligible = getAchievementEligible(firsts, hasCC, availableClassNames);
-  const suggested = eligible[0] ?? null;
+  const [suggested = null, ...alternatives] = preferCoatDivision(eligible, (n) => n, dogCoat);
 
   const reason = hasCC
     ? isChampionTitle
@@ -78,7 +87,7 @@ function getClassRecommendation(
       ? 'No qualifying wins recorded — eligible for all achievement classes'
       : `${firsts} first-place win${firsts !== 1 ? 's' : ''} recorded on Remi`;
 
-  return { eligible, suggested, reason };
+  return { eligible, suggested, alternatives, reason };
 }
 
 /** Compute achievement class eligibility based on RKC win rules */
@@ -1044,14 +1053,14 @@ export const dogsRouter = createTRPCRouter({
       // That MUST bar it from every achievement class except Open just the
       // same as a CC recorded on Remi (Mandy, 21 Sept 2026). One owner:
       // `lib/dog-champion-status.ts`.
-      const championDog = await ctx.db.query.dogs.findFirst({
+      const dog = await ctx.db.query.dogs.findFirst({
         where: eq(dogs.id, input.dogId),
-        columns: { registeredName: true },
+        columns: { registeredName: true, dateOfBirth: true, coatType: true },
         with: { titles: true },
       });
       const isChampionTitle = isShowChampion({
-        titles: championDog?.titles,
-        registeredName: championDog?.registeredName,
+        titles: dog?.titles,
+        registeredName: dog?.registeredName,
       });
       const hasCC = ccFromAchievements || isChampionTitle;
 
@@ -1072,17 +1081,11 @@ export const dogsRouter = createTRPCRouter({
           );
         availableClassNames = showAchievementClasses.map((c) => c.name);
 
-        // Fetch dog DOB and show date to calculate age for age class suggestions
-        const [dog, show] = await Promise.all([
-          ctx.db.query.dogs.findFirst({
-            where: eq(dogs.id, input.dogId),
-            columns: { dateOfBirth: true, coatType: true },
-          }),
-          ctx.db.query.shows.findFirst({
-            where: eq(shows.id, input.showId),
-            columns: { startDate: true },
-          }),
-        ]);
+        // Show date + the dog's DOB (fetched above) give the age for age-class suggestions
+        const show = await ctx.db.query.shows.findFirst({
+          where: eq(shows.id, input.showId),
+          columns: { startDate: true },
+        });
 
         if (dog?.dateOfBirth && show?.startDate) {
           const showDate = new Date(show.startDate);
@@ -1142,6 +1145,7 @@ export const dogsRouter = createTRPCRouter({
           availableClassNames,
           ageInfo,
           isChampionTitle,
+          dog?.coatType ?? null,
         ),
       };
     }),
