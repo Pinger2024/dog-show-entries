@@ -3,8 +3,8 @@ import { and, eq, inArray, isNull, ne, notInArray, sql } from 'drizzle-orm';
 import { getStripe } from '@/server/services/stripe';
 import { captureFeeForPaymentIntent } from '@/server/services/stripe-fee-heal';
 import { db } from '@/server/db';
-import { entries, entryClasses, entryAuditLog, orders, payments, organisations, plans, users, printOrders, printOrderItems } from '@/server/db/schema';
-import { sendEntryConfirmationEmail, sendSecretaryNotificationEmail, sendPrintOrderConfirmationEmail, sendPrintOrderAdminNotificationEmail, sendRefundFailedAlertEmail } from '@/server/services/email';
+import { entries, entryClasses, entryAuditLog, orders, orderSundryItems, payments, organisations, plans, users, printOrders, printOrderItems } from '@/server/db/schema';
+import { sendEntryConfirmationEmail, sendSecretaryNotificationEmail, sendPrintOrderConfirmationEmail, sendPrintOrderAdminNotificationEmail, sendRefundFailedAlertEmail, sendExtrasAddedEmail } from '@/server/services/email';
 import { syncCatalogueNumbers } from '@/server/services/catalogue-numbering';
 import { formatOrderRef, isPrintOrderPaid } from '@/lib/print-products';
 import type Stripe from 'stripe';
@@ -203,6 +203,80 @@ export async function POST(request: NextRequest) {
         break;
       }
 
+      // Extras purchased on an already-paid entry (add-extras-to-entry,
+      // design doc 2026-09-21). MUST run BEFORE the generic order-level
+      // branch below — that branch re-confirms every entry on the order and
+      // would otherwise treat this event as (re-)paying the original order.
+      // In practice the order is already 'paid' (a terminal status) by the
+      // time extras can be bought, so the generic branch's own canTransition
+      // guard is a no-op either way — this ordering is belt-and-braces.
+      if (
+        paymentIntent.metadata.type === 'extras' &&
+        paymentIntent.metadata.orderId &&
+        paymentIntent.metadata.pendingExtras
+      ) {
+        const extrasOrderId = paymentIntent.metadata.orderId;
+        const extrasEntryId = paymentIntent.metadata.entryId as string | undefined;
+        const extrasPayment = await db.query.payments.findFirst({
+          where: eq(payments.stripePaymentId, paymentIntent.id),
+          columns: { status: true },
+        });
+        // Same idempotency shape as the entries-edit adjustment branch below:
+        // apply only while the payment hasn't already succeeded, so a Stripe
+        // replay can't double-insert the rows or double-bump the order.
+        if (extrasPayment != null && extrasPayment.status !== 'succeeded') {
+          const lines = paymentIntent.metadata.pendingExtras
+            .split(',')
+            .filter(Boolean)
+            .map((entry) => {
+              const [sundryItemId, quantity, unitPrice] = entry.split(':');
+              return {
+                sundryItemId: sundryItemId!,
+                quantity: Number(quantity) || 0,
+                unitPrice: Number(unitPrice) || 0,
+              };
+            });
+
+          if (lines.length > 0) {
+            await db.insert(orderSundryItems).values(
+              lines.map((line) => ({
+                orderId: extrasOrderId,
+                sundryItemId: line.sundryItemId,
+                quantity: line.quantity,
+                unitPrice: line.unitPrice,
+              }))
+            );
+
+            const subtotalPence = Number(paymentIntent.metadata.subtotalPence ?? '0');
+            const platformFeePence = Number(paymentIntent.metadata.platformFeePence ?? '0');
+            await db
+              .update(orders)
+              .set({
+                totalAmount: sql`${orders.totalAmount} + ${subtotalPence}`,
+                platformFeePence: sql`${orders.platformFeePence} + ${platformFeePence}`,
+              })
+              .where(eq(orders.id, extrasOrderId));
+
+            if (extrasEntryId) {
+              await db.insert(entryAuditLog).values({
+                entryId: extrasEntryId,
+                // No 'extras_added' enum value exists (would need a schema
+                // migration) — reuse 'classes_changed' and mark the real
+                // kind via `changes.via`; the secretary audit-log page
+                // relabels rows with `via === 'extras_payment'`.
+                action: 'classes_changed',
+                userId: paymentIntent.metadata.exhibitorId,
+                changes: { via: 'extras_payment', items: lines, subtotalPence, platformFeePence },
+              });
+            }
+
+            sendExtrasAddedEmail(extrasOrderId, extrasEntryId, lines).catch((err) =>
+              console.error('[webhook] Extras receipt email failed:', err)
+            );
+          }
+        }
+      }
+
       // Track whether the order was previously unpaid so we only send the
       // confirmation emails on the first delivery of this event — Stripe
       // retries aggressively and duplicate emails to exhibitors are a bad
@@ -319,8 +393,19 @@ export async function POST(request: NextRequest) {
             // this the top-up the exhibitor just paid would never reach the
             // club (bug hunt #4). Inside the pending-guard, so a replayed
             // succeeded event can't double-bump the order.
+            //
+            // ⚠️ platformFeePence must be bumped alongside totalAmount — flagged
+            // in the extras-to-entry design doc (2026-09-21). Before this fix,
+            // the exhibitor was actually charged calculatePlatformFee(adjFeeDiff)
+            // on the top-up (it's right there in the PaymentIntent metadata) but
+            // orders.platformFeePence never moved, so settlement-reconciliation.ts
+            // and show-metrics.ts — which both sum orders.platformFeePence —
+            // silently understated Remi's own handling-fee revenue for every
+            // class-change top-up. Same reconciliation-gap shape as bug hunt #4,
+            // just never checked until now.
             const adjFeeDiff = Number(paymentIntent.metadata.subtotalPence ?? '0');
-            if (adjFeeDiff > 0) {
+            const adjPlatformFeeDiff = Number(paymentIntent.metadata.platformFeePence ?? '0');
+            if (adjFeeDiff > 0 || adjPlatformFeeDiff > 0) {
               const adjEntry = await db.query.entries.findFirst({
                 where: eq(entries.id, entryId),
                 columns: { orderId: true },
@@ -328,7 +413,10 @@ export async function POST(request: NextRequest) {
               if (adjEntry?.orderId) {
                 await db
                   .update(orders)
-                  .set({ totalAmount: sql`${orders.totalAmount} + ${adjFeeDiff}` })
+                  .set({
+                    totalAmount: sql`${orders.totalAmount} + ${adjFeeDiff}`,
+                    platformFeePence: sql`${orders.platformFeePence} + ${adjPlatformFeeDiff}`,
+                  })
                   .where(eq(orders.id, adjEntry.orderId));
               }
             }

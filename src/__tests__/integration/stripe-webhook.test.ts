@@ -600,6 +600,38 @@ describe('POST /api/webhooks/stripe — entry-edit UPGRADE (deferred adjustment)
     const final = await testDb.query.entryClasses.findMany({ where: eq(entryClasses.entryId, entry.id) });
     expect(final.map((r) => r.showClassId)).toEqual([c1.id]);
   });
+
+  // ⚠️ CHECK from the extras-to-entry design doc (2026-09-21): the class-change
+  // top-up bumps orders.totalAmount (bug hunt #4) but NEVER bumped
+  // orders.platformFeePence — even though the platform fee on the top-up is
+  // right there in the PaymentIntent metadata (`platformFeePence`) and the
+  // exhibitor was actually charged it. settlement-reconciliation.ts and
+  // show-metrics.ts both sum orders.platformFeePence for payout/reconciliation,
+  // so every class-change top-up silently understated Remi's own handling-fee
+  // revenue for that order — a reconciliation gap in the same owner as bug
+  // hunt #4, just never checked.
+  it('also bumps orders.platformFeePence by the top-up handling fee (reconciliation gap)', async () => {
+    const { exhibitor, c1, c2, entry, order } = await entryReadyToUpgrade();
+    vi.mocked(stripeService.createPaymentIntent).mockClear();
+
+    await createTestCaller(exhibitor).entries.update({ id: entry.id, classIds: [c1.id, c2.id] });
+    const adjPayment = await testDb.query.payments.findFirst({ where: eq(payments.entryId, entry.id) });
+    const intentId = adjPayment!.stripePaymentId!;
+    const metadata = vi.mocked(stripeService.createPaymentIntent).mock.calls.at(-1)![1];
+    const expectedFeeBump = Number(metadata.platformFeePence);
+    expect(expectedFeeBump).toBeGreaterThan(0);
+
+    const orderBefore = await testDb.query.orders.findFirst({ where: eq(orders.id, order.id) });
+
+    injectStripeEvent({
+      type: 'payment_intent.succeeded',
+      data: { object: { id: intentId, metadata } },
+    });
+    await stripeWebhook(buildStripeWebhookRequest() as never);
+
+    const orderAfter = await testDb.query.orders.findFirst({ where: eq(orders.id, order.id) });
+    expect(orderAfter?.platformFeePence).toBe((orderBefore?.platformFeePence ?? 0) + expectedFeeBump);
+  });
 });
 
 // Maxine's £52.51, 2026-08-19 — Stripe accepted the refund, Remi marked it
