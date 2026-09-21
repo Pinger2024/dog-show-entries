@@ -1,8 +1,20 @@
-import { dogTitleTypeEnum } from '@/server/db/schema/enums';
-
-/** The `dog_title_type` enum, kept in sync with the schema so this module
- *  fails to compile rather than drift if a title is added. */
-export type DogTitleType = (typeof dogTitleTypeEnum.enumValues)[number];
+/** The `dog_title_type` enum values, spelled out here rather than imported
+ *  from the Drizzle schema because this module is also used by the dog form
+ *  (a client component) and must not drag the DB layer into the browser
+ *  bundle. `dog-champion-status.test.ts` asserts this list equals
+ *  `dogTitleTypeEnum.enumValues`, so adding a title to the schema fails the
+ *  suite until it's added here too. */
+export const DOG_TITLE_TYPES = [
+  'ch',
+  'sh_ch',
+  'ir_ch',
+  'ir_sh_ch',
+  'int_ch',
+  'ob_ch',
+  'ft_ch',
+  'wt_ch',
+] as const;
+export type DogTitleType = (typeof DOG_TITLE_TYPES)[number];
 
 /**
  * RKC "show champion" titles — a dog holding any of these has won CCs (or

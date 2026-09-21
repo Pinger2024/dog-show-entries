@@ -5,7 +5,15 @@ import {
   isRkcChampion,
   SHOW_CHAMPION_TITLES,
   RKC_CHAMPION_TITLES,
+  DOG_TITLE_TYPES,
 } from '../dog-champion-status';
+import { dogTitleTypeEnum } from '@/server/db/schema/enums';
+
+describe('DOG_TITLE_TYPES', () => {
+  it('mirrors the dog_title_type DB enum exactly (the lib must stay client-safe, so it cannot import the schema)', () => {
+    expect([...DOG_TITLE_TYPES]).toEqual([...dogTitleTypeEnum.enumValues]);
+  });
+});
 
 describe('parseChampionPrefix', () => {
   it('parses a bare CH prefix', () => {
