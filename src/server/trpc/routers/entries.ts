@@ -9,6 +9,7 @@ import {
 import { createTRPCRouter } from '../init';
 import { countPriorRegionalPayingDogs } from '@/server/services/regional-pricing';
 import { priceEntryClassChange } from '@/server/services/entry-change-pricing';
+import { entryWindowOpen } from '@/lib/show-status';
 import { verifyShowAccess } from '../verify-show-access';
 import { publicOrgColumns } from '../public-org-columns';
 import {
@@ -101,18 +102,13 @@ export const entriesRouter = createTRPCRouter({
         });
       }
 
-      if (show.status !== 'entries_open') {
+      // ONE owner for "is this show still accepting entries" — entryWindowOpen
+      // (lib/show-status.ts). Also used by orders.checkout, priceEntryClassChange
+      // (class-change top-ups) and priceOrderExtras (extras purchases).
+      if (!entryWindowOpen(show)) {
         throw new TRPCError({
           code: 'BAD_REQUEST',
           message: 'Show is not accepting entries',
-        });
-      }
-
-      // Also reject if entry close date has passed
-      if (show.entryCloseDate && new Date(show.entryCloseDate).getTime() < Date.now()) {
-        throw new TRPCError({
-          code: 'BAD_REQUEST',
-          message: 'Entry closing date has passed',
         });
       }
 
@@ -515,6 +511,15 @@ export const entriesRouter = createTRPCRouter({
             },
           },
           payments: true,
+          // Extras (add-extras-to-entry, 2026-09-21) live on the entry's
+          // order — read via that one relation, never a second query.
+          order: {
+            with: {
+              orderSundryItems: {
+                with: { sundryItem: true },
+              },
+            },
+          },
         },
       });
 

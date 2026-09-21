@@ -45,6 +45,7 @@ import {
   type RegionalFeeContext,
 } from '@/lib/regional-fee-calc';
 import { specialAwardClassFee } from '@/lib/class-labels';
+import { entryWindowOpen } from '@/lib/show-status';
 
 export type EntryChangePricing = {
   /** The entry as loaded (show, entryClasses, payments) — reuse, don't re-fetch. */
@@ -105,7 +106,12 @@ export async function priceEntryClassChange(
     throw new TRPCError({ code: 'FORBIDDEN', message: 'Not your entry' });
   }
 
-  if (entry.show.status !== 'entries_open') {
+  // ONE owner for "is the window still open" — entryWindowOpen (lib/show-status.ts).
+  // Before this, this check was `status !== 'entries_open'` only and never
+  // looked at entryCloseDate, so a show whose deadline had passed but whose
+  // daily-cron status hadn't caught up yet still accepted a class-change
+  // top-up (see entry-change-preview.test.ts case (f)).
+  if (!entryWindowOpen(entry.show)) {
     throw new TRPCError({
       code: 'BAD_REQUEST',
       message: 'Show is no longer accepting entry changes',

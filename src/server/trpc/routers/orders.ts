@@ -9,6 +9,10 @@ import { syncCatalogueNumbers } from '@/server/services/catalogue-numbering';
 import { countPriorRegionalPayingDogs } from '@/server/services/regional-pricing';
 import { validateSundrySelection } from '@/server/services/sundry-selection';
 import { getLimitedShowEligibility } from '@/server/services/limited-show-eligibility';
+import { entryWindowOpen } from '@/lib/show-status';
+import { priceOrderExtras } from '@/server/services/order-extras-pricing';
+import { sundryViolationError } from '@/server/services/sundry-selection';
+import { sendExtrasAddedEmail } from '@/server/services/email';
 import {
   orders,
   entries,
@@ -117,18 +121,13 @@ export const ordersRouter = createTRPCRouter({
         throw new TRPCError({ code: 'NOT_FOUND', message: 'Show not found' });
       }
 
-      if (show.status !== 'entries_open') {
+      // ONE owner for "is this show still accepting entries" — entryWindowOpen
+      // (lib/show-status.ts). Also used by entries.create, priceEntryClassChange
+      // (class-change top-ups) and priceOrderExtras (extras purchases).
+      if (!entryWindowOpen(show)) {
         throw new TRPCError({
           code: 'BAD_REQUEST',
           message: 'Show is not accepting entries',
-        });
-      }
-
-      // Also reject if entry close date has passed
-      if (show.entryCloseDate && new Date(show.entryCloseDate).getTime() < Date.now()) {
-        throw new TRPCError({
-          code: 'BAD_REQUEST',
-          message: 'Entry closing date has passed',
         });
       }
 
@@ -714,16 +713,7 @@ export const ordersRouter = createTRPCRouter({
       // hit a problem.
       const firstViolation = sundrySelection.violations[0];
       if (firstViolation) {
-        if (firstViolation.kind === 'over_max') {
-          throw new TRPCError({
-            code: 'BAD_REQUEST',
-            message: `Maximum ${firstViolation.max} of "${firstViolation.name}" per order`,
-          });
-        }
-        throw new TRPCError({
-          code: 'BAD_REQUEST',
-          message: `Sundry item not found or not available: ${firstViolation.sundryItemId}`,
-        });
+        throw sundryViolationError(firstViolation);
       }
 
       const validatedSundryItems = sundrySelection.items.map((i) => ({
@@ -987,6 +977,162 @@ export const ordersRouter = createTRPCRouter({
       }
 
       return order;
+    }),
+
+  // ── Extras on an existing (paid) entry's order ────────────────────
+  // Design doc: research/DESIGN-add-extras-to-entry-2026-09-21.md.
+  // Pricing has ONE owner: priceOrderExtras (mirrors priceEntryClassChange,
+  // the class-change top-up owner). previewExtras calls it read-only;
+  // addExtras calls it then does the writes — free items land immediately,
+  // anything with a cost is DEFERRED into a PaymentIntent's metadata and
+  // applied by the Stripe webhook on success (same pattern as the
+  // entries.update upgrade branch), so an abandoned top-up can't leave the
+  // exhibitor with free extras or overstate the club's revenue.
+  previewExtras: protectedProcedure
+    .input(
+      z.object({
+        orderId: z.string().uuid(),
+        items: z.array(
+          z.object({
+            sundryItemId: z.string().uuid(),
+            quantity: z.number().int().min(1),
+          })
+        ),
+      })
+    )
+    .query(async ({ ctx, input }) => {
+      const pricing = await priceOrderExtras(ctx.db, {
+        orderId: input.orderId,
+        userId: ctx.session.user.id,
+        items: input.items,
+      });
+
+      return {
+        lines: pricing.lines,
+        subtotalPence: pricing.subtotalPence,
+        platformFeePence: pricing.platformFeePence,
+        grossPence: pricing.grossPence,
+        requiresPayment: pricing.requiresPayment,
+      };
+    }),
+
+  addExtras: protectedProcedure
+    .input(
+      z.object({
+        orderId: z.string().uuid(),
+        // The entry the exhibitor came from — carried through to the
+        // PaymentIntent metadata purely so the webhook/audit log has an
+        // entryId to attribute the purchase to (entry_audit_log.entryId is
+        // NOT NULL). Must belong to this order.
+        entryId: z.string().uuid(),
+        items: z.array(
+          z.object({
+            sundryItemId: z.string().uuid(),
+            quantity: z.number().int().min(1),
+          })
+        ).min(1),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      const pricing = await priceOrderExtras(ctx.db, {
+        orderId: input.orderId,
+        userId: ctx.session.user.id,
+        items: input.items,
+      });
+
+      // The entry the exhibitor came from must actually belong to this
+      // order — covers both "entry without order" and a mismatched/foreign
+      // entryId with one clear error, same shape as priceOrderExtras' own
+      // ownership checks.
+      const entry = await ctx.db.query.entries.findFirst({
+        where: and(eq(entries.id, input.entryId), isNull(entries.deletedAt)),
+        columns: { id: true, orderId: true },
+      });
+      if (!entry || entry.orderId !== input.orderId) {
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: 'Entry not found for this order — please contact the show secretary.',
+        });
+      }
+
+      // Free-only extras (gross 0): apply immediately, no Stripe involved.
+      if (pricing.grossPence === 0) {
+        await ctx.db.insert(orderSundryItems).values(
+          pricing.lines.map((line) => ({
+            orderId: input.orderId,
+            sundryItemId: line.sundryItemId,
+            quantity: line.quantity,
+            unitPrice: line.unitPrice,
+          }))
+        );
+
+        await ctx.db
+          .update(orders)
+          .set({
+            totalAmount: sql`${orders.totalAmount} + ${pricing.subtotalPence}`,
+            platformFeePence: sql`${orders.platformFeePence} + ${pricing.platformFeePence}`,
+          })
+          .where(eq(orders.id, input.orderId));
+
+        await ctx.db.insert(entryAuditLog).values({
+          entryId: input.entryId,
+          // No 'extras_added' enum value exists yet (would need a schema
+          // migration — out of scope here, see the PR description); reuse
+          // 'classes_changed' and mark the real kind in `changes`. The
+          // secretary audit-log page relabels this via `changes.via`.
+          action: 'classes_changed',
+          userId: ctx.session.user.id,
+          changes: {
+            via: 'extras_payment',
+            items: pricing.lines,
+            subtotalPence: pricing.subtotalPence,
+            platformFeePence: pricing.platformFeePence,
+          },
+        });
+
+        sendExtrasAddedEmail(input.orderId, input.entryId, pricing.lines).catch((err) =>
+          console.error('[orders.addExtras] Extras email failed:', err)
+        );
+
+        return { requiresPayment: false as const };
+      }
+
+      // Paid extras: stage the purchase in the PaymentIntent metadata and
+      // defer applying it until the webhook sees the payment succeed.
+      const pendingExtras = pricing.lines
+        .map((l) => `${l.sundryItemId}:${l.quantity}:${l.unitPrice}`)
+        .join(',');
+      if (pendingExtras.length > 480) {
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: 'Too many extras to add online — please contact the show secretary.',
+        });
+      }
+
+      const pi = await createPaymentIntent(pricing.grossPence, {
+        type: 'extras',
+        orderId: input.orderId,
+        showId: pricing.order.showId,
+        exhibitorId: ctx.session.user.id,
+        entryId: input.entryId,
+        platformFeePence: String(pricing.platformFeePence),
+        subtotalPence: String(pricing.subtotalPence),
+        pendingExtras,
+      });
+
+      await ctx.db.insert(payments).values({
+        orderId: input.orderId,
+        entryId: input.entryId,
+        stripePaymentId: pi.id,
+        amount: pricing.grossPence,
+        status: 'pending',
+        type: 'adjustment',
+      });
+
+      return {
+        requiresPayment: true as const,
+        clientSecret: pi.client_secret!,
+      };
     }),
 
   list: protectedProcedure

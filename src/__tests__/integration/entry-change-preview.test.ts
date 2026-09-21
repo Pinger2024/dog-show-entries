@@ -15,7 +15,7 @@
  */
 import { describe, it, expect } from 'vitest';
 import { eq } from 'drizzle-orm';
-import { entries, entryClasses } from '@/server/db/schema';
+import { entries, entryClasses, shows } from '@/server/db/schema';
 import { testDb } from '../helpers/db';
 import { createTestCaller } from '../helpers/context';
 import {
@@ -222,5 +222,57 @@ describe('entries.previewUpdate — one owner with entries.update', () => {
     await expect(
       createTestCaller(stranger).entries.previewUpdate({ id: entry!.id, classIds: [classA!.id] }),
     ).rejects.toThrow();
+  });
+
+  // Extras-to-entry design doc (2026-09-21), window owner (`entryWindowOpen`,
+  // src/lib/show-status.ts): priceEntryClassChange used to check ONLY
+  // `show.status !== 'entries_open'` and never entryCloseDate at all — so a
+  // show whose deadline had passed but whose daily-cron status hadn't caught
+  // up yet (stale `status='entries_open'`) still let a class-change top-up
+  // through. entryWindowOpen closes that gap for both previewUpdate and update.
+  it('(f) stale status="entries_open" with a PASSED entryCloseDate refuses the class change', async () => {
+    const { org } = await makeSecretaryWithOrg();
+    const breed = await makeBreed();
+    const show = await makeShow({
+      organisationId: org.id,
+      breedId: breed.id,
+      status: 'entries_open',
+      firstEntryFee: FIRST,
+      subsequentEntryFee: SUBSEQUENT,
+      entryCloseDate: new Date(Date.now() + 60_000),
+    });
+    const [classA, classB] = await Promise.all([
+      makeShowClass({ showId: show.id, breedId: breed.id, entryFee: FIRST }),
+      makeShowClass({ showId: show.id, breedId: breed.id, entryFee: FIRST }),
+    ]);
+    const exhibitor = await makeUser({ role: 'exhibitor' });
+    const dog = await makeDog({ ownerId: exhibitor.id, breedId: breed.id });
+
+    const checkout = await createTestCaller(exhibitor).orders.checkout({
+      showId: show.id,
+      entries: [{ entryType: 'standard', dogId: dog.id, classIds: [classA!.id], isNfc: false }],
+    });
+    const entry = await testDb.query.entries.findFirst({ where: eq(entries.orderId, checkout.orderId) });
+
+    // Deadline has now passed, but nothing has flipped the stored status —
+    // exactly the daily-cron lag effectiveShowStatus exists to paper over.
+    await testDb
+      .update(shows)
+      .set({ entryCloseDate: new Date(Date.now() - 60_000) })
+      .where(eq(shows.id, show.id));
+
+    await expect(
+      createTestCaller(exhibitor).entries.previewUpdate({
+        id: entry!.id,
+        classIds: [classA!.id, classB!.id],
+      }),
+    ).rejects.toThrow(/no longer accepting/i);
+
+    await expect(
+      createTestCaller(exhibitor).entries.update({
+        id: entry!.id,
+        classIds: [classA!.id, classB!.id],
+      }),
+    ).rejects.toThrow(/no longer accepting/i);
   });
 });
