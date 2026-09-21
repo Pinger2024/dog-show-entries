@@ -115,14 +115,20 @@ function getAchievementEligible(
   }
 
   // Filter to only classes available in this show's schedule.
-  // Use flatMap to match breed-specific variants (e.g. "Special Long Coat Open" → "Open")
+  // Use flatMap to match breed-specific variants (e.g. "Special Long Coat Open" → "Open").
+  // De-duplicated: a schedule lists the same definition once per sex (Open
+  // Dog + Open Bitch), which read back as "We suggest Open or Open".
   return availableClassNames
-    ? allEligible.flatMap((name) =>
-        availableClassNames.filter(
-          (avail) =>
-            avail.toLowerCase() === name.toLowerCase() ||
-            avail.toLowerCase().endsWith(` ${name.toLowerCase()}`)
-        )
+    ? Array.from(
+        new Set(
+          allEligible.flatMap((name) =>
+            availableClassNames.filter(
+              (avail) =>
+                avail.toLowerCase() === name.toLowerCase() ||
+                avail.toLowerCase().endsWith(` ${name.toLowerCase()}`)
+            )
+          ),
+        ),
       )
     : allEligible;
 }
