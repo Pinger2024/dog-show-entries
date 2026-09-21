@@ -88,4 +88,35 @@ describe('dogs.getWinSummary — Champion dogs are Open only', () => {
     );
     expect(summary.recommendation.suggested).not.toBe('Open');
   });
+
+  it('a junior-handler class is never suggested as the dog\'s AGE class (its band is the handler\'s age)', async () => {
+    // Found on demo Winterfest, 21 Sept 2026: "JHA Handling (6-11)" carries
+    // min/max age 72–144 months (the HANDLER's 6–11 years), so a 73-month-
+    // old Champion was told "Suggested class: JHA Handling (6-11)". The
+    // handler's age is a separate question — see the enter page's own
+    // "Based on the handler's age" copy — and must not feed the dog's
+    // age-class pick.
+    const { owner, breed, show } = await makeAchievementShow();
+    const jh = await makeClassDef({
+      name: 'JHA Handling (6-11)',
+      type: 'junior_handler',
+      minAgeMonths: 72,
+      maxAgeMonths: 144,
+    });
+    await makeShowClass({ showId: show.id, breedId: breed.id, classDefinitionId: jh.id });
+    const dog = await makeDog({
+      ownerId: owner.id,
+      breedId: breed.id,
+      registeredName: 'CH RENO DE LA PETITE LAETICIA (IMP FRA)',
+      dateOfBirth: '2020-10-21',
+    });
+
+    const summary = await createTestCaller(owner).dogs.getWinSummary({
+      dogId: dog.id,
+      showId: show.id,
+    });
+
+    expect(summary.recommendation.suggested).toBe('Open');
+    expect(summary.recommendation.reason).not.toMatch(/JHA/);
+  });
 });
