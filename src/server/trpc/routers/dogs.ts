@@ -1110,6 +1110,10 @@ export const dogsRouter = createTRPCRouter({
                   isNotNull(classDefinitions.minAgeMonths),
                   isNotNull(classDefinitions.maxAgeMonths),
                 ),
+                // …except junior handling, whose band is the HANDLER's age
+                // (e.g. "JHA Handling (6-11)" = 72–144 months): a 6-year-old
+                // dog was being told that was its class (demo, 21 Sept 2026).
+                ne(classDefinitions.type, 'junior_handler'),
               )
             );
 
