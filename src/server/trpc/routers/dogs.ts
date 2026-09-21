@@ -12,7 +12,7 @@ import { isAgeEligibleOnShowDay, todayInLondon } from '@/lib/date-utils';
 import { pickRecommendedAgeClass, type AgeClassOption } from '@/lib/class-recommendation';
 import { dogAccessCondition, dogRowGrantsAccess, userMayActOnDog } from '@/server/dog-access';
 import { findClearedPedigreeFields, pedigreeClearMessage } from '@/lib/dog-pedigree';
-import { isShowChampion } from '@/lib/dog-champion-status';
+import { isShowChampion, DOG_TITLE_TYPES } from '@/lib/dog-champion-status';
 
 /**
  * Recommend the best class for a dog based on age eligibility first,
@@ -454,10 +454,22 @@ export const dogsRouter = createTRPCRouter({
           .min(1, 'At least one owner with name and address is required')
           // Same sanity bound as update — see the comment there.
           .max(10, 'Up to 10 owners are allowed'),
+        // Titles known at creation time (e.g. an imported Champion who has
+        // never been entered on Remi before) — previously only addable
+        // after the dog existed (edit mode), so a Champion with no Remi
+        // win history had no way to record the title that makes it
+        // Open-only until after its first save (Mandy, 21 Sept 2026).
+        // Same rows `addTitle` writes, inserted right after the dog. The
+        // recommender also reads a "CH" prefix in the name (isShowChampion),
+        // so a Champion is Open-only even if nobody fills this in.
+        titles: z
+          .array(z.enum(DOG_TITLE_TYPES))
+          .max(10)
+          .optional(),
       })
     )
     .mutation(async ({ ctx, input }) => {
-      const { owners, ...dogData } = input;
+      const { owners, titles, ...dogData } = input;
 
       // Sire, dam, breeder and colour are mandatory for every new dog — a
       // catalogue can't be produced without them, and this is the single
@@ -521,6 +533,12 @@ export const dogsRouter = createTRPCRouter({
                 sortOrder: i,
               }))
             );
+            if (titles && titles.length > 0) {
+              await ctx.db.delete(dogTitles).where(eq(dogTitles.dogId, clash.id));
+              await ctx.db.insert(dogTitles).values(
+                titles.map((title) => ({ dogId: clash.id, title }))
+              );
+            }
             return restored!;
           }
           throw new TRPCError({
@@ -556,6 +574,12 @@ export const dogsRouter = createTRPCRouter({
           sortOrder: i,
         }))
       );
+
+      if (titles && titles.length > 0) {
+        await ctx.db.insert(dogTitles).values(
+          titles.map((title) => ({ dogId: dog!.id, title }))
+        );
+      }
 
       return dog!;
     }),
@@ -812,7 +836,7 @@ export const dogsRouter = createTRPCRouter({
     .input(
       z.object({
         dogId: z.string().uuid(),
-        title: z.enum(['ch', 'sh_ch', 'ir_ch', 'ir_sh_ch', 'int_ch', 'ob_ch', 'ft_ch', 'wt_ch']),
+        title: z.enum(DOG_TITLE_TYPES),
         dateAwarded: z.string().optional(),
         awardingBody: z.string().optional(),
       })

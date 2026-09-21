@@ -18,6 +18,7 @@ import {
   deriveSameAddressFlags,
 } from '@/lib/owner-address';
 import { cn, getTitleDisplay } from '@/lib/utils';
+import { parseChampionPrefix } from '@/lib/dog-champion-status';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -259,6 +260,11 @@ export function DogForm({ mode, defaultValues, dogId, svSection, returnTo, isReg
   const router = useRouter();
   const [breedOpen, setBreedOpen] = useState(false);
   const [calendarOpen, setCalendarOpen] = useState(false);
+  // Titles chosen before the dog exists (create mode) — there's no dogId yet
+  // to call addTitle against, so these are collected here and sent as part
+  // of the create payload (Mandy 21 Sept 2026: a Champion with no Remi win
+  // history had no way to record its title until AFTER its first save).
+  const [pendingTitles, setPendingTitles] = useState<(typeof TITLE_OPTIONS)[number]['value'][]>([]);
 
   const { data: breeds, isLoading: breedsLoading } =
     trpc.breeds.list.useQuery();
@@ -623,6 +629,17 @@ export function DogForm({ mode, defaultValues, dogId, svSection, returnTo, isReg
   // empty — value that would fail validation behind a tick nobody can see.
   const watchedOwners = useWatch({ control: form.control, name: 'owners' });
   const primaryAddress = watchedOwners?.[0]?.ownerAddress ?? '';
+
+  // Live registered name, to show the "we'll treat this as a Champion"
+  // hint the moment a title prefix is typed (parseChampionPrefix — see
+  // lib/dog-champion-status.ts, the one owner for the Champion rule).
+  const watchedRegisteredName = useWatch({ control: form.control, name: 'registeredName' });
+  const namePrefixTitles = parseChampionPrefix(watchedRegisteredName);
+  const currentTitleValues =
+    mode === 'edit' ? (dogData?.titles.map((t) => t.title) ?? []) : pendingTitles;
+  const namePrefixNotYetRecorded =
+    namePrefixTitles.length > 0 &&
+    !namePrefixTitles.some((t) => currentTitleValues.includes(t));
   useEffect(() => {
     if (!watchedOwners || !primaryAddress.trim()) return;
     watchedOwners.forEach((owner, i) => {
@@ -760,7 +777,7 @@ export function DogForm({ mode, defaultValues, dogId, svSection, returnTo, isReg
           return;
         }
       }
-      createDog.mutate(payload);
+      createDog.mutate({ ...payload, titles: pendingTitles });
     } else if (dogId) {
       updateDog.mutate({ id: dogId, ...payload });
     }
@@ -1838,17 +1855,21 @@ export function DogForm({ mode, defaultValues, dogId, svSection, returnTo, isReg
           </CardContent>
         </Card>
 
-        {/* Titles (edit mode only — need saved dog to add titles) */}
-        {mode === 'edit' && dogId && (
-          <Card>
-            <CardHeader>
-              <CardTitle>Titles</CardTitle>
-              <CardDescription>
-                Championship and other RKC titles awarded to this dog.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {dogData?.titles && dogData.titles.length > 0 && (
+        {/* Titles — editable in both modes. In create mode there's no dogId
+            yet, so choices are held in `pendingTitles` and sent with the
+            create payload; in edit mode each choice saves immediately via
+            addTitle/removeTitle, as before. */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Titles</CardTitle>
+            <CardDescription>
+              Championship and other RKC titles awarded to this dog. A Champion
+              or Show Champion is only eligible for the Open class.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {mode === 'edit' ? (
+              dogData?.titles && dogData.titles.length > 0 && (
                 <div className="flex flex-wrap gap-2">
                   {dogData.titles.map((t) => (
                     <Badge key={t.id} variant="default" className="gap-1.5 text-sm">
@@ -1864,29 +1885,62 @@ export function DogForm({ mode, defaultValues, dogId, svSection, returnTo, isReg
                     </Badge>
                   ))}
                 </div>
-              )}
+              )
+            ) : (
+              pendingTitles.length > 0 && (
+                <div className="flex flex-wrap gap-2">
+                  {pendingTitles.map((title, i) => (
+                    <Badge key={`${title}-${i}`} variant="default" className="gap-1.5 text-sm">
+                      <Award className="size-3" />
+                      {getTitleDisplay(title)}
+                      <button
+                        type="button"
+                        className="ml-1 rounded-full p-0.5 hover:bg-white/20"
+                        onClick={() =>
+                          setPendingTitles((prev) => prev.filter((_, idx) => idx !== i))
+                        }
+                      >
+                        <Trash2 className="size-3" />
+                      </button>
+                    </Badge>
+                  ))}
+                </div>
+              )
+            )}
 
-              <div className="flex gap-2">
-                <Select
-                  onValueChange={(value) => {
-                    addTitle.mutate({ dogId, title: value as 'ch' | 'sh_ch' | 'ir_ch' | 'ir_sh_ch' | 'int_ch' | 'ob_ch' | 'ft_ch' | 'wt_ch' });
-                  }}
-                >
-                  <SelectTrigger className="w-full sm:w-64 h-11">
-                    <SelectValue placeholder="Add a title..." />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {TITLE_OPTIONS.map((opt) => (
-                      <SelectItem key={opt.value} value={opt.value}>
-                        {opt.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </CardContent>
-          </Card>
-        )}
+            <div className="flex gap-2">
+              <Select
+                onValueChange={(value) => {
+                  const title = value as (typeof TITLE_OPTIONS)[number]['value'];
+                  if (mode === 'edit' && dogId) {
+                    addTitle.mutate({ dogId, title });
+                  } else {
+                    setPendingTitles((prev) => [...prev, title]);
+                  }
+                }}
+              >
+                <SelectTrigger className="w-full sm:w-64 h-11">
+                  <SelectValue placeholder="Add a title..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {TITLE_OPTIONS.map((opt) => (
+                    <SelectItem key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {namePrefixNotYetRecorded && (
+              <p className="text-xs text-muted-foreground">
+                Because the name starts with a title, this dog counts as a
+                Champion and will be entered in Open. You can add the title
+                above too, but you don&apos;t have to.
+              </p>
+            )}
+          </CardContent>
+        </Card>
 
         {/* Submit. The SV Health card and the pedigree/breeder/registration
             sections save themselves in edit mode (DogFormAutosaveBridge +
