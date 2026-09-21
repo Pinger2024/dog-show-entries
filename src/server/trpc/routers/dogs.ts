@@ -12,6 +12,7 @@ import { isAgeEligibleOnShowDay, todayInLondon } from '@/lib/date-utils';
 import { pickRecommendedAgeClass, type AgeClassOption } from '@/lib/class-recommendation';
 import { dogAccessCondition, dogRowGrantsAccess, userMayActOnDog } from '@/server/dog-access';
 import { findClearedPedigreeFields, pedigreeClearMessage } from '@/lib/dog-pedigree';
+import { isShowChampion } from '@/lib/dog-champion-status';
 
 /**
  * Recommend the best class for a dog based on age eligibility first,
@@ -36,6 +37,11 @@ function getClassRecommendation(
   hasCC: boolean,
   availableClassNames?: string[],
   ageInfo?: RecommendationAgeInfo,
+  /** True when the Open-only gate is driven by a Champion title (title row
+   *  or a name prefix like "CH ...") rather than a CC recorded on Remi —
+   *  changes the wording of `reason` only; the eligibility rule is
+   *  identical either way (see `isShowChampion`, `lib/dog-champion-status.ts`). */
+  isChampionTitle = false,
 ): {
   eligible: string[];
   suggested: string | null;
@@ -65,7 +71,9 @@ function getClassRecommendation(
   const suggested = eligible[0] ?? null;
 
   const reason = hasCC
-    ? 'Has won a CC — eligible for Open only'
+    ? isChampionTitle
+      ? 'Champion — eligible for Open only'
+      : 'Has won a CC — eligible for Open only'
     : firsts === 0
       ? 'No qualifying wins recorded — eligible for all achievement classes'
       : `${firsts} first-place win${firsts !== 1 ? 's' : ''} recorded on Remi`;
@@ -1001,9 +1009,27 @@ export const dogsRouter = createTRPCRouter({
         where: eq(achievements.dogId, input.dogId),
         with: { show: { columns: { showType: true, showScope: true } } },
       });
-      const hasCC = ccAchs.some((a) =>
+      const ccFromAchievements = ccAchs.some((a) =>
         isCcType(effectiveCcType(a.type, a.show?.showType, a.show?.showScope)),
       );
+
+      // A dog can arrive on Remi with no recorded wins at all — imported,
+      // or simply never entered here before — yet already be a Champion
+      // under RKC rules or a recognised governing body (a title row, or a
+      // title typed straight into the registered name, e.g. "CH Reno...").
+      // That MUST bar it from every achievement class except Open just the
+      // same as a CC recorded on Remi (Mandy, 21 Sept 2026). One owner:
+      // `lib/dog-champion-status.ts`.
+      const championDog = await ctx.db.query.dogs.findFirst({
+        where: eq(dogs.id, input.dogId),
+        columns: { registeredName: true },
+        with: { titles: true },
+      });
+      const isChampionTitle = isShowChampion({
+        titles: championDog?.titles,
+        registeredName: championDog?.registeredName,
+      });
+      const hasCC = ccFromAchievements || isChampionTitle;
 
       // Get achievement class names actually in this show's schedule
       let availableClassNames: string[] | undefined;
@@ -1082,7 +1108,13 @@ export const dogsRouter = createTRPCRouter({
       return {
         totalFirsts: firstsAtQualifyingShows,
         hasCC,
-        recommendation: getClassRecommendation(firstsAtQualifyingShows, hasCC, availableClassNames, ageInfo),
+        recommendation: getClassRecommendation(
+          firstsAtQualifyingShows,
+          hasCC,
+          availableClassNames,
+          ageInfo,
+          isChampionTitle,
+        ),
       };
     }),
 
