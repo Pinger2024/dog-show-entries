@@ -34,6 +34,7 @@ import {
 import { isCcType, isRccType } from '@/lib/placements';
 import { effectiveCcType } from '@/lib/effective-achievement-type';
 import { dogAccessCondition } from '@/server/dog-access';
+import { isRkcChampion } from '@/lib/dog-champion-status';
 
 export const dashboardRouter = createTRPCRouter({
   getSummary: protectedProcedure.query(async ({ ctx }) => {
@@ -507,7 +508,14 @@ export const dashboardRouter = createTRPCRouter({
             .map((a) => a.judgeId!)
         );
 
-        const isChampion = dogTitlesList.some((t) => t.title === 'ch');
+        // "Champion" for this widget means the RKC title itself (Ch/Sh Ch),
+        // not the broader "barred from all classes but Open" concept used
+        // for class-eligibility (that's `isShowChampion` — see
+        // `lib/dog-champion-status.ts`, one owner for both).
+        const isChampion = isRkcChampion({
+          titles: dogTitlesList,
+          registeredName: dog.registeredName,
+        });
 
         return {
           dogId: dog.id,
