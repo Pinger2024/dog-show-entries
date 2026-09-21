@@ -47,10 +47,12 @@ function triggerDownload(url: string) {
  * Reload while a job is queued/running: component state (`phase`,
  * `jobIdRef`) is local, so a reload always lands back on 'idle' — the
  * button shows its normal label, NOT "Preparing…", even though the job may
- * still be rendering server-side (2026-08-27 — prod's render worker only
- * ticks every 5 minutes now, see document-render-worker.ts, so "come back
- * later and tap it again" is the expected path, not an edge case). This is
- * fine, not a bug: `start()` always calls `documentJobs.request` on click
+ * still be rendering server-side (2026-08-27 — prod's render worker runs as
+ * a Render Cron Job; 2026-09-21 — requestCatalogueJob now kicks it to run
+ * immediately on enqueue, see render-worker-kick.ts, with the cron's 5-minute
+ * tick kept only as a safety net for a missed kick, so "come back later and
+ * tap it again" is now the rare fallback rather than the expected path).
+ * This is fine, not a bug: `start()` always calls `documentJobs.request` on click
  * regardless of prior state, and `requestCatalogueJob` (catalogue-jobs.ts)
  * dedupes onto any existing queued/running/done job for the same
  * (show, format, snapshot), so re-tapping the button re-attaches to the
@@ -225,7 +227,7 @@ export function CatalogueJobButton({
           Preparing…
         </Button>
         <p className="max-w-[16rem] text-xs text-muted-foreground">
-          Preparing your catalogue — usually ready within a few minutes. You can carry on and come back.
+          Preparing your catalogue — usually ready within a minute or so. You can carry on and come back.
         </p>
       </div>
     );
