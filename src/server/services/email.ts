@@ -1,7 +1,7 @@
 import { Resend } from 'resend';
 import { db } from '@/server/db';
-import { and, eq } from 'drizzle-orm';
-import { orders, entries, memberships, users, printOrders, showClasses } from '@/server/db/schema';
+import { and, eq, inArray } from 'drizzle-orm';
+import { orders, entries, memberships, users, printOrders, showClasses, sundryItems } from '@/server/db/schema';
 import { formatOrderRef, PRINT_PAYMENT_METHODS } from '@/lib/print-products';
 import { isCatalogueItem } from '@/lib/catalogue-utils';
 import { generateParkingPassPdf } from '@/server/services/parking-pass-pdf';
@@ -313,6 +313,111 @@ export async function sendEntryConfirmationEmail(orderId: string) {
     return result;
   } catch (error) {
     console.error(`[email] Failed to send confirmation for order ${orderRef}:`, error);
+  }
+}
+
+/**
+ * Send a receipt after extras (sundry items) are added to an ALREADY-PAID
+ * entry (add-extras-to-entry, design doc 2026-09-21). Modelled directly on
+ * `sendEntryConfirmationEmail` above — same sender/reply-to conventions
+ * (FROM, FEEDBACK_REPLY_TO) — but scoped to just the items purchased in this
+ * top-up, not the whole order.
+ */
+export async function sendExtrasAddedEmail(
+  orderId: string,
+  entryId: string | undefined,
+  items: { sundryItemId: string; quantity: number; unitPrice: number }[],
+) {
+  const order = await db.query.orders.findFirst({
+    where: eq(orders.id, orderId),
+    with: {
+      exhibitor: true,
+      show: { with: { organisation: true } },
+    },
+  });
+
+  if (!order || !order.exhibitor?.email) {
+    console.error(`[email] Cannot send extras receipt: order ${orderId} not found or no email`);
+    return;
+  }
+
+  const sundryItemIds = items.map((i) => i.sundryItemId);
+  const itemRows = sundryItemIds.length
+    ? await db.query.sundryItems.findMany({ where: inArray(sundryItems.id, sundryItemIds) })
+    : [];
+  const nameById = new Map(itemRows.map((r) => [r.id, r.name]));
+
+  const subtotalPence = items.reduce((sum, i) => sum + i.unitPrice * i.quantity, 0);
+  const orderRef = order.id.slice(0, 8).toUpperCase();
+
+  const itemLines = items
+    .map((i) => `
+        <div style="display: flex; justify-content: space-between; padding: 4px 0; font-size: 14px;">
+          <span style="color: ${BRAND.ink};">${nameById.get(i.sundryItemId) ?? 'Extra'}${i.quantity > 1 ? ` x${i.quantity}` : ''}</span>
+          <span style="font-weight: 600;">${formatFee(i.unitPrice * i.quantity)}</span>
+        </div>`)
+    .join('');
+
+  const html = `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+</head>
+<body style="margin: 0; padding: 0; background-color: ${BRAND.paper}; font-family: 'Hanken Grotesk', -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
+  <div style="max-width: 600px; margin: 0 auto; padding: 24px 16px;">
+    ${emailHeader()}
+    <div style="background: #ffffff; border: 1px solid ${BRAND.line}; border-radius: 14px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+      <div style="background: ${BRAND.deep}; padding: 24px 24px 20px; text-align: center;">
+        <div style="display: inline-block; width: 40px; height: 40px; line-height: 40px; border-radius: 50%; background: rgba(243,236,220,0.2); font-size: 20px; color: ${BRAND.cream}; margin-bottom: 8px;">&#10003;</div>
+        <h2 style="margin: 0; color: ${BRAND.cream}; font-size: 22px; font-weight: 700;">Extras Added</h2>
+        <p style="margin: 8px 0 0; color: rgba(243, 236, 220, 0.78); font-size: 14px;">
+          Order ${orderRef} &middot; ${formatFee(subtotalPence)}
+        </p>
+      </div>
+      <div style="padding: 20px 24px; border-bottom: 1px solid ${BRAND.line};">
+        <h3 style="margin: 0 0 4px; font-size: 18px; color: ${BRAND.ink};">${order.show.name}</h3>
+        ${order.show.organisation?.name ? `<p style="margin: 4px 0 0; font-size: 13px; color: ${BRAND.ink2};">${order.show.organisation.name}</p>` : ''}
+      </div>
+      <div style="padding: 16px 24px;">
+        <p style="margin: 0 0 8px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: ${BRAND.ink2};">Added to your entry</p>
+        ${itemLines}
+      </div>
+      <div style="padding: 16px 24px; background: ${BRAND.paper};">
+        <table style="width: 100%;">
+          <tr>
+            <td style="font-weight: 700; font-size: 16px; color: ${BRAND.ink};">Total Paid</td>
+            <td style="text-align: right; font-weight: 700; font-size: 16px; color: ${BRAND.green};">${formatFee(subtotalPence)}</td>
+          </tr>
+        </table>
+      </div>
+      <div style="padding: 20px 24px; text-align: center; border-top: 1px solid ${BRAND.line};">
+        ${btn(`${APP_URL}/entries${entryId ? `/${entryId}` : ''}`, 'View Your Entry')}
+      </div>
+    </div>
+    ${emailFooter(order.show.organisation?.name)}
+  </div>
+</body>
+</html>`;
+
+  try {
+    const result = await resend.emails.send({
+      from: FROM,
+      to: order.exhibitor.email,
+      replyTo: FEEDBACK_REPLY_TO,
+      subject: `Extras Added — ${order.show.name}`,
+      html,
+    });
+
+    if (result.error) {
+      console.error(`[email] Resend rejected extras receipt for order ${orderRef} to ${order.exhibitor.email}:`, result.error);
+      return result;
+    }
+    console.log(`[email] Extras receipt sent for order ${orderRef} to ${order.exhibitor.email}`, result);
+    return result;
+  } catch (error) {
+    console.error(`[email] Failed to send extras receipt for order ${orderRef}:`, error);
   }
 }
 
