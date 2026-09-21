@@ -1184,7 +1184,16 @@ function AuditLogViewer({ showId }: { showId: string }) {
         ) : (
           <div className="space-y-2">
             {auditLog?.map((log) => {
-              const config = actionConfig[log.action] ?? { label: log.action, variant: 'outline' as const };
+              // Extras purchases (add-extras-to-entry, 2026-09-21) are logged
+              // under the 'classes_changed' enum value — no 'extras_added'
+              // value exists without a schema migration — so relabel here
+              // using the real kind recorded in `changes.via`, rather than
+              // showing the secretary a misleading "Classes Changed".
+              const via = (log.changes as { via?: string } | null)?.via;
+              const config =
+                via === 'extras_payment'
+                  ? { label: 'Extras Added', variant: 'secondary' as const }
+                  : actionConfig[log.action] ?? { label: log.action, variant: 'outline' as const };
               return (
                 <div
                   key={log.id}

@@ -12,12 +12,14 @@ import {
   AlertTriangle,
   Pencil,
   Trophy,
+  Plus,
 } from 'lucide-react';
 import { useState } from 'react';
 import { toast } from 'sonner';
 import { trpc } from '@/lib/trpc/client';
 import { cn } from '@/lib/utils';
 import { formatCurrency } from '@/lib/date-utils';
+import { entryWindowOpen } from '@/lib/show-status';
 import { SE_H } from '@/components/show-experience/tokens';
 import { Button } from '@/components/ui/button';
 import {
@@ -237,6 +239,34 @@ export default function EntryDetailPage() {
         </CardContent>
       </Card>
 
+      {/* Extras — items purchased on this entry's order, either at checkout
+          or added after entry (add-extras-to-entry, 2026-09-21). */}
+      {entry.order && entry.order.orderSundryItems.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Extras</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            {entry.order.orderSundryItems.map((osi) => (
+              <div key={osi.id} className="flex justify-between text-sm">
+                <span>
+                  {osi.sundryItem?.name ?? 'Extra'}
+                  {osi.quantity > 1 ? ` ×${osi.quantity}` : ''}
+                </span>
+                <span className="font-medium">{formatCurrency(osi.unitPrice * osi.quantity)}</span>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      )}
+
+      {entry.status === 'confirmed' && !entry.orderId && (
+        <p className="text-center text-sm text-muted-foreground">
+          This entry doesn&apos;t have an order attached — to add extras like a
+          catalogue or class sponsorship, please contact the show secretary.
+        </p>
+      )}
+
       {/* Actions */}
       <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:gap-3">
         <Button variant="outline" asChild className="w-full sm:w-auto min-h-[2.75rem]">
@@ -250,11 +280,23 @@ export default function EntryDetailPage() {
             </Link>
           </Button>
         )}
-        {(entry.status === 'confirmed' || entry.status === 'pending') && entry.show.status === 'entries_open' && (
+        {(entry.status === 'confirmed' || entry.status === 'pending') && entryWindowOpen(entry.show) && (
           <Button variant="outline" asChild className="w-full sm:w-auto min-h-[2.75rem]">
             <Link href={`/shows/${entry.show.slug ?? entry.showId}/entries/${entry.id}/edit`}>
               <Pencil className="size-4" />
               Edit Classes
+            </Link>
+          </Button>
+        )}
+        {/* Add extras (add-extras-to-entry, 2026-09-21): shown only when the
+            entry is confirmed, has an order to attach the purchase to, and
+            the window is still open. A legacy entry with no order can't take
+            extras online — the copy under the Extras card below explains why. */}
+        {entry.status === 'confirmed' && entry.orderId && entryWindowOpen(entry.show) && (
+          <Button variant="outline" asChild className="w-full sm:w-auto min-h-[2.75rem]">
+            <Link href={`/shows/${entry.show.slug ?? entry.showId}/entries/${entry.id}/extras`}>
+              <Plus className="size-4" />
+              Add Extras
             </Link>
           </Button>
         )}
