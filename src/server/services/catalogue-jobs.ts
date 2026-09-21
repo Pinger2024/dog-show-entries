@@ -21,6 +21,7 @@ import {
   CATALOGUE_FORMAT_LABELS,
   type CatalogueFormat,
 } from '@/server/services/catalogue-snapshot';
+import { kickRenderWorker } from '@/server/services/render-worker-kick';
 
 export function isCatalogueFormat(value: string): value is CatalogueFormat {
   return (CATALOGUE_FORMATS as readonly string[]).includes(value);
@@ -75,7 +76,19 @@ export interface RequestCatalogueJobResult {
  */
 export async function requestCatalogueJob(
   db: Database,
-  opts: { showId: string; format: CatalogueFormat; requestedByUserId: string | null },
+  opts: {
+    showId: string;
+    format: CatalogueFormat;
+    requestedByUserId: string | null;
+    /** Internal — set by refreshCatalogueJobs (the auto-render sweep) only.
+     *  The sweep runs on a schedule (or after a write, speculatively across
+     *  every auto-render format) and the 5-minute cron tick already covers
+     *  it; a secretary pressing the catalogue button is the case that
+     *  actually needs an immediate kick. Defaults to false — every other
+     *  caller (documentJobs.request, the /api/catalogue enqueue branch,
+     *  print-orders' catalogue proof) kicks as normal. */
+    skipKick?: boolean;
+  },
 ): Promise<RequestCatalogueJobResult> {
   const snapshot = await buildCatalogueSnapshot(db, opts.showId);
   const snapshotHash = computeSnapshotHash(snapshot);
@@ -91,6 +104,14 @@ export async function requestCatalogueJob(
     orderBy: [desc(schema.documentRenderJobs.createdAt)],
   });
   if (existing) {
+    // Deduping onto a queued job means nobody has rendered it yet — the
+    // secretary pressing again is exactly the "kick the worker" case (the
+    // 60s debounce inside kickRenderWorker makes repeated presses cheap).
+    // A running/done existing job needs no kick: running already has a live
+    // worker draining the queue, and done needs no worker at all.
+    if (existing.status === 'queued' && !opts.skipKick) {
+      void kickRenderWorker(db, `catalogue:${opts.format}`);
+    }
     return { jobId: existing.id, status: existing.status as DocumentRenderJobStatus, isNew: false };
   }
 
@@ -106,6 +127,10 @@ export async function requestCatalogueJob(
       snapshotHash,
     })
     .returning({ id: schema.documentRenderJobs.id });
+
+  if (!opts.skipKick) {
+    void kickRenderWorker(db, `catalogue:${opts.format}`);
+  }
 
   return { jobId: row.id, status: 'queued', isNew: true };
 }
@@ -158,6 +183,11 @@ export interface RefreshCatalogueJobsResult {
  *
  * One format's failure (e.g. a snapshot-build error) never stops the rest —
  * each is requested independently and failures are collected, not thrown.
+ *
+ * Never kicks the render worker (passes skipKick to requestCatalogueJob) —
+ * this sweep runs speculatively (after a write, or on the hourly cron) and
+ * the 5-minute render-worker cron tick already covers it; the immediate
+ * kick is reserved for a secretary actually waiting on the catalogue button.
  */
 export async function refreshCatalogueJobs(
   db: Database,
@@ -181,7 +211,7 @@ export async function refreshCatalogueJobs(
 
   for (const format of autoRenderFormatsFor(show)) {
     try {
-      const result = await requestCatalogueJob(db, { showId, format, requestedByUserId: null });
+      const result = await requestCatalogueJob(db, { showId, format, requestedByUserId: null, skipKick: true });
       (result.isNew ? enqueued : deduped).push(format);
     } catch (err) {
       errors.push({ format, error: err instanceof Error ? err.message : String(err) });
