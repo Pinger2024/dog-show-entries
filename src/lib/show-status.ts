@@ -41,3 +41,37 @@ export function effectiveShowStatus(
   }
   return show.status;
 }
+
+/**
+ * ONE owner for "is this show still accepting NEW MONEY against an entry" —
+ * new entries, class changes, and (2026-09-21) extras purchased after entry.
+ *
+ * Before this, `orders.checkout` and `entries.create` each carried their own
+ * copy of `status === 'entries_open' && entryCloseDate not passed`, and
+ * `priceEntryClassChange` (the class-change top-up owner) carried only HALF
+ * of it — it checked `status !== 'entries_open'` but never the close date at
+ * all, so a class-change top-up (and now an extras purchase) could still be
+ * bought on a show whose `entryCloseDate` had passed but whose daily-cron
+ * status hadn't caught up yet (the same lag `effectiveShowStatus` exists to
+ * paper over for display). That is a rule written down twice — three times,
+ * with one copy missing a check — per CLAUDE.md "One owner per rule".
+ *
+ * Rule: `status === 'entries_open'` AND (`entryCloseDate` unset OR not yet
+ * passed). Strict `<` on the close date, matching `effectiveShowStatus` and
+ * every existing inline check this replaces, so the boundary instant behaves
+ * identically everywhere.
+ *
+ * `secretary.createManualEntry` deliberately allows a WIDER set of statuses
+ * for postal/manual entries (see its own comment) — do NOT route it through
+ * this function; that breadth is intentional, not a second copy of this rule.
+ */
+export function entryWindowOpen(
+  show: { status: string; entryCloseDate: string | Date | null | undefined },
+  now: Date = new Date(),
+): boolean {
+  if (show.status !== 'entries_open') return false;
+  if (show.entryCloseDate && new Date(show.entryCloseDate).getTime() < now.getTime()) {
+    return false;
+  }
+  return true;
+}
