@@ -1029,7 +1029,7 @@ export const stewardRouter = createTRPCRouter({
       // secretary/steward could read unpublished BOB/BIS before publication).
       const achShow = await ctx.db.query.shows.findFirst({
         where: eq(shows.id, showId),
-        columns: { organisationId: true, showType: true, scheduleData: true },
+        columns: { organisationId: true, showType: true, showRuleset: true, scheduleData: true },
       });
       const isPrivileged = achShow
         ? await callerIsPrivilegedForShow(
@@ -1054,7 +1054,11 @@ export const stewardRouter = createTRPCRouter({
       // (Mandy 2026-07-27: same disease as the catalogue/judges-book, 9a6a475).
       // Types outside the configured list are NEVER dropped — grouping is
       // labelling only, never gating — they just sort after the configured ones.
-      const topAwards = resolveTopAwards(achShow?.showType, achShow?.scheduleData?.bestAwards ?? []);
+      const topAwards = resolveTopAwards(
+        achShow?.showType,
+        achShow?.scheduleData?.bestAwards ?? [],
+        achShow?.showRuleset,
+      );
       const orderByType = new Map(topAwards.map((a, i) => [a.type, i]));
       const nameByType = new Map(topAwards.map((a) => [a.type, a.name]));
 

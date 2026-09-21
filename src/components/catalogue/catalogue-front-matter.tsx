@@ -2144,7 +2144,7 @@ const bestsWriteInStyles = {
 };
 
 export function BestsWriteInPage({ show }: FrontMatterProps) {
-  const awards = buildBestAwards(show.showType, show.bestAwards ?? []);
+  const awards = buildBestAwards(show.showType, show.bestAwards ?? [], show.showRuleset);
   if (awards.length === 0) return null;
 
   return (

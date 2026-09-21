@@ -250,6 +250,7 @@ function BestAwardsSection({
   showId,
   showDate,
   showType,
+  showRuleset,
   customAwards,
   confirmedDogs,
   existingAchievements,
@@ -258,6 +259,7 @@ function BestAwardsSection({
   showId: string;
   showDate: string;
   showType: string;
+  showRuleset?: string | null;
   customAwards?: string[];
   classResults?: { breedName: string; classes: { className: string; sex: string | null; results: { dogId: string | null; placement: number | null; dogDateOfBirth?: string | null }[] }[] }[];
   confirmedDogs: {
@@ -381,7 +383,7 @@ function BestAwardsSection({
               actually gives (BAGSD: Best Dog/Bitch + reserves + Best Puppy in
               Show + Best Long Coat in Show, not CCs). */}
           {breedNames.length === 1 && (() => {
-            const topAwards = resolveTopAwards(showType, customAwards);
+            const topAwards = resolveTopAwards(showType, customAwards, showRuleset);
             if (topAwards.length === 0) return null;
 
             // Eligibility (#98 — the RKC "beaten" rule) runs through the shared
@@ -913,6 +915,7 @@ export default function SecretaryResultsPage() {
           showId={showId}
           showDate={showData.startDate}
           showType={showData.showType}
+          showRuleset={showData.showRuleset}
           customAwards={
             (showData as { scheduleData?: { bestAwards?: string[] } | null })
               .scheduleData?.bestAwards ?? []

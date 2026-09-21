@@ -158,7 +158,7 @@ export async function GET(
   // Shared with the catalogue's back-of-book write-in page via lib/best-awards.
   const scheduleData = (show.scheduleData ?? {}) as { bestAwards?: string[] };
   const customAwards = Array.isArray(scheduleData.bestAwards) ? scheduleData.bestAwards : [];
-  const bestAwards = buildBestAwards(show.showType, customAwards);
+  const bestAwards = buildBestAwards(show.showType, customAwards, show.showRuleset);
 
   // Optional per-judge book: ?judge=<judgeId> filters to just that judge's
   // classes so each judge gets their own book (Mandy 2026-06-19 — Helen's GSD

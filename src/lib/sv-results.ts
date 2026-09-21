@@ -26,6 +26,8 @@
 
 import { SV_AGE_ORDER, svDisplayAge } from './class-labels';
 import { formatRegNumber } from '@/components/catalogue/catalogue-utils';
+import { REGIONAL_BEST_AWARDS } from './best-awards';
+import { awardNameToType } from './top-awards';
 
 export type SvCoat = 'stock' | 'long_stock';
 
@@ -199,13 +201,36 @@ const COAT_ORDER: { coat: SvCoat | null; title: string | null }[] = [
   { coat: null, title: null },
 ];
 
-/** Footer best-of awards in their printed order, mapped to achievement types. */
-const FOOTER_AWARDS: { type: string; label: string }[] = [
-  { type: 'best_dog', label: 'Best Male' },
-  { type: 'best_bitch', label: 'Best Female' },
-  { type: 'most_promising_young_dog', label: 'Most Promising Male' },
-  { type: 'most_promising_young_bitch', label: 'Most Promising Female' },
-];
+/**
+ * SV's print labels for the footer's four regional Best Awards — "Male/
+ * Female" rather than the recordable "Dog/Bitch" names. Kept as a label-only
+ * override so the vocabulary itself has exactly one owner: `best-awards.ts`
+ * `REGIONAL_BEST_AWARDS`. A name here with no entry keeps its recordable
+ * name as the printed label.
+ */
+const REGIONAL_FOOTER_LABELS: Record<string, string> = {
+  'Best Dog': 'Best Male',
+  'Best Bitch': 'Best Female',
+  'Most Promising Dog': 'Most Promising Male',
+  'Most Promising Bitch': 'Most Promising Female',
+};
+
+/**
+ * Footer best-of awards in their printed order, mapped to achievement types.
+ * Derived from `REGIONAL_BEST_AWARDS` (best-awards.ts) — the SAME list the
+ * Sponsors page's Awards Picker offers a regional show — so the printed
+ * footer and the recordable/pickable vocabulary can never drift apart again
+ * (they were two literal lists of the same four awards until 21 Sept 2026).
+ */
+export const FOOTER_AWARDS: { type: string; label: string }[] = REGIONAL_BEST_AWARDS.map((name) => {
+  const type = awardNameToType(name);
+  if (!type) {
+    throw new Error(
+      `REGIONAL_BEST_AWARDS entry "${name}" has no recordable achievement type — check top-awards.ts NAME_TO_TYPE`,
+    );
+  }
+  return { type, label: REGIONAL_FOOTER_LABELS[name] ?? name };
+});
 
 // ── Small helpers ───────────────────────────────────────────────────
 

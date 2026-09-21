@@ -320,7 +320,7 @@ export function ScheduleSettingsForm({ showId, onSaved }: ScheduleSettingsFormPr
     setBestAwards(
       sd?.bestAwards && sd.bestAwards.length > 0
         ? sd.bestAwards
-        : buildBestAwards(showData.showType, [])
+        : buildBestAwards(showData.showType, [], showData.showRuleset)
     );
     setAwardsDescription(sd?.awardsDescription ?? '');
     setPrizeMoney(sd?.prizeMoney ?? '');
@@ -406,9 +406,7 @@ export function ScheduleSettingsForm({ showId, onSaved }: ScheduleSettingsFormPr
       firstAiders: firstAiders.filter((n) => n.trim()).length > 0
         ? firstAiders.filter((n) => n.trim()).map((n) => n.trim())
         : undefined,
-      // Regionals never send bestAwards — omission means "leave alone"
-      // server-side, so a hidden picker can't overwrite a configured list.
-      ...(isWusvShow ? {} : { bestAwards }),
+      bestAwards,
       awardsDescription: awardsDescription || undefined,
       prizeMoney: prizeMoney || undefined,
       what3words: what3words || undefined,
@@ -556,9 +554,7 @@ export function ScheduleSettingsForm({ showId, onSaved }: ScheduleSettingsFormPr
       firstAiders: firstAiders.filter((n) => n.trim()).length > 0
         ? firstAiders.filter((n) => n.trim()).map((n) => n.trim())
         : undefined,
-      // Regionals never send bestAwards — omission means "leave alone"
-      // server-side, so a hidden picker can't overwrite a configured list.
-      ...(isWusvShow ? {} : { bestAwards }),
+      bestAwards,
       awardsDescription: awardsDescription || undefined,
       prizeMoney: prizeMoney || undefined,
       what3words: what3words || undefined,
@@ -1320,18 +1316,22 @@ function AwardsSection({
 
   return (
     <div className="space-y-4">
-      {/* Regional (SV/WUSV) shows have a fixed award structure (Best Dog/
-          Bitch, Most Promising) — no tick-list needed there (Mandy
-          2026-08-11); their configured lists still render everywhere. */}
-      {!isWusvShow && (
-        <div className="space-y-1.5">
-          <Label className="text-xs">Which awards are you giving?</Label>
-          <p className="text-xs text-muted-foreground">
-            Tick the awards your show gives out. This is what the sponsors table and results recording page use.
-          </p>
-          <AwardsPicker value={bestAwards} onChange={setBestAwards} showType={showType} />
-        </div>
-      )}
+      {/* Regional (SV/WUSV) shows have their OWN fixed tick-list (Best Dog/
+          Bitch, Most Promising Dog/Bitch — see REGIONAL_BEST_AWARDS in
+          lib/best-awards.ts) rather than being hidden — this used to be
+          hidden entirely (Mandy 2026-08-11) on the theory a regional's
+          awards are fixed and don't need editing, but the Sponsors page's
+          own picker was never hidden and offered the wrong (RKC
+          championship) list there, so a secretary had no correct way to
+          adjust a regional's awards (Mandy, 21 Sept 2026). Both pages now
+          show the same picker with the same regional-aware defaults. */}
+      <div className="space-y-1.5">
+        <Label className="text-xs">Which awards are you giving?</Label>
+        <p className="text-xs text-muted-foreground">
+          Tick the awards your show gives out. This is what the sponsors table and results recording page use.
+        </p>
+        <AwardsPicker value={bestAwards} onChange={setBestAwards} showType={showType} showRuleset={isWusvShow ? 'wusv' : 'rkc'} />
+      </div>
       <div className="space-y-1.5">
         <Label htmlFor="awards" className="text-xs">Awards description text for the schedule</Label>
         <p className="text-xs text-muted-foreground">The rosettes/trophies wording printed in the schedule — separate from the awards list above.</p>

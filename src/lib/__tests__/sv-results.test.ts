@@ -7,10 +7,37 @@ import {
   svClassLabel,
   svSexWord,
   computeClassMembers,
+  FOOTER_AWARDS,
   type SvEntryInput,
   type SvShowClassInput,
   type SvResultsReportInput,
 } from '../sv-results';
+import { REGIONAL_BEST_AWARDS } from '../best-awards';
+import { awardNameToType } from '../top-awards';
+
+// ── FOOTER_AWARDS ↔ REGIONAL_BEST_AWARDS parity guard ───────────────
+//
+// Before 21 Sept 2026 the printed regional footer's four Best Awards
+// (FOOTER_AWARDS here) and the Sponsors page picker's regional vocabulary
+// (REGIONAL_BEST_AWARDS in best-awards.ts) were two separate literal lists
+// of the same four awards — the exact "one owner per rule" trap. FOOTER_AWARDS
+// is now DERIVED from REGIONAL_BEST_AWARDS, so this guard can only ever fail
+// if a future edit reintroduces a second, independent literal list.
+describe('FOOTER_AWARDS — derived from REGIONAL_BEST_AWARDS, not a second list', () => {
+  it('has exactly the same awards, in the same order, as REGIONAL_BEST_AWARDS', () => {
+    const expectedTypes = REGIONAL_BEST_AWARDS.map((name) => awardNameToType(name));
+    expect(FOOTER_AWARDS.map((a) => a.type)).toEqual(expectedTypes);
+  });
+
+  it('uses SV print labels (Male/Female) for the recordable Dog/Bitch names', () => {
+    expect(FOOTER_AWARDS).toEqual([
+      { type: 'best_dog', label: 'Best Male' },
+      { type: 'best_bitch', label: 'Best Female' },
+      { type: 'most_promising_young_dog', label: 'Most Promising Male' },
+      { type: 'most_promising_young_bitch', label: 'Most Promising Female' },
+    ]);
+  });
+});
 
 // ── Registered-name affix splitting (SV "Results" sheet, Mandy 2026-07-01) ──
 

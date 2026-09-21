@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
 import { awardNameToType } from '@/lib/top-awards';
-import { buildBestAwards, OPTIONAL_AWARDS } from '@/lib/best-awards';
+import { bestAwardsPickerOptions, commitPendingAward } from '@/lib/best-awards';
 
 const canon = (a: string) => a.trim().toLowerCase();
 
@@ -43,20 +43,23 @@ export function AwardsPicker({
   value,
   onChange,
   showType,
+  showRuleset,
 }: {
   value: string[];
   onChange: (next: string[]) => void;
   showType: string | null | undefined;
+  /** REQUIRED (not optional): a regional is showType 'championship' +
+   *  showRuleset 'wusv', and the tick-list is wrong without the ruleset.
+   *  Optional let one call site omit it and tsc said nothing (21 Sept 2026). */
+  showRuleset: string | null | undefined;
 }) {
   const [customName, setCustomName] = useState('');
   const [showMore, setShowMore] = useState(false);
 
   const valueSet = useMemo(() => new Set(value.map(canon)), [value]);
-  const usualAwards = useMemo(() => buildBestAwards(showType, []), [showType]);
-  const usualSet = useMemo(() => new Set(usualAwards.map(canon)), [usualAwards]);
-  const moreAwards = useMemo(
-    () => OPTIONAL_AWARDS.filter((a) => !usualSet.has(canon(a))),
-    [usualSet],
+  const { usual: usualAwards, more: moreAwards } = useMemo(
+    () => bestAwardsPickerOptions(showType, showRuleset),
+    [showType, showRuleset],
   );
 
   const handleMoveUp = useCallback(
@@ -99,15 +102,21 @@ export function AwardsPicker({
   );
 
   const handleAddCustom = useCallback(() => {
-    const trimmed = customName.trim();
-    if (!trimmed) return;
-    if (valueSet.has(canon(trimmed))) {
-      setCustomName('');
-      return;
-    }
-    onChange([...value, trimmed]);
+    const next = commitPendingAward(value, customName);
+    if (next !== value) onChange(next);
     setCustomName('');
-  }, [customName, value, onChange, valueSet]);
+  }, [customName, value, onChange]);
+
+  // A name typed into "Add your own trophy" but never explicitly added (no
+  // "+ Add", no Enter) must still count when the surrounding form/dialog
+  // saves — the box loses focus before any Save button's click handler runs,
+  // so committing on blur catches exactly that moment (Mandy, 21 Sept 2026:
+  // typed "Most Promising Dog", tapped "Save Awards" directly, and lost it —
+  // see `commitPendingAward` in lib/best-awards.ts for the single-owner
+  // commit logic shared with "+ Add" and Enter-to-add above).
+  const handleCustomNameBlur = useCallback(() => {
+    if (customName.trim()) handleAddCustom();
+  }, [customName, handleAddCustom]);
 
   return (
     <div className="space-y-4">
@@ -228,6 +237,7 @@ export function AwardsPicker({
                 handleAddCustom();
               }
             }}
+            onBlur={handleCustomNameBlur}
             placeholder="e.g. The Smith Family Memorial Trophy"
             className="min-h-[2.75rem]"
           />

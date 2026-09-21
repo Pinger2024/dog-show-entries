@@ -1306,10 +1306,12 @@ function NewSponsorshipRow({
 function EditAwardsDialog({
   awards,
   showType,
+  showRuleset,
   onSave,
 }: {
   awards: string[];
   showType?: string | null;
+  showRuleset: string | null | undefined;
   onSave: (awards: string[]) => void;
 }) {
   const [open, setOpen] = useState(false);
@@ -1353,7 +1355,7 @@ function EditAwardsDialog({
         <p className="text-sm text-muted-foreground">
           Tick the awards your show gives out. Reorder, untick, or add a bespoke trophy as needed.
         </p>
-        <AwardsPicker value={editAwards} onChange={setEditAwards} showType={showType} />
+        <AwardsPicker value={editAwards} onChange={setEditAwards} showType={showType} showRuleset={showRuleset} />
         <div className="mt-4 flex justify-end gap-2">
           <Button variant="outline" onClick={() => setOpen(false)}>
             Cancel
@@ -1848,8 +1850,8 @@ function ClassSponsorshipTable({
   const bestAwards: string[] = useMemo(() => {
     const stored = (show?.scheduleData as Record<string, unknown> | null)?.bestAwards as string[] | undefined;
     if (stored && stored.length > 0) return stored;
-    return buildBestAwards(show?.showType, []);
-  }, [show?.scheduleData, show?.showType]);
+    return buildBestAwards(show?.showType, [], show?.showRuleset);
+  }, [show?.scheduleData, show?.showType, show?.showRuleset]);
 
   const saveBestAwards = useCallback(
     (awards: string[]) => {
@@ -1978,6 +1980,7 @@ function ClassSponsorshipTable({
           <EditAwardsDialog
             awards={bestAwards}
             showType={show?.showType}
+            showRuleset={show?.showRuleset}
             onSave={saveBestAwards}
           />
         </div>

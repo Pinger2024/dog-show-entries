@@ -61,6 +61,17 @@ const NAME_TO_TYPE: Record<string, AchievementType> = {
   'best baby puppy': 'best_baby_puppy',
   'most promising dog': 'most_promising_young_dog',
   'most promising bitch': 'most_promising_young_bitch',
+  // SV's own labels for the regional Best Dog/Bitch, Most Promising
+  // Dog/Bitch awards — "Best Male/Female", "Most Promising Male/Female".
+  // Same awards, same achievement types; registered here directly (not just
+  // canonicalised in the picker's free-text box, see
+  // `canonicalAwardName` in best-awards.ts) so results recording accepts
+  // either spelling regardless of how the name reached it (Mandy, 21 Sept
+  // 2026 — regional Best Awards fix).
+  'best male': 'best_dog',
+  'best female': 'best_bitch',
+  'most promising male': 'most_promising_young_dog',
+  'most promising female': 'most_promising_young_bitch',
 };
 
 export function awardNameToType(name: string): AchievementType | null {
@@ -182,13 +193,15 @@ export type TopAward = {
 export function resolveTopAwards(
   showType: string | null | undefined,
   customAwards: string[] = [],
+  showRuleset?: string | null,
 ): TopAward[] {
   // Mirror the sponsors page (the source of truth the secretary sees): use the
   // show's STORED award list verbatim when set — a club like BAGSD configures
   // "Best Dog/Bitch + reserves", and we must NOT run that through
   // buildBestAwards, whose CC_SUPERSEDES rule would swap them for CCs. Only when
-  // nothing is configured do we fall back to the show-type defaults.
-  const names = customAwards.length > 0 ? customAwards : buildBestAwards(showType, []);
+  // nothing is configured do we fall back to the show-type defaults — a WUSV/SV
+  // regional's defaults are its own fixed four (buildBestAwards handles this).
+  const names = customAwards.length > 0 ? customAwards : buildBestAwards(showType, [], showRuleset);
   const out: TopAward[] = [];
   const seen = new Set<AchievementType>();
   for (const name of names) {
