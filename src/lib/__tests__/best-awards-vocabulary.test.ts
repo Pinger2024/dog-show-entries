@@ -1,5 +1,10 @@
 import { describe, it, expect } from 'vitest';
-import { DEFAULT_BEST_AWARDS, OPTIONAL_AWARDS } from '../best-awards';
+import {
+  DEFAULT_BEST_AWARDS,
+  OPTIONAL_AWARDS,
+  REGIONAL_BEST_AWARDS,
+  REGIONAL_OPTIONAL_AWARDS,
+} from '../best-awards';
 import { awardNameToType } from '../top-awards';
 
 // The Awards Picker (src/components/awards/awards-picker.tsx) replaces
@@ -37,5 +42,15 @@ describe('award vocabulary — everything pickable is recordable', () => {
       seen.add(key);
     }
     expect(dupes).toEqual([]);
+  });
+
+  it('every REGIONAL_BEST_AWARDS name maps via awardNameToType', () => {
+    const unrecordable = REGIONAL_BEST_AWARDS.filter((name) => !awardNameToType(name));
+    expect(unrecordable).toEqual([]);
+  });
+
+  it('every REGIONAL_OPTIONAL_AWARDS name maps via awardNameToType', () => {
+    const unrecordable = REGIONAL_OPTIONAL_AWARDS.filter((name) => !awardNameToType(name));
+    expect(unrecordable).toEqual([]);
   });
 });

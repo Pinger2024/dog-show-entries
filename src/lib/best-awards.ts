@@ -68,13 +68,96 @@ export const OPTIONAL_AWARDS: string[] = [
   'Best Long Coat Puppy',
   'Best Baby Puppy',
   // Most Promising Dog/Bitch deliberately absent — regional-only awards
-  // (Mandy 2026-08-11), and regional shows don't get the picker at all.
-  // They stay recordable via awardNameToType for regionals' configured lists.
+  // (Mandy 2026-08-11). Regionals get their OWN tick-list (see
+  // REGIONAL_BEST_AWARDS / REGIONAL_OPTIONAL_AWARDS below) — they stay
+  // recordable via awardNameToType for regionals' configured lists.
   'Dog Challenge Certificate',
   'Reserve Dog Challenge Certificate',
   'Bitch Challenge Certificate',
   'Reserve Bitch Challenge Certificate',
 ];
+
+/**
+ * The four awards every WUSV/SV regional show gives — the ONE owner for
+ * "which best awards does a regional give" (Mandy, 21 Sept 2026: the
+ * Sponsors page picker offered the RKC championship list on a regional show
+ * and never offered these). SV's own labels are "Best Male/Female, Most
+ * Promising Male/Female" (see `REGIONAL_FOOTER_LABELS` in sv-results.ts for
+ * that print-only relabelling) but these are the RECORDABLE names —
+ * `awardNameToType` in top-awards.ts resolves each one, enforced by
+ * src/lib/__tests__/best-awards-vocabulary.test.ts.
+ *
+ * `buildBestAwards` uses this as the wusv default list; `sv-results.ts`
+ * derives its printed footer from this same list so the two can never
+ * drift apart again.
+ */
+export const REGIONAL_BEST_AWARDS: string[] = [
+  'Best Dog',
+  'Best Bitch',
+  'Most Promising Dog',
+  'Most Promising Bitch',
+];
+
+/**
+ * The "Also available" tick-list for a regional show's Awards Picker —
+ * awards that make sense at a WUSV/SV regional. Deliberately excludes
+ * Challenge Certificates, Best of Breed and Best in Show, which are RKC
+ * championship-only concepts a regional show doesn't award.
+ */
+export const REGIONAL_OPTIONAL_AWARDS: string[] = [
+  'Best Puppy Dog',
+  'Best Puppy Bitch',
+  'Best Long Coat Dog',
+  'Best Long Coat Bitch',
+  'Best Baby Puppy',
+];
+
+/**
+ * SV's own labels for the four regional awards ("Best Male/Female", "Most
+ * Promising Male/Female") map onto the same recordable Dog/Bitch names a
+ * secretary picks from the tick-list — they are literally the same award,
+ * just SV's word for it. One owner for the mapping: the Awards Picker's
+ * free-text "Add your own trophy" box runs typed names through
+ * `canonicalAwardName` before adding them, so typing an SV label still
+ * lands on a name `awardNameToType` recognises (the same aliases are also
+ * registered directly in top-awards.ts's NAME_TO_TYPE, so results recording
+ * accepts either spelling even if a name reaches it some other way).
+ */
+const SV_LABEL_TO_CANONICAL: Record<string, string> = {
+  'best male': 'Best Dog',
+  'best female': 'Best Bitch',
+  'most promising male': 'Most Promising Dog',
+  'most promising female': 'Most Promising Bitch',
+};
+
+/**
+ * Normalise a secretary-typed award name to its canonical recordable form —
+ * currently only the SV "Male/Female" synonyms need this; every other name
+ * passes through unchanged (trimmed).
+ */
+export function canonicalAwardName(name: string): string {
+  const trimmed = name.trim();
+  return SV_LABEL_TO_CANONICAL[trimmed.toLowerCase()] ?? trimmed;
+}
+
+/**
+ * Commit a pending "Add your own trophy" name into the awards list — the ONE
+ * owner for what "add this custom award" means, shared by the picker's "+
+ * Add" button, its Enter-to-add, and its on-blur auto-commit (Mandy, 21 Sept
+ * 2026: typed "Most Promising Dog" into the box and pressed "Save Awards"
+ * without tapping "+ Add" first — the box's text was silently discarded and
+ * she got "You need at least one award"). A blank name, or one already in
+ * the list (case-insensitive, after canonicalisation), returns `value`
+ * unchanged so callers can cheaply check `result !== value` to know whether
+ * anything changed.
+ */
+export function commitPendingAward(value: string[], pendingName: string): string[] {
+  const trimmed = canonicalAwardName(pendingName);
+  if (!trimmed) return value;
+  const canon = (a: string) => a.toLowerCase().trim();
+  if (value.some((a) => canon(a) === canon(trimmed))) return value;
+  return [...value, trimmed];
+}
 
 /**
  * Build the ordered Best Awards list for a show: the show-type defaults first,
@@ -102,6 +185,7 @@ const CC_SUPERSEDES: Record<string, string> = {
 export function buildBestAwards(
   showType: string | null | undefined,
   customAwards: string[] = [],
+  showRuleset?: string | null,
 ): string[] {
   // A CONFIGURED list wins VERBATIM — same order, nothing added. The sponsors
   // page is the source of truth the secretary sees and edits; prepending
@@ -119,6 +203,12 @@ export function buildBestAwards(
   // so a club's awards read identically everywhere.
   if (customAwards.length > 0) return [...customAwards];
 
+  // A WUSV/SV regional show's fixed award structure (Mandy, 21 Sept 2026) —
+  // takes priority over showType, since a regional is `showType:
+  // 'championship'` + `showRuleset: 'wusv'` and must NOT get the RKC
+  // championship defaults (Best of Breed, CCs) below.
+  if (showRuleset === 'wusv') return [...REGIONAL_BEST_AWARDS];
+
   const defaults = DEFAULT_BEST_AWARDS[showType ?? ''] ?? ['Best in Show'];
   const canon = (a: string) => a.toLowerCase().trim();
   const present = new Set(defaults.map(canon));
@@ -132,4 +222,24 @@ export function buildBestAwards(
     result.push(award);
   }
   return result;
+}
+
+/**
+ * The Awards Picker's "Usually awarded" / "Also available" split — pulled
+ * out of the picker component so the component owns only rendering, not the
+ * rule for what counts as usual vs more (src/components/awards/
+ * awards-picker.tsx). RKC show types use DEFAULT_BEST_AWARDS/OPTIONAL_AWARDS;
+ * a WUSV/SV regional uses REGIONAL_BEST_AWARDS/REGIONAL_OPTIONAL_AWARDS —
+ * no Challenge Certificates, Best of Breed or Best in Show on offer there.
+ */
+export function bestAwardsPickerOptions(
+  showType: string | null | undefined,
+  showRuleset: string | null | undefined,
+): { usual: string[]; more: string[] } {
+  const usual = buildBestAwards(showType, [], showRuleset);
+  const canon = (a: string) => a.toLowerCase().trim();
+  const usualSet = new Set(usual.map(canon));
+  const optionalPool = showRuleset === 'wusv' ? REGIONAL_OPTIONAL_AWARDS : OPTIONAL_AWARDS;
+  const more = optionalPool.filter((a) => !usualSet.has(canon(a)));
+  return { usual, more };
 }

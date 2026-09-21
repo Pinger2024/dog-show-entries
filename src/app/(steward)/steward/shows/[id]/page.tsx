@@ -555,7 +555,7 @@ function BestOfBreedSection({
   const isSingleBreedShow =
     showScope != null ? showScope === 'single_breed' : classWinnersByBreed.size === 1;
   if (!isWusv && isSingleBreedShow) {
-    const topAwards = resolveTopAwards(showType, customAwards);
+    const topAwards = resolveTopAwards(showType, customAwards, showRuleset);
     if (topAwards.length === 0) return null;
 
     // Eligibility (#98 — the RKC "beaten" rule) runs through the shared engine
