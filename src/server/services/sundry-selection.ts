@@ -22,6 +22,7 @@
  *    comment at its call site for why.
  */
 import { and, eq, inArray } from 'drizzle-orm';
+import { TRPCError } from '@trpc/server';
 import type { db as Database } from '@/server/db';
 import { sundryItems } from '@/server/db/schema';
 
@@ -73,9 +74,17 @@ export async function validateSundrySelection(
   params: {
     showId: string;
     items: SundrySelectionInput[];
+    /**
+     * Quantities already on the order for each sundry item (2026-09-21,
+     * add-extras-to-entry) — `over_max` is judged on EXISTING + REQUESTED,
+     * not requested alone, so an exhibitor who already has 1 Catalogue
+     * (maxPerOrder 1) can't buy a second one after the fact via "Add extras".
+     * Omitted (or empty) for checkout, where nothing is on the order yet.
+     */
+    alreadyOnOrder?: Map<string, number>;
   },
 ): Promise<SundrySelectionResult> {
-  const { showId, items } = params;
+  const { showId, items, alreadyOnOrder } = params;
 
   if (items.length === 0) {
     return { items: [], violations: [] };
@@ -134,7 +143,8 @@ export async function validateSundrySelection(
       continue;
     }
 
-    if (item.maxPerOrder != null && quantity > item.maxPerOrder) {
+    const existingQty = alreadyOnOrder?.get(sundryItemId) ?? 0;
+    if (item.maxPerOrder != null && existingQty + quantity > item.maxPerOrder) {
       violations.push({
         sundryItemId,
         name: item.name,
@@ -153,4 +163,24 @@ export async function validateSundrySelection(
   }
 
   return { items: validated, violations };
+}
+
+/**
+ * ONE owner for turning a `SundryViolation` into the TRPCError a caller
+ * throws. `orders.checkout` and `orders.previewExtras`/`addExtras`
+ * (2026-09-21) both surface the SAME two messages checkout has always used —
+ * not_found/wrong_show/disabled collapse into one generic message, over_max
+ * gets its own — so callers don't hand-roll a second copy of this mapping.
+ */
+export function sundryViolationError(violation: SundryViolation): TRPCError {
+  if (violation.kind === 'over_max') {
+    return new TRPCError({
+      code: 'BAD_REQUEST',
+      message: `Maximum ${violation.max} of "${violation.name}" per order`,
+    });
+  }
+  return new TRPCError({
+    code: 'BAD_REQUEST',
+    message: `Sundry item not found or not available: ${violation.sundryItemId}`,
+  });
 }
