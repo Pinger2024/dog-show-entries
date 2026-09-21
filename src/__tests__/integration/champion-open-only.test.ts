@@ -28,9 +28,14 @@ async function makeAchievementShow() {
   const org = await makeOrg();
   const breed = await makeBreed();
   const show = await makeShow({ organisationId: org.id, breedId: breed.id, status: 'entries_open' });
+  // One definition per name, scheduled for BOTH sexes — as a real schedule
+  // is (Open Dog + Open Bitch). The eligible list must still name "Open"
+  // once; demo Winterfest read "We suggest Open or Open" before this.
   for (const name of ['Post Graduate', 'Limit', 'Open']) {
     const classDef = await makeClassDef({ name, type: 'achievement' });
-    await makeShowClass({ showId: show.id, breedId: breed.id, classDefinitionId: classDef.id });
+    for (const sex of ['dog', 'bitch'] as const) {
+      await makeShowClass({ showId: show.id, breedId: breed.id, classDefinitionId: classDef.id, sex });
+    }
   }
   return { owner, breed, show };
 }
