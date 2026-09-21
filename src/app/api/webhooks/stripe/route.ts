@@ -260,17 +260,13 @@ export async function POST(request: NextRequest) {
             if (extrasEntryId) {
               await db.insert(entryAuditLog).values({
                 entryId: extrasEntryId,
-                // No 'extras_added' enum value exists (would need a schema
-                // migration) — reuse 'classes_changed' and mark the real
-                // kind via `changes.via`; the secretary audit-log page
-                // relabels rows with `via === 'extras_payment'`.
-                action: 'classes_changed',
+                action: 'extras_added',
                 userId: paymentIntent.metadata.exhibitorId,
                 changes: { via: 'extras_payment', items: lines, subtotalPence, platformFeePence },
               });
             }
 
-            sendExtrasAddedEmail(extrasOrderId, extrasEntryId, lines).catch((err) =>
+            sendExtrasAddedEmail(extrasOrderId, extrasEntryId, lines, platformFeePence).catch((err) =>
               console.error('[webhook] Extras receipt email failed:', err)
             );
           }

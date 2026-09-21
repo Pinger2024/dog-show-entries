@@ -82,6 +82,20 @@ export async function priceOrderExtras(
     });
   }
 
+  // Offline orders (secretary-recorded postal/cash/BACS — `stripePaymentIntentId`
+  // IS NULL, which is exactly how show-metrics tells "the club already holds
+  // this money" from "Remi holds it") cannot take CARD extras: the order would
+  // still read as offline, so the card money would be attributed to the club
+  // as cash and never settled. Until offline-ness is keyed per PAYMENT, these
+  // exhibitors pay the secretary directly (design doc, "NOT in v1").
+  if (!order.stripePaymentIntentId) {
+    throw new TRPCError({
+      code: 'BAD_REQUEST',
+      message:
+        'This entry was paid directly to the club, so extras can\'t be added online — please contact the show secretary.',
+    });
+  }
+
   if (!entryWindowOpen(order.show)) {
     throw new TRPCError({
       code: 'BAD_REQUEST',

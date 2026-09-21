@@ -260,10 +260,11 @@ export default function EntryDetailPage() {
         </Card>
       )}
 
-      {entry.status === 'confirmed' && !entry.orderId && (
+      {entry.status === 'confirmed' && (!entry.orderId || !entry.order?.stripePaymentIntentId) && (
         <p className="text-center text-sm text-muted-foreground">
-          This entry doesn&apos;t have an order attached — to add extras like a
-          catalogue or class sponsorship, please contact the show secretary.
+          {entry.orderId
+            ? 'This entry was paid directly to the club, so extras like a catalogue or class sponsorship can\'t be added online — please contact the show secretary.'
+            : 'This entry doesn\'t have an order attached — to add extras like a catalogue or class sponsorship, please contact the show secretary.'}
         </p>
       )}
 
@@ -292,7 +293,7 @@ export default function EntryDetailPage() {
             entry is confirmed, has an order to attach the purchase to, and
             the window is still open. A legacy entry with no order can't take
             extras online — the copy under the Extras card below explains why. */}
-        {entry.status === 'confirmed' && entry.orderId && entryWindowOpen(entry.show) && (
+        {entry.status === 'confirmed' && entry.orderId && entry.order?.stripePaymentIntentId && entryWindowOpen(entry.show) && (
           <Button variant="outline" asChild className="w-full sm:w-auto min-h-[2.75rem]">
             <Link href={`/shows/${entry.show.slug ?? entry.showId}/entries/${entry.id}/extras`}>
               <Plus className="size-4" />

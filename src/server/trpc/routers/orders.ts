@@ -1076,21 +1076,17 @@ export const ordersRouter = createTRPCRouter({
 
         await ctx.db.insert(entryAuditLog).values({
           entryId: input.entryId,
-          // No 'extras_added' enum value exists yet (would need a schema
-          // migration — out of scope here, see the PR description); reuse
-          // 'classes_changed' and mark the real kind in `changes`. The
-          // secretary audit-log page relabels this via `changes.via`.
-          action: 'classes_changed',
+          action: 'extras_added',
           userId: ctx.session.user.id,
           changes: {
-            via: 'extras_payment',
+            via: 'extras_free',
             items: pricing.lines,
             subtotalPence: pricing.subtotalPence,
             platformFeePence: pricing.platformFeePence,
           },
         });
 
-        sendExtrasAddedEmail(input.orderId, input.entryId, pricing.lines).catch((err) =>
+        sendExtrasAddedEmail(input.orderId, input.entryId, pricing.lines, pricing.platformFeePence).catch((err) =>
           console.error('[orders.addExtras] Extras email failed:', err)
         );
 

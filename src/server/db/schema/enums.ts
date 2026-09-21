@@ -99,6 +99,9 @@ export const entryAuditActionEnum = pgEnum('entry_audit_action', [
   'handler_changed',
   'withdrawn',
   'reinstated',
+  // 2026-09-21: extras (sundries) bought on an already-paid entry.
+  // Added on prod/demo by startup-migrations (ALTER TYPE ... ADD VALUE).
+  'extras_added',
 ]);
 
 export const entryTypeEnum = pgEnum('entry_type', [

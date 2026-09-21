@@ -327,6 +327,9 @@ export async function sendExtrasAddedEmail(
   orderId: string,
   entryId: string | undefined,
   items: { sundryItemId: string; quantity: number; unitPrice: number }[],
+  /** Booking fee charged on this top-up (0 for free-only extras) — the
+   *  receipt must show what the card was actually charged, fee included. */
+  platformFeePence: number,
 ) {
   const order = await db.query.orders.findFirst({
     where: eq(orders.id, orderId),
@@ -348,6 +351,7 @@ export async function sendExtrasAddedEmail(
   const nameById = new Map(itemRows.map((r) => [r.id, r.name]));
 
   const subtotalPence = items.reduce((sum, i) => sum + i.unitPrice * i.quantity, 0);
+  const grossPence = subtotalPence + platformFeePence;
   const orderRef = order.id.slice(0, 8).toUpperCase();
 
   const itemLines = items
@@ -373,7 +377,7 @@ export async function sendExtrasAddedEmail(
         <div style="display: inline-block; width: 40px; height: 40px; line-height: 40px; border-radius: 50%; background: rgba(243,236,220,0.2); font-size: 20px; color: ${BRAND.cream}; margin-bottom: 8px;">&#10003;</div>
         <h2 style="margin: 0; color: ${BRAND.cream}; font-size: 22px; font-weight: 700;">Extras Added</h2>
         <p style="margin: 8px 0 0; color: rgba(243, 236, 220, 0.78); font-size: 14px;">
-          Order ${orderRef} &middot; ${formatFee(subtotalPence)}
+          Order ${orderRef} &middot; ${formatFee(grossPence)}
         </p>
       </div>
       <div style="padding: 20px 24px; border-bottom: 1px solid ${BRAND.line};">
@@ -386,9 +390,13 @@ export async function sendExtrasAddedEmail(
       </div>
       <div style="padding: 16px 24px; background: ${BRAND.paper};">
         <table style="width: 100%;">
+          ${platformFeePence > 0 ? `<tr>
+            <td style="font-size: 14px; color: ${BRAND.ink2};">Booking fee</td>
+            <td style="text-align: right; font-size: 14px; color: ${BRAND.ink2};">${formatFee(platformFeePence)}</td>
+          </tr>` : ''}
           <tr>
             <td style="font-weight: 700; font-size: 16px; color: ${BRAND.ink};">Total Paid</td>
-            <td style="text-align: right; font-weight: 700; font-size: 16px; color: ${BRAND.green};">${formatFee(subtotalPence)}</td>
+            <td style="text-align: right; font-weight: 700; font-size: 16px; color: ${BRAND.green};">${formatFee(grossPence)}</td>
           </tr>
         </table>
       </div>

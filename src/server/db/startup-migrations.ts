@@ -265,5 +265,12 @@ export async function runStartupMigrations() {
       ADD COLUMN IF NOT EXISTS render_job_id UUID REFERENCES document_render_jobs(id) ON DELETE SET NULL;
   `);
 
+  // ── 2026-09-21: add-extras-to-entry (Mandy) — extras bought after entry
+  // get their own audit action instead of masquerading as 'classes_changed'.
+  // ADD VALUE is idempotent with IF NOT EXISTS; PG ≥ 12 allows it here. ──
+  await db.execute(sql`
+    ALTER TYPE entry_audit_action ADD VALUE IF NOT EXISTS 'extras_added';
+  `);
+
   console.log(`[startup-migrations] done in ${Date.now() - started}ms`);
 }

@@ -142,7 +142,7 @@ describe('orders.previewExtras / addExtras — the add-extras-to-entry journey',
     expect(paidPayment?.status).toBe('succeeded');
 
     const audit = await testDb.query.entryAuditLog.findMany({ where: eq(entryAuditLog.entryId, entry.id) });
-    const applied = audit.filter((a) => (a.changes as { via?: string })?.via === 'extras_payment');
+    const applied = audit.filter((a) => a.action === 'extras_added' && (a.changes as { via?: string })?.via === 'extras_payment');
     expect(applied).toHaveLength(1);
 
     expect(vi.mocked(emailService.sendExtrasAddedEmail)).toHaveBeenCalledTimes(1);
@@ -188,6 +188,27 @@ describe('orders.previewExtras / addExtras — the add-extras-to-entry journey',
         items: [{ sundryItemId: sponsorshipItem.id, quantity: 1 }],
       })
     ).rejects.toThrow(/closed/i);
+  });
+
+  it('offline (cash/BACS) order → refused with a "contact the secretary" message, never a card charge', async () => {
+    // show-metrics keys "the club already holds this money" on
+    // orders.stripePaymentIntentId IS NULL; card extras on such an order
+    // would be attributed to the club as cash and never settled.
+    const { exhibitor, show, dog, sponsorshipItem } = await setupPaidEntry();
+    const offlineOrder = await makeOrder({
+      showId: show.id, exhibitorId: exhibitor.id, status: 'paid', totalAmount: 1000, stripePaymentIntentId: null,
+    });
+    const offlineEntry = await makeEntry({
+      showId: show.id, dogId: dog.id, exhibitorId: exhibitor.id, status: 'confirmed', totalFee: 1000, orderId: offlineOrder.id,
+    });
+    vi.mocked(stripeService.createPaymentIntent).mockClear();
+    const caller = createTestCaller(exhibitor);
+    const items = [{ sundryItemId: sponsorshipItem.id, quantity: 1 }];
+    await expect(caller.orders.previewExtras({ orderId: offlineOrder.id, items })).rejects.toThrow(/paid directly to the club/);
+    await expect(
+      caller.orders.addExtras({ orderId: offlineOrder.id, entryId: offlineEntry.id, items }),
+    ).rejects.toThrow(/paid directly to the club/);
+    expect(vi.mocked(stripeService.createPaymentIntent)).not.toHaveBeenCalled();
   });
 
   it('wrong owner → FORBIDDEN', async () => {
