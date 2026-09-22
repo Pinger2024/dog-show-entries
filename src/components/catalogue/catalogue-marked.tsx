@@ -571,7 +571,7 @@ export function CatalogueMarked({ show, entries, results, absentees, achievement
   // `isChampionship && !isMultiBreedChamp` used to be true for them too —
   // that was the live bug: a regional's marked catalogue printed the
   // exhibitor index unconditionally.
-  const backMatter = catalogueBackMatter(show);
+  const backMatter = catalogueBackMatter(show, 'marked');
   const isChampionship = show.showType === 'championship';
   const isMultiBreedChamp = isMultiBreedChampionship(show);
   const renderBreedIndex = createBreedIndexRenderer(

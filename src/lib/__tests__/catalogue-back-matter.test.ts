@@ -30,4 +30,12 @@ describe('catalogueBackMatter', () => {
       exhibitorIndex: false,
     });
   });
+
+  it("the marked (RKC submission) copy keeps its exhibitor index on a regional — Mandy's 22 Sept answer was about the exhibitors' catalogue, not a submission document", () => {
+    expect(catalogueBackMatter({ showRuleset: 'wusv' }, 'marked').exhibitorIndex).toBe(true);
+    expect(catalogueBackMatter({ showRuleset: 'wusv' }, 'catalogue').exhibitorIndex).toBe(false);
+    expect(catalogueBackMatter({ showRuleset: 'wusv' }).exhibitorIndex).toBe(false);
+    // The awards page Mandy DID ask for applies to both.
+    expect(catalogueBackMatter({ showRuleset: 'wusv' }, 'marked').awardsWriteIn).toBe(true);
+  });
 });

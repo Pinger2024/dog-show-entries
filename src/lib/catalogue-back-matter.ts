@@ -38,6 +38,19 @@ export interface CatalogueBackMatterShow {
   showRuleset?: string | null;
 }
 
+/**
+ * Which document is being rendered. The MARKED catalogue is not the
+ * catalogue exhibitors read — it is the secretary's marked-up submission
+ * copy, and RKC F(1).11.b(6) governs what it must contain. Mandy's 22 Sept
+ * answer ("no exhibitor index for regionals") was given about the catalogue
+ * she had just generated, and the question put to her said regionals had no
+ * index "at the moment" — true of that catalogue, but NOT true of the marked
+ * copy, which did print one. So her answer is not safely read as covering a
+ * submission document, and the marked copy keeps its index until she rules
+ * on it specifically. Do not "tidy" this away without asking her.
+ */
+export type CatalogueDocumentKind = 'catalogue' | 'marked';
+
 export interface CatalogueBackMatter {
   /** The Best Awards write-in page (Best Dog / Best Bitch / etc, blank
    *  lines for the day). Mandy, 22 Sept 2026: YES for regionals too. */
@@ -50,11 +63,16 @@ export interface CatalogueBackMatter {
   exhibitorIndex: boolean;
 }
 
-export function catalogueBackMatter(show: CatalogueBackMatterShow): CatalogueBackMatter {
+export function catalogueBackMatter(
+  show: CatalogueBackMatterShow,
+  document: CatalogueDocumentKind = 'catalogue',
+): CatalogueBackMatter {
   const isWusv = show.showRuleset === 'wusv';
   return {
     awardsWriteIn: true,
     notForCompetition: !isWusv,
-    exhibitorIndex: !isWusv,
+    // See CatalogueDocumentKind: the marked (RKC submission) copy keeps its
+    // index on a regional pending Mandy's explicit ruling.
+    exhibitorIndex: !isWusv || document === 'marked',
   };
 }
