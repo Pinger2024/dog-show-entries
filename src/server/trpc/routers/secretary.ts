@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { roleAfterGrant, type UserRole } from '@/lib/roles';
 import { TRPCError } from '@trpc/server';
 import { and, eq, sql, isNull, isNotNull, inArray, asc, desc, ilike } from 'drizzle-orm';
 import { secretaryProcedure, publicProcedure } from '../procedures';
@@ -2454,11 +2455,13 @@ export const secretaryRouter = createTRPCRouter({
         });
       }
 
-      // Update user role to steward if they're an exhibitor
-      if (user.role === 'exhibitor') {
+      // Grant steward (never lowers a role — src/lib/roles.ts). A judge-
+      // labelled user is raised to steward so the steward pages open for them.
+      const stewardRole = roleAfterGrant(user.role as UserRole, 'steward');
+      if (stewardRole !== user.role) {
         await ctx.db
           .update(users)
-          .set({ role: 'steward' })
+          .set({ role: stewardRole })
           .where(eq(users.id, user.id));
       }
 
