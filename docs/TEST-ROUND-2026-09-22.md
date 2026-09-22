@@ -307,7 +307,10 @@ separately, as issueRefund does), or go down (with the refund not counted)? This
 - Unpublishing results doesn't hide already-published award rows.
 
 **Data fixes for prod (need an OK first)**
-- Shows created in the new-show wizard close at 00:00 (bug 9). Moving them to 23:59 on the same date is
-  a production write.
-- Duplicate award holders already in prod from bug 7. The read-only SQL to list them is in
-  `docs/bug-hunt-2026-09-22-dup-award-holders.sql`.
+- Shows created in the new-show wizard close at 00:00 (bug 9). Checked prod read-only on 22 Sept: of the
+  shows not yet completed, only the DRAFT "Winter Spectacular 2026" does (entry close 1 Nov 00:00, postal
+  close 25 Oct 00:00). Midland (27 Sept 23:59) and North Eastern (28 Sept 23:59) are correct. Re-picking
+  its dates after the fix sets 23:59, or it's a one-row production fix.
+- Duplicate award holders from bug 7: checked prod read-only on 22 Sept and found **none**, and no
+  hidden post-publish corrections either. Nothing to clean up. The SQL is in
+  `docs/bug-hunt-2026-09-22-dup-award-holders.sql` for re-checking.
