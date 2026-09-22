@@ -26,6 +26,7 @@ import {
   BestsWriteInPage,
 } from './catalogue-front-matter';
 import type { ClassSponsorshipInfo } from './catalogue-types';
+import { catalogueBackMatter } from '@/lib/catalogue-back-matter';
 
 interface Props {
   show: CatalogueShowInfo;
@@ -461,6 +462,7 @@ function AdvertPages({
 export function CatalogueRingside({ show, entries, compact }: Props) {
   const allClasses = groupByClass(entries, show);
   const isChampionship = show.showType === 'championship';
+  const backMatter = catalogueBackMatter(show);
 
   // Build sponsorship lookup keyed on classLabel so JH (JHA/JHB) resolves too.
   const sponsorsByClassLabel = new Map<string, ClassSponsorshipInfo[]>();
@@ -666,12 +668,16 @@ export function CatalogueRingside({ show, entries, compact }: Props) {
       </Page>
 
       {/* Best Awards write-in page — the SAME component the By-Class catalogue
-          uses, so both formats read identically (Michael 2026-06-19). */}
-      <BestsWriteInPage show={show} />
+          uses, so both formats read identically (Michael 2026-06-19). Whether
+          this and the NFC list below print is owned by catalogueBackMatter()
+          (src/lib/catalogue-back-matter.ts) — this format never actually
+          renders for a WUSV show (it collapses to by-class first), but the
+          gate is here too so that stays true even if that ever changes. */}
+      {backMatter.awardsWriteIn && <BestsWriteInPage show={show} />}
 
       {/* Not For Competition — NFC dogs carry no class so they'd otherwise
           fall out of the sections entirely (Michael 2026-06-19). */}
-      <NotForCompetitionPage entries={entries} />
+      {backMatter.notForCompetition && <NotForCompetitionPage entries={entries} />}
 
 
       {/* Exhibitor Index — full details like the GSD Scotland PDF.

@@ -11,6 +11,7 @@ import {
 import { AdvertPage } from '@/components/schedule/shared/advert-page';
 import { formatDobKC, formatPedigreeKC, formatOwnerKC, uppercaseName } from './catalogue-utils';
 import type { CatalogueEntry, CatalogueShowInfo, ClassSponsorshipInfo } from './catalogue-types';
+import { catalogueBackMatter } from '@/lib/catalogue-back-matter';
 
 interface Props {
   show: CatalogueShowInfo;
@@ -224,10 +225,14 @@ export function CatalogueByBreed({ show, entries }: Props) {
   // only routed for all-breed shows (the API picks CatalogueByClass for
   // single-breed), but we still use the shared isMultiBreedChampionship
   // check for consistency with catalogue-standard / catalogue-marked.
+  // Whether an exhibitor index prints at all is owned by
+  // catalogueBackMatter() (Mandy, 22 Sept 2026: no exhibitor index for
+  // regionals) — an all-breed show is never WUSV in practice, but the gate
+  // belongs here regardless so this stays correct if that ever changes.
   const renderBreedIndex = createBreedIndexRenderer(
     show,
     entries,
-    isMultiBreedChampionship(show),
+    isMultiBreedChampionship(show) && catalogueBackMatter(show).exhibitorIndex,
   );
 
   return (

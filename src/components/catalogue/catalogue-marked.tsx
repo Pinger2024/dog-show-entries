@@ -13,6 +13,7 @@ import {
 } from './catalogue-front-matter';
 import { formatDobKC, formatPedigreeKC, formatOwnerKC, uppercaseName } from './catalogue-utils';
 import type { CatalogueEntry, CatalogueShowInfo } from './catalogue-types';
+import { catalogueBackMatter } from '@/lib/catalogue-back-matter';
 
 // The marked catalogue is a secretary-only submission to the RKC, not a public
 // publication. RKC F(1).11.b.(6) withhold-from-publication rules apply to
@@ -564,9 +565,20 @@ export function CatalogueMarked({ show, entries, results, absentees, achievement
     .sort((a, b) => awardRank(a.type) - awardRank(b.type));
 
   // RKC F(1).11.b(6) exhibitor index policy — see catalogue-standard.tsx.
+  // Whether an exhibitor index prints AT ALL (either shape) is owned by
+  // catalogueBackMatter() — Mandy, 22 Sept 2026: regionals get no exhibitor
+  // index. WUSV regionals are showType 'championship' but single-breed, so
+  // `isChampionship && !isMultiBreedChamp` used to be true for them too —
+  // that was the live bug: a regional's marked catalogue printed the
+  // exhibitor index unconditionally.
+  const backMatter = catalogueBackMatter(show);
   const isChampionship = show.showType === 'championship';
   const isMultiBreedChamp = isMultiBreedChampionship(show);
-  const renderBreedIndex = createBreedIndexRenderer(show, entries, isMultiBreedChamp);
+  const renderBreedIndex = createBreedIndexRenderer(
+    show,
+    entries,
+    isMultiBreedChamp && backMatter.exhibitorIndex,
+  );
 
   return (
     <Document>
@@ -870,7 +882,7 @@ export function CatalogueMarked({ show, entries, results, absentees, achievement
           Single-page version is for single-breed championship shows. The
           per-breed version (used by multi-breed championships) stays
           inline at the start of each breed section above. */}
-      {isChampionship && !isMultiBreedChamp && (
+      {isChampionship && !isMultiBreedChamp && backMatter.exhibitorIndex && (
         <ExhibitorIndexPage show={show} entries={entries} />
       )}
     </Document>

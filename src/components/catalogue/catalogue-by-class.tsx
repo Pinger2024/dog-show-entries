@@ -15,6 +15,7 @@ import { SV, SV_FONTS } from '@/components/schedule/shared/sv-styles';
 import { svCoatDisplayName, sectionClasses } from '@/lib/class-labels';
 import { AdvertPage } from '@/components/schedule/shared/advert-page';
 import { formatSvGradeBare } from '@/lib/sv-grading';
+import { catalogueBackMatter } from '@/lib/catalogue-back-matter';
 
 /**
  * One dog's recorded result, for the "judge-copy" format only — the SV/WUSV
@@ -647,6 +648,7 @@ function ChallengeCertificateHeader({ sex }: { sex: 'DOG' | 'BITCH' }) {
 
 export function CatalogueByClass({ show, entries, compact, judgeResults }: Props) {
   const isSvShow = show.showRuleset === 'wusv';
+  const backMatter = catalogueBackMatter(show);
   // Build a lookup: classLabel -> sponsorship info (array, since one class
   // can have multiple sponsors — e.g. one for the trophy and another for
   // the rosettes). Keyed on label rather than classNumber so that JH class
@@ -1184,14 +1186,14 @@ export function CatalogueByClass({ show, entries, compact, judgeResults }: Props
       </Page>
       ))}
 
-      {/* Back matter. SV catalogues keep their own structure (owner +
-          results details already live on each SV entry line), so the RKC
-          back-of-book pages are skipped for them. Order: principal-awards
-          write-in (results, straight after the last class) → Not For
-          Competition list → exhibitor index. */}
-      {!isSvShow && <BestsWriteInPage show={show} />}
-      {!isSvShow && <NotForCompetitionPage entries={entries} />}
-      {!isSvShow && (
+      {/* Back matter — which of these three pages print is owned by
+          catalogueBackMatter() (src/lib/catalogue-back-matter.ts), not by
+          `isSvShow` here. Order: principal-awards write-in (results,
+          straight after the last class) → Not For Competition list →
+          exhibitor index. */}
+      {backMatter.awardsWriteIn && <BestsWriteInPage show={show} />}
+      {backMatter.notForCompetition && <NotForCompetitionPage entries={entries} />}
+      {backMatter.exhibitorIndex && (
         <ExhibitorIndexPage show={show} entries={entries} compact={compact} />
       )}
       <AdvertPages adverts={show.adverts} position="inside_back" />
