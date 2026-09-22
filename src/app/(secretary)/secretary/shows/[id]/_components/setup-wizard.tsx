@@ -15,7 +15,12 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { trpc } from '@/lib/trpc';
-import { penceToPoundsString, poundsToPence } from '@/lib/date-utils';
+import {
+  penceToPoundsString,
+  poundsToPence,
+  toLondonDateTimeInput,
+  fromLondonDateTimeInput,
+} from '@/lib/date-utils';
 import {
   MIN_DAYS_BEFORE_SHOW_START,
   isCloseDateWithinFloor,
@@ -648,15 +653,13 @@ function StepDetails({
     threshold: show.multiDogThreshold != null ? String(show.multiDogThreshold) : '',
     packagePence: show.multiDogPackagePence != null ? penceToPoundsString(show.multiDogPackagePence) : '',
   });
+  // Close date/time boxes hold UK wall-clock 'YYYY-MM-DDTHH:mm' — never the
+  // UTC clock (2026-09-22: that moved every BST close an hour earlier per Save).
   const [entryCloseDate, setEntryCloseDate] = useState(
-    show.entryCloseDate
-      ? new Date(show.entryCloseDate).toISOString().slice(0, 16)
-      : '',
+    show.entryCloseDate ? toLondonDateTimeInput(show.entryCloseDate) : '',
   );
   const [postalCloseDate, setPostalCloseDate] = useState(
-    show.postalCloseDate
-      ? new Date(show.postalCloseDate).toISOString().slice(0, 16)
-      : '',
+    show.postalCloseDate ? toLondonDateTimeInput(show.postalCloseDate) : '',
   );
   const [secretaryName, setSecretaryName] = useState(show.secretaryName ?? '');
   const [secretaryEmail, setSecretaryEmail] = useState(
@@ -693,11 +696,11 @@ function StepDetails({
     // Mandy's hard rule (2026-08-04): entries — and postal entries — must
     // close at least two weeks before the show. Same helper + message the
     // server uses, so this can never drift from what the server accepts.
-    if (entryCloseDate && show.startDate && !isCloseDateWithinFloor(entryCloseDate, show.startDate)) {
+    if (entryCloseDate && show.startDate && !isCloseDateWithinFloor(fromLondonDateTimeInput(entryCloseDate), show.startDate)) {
       toast.error(entryCloseFloorMessage(show.startDate, 'entry close date'));
       return;
     }
-    if (postalCloseDate && show.startDate && !isCloseDateWithinFloor(postalCloseDate, show.startDate)) {
+    if (postalCloseDate && show.startDate && !isCloseDateWithinFloor(fromLondonDateTimeInput(postalCloseDate), show.startDate)) {
       toast.error(entryCloseFloorMessage(show.startDate, 'postal close date'));
       return;
     }
@@ -719,12 +722,8 @@ function StepDetails({
       regionalFeeConfig: isWusv ? regionalPayload?.config ?? undefined : undefined,
       multiDogThreshold: isWusv ? undefined : multiDog.threshold ? Number(multiDog.threshold) : null,
       multiDogPackagePence: isWusv ? undefined : multiDog.packagePence ? poundsToPence(Number(multiDog.packagePence)) : null,
-      entryCloseDate: entryCloseDate
-        ? new Date(entryCloseDate).toISOString()
-        : null,
-      postalCloseDate: postalCloseDate
-        ? new Date(postalCloseDate).toISOString()
-        : null,
+      entryCloseDate: entryCloseDate ? fromLondonDateTimeInput(entryCloseDate) : null,
+      postalCloseDate: postalCloseDate ? fromLondonDateTimeInput(postalCloseDate) : null,
       secretaryName: secretaryName || null,
       secretaryEmail: secretaryEmail || null,
       secretaryPhone: secretaryPhone || null,
@@ -889,7 +888,7 @@ function StepDetails({
                   // Mandy's hard rule (2026-08-04): same floor guard as Save
                   // (handleSave above), but on change — immediate feedback
                   // rather than a surprise on the eventual save.
-                  if (newClose && show.startDate && !isCloseDateWithinFloor(newClose, show.startDate)) {
+                  if (newClose && show.startDate && !isCloseDateWithinFloor(fromLondonDateTimeInput(newClose), show.startDate)) {
                     toast.error(entryCloseFloorMessage(show.startDate, 'entry close date'));
                     return;
                   }
@@ -924,7 +923,7 @@ function StepDetails({
                   onChange={(e) => {
                     const newClose = e.target.value ? `${e.target.value}T23:59` : '';
                     // Same floor guard as the entry close date above.
-                    if (newClose && show.startDate && !isCloseDateWithinFloor(newClose, show.startDate)) {
+                    if (newClose && show.startDate && !isCloseDateWithinFloor(fromLondonDateTimeInput(newClose), show.startDate)) {
                       toast.error(entryCloseFloorMessage(show.startDate, 'postal close date'));
                       return;
                     }

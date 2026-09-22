@@ -32,7 +32,7 @@ import {
 import Link from 'next/link';
 import { format, addDays, subDays } from 'date-fns';
 import { trpc } from '@/lib/trpc';
-import { poundsToPence, formatCurrency, parseLocalDate } from '@/lib/date-utils';
+import { poundsToPence, formatCurrency, parseLocalDate, fromLondonDateTimeInput } from '@/lib/date-utils';
 import {
   isCloseDateWithinFloor,
   latestPermissibleCloseDate,
@@ -183,14 +183,14 @@ const createShowSchema = z.object({
   // take a day"). Same helper + message the server uses, via superRefine
   // (not .refine) because the message needs the show's own date — the
   // client can never drift from what the server accepts.
-  if (data.entryCloseDate && data.startDate && !isCloseDateWithinFloor(data.entryCloseDate, data.startDate)) {
+  if (data.entryCloseDate && data.startDate && !isCloseDateWithinFloor(fromLondonDateTimeInput(data.entryCloseDate), data.startDate)) {
     ctx.addIssue({
       code: 'custom',
       message: entryCloseFloorMessage(data.startDate, 'entry close date'),
       path: ['entryCloseDate'],
     });
   }
-  if (data.postalCloseDate && data.startDate && !isCloseDateWithinFloor(data.postalCloseDate, data.startDate)) {
+  if (data.postalCloseDate && data.startDate && !isCloseDateWithinFloor(fromLondonDateTimeInput(data.postalCloseDate), data.startDate)) {
     ctx.addIssue({
       code: 'custom',
       message: entryCloseFloorMessage(data.startDate, 'postal close date'),
@@ -441,14 +441,16 @@ export default function NewShowPage() {
         venueId: venueId || undefined,
         startDate: values.startDate,
         endDate: values.endDate,
+        // A picked date means 00:00 UK time on that date, whatever zone the
+        // browser is in (parseLocalDate used the browser's own midnight).
         entriesOpenDate: values.entriesOpenDate
-          ? parseLocalDate(values.entriesOpenDate).toISOString()
+          ? fromLondonDateTimeInput(values.entriesOpenDate)
           : undefined,
         entryCloseDate: values.entryCloseDate
-          ? parseLocalDate(values.entryCloseDate).toISOString()
+          ? fromLondonDateTimeInput(values.entryCloseDate)
           : undefined,
         postalCloseDate: values.postalCloseDate
-          ? parseLocalDate(values.postalCloseDate).toISOString()
+          ? fromLondonDateTimeInput(values.postalCloseDate)
           : undefined,
         description: values.description || undefined,
         // Single-breed: pass class definition IDs directly

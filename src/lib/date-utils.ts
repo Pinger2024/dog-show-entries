@@ -236,6 +236,111 @@ export function londonCalendarDateStr(instant: Date): string {
 }
 
 /**
+ * Europe/London wall clock of an instant, broken into numbers. Module-level
+ * formatter: it is pinned to Europe/London, so the process / browser zone
+ * never enters into it. `hourCycle: 'h23'` so midnight is 00, never 24.
+ */
+const LONDON_WALL_CLOCK = new Intl.DateTimeFormat('en-GB', {
+  timeZone: 'Europe/London',
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit',
+  hour: '2-digit',
+  minute: '2-digit',
+  second: '2-digit',
+  hourCycle: 'h23',
+});
+
+function londonWallClockParts(instant: Date) {
+  const parts = LONDON_WALL_CLOCK.formatToParts(instant);
+  const get = (type: Intl.DateTimeFormatPartTypes) => Number(parts.find((p) => p.type === type)?.value);
+  return { year: get('year'), month: get('month'), day: get('day'), hour: get('hour'), minute: get('minute'), second: get('second') };
+}
+
+/** The London wall clock of `ms` written as if it were UTC — `wall - ms` is London's offset then. */
+function londonWallClockAsUtcMs(ms: number): number {
+  const p = londonWallClockParts(new Date(ms));
+  return Date.UTC(p.year, p.month - 1, p.day, p.hour, p.minute, p.second);
+}
+
+const pad2 = (n: number) => String(n).padStart(2, '0');
+
+/**
+ * THE ONE OWNER for turning a show's stored close (or open) instant into the
+ * value its date + time boxes hold: `YYYY-MM-DDTHH:mm` in UK wall-clock time,
+ * whatever zone the browser is in. The date box shows the first 10 chars, the
+ * time box chars 11–16. Its inverse is {@link fromLondonDateTimeInput}; every
+ * show-date form uses the pair and nothing else (guard:
+ * src/__tests__/london-datetime-input.test.ts).
+ *
+ * Why it exists (2026-09-22): the edit-show dialog and the setup wizard filled
+ * these boxes with `toISOString().slice(0, 16)` — the UTC clock — and saved
+ * them back as browser-local time. In British Summer Time a 23:59 close showed
+ * as 22:59 and every Save moved it an hour earlier; a 00:00 close became 23:00
+ * the day before, so schedules printed the close date a day early.
+ *
+ * Seconds are dropped (the time box works in minutes).
+ */
+export function toLondonDateTimeInput(instant: Date | string): string {
+  const d = typeof instant === 'string' ? new Date(instant) : instant;
+  if (Number.isNaN(d.getTime())) throw new RangeError(`Not a date/time: ${String(instant)}`);
+  const p = londonWallClockParts(d);
+  return `${String(p.year).padStart(4, '0')}-${pad2(p.month)}-${pad2(p.day)}T${pad2(p.hour)}:${pad2(p.minute)}`;
+}
+
+/**
+ * Inverse of {@link toLondonDateTimeInput}: reads a form value as UK
+ * wall-clock time and returns the instant it means, as an ISO string (what
+ * shows.create / shows.update take). Accepts `YYYY-MM-DDTHH:mm` (optionally
+ * `:ss`) or a bare `YYYY-MM-DD`, which means 00:00 UK time on that date.
+ *
+ * Never `new Date(value)`: a string with no offset is read in the BROWSER's
+ * zone — right on a UK device, but hours out for a secretary working from
+ * abroad (Mandy in Germany) or on a device set to another zone.
+ *
+ * Clock-change edges follow the usual ("compatible") convention: a time that
+ * does not exist (01:30 on the spring-forward Sunday) moves forward by the
+ * hour to 02:30 BST; a time that happens twice (01:30 on the autumn Sunday)
+ * takes the first, BST, one.
+ *
+ * Throws a RangeError on anything else (as `new Date(bad).toISOString()`
+ * did), so a malformed value can never be saved as some other instant.
+ */
+export function fromLondonDateTimeInput(value: string): string {
+  const m = /^(\d{4})-(\d{2})-(\d{2})(?:T(\d{2}):(\d{2})(?::(\d{2}))?)?$/.exec(value);
+  if (!m) throw new RangeError(`Not a UK date/time form value: "${value}"`);
+  const [year, month, day, hour, minute, second] = m.slice(1).map((v) => (v === undefined ? 0 : Number(v))) as [
+    number, number, number, number, number, number,
+  ];
+  const wall = Date.UTC(year, month - 1, day, hour, minute, second);
+  const check = new Date(wall);
+  if (
+    check.getUTCFullYear() !== year ||
+    check.getUTCMonth() !== month - 1 ||
+    check.getUTCDate() !== day ||
+    hour > 23 ||
+    minute > 59 ||
+    second > 59
+  ) {
+    throw new RangeError(`Not a real UK date/time: "${value}"`);
+  }
+
+  // London's offset is one of two values around any date; take them from a
+  // day either side (clock changes are months apart) and keep the instants
+  // whose London wall clock really is `wall`.
+  const DAY_MS = 86_400_000;
+  const offsetBefore = londonWallClockAsUtcMs(wall - DAY_MS) - (wall - DAY_MS);
+  const offsetAfter = londonWallClockAsUtcMs(wall + DAY_MS) - (wall + DAY_MS);
+  const matches = [wall - offsetBefore, wall - offsetAfter]
+    .filter((t) => londonWallClockAsUtcMs(t) === wall)
+    .sort((a, b) => a - b);
+  // No match = the spring-forward gap: keep the pre-change offset, which
+  // lands the same number of minutes after the jump.
+  const instant = matches[0] ?? wall - offsetBefore;
+  return new Date(instant).toISOString();
+}
+
+/**
  * Formats any instant (a Date, an ISO timestamp string, or a plain
  * YYYY-MM-DD date-only string) as a human date string, ALWAYS anchored to
  * the Europe/London calendar day — never the process's local timezone.

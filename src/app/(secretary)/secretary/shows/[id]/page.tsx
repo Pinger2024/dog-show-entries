@@ -22,7 +22,12 @@ import {
 import { toast } from 'sonner';
 import { trpc } from '@/lib/trpc';
 import { format } from 'date-fns';
-import { formatDateRange, poundsToPence } from '@/lib/date-utils';
+import {
+  formatDateRange,
+  poundsToPence,
+  toLondonDateTimeInput,
+  fromLondonDateTimeInput,
+} from '@/lib/date-utils';
 import {
   isCloseDateWithinFloor,
   latestPermissibleCloseDate,
@@ -456,7 +461,7 @@ function adjustCloseDateForFloor(
   newStartDate: string,
   field: 'entry close date' | 'postal close date',
 ) {
-  if (!newStartDate || !closeDate || isCloseDateWithinFloor(closeDate, newStartDate)) return;
+  if (!newStartDate || !closeDate || isCloseDateWithinFloor(fromLondonDateTimeInput(closeDate), newStartDate)) return;
   const adjusted = latestPermissibleCloseDate(newStartDate);
   setCloseDate(`${format(adjusted, 'yyyy-MM-dd')}T23:59`);
   toast.info(entryCloseAdjustedMessage(field, adjusted));
@@ -514,15 +519,13 @@ function EditShowDetailsDialog({
   const [onCallVet, setOnCallVet] = useState(show.onCallVet ?? '');
   const [startDate, setStartDate] = useState(show.startDate);
   const [endDate, setEndDate] = useState(show.endDate);
+  // Close date/time boxes hold UK wall-clock 'YYYY-MM-DDTHH:mm' — never the
+  // UTC clock (2026-09-22: that moved every BST close an hour earlier per Save).
   const [entryCloseDate, setEntryCloseDate] = useState(
-    show.entryCloseDate
-      ? new Date(show.entryCloseDate).toISOString().slice(0, 16)
-      : ''
+    show.entryCloseDate ? toLondonDateTimeInput(show.entryCloseDate) : ''
   );
   const [postalCloseDate, setPostalCloseDate] = useState(
-    show.postalCloseDate
-      ? new Date(show.postalCloseDate).toISOString().slice(0, 16)
-      : ''
+    show.postalCloseDate ? toLondonDateTimeInput(show.postalCloseDate) : ''
   );
   const [kcLicenceNo, setKcLicenceNo] = useState(show.kcLicenceNo ?? '');
   const [description, setDescription] = useState(show.description ?? '');
@@ -567,11 +570,11 @@ function EditShowDetailsDialog({
     // Mandy's hard rule (2026-08-04): entries — and postal entries — must
     // close at least two weeks before the show. Same helper + message the
     // server uses, so this can never drift from what the server accepts.
-    if (entryCloseDate && startDate && !isCloseDateWithinFloor(entryCloseDate, startDate)) {
+    if (entryCloseDate && startDate && !isCloseDateWithinFloor(fromLondonDateTimeInput(entryCloseDate), startDate)) {
       toast.error(entryCloseFloorMessage(startDate, 'entry close date'));
       return;
     }
-    if (postalCloseDate && startDate && !isCloseDateWithinFloor(postalCloseDate, startDate)) {
+    if (postalCloseDate && startDate && !isCloseDateWithinFloor(fromLondonDateTimeInput(postalCloseDate), startDate)) {
       toast.error(entryCloseFloorMessage(startDate, 'postal close date'));
       return;
     }
@@ -589,12 +592,8 @@ function EditShowDetailsDialog({
       onCallVet: onCallVet || null,
       startDate,
       endDate,
-      entryCloseDate: entryCloseDate
-        ? new Date(entryCloseDate).toISOString()
-        : null,
-      postalCloseDate: postalCloseDate
-        ? new Date(postalCloseDate).toISOString()
-        : null,
+      entryCloseDate: entryCloseDate ? fromLondonDateTimeInput(entryCloseDate) : null,
+      postalCloseDate: postalCloseDate ? fromLondonDateTimeInput(postalCloseDate) : null,
       kcLicenceNo: kcLicenceNo || null,
       description: description || null,
       bannerImageUrl: bannerImageUrl || null,
@@ -622,16 +621,8 @@ function EditShowDetailsDialog({
     setShowScope(show.showScope);
     setStartDate(show.startDate);
     setEndDate(show.endDate);
-    setEntryCloseDate(
-      show.entryCloseDate
-        ? new Date(show.entryCloseDate).toISOString().slice(0, 16)
-        : ''
-    );
-    setPostalCloseDate(
-      show.postalCloseDate
-        ? new Date(show.postalCloseDate).toISOString().slice(0, 16)
-        : ''
-    );
+    setEntryCloseDate(show.entryCloseDate ? toLondonDateTimeInput(show.entryCloseDate) : '');
+    setPostalCloseDate(show.postalCloseDate ? toLondonDateTimeInput(show.postalCloseDate) : '');
     setKcLicenceNo(show.kcLicenceNo ?? '');
     setDescription(show.description ?? '');
     setClassSexArrangement(show.classSexArrangement ?? '');
@@ -945,7 +936,7 @@ function EditShowDetailsDialog({
                       const newClose = e.target.value
                         ? `${e.target.value}T23:59`
                         : '';
-                      if (newClose && startDate && !isCloseDateWithinFloor(newClose, startDate)) {
+                      if (newClose && startDate && !isCloseDateWithinFloor(fromLondonDateTimeInput(newClose), startDate)) {
                         toast.error(entryCloseFloorMessage(startDate, 'entry close date'));
                         return;
                       }
@@ -978,7 +969,7 @@ function EditShowDetailsDialog({
                       const newClose = e.target.value
                         ? `${e.target.value}T23:59`
                         : '';
-                      if (newClose && startDate && !isCloseDateWithinFloor(newClose, startDate)) {
+                      if (newClose && startDate && !isCloseDateWithinFloor(fromLondonDateTimeInput(newClose), startDate)) {
                         toast.error(entryCloseFloorMessage(startDate, 'postal close date'));
                         return;
                       }
