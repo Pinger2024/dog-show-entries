@@ -64,7 +64,7 @@ import {
 } from '@/lib/default-checklist';
 import { getStripe } from '@/server/services/stripe';
 import { executeStripeRefund } from '@/server/services/stripe-refunds';
-import { deriveTopAwardJudge } from '@/server/services/derive-award-judge';
+import { recordTopAward, removeTopAwardHolder } from '@/server/services/achievements';
 import { penceToPoundsString } from '@/lib/date-utils';
 import { Resend } from 'resend';
 import { searchKcJudges, fetchKcJudgeProfile } from '@/server/services/kc-judges';
@@ -7251,7 +7251,10 @@ export const secretaryRouter = createTRPCRouter({
       });
     }),
 
-  /** Record a best award / achievement (secretary-scoped) */
+  /** Record a best award / achievement (secretary-scoped). The secretary may
+   *  correct an award after Publish Results (no lock check here, unlike the
+   *  steward); `recordTopAward` owns the entry check, the sex rule, which
+   *  previous holder is replaced, and publishing a post-publish correction. */
   recordAchievement: secretaryProcedure
     .input(
       z.object({
@@ -7263,79 +7266,7 @@ export const secretaryRouter = createTRPCRouter({
     )
     .mutation(async ({ ctx, input }) => {
       await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId, { callerIsAdmin: ctx.callerIsAdmin });
-
-      // Verify the dog is entered in this show
-      const dogEntry = await ctx.db.query.entries.findFirst({
-        where: and(
-          eq(entries.showId, input.showId),
-          eq(entries.dogId, input.dogId),
-          eq(entries.status, 'confirmed'),
-          isNull(entries.deletedAt)
-        ),
-        columns: { id: true },
-      });
-      if (!dogEntry) {
-        throw new TRPCError({
-          code: 'BAD_REQUEST',
-          message: 'This dog is not entered in this show',
-        });
-      }
-
-      // Validate sex matches award type
-      const DOG_ONLY_AWARDS = ['dog_cc', 'reserve_dog_cc', 'best_puppy_dog', 'best_long_coat_dog'];
-      const BITCH_ONLY_AWARDS = ['bitch_cc', 'reserve_bitch_cc', 'best_puppy_bitch', 'best_long_coat_bitch'];
-
-      if (DOG_ONLY_AWARDS.includes(input.type) || BITCH_ONLY_AWARDS.includes(input.type)) {
-        const dog = await ctx.db.query.dogs.findFirst({
-          where: eq(dogs.id, input.dogId),
-          columns: { sex: true },
-        });
-        const requiredSex = DOG_ONLY_AWARDS.includes(input.type) ? 'dog' : 'bitch';
-        if (dog?.sex !== requiredSex) {
-          throw new TRPCError({
-            code: 'BAD_REQUEST',
-            message: `This award is for ${requiredSex === 'dog' ? 'dogs' : 'bitches'} only`,
-          });
-        }
-      }
-
-      // Remove any existing same-type award for this show (not dog-specific — e.g. only one BIS)
-      // For show-level awards: only one dog can hold it
-      const UNIQUE_SHOW_AWARDS = [
-        'best_in_show', 'reserve_best_in_show', 'best_puppy_in_show', 'best_long_coat_in_show',
-        'best_of_breed', 'best_puppy_in_breed', 'best_veteran_in_breed',
-        'dog_cc', 'reserve_dog_cc', 'bitch_cc', 'reserve_bitch_cc',
-        'best_puppy_dog', 'best_puppy_bitch', 'best_long_coat_dog', 'best_long_coat_bitch',
-        'cc', 'reserve_cc',
-      ];
-
-      if (UNIQUE_SHOW_AWARDS.includes(input.type)) {
-        await ctx.db
-          .delete(achievements)
-          .where(
-            and(
-              eq(achievements.showId, input.showId),
-              eq(achievements.type, input.type)
-            )
-          );
-      }
-
-      // Capture the judge (derived from the show's breed-level judge
-      // assignments) so a CC credits the right judge toward the Champion
-      // "3 different judges" rule (Mandy 2026-07-09).
-      const judgeId = await deriveTopAwardJudge(ctx.db, input.showId, input.type);
-      const [achievement] = await ctx.db
-        .insert(achievements)
-        .values({
-          showId: input.showId,
-          dogId: input.dogId,
-          type: input.type,
-          date: input.date,
-          judgeId,
-        })
-        .returning();
-
-      return achievement!;
+      return recordTopAward(ctx.db, input);
     }),
 
   /** Remove a best award / achievement (secretary-scoped) */
@@ -7348,16 +7279,7 @@ export const secretaryRouter = createTRPCRouter({
     )
     .mutation(async ({ ctx, input }) => {
       await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId, { callerIsAdmin: ctx.callerIsAdmin });
-
-      await ctx.db
-        .delete(achievements)
-        .where(
-          and(
-            eq(achievements.id, input.achievementId),
-            eq(achievements.showId, input.showId)
-          )
-        );
-
+      await removeTopAwardHolder(ctx.db, { showId: input.showId, achievementId: input.achievementId });
       return { removed: true };
     }),
 

@@ -31,7 +31,7 @@ import {
 } from '@/lib/placements';
 import { svCoatDisplayName } from '@/lib/class-labels';
 import { SE_H } from '@/components/show-experience/tokens';
-import { resolveTopAwards, buildPlacementIndex, eligibleCandidates, isPuppyOnShowDate } from '@/lib/top-awards';
+import { resolveTopAwards, buildPlacementIndex, eligibleCandidates, isPuppyOnShowDate, awardFilter } from '@/lib/top-awards';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
@@ -82,13 +82,6 @@ const CHAMPIONSHIP_AWARDS: { type: AchievementType; label: string }[] = [
   { type: 'best_puppy_bitch', label: 'Best Puppy Bitch' },
   { type: 'best_long_coat_bitch', label: 'Best Long Coat Bitch' },
 ];
-
-/** Returns the required sex for a sex-specific award, or null if open */
-function requiredSexForAward(type: AchievementType): 'dog' | 'bitch' | null {
-  if (['dog_cc', 'reserve_dog_cc', 'best_puppy_dog', 'best_long_coat_dog'].includes(type)) return 'dog';
-  if (['bitch_cc', 'reserve_bitch_cc', 'best_puppy_bitch', 'best_long_coat_bitch'].includes(type)) return 'bitch';
-  return null;
-}
 
 /**
  * Show-level awards cascade from breed-level awards:
@@ -273,6 +266,7 @@ function BestAwardsSection({
     id: string;
     dogId: string;
     type: string;
+    createdAt?: Date | string;
     dog?: {
       id: string;
       registeredName: string;
@@ -335,18 +329,30 @@ function BestAwardsSection({
   const breedNames = [...new Set(confirmedDogs.map((d) => d.breedName).filter(Boolean))] as string[];
   breedNames.sort((a, b) => a.localeCompare(b));
 
-  function getExisting(type: string) {
-    return existingAchievements.find((a) => a.type === type);
+  // An award has one holder in its scope — the server's recordTopAward
+  // replaces the previous one. Rows saved before that fix can still hold the
+  // same award twice, so show the most recently recorded (her latest choice)
+  // and let "None" clear every one of them, not just whichever came first.
+  function holdersOf(rows: typeof existingAchievements, type: string) {
+    return rows
+      .filter((a) => a.type === type)
+      .sort((a, b) => new Date(b.createdAt ?? 0).getTime() - new Date(a.createdAt ?? 0).getTime());
   }
 
-  function handleAwardChange(type: AchievementType, dogId: string) {
-    const existing = getExisting(type);
+  function getExisting(type: string) {
+    return holdersOf(existingAchievements, type)[0];
+  }
+
+  /** `scopeRows` — the rows this picker row covers: the whole show, or one
+   *  breed's rows for a per-breed award on a multi-breed show (so "None" on
+   *  breed Y's Best of Breed can never remove breed X's). */
+  function handleAwardChange(type: AchievementType, dogId: string, scopeRows = existingAchievements) {
     if (dogId === 'none') {
-      if (existing) {
-        removeMut.mutate({ showId, achievementId: existing.id });
+      for (const holder of holdersOf(scopeRows, type)) {
+        removeMut.mutate({ showId, achievementId: holder.id });
       }
     } else {
-      // If there was a previous winner, the server will replace it
+      // The server replaces the previous holder (recordTopAward).
       recordMut.mutate({ showId, dogId, type, date: showDate });
     }
   }
@@ -470,7 +476,7 @@ function BestAwardsSection({
                   {breedName}
                 </h4>
                 {BREED_LEVEL_AWARDS.map((award) => {
-                  const existing = breedAchievements.find((a) => a.type === award.type);
+                  const existing = holdersOf(breedAchievements, award.type)[0];
                   return (
                     <AwardRow
                       key={`${breedName}-${award.type}`}
@@ -479,14 +485,14 @@ function BestAwardsSection({
                       existing={existing}
                       candidates={breedDogs}
                       isPending={isPending}
-                      onSelect={(dogId) => handleAwardChange(award.type, dogId)}
+                      onSelect={(dogId) => handleAwardChange(award.type, dogId, breedAchievements)}
                     />
                   );
                 })}
                 {isChampionship && (
                   <>
                     {CHAMPIONSHIP_AWARDS.map((award) => {
-                      const sexFilter = requiredSexForAward(award.type);
+                      const sexFilter = awardFilter(award.type).sex;
                       let filtered = sexFilter
                         ? breedDogs.filter((d) => d.sex === sexFilter)
                         : breedDogs;
@@ -495,7 +501,7 @@ function BestAwardsSection({
                         const puppyFiltered = filtered.filter((d) => puppyClassWinnerIds.has(d.dogId));
                         if (puppyFiltered.length > 0) filtered = puppyFiltered;
                       }
-                      const existing = breedAchievements.find((a) => a.type === award.type);
+                      const existing = holdersOf(breedAchievements, award.type)[0];
                       return (
                         <AwardRow
                           key={`${breedName}-${award.type}`}
@@ -504,7 +510,7 @@ function BestAwardsSection({
                           existing={existing}
                           candidates={filtered}
                           isPending={isPending}
-                          onSelect={(dogId) => handleAwardChange(award.type, dogId)}
+                          onSelect={(dogId) => handleAwardChange(award.type, dogId, breedAchievements)}
                         />
                       );
                     })}

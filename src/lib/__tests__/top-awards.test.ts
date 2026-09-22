@@ -9,11 +9,12 @@ import {
   eligibleCandidates,
   isReserveAward,
   isPuppyOnShowDate,
+  awardHolderScope,
   RESERVE_TYPES,
   type IndexClass,
   type TopAward,
 } from '@/lib/top-awards';
-import type { AchievementType } from '@/lib/placements';
+import { ACHIEVEMENT_TYPES, type AchievementType } from '@/lib/placements';
 
 // Build a TopAward the way the surfaces do, straight off the award type.
 const award = (type: AchievementType, name = type): TopAward => ({
@@ -95,6 +96,47 @@ describe('awardFilter', () => {
 // 2026-08-18): which of the three sign-off pages — dog / bitch / back
 // (overall) — a configured award name belongs on. Built on
 // awardNameToType + awardFilter, not a second copy of the vocabulary.
+describe('awardHolderScope — how many dogs may hold an award at one show', () => {
+  it('gives EVERY achievement type a scope (a new type cannot fall through)', () => {
+    for (const type of ACHIEVEMENT_TYPES) {
+      expect(['show', 'group', 'breed', 'dog']).toContain(awardHolderScope(type, 'general'));
+    }
+  });
+
+  it('single-breed show: every top award is one holder for the show', () => {
+    for (const type of [
+      'best_dog', 'best_bitch', 'reserve_best_dog', 'reserve_best_bitch',
+      'most_promising_young_dog', 'most_promising_young_bitch',
+      'best_of_breed', 'dog_cc', 'bitch_cc', 'best_puppy_dog', 'best_baby_puppy',
+      'best_long_coat_adult', 'best_veteran_in_show', 'best_in_show', 'best_veteran_in_group',
+    ] as const) {
+      expect(awardHolderScope(type, 'single_breed')).toBe('show');
+    }
+  });
+
+  it('multi-breed show: breed awards are per breed, "in Show" awards per show', () => {
+    expect(awardHolderScope('best_of_breed', 'general')).toBe('breed');
+    expect(awardHolderScope('dog_cc', 'general')).toBe('breed');
+    expect(awardHolderScope('best_dog', 'general')).toBe('breed');
+    expect(awardHolderScope('best_puppy_in_breed', 'group')).toBe('breed');
+    expect(awardHolderScope('best_in_show', 'general')).toBe('show');
+    expect(awardHolderScope('best_puppy_in_show', 'group')).toBe('show');
+    expect(awardHolderScope('best_veteran_in_show', 'general')).toBe('show');
+  });
+
+  it('Best Veteran in Group: per group on an all-breed show, the whole show on a group show', () => {
+    expect(awardHolderScope('best_veteran_in_group', 'general')).toBe('group');
+    expect(awardHolderScope('best_veteran_in_group', 'group')).toBe('show');
+  });
+
+  it('placements and qualifications are held by many dogs, on any show', () => {
+    for (const type of ['class_placement', 'group_placement', 'junior_warrant', 'stud_book'] as const) {
+      expect(awardHolderScope(type, 'single_breed')).toBe('dog');
+      expect(awardHolderScope(type, 'general')).toBe('dog');
+    }
+  });
+});
+
 describe('bestAwardSection', () => {
   it('sends sex-restricted awards to their own page', () => {
     expect(bestAwardSection('Dog Challenge Certificate')).toBe('dog');

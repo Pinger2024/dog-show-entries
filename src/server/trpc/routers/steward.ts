@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { TRPCError } from '@trpc/server';
-import { and, eq, ne, isNull, isNotNull, asc, sql, inArray } from 'drizzle-orm';
+import { and, eq, ne, isNotNull, asc, sql, inArray } from 'drizzle-orm';
 import { stewardProcedure, publicProcedure } from '../procedures';
 import { createTRPCRouter } from '../init';
 import type { Database } from '@/server/db';
@@ -17,7 +17,6 @@ import {
   stewardBreedAssignments,
   classDefinitions,
   achievements,
-  dogs,
   judges,
   judgeAssignments,
   memberships,
@@ -28,7 +27,7 @@ import { buildJudgeBreedAndClassification } from '@/lib/judge-breed-classificati
 import { buildClassLabelMap, svDisplayAge } from '@/lib/class-labels';
 import { publicOrgColumns } from '../public-org-columns';
 import { sendJudgeApprovalRequestEmail } from '@/server/services/email';
-import { deriveTopAwardJudge } from '@/server/services/derive-award-judge';
+import { recordTopAward, removeTopAwardHolder } from '@/server/services/achievements';
 
 /** Resolve a show slug or UUID to a UUID */
 async function resolveShowId(db: Database, idOrSlug: string): Promise<string> {
@@ -854,6 +853,10 @@ export const stewardRouter = createTRPCRouter({
     }),
 
   // ── BOB / BIS / Group achievements ──────────────────────
+  // Recording goes through `recordTopAward` — the same owner the secretary
+  // results page uses — so the entry check, the sex rule and which previous
+  // holder is replaced cannot drift between the two screens. The steward's
+  // one difference is kept here: nothing changes once results are locked.
   recordAchievement: stewardProcedure
     .input(
       z.object({
@@ -866,73 +869,7 @@ export const stewardRouter = createTRPCRouter({
     .mutation(async ({ ctx, input }) => {
       await verifyStewardAssignment(ctx.db, ctx.session.user.id, input.showId);
       await assertResultsNotLocked(ctx.db, input.showId);
-
-      // Verify the dog is entered in this show
-      const dogEntry = await ctx.db.query.entries.findFirst({
-        where: and(
-          eq(entries.showId, input.showId),
-          eq(entries.dogId, input.dogId),
-          eq(entries.status, 'confirmed'),
-          isNull(entries.deletedAt)
-        ),
-        columns: { id: true },
-      });
-      if (!dogEntry) {
-        throw new TRPCError({
-          code: 'BAD_REQUEST',
-          message: 'This dog is not entered in this show',
-        });
-      }
-
-      // Validate sex matches award type (Dog CC → dogs only, Bitch CC → bitches only)
-      const DOG_ONLY_AWARDS = ['dog_cc', 'reserve_dog_cc', 'best_puppy_dog', 'best_long_coat_dog'];
-      const BITCH_ONLY_AWARDS = ['bitch_cc', 'reserve_bitch_cc', 'best_puppy_bitch', 'best_long_coat_bitch'];
-
-      if (DOG_ONLY_AWARDS.includes(input.type) || BITCH_ONLY_AWARDS.includes(input.type)) {
-        const dog = await ctx.db.query.dogs.findFirst({
-          where: eq(dogs.id, input.dogId),
-          columns: { sex: true },
-        });
-        const requiredSex = DOG_ONLY_AWARDS.includes(input.type) ? 'dog' : 'bitch';
-        if (dog?.sex !== requiredSex) {
-          throw new TRPCError({
-            code: 'BAD_REQUEST',
-            message: `This award is for ${requiredSex === 'dog' ? 'dogs' : 'bitches'} only`,
-          });
-        }
-      }
-
-      // A show-level achievement (BIS, BOB, a CC, …) can be held by only ONE
-      // dog per show, so assigning it must remove any previous holder — not
-      // just a prior assignment to the SAME dog. Deleting by (show, dog, type)
-      // let two different dogs both hold e.g. Best in Show (bug hunt #14).
-      // (Multi-breed per-breed BOB/CC scoping is separate future work —
-      // achievements aren't breed-scoped yet; current shows are single-breed.)
-      await ctx.db
-        .delete(achievements)
-        .where(
-          and(
-            eq(achievements.showId, input.showId),
-            eq(achievements.type, input.type)
-          )
-        );
-
-      // Capture the judge who awarded it (derived from the show's breed-level
-      // judge assignments) so a CC credits the right judge toward the Champion
-      // "3 different judges" rule (Mandy 2026-07-09).
-      const judgeId = await deriveTopAwardJudge(ctx.db, input.showId, input.type);
-      const [achievement] = await ctx.db
-        .insert(achievements)
-        .values({
-          showId: input.showId,
-          dogId: input.dogId,
-          type: input.type,
-          date: input.date,
-          judgeId,
-        })
-        .returning();
-
-      return achievement!;
+      return recordTopAward(ctx.db, input);
     }),
 
   removeAchievement: stewardProcedure
@@ -946,17 +883,7 @@ export const stewardRouter = createTRPCRouter({
     .mutation(async ({ ctx, input }) => {
       await verifyStewardAssignment(ctx.db, ctx.session.user.id, input.showId);
       await assertResultsNotLocked(ctx.db, input.showId);
-
-      await ctx.db
-        .delete(achievements)
-        .where(
-          and(
-            eq(achievements.showId, input.showId),
-            eq(achievements.dogId, input.dogId),
-            eq(achievements.type, input.type)
-          )
-        );
-
+      await removeTopAwardHolder(ctx.db, { showId: input.showId, dogId: input.dogId, type: input.type });
       return { removed: true };
     }),
 

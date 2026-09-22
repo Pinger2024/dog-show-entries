@@ -28,12 +28,19 @@ async function singleBreedShow(scope: 'single_breed' | 'group' | 'general' = 'si
     status: 'in_progress',
   });
   const showClass = await makeShowClass({ showId: show.id, breedId: breed.id });
-  const dog = await makeDog({ ownerId: exhibitor.id, breedId: breed.id });
+  // `dog` is a bitch and `male` a dog: an award's sex rule (awardFilter) is
+  // enforced when it's recorded, so Best Bitch can't go to a dog.
+  const dog = await makeDog({ ownerId: exhibitor.id, breedId: breed.id, sex: 'bitch' });
   const entry = await makeEntry({
     showId: show.id, dogId: dog.id, exhibitorId: exhibitor.id, status: 'confirmed',
   });
   await makeEntryClass({ entryId: entry.id, showClassId: showClass.id });
-  return { secretary, show, breed, dog, caller: createTestCaller(secretary) };
+  const male = await makeDog({ ownerId: exhibitor.id, breedId: breed.id, sex: 'dog' });
+  const maleEntry = await makeEntry({
+    showId: show.id, dogId: male.id, exhibitorId: exhibitor.id, status: 'confirmed',
+  });
+  await makeEntryClass({ entryId: maleEntry.id, showClassId: showClass.id });
+  return { secretary, show, breed, dog, male, caller: createTestCaller(secretary) };
 }
 
 describe('top-award judge capture', () => {
@@ -51,7 +58,7 @@ describe('top-award judge capture', () => {
   });
 
   it('picks the correct sex judge when dogs and bitches are split', async () => {
-    const { show, breed, dog, caller } = await singleBreedShow();
+    const { show, breed, dog, male, caller } = await singleBreedShow();
     const dogJudge = await makeJudge({ name: 'Dog Judge' });
     const bitchJudge = await makeJudge({ name: 'Bitch Judge' });
     await makeJudgeAssignment({ showId: show.id, judgeId: dogJudge.id, breedId: breed.id, sex: 'dog' });
@@ -63,7 +70,7 @@ describe('top-award judge capture', () => {
     expect(bitchAch?.judgeId).toBe(bitchJudge.id);
 
     const dogAch = await caller.secretary.recordAchievement({
-      showId: show.id, dogId: dog.id, type: 'best_dog', date: '2030-06-01',
+      showId: show.id, dogId: male.id, type: 'best_dog', date: '2030-06-01',
     });
     expect(dogAch?.judgeId).toBe(dogJudge.id);
   });
