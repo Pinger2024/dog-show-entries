@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { eq } from 'drizzle-orm';
-import { judgeAssignments, results } from '@/server/db/schema';
+import { dogOwners, judgeAssignments, results } from '@/server/db/schema';
 import { testDb } from '../helpers/db';
 import { createTestCaller } from '../helpers/context';
 import {
@@ -303,5 +303,30 @@ describe('guarantor home addresses never leave club scope', () => {
     const { secretary, show } = await showWithGuarantors();
     const result = await createTestCaller(secretary).shows.getById({ id: show.id });
     expect(result.scheduleData?.guarantors?.[0]?.address).toBe(ADDRESS);
+  });
+});
+
+/**
+ * Bug hunt 2026-09-22: secretary.searchDogs searches every dog on Remi (any
+ * self-registered secretary can call it) and returned each dog's owner row in
+ * full — home address and phone included. The Add Entry dialog only uses the
+ * owner's name and email.
+ */
+describe("secretary dog search doesn't hand out owners' addresses or phones", () => {
+  it('returns owner name and email only', async () => {
+    const { user: secretary } = await makeSecretaryWithOrg();
+    const stranger = await makeUser({ role: 'exhibitor' });
+    const dog = await makeDog({ ownerId: stranger.id, registeredName: 'Zyxwvut Searchable Rex' });
+    await testDb.insert(dogOwners).values({
+      dogId: dog.id, ownerName: 'Olive Owner', ownerEmail: 'olive@example.com',
+      ownerAddress: '7 Secret Street, Nowhere NW1 1AA', ownerPhone: '07700 900777',
+      isPrimary: true, sortOrder: 0,
+    });
+    const found = await createTestCaller(secretary).secretary.searchDogs({ query: 'Zyxwvut Searchable' });
+    expect(found).toHaveLength(1);
+    const json = JSON.stringify(found);
+    expect(json).not.toContain('7 Secret Street');
+    expect(json).not.toContain('07700 900777');
+    expect(found[0].owners[0]).toMatchObject({ ownerName: 'Olive Owner', ownerEmail: 'olive@example.com' });
   });
 });

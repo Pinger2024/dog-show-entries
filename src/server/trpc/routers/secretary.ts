@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { dogSearchOwnerColumns } from '../owner-lookup-columns';
 import { roleAfterGrant, type UserRole } from '@/lib/roles';
 import { TRPCError } from '@trpc/server';
 import { and, eq, sql, isNull, isNotNull, inArray, asc, desc, ilike } from 'drizzle-orm';
@@ -3473,7 +3474,8 @@ export const secretaryRouter = createTRPCRouter({
         ),
         with: {
           breed: { with: { group: true } },
-          owners: { orderBy: [asc(dogOwners.sortOrder)], limit: 1 },
+          // Name + email only — never an owner's address or phone (owner-lookup-columns.ts).
+          owners: { columns: dogSearchOwnerColumns, orderBy: [asc(dogOwners.sortOrder)], limit: 1 },
           titles: true,
         },
         limit: input.limit,

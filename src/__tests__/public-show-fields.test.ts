@@ -42,3 +42,11 @@ describe('public show payloads — one owner guard', () => {
     expect(src).toMatch(/isPrivileged \? show\.scheduleData : toPublicScheduleData\(show\.scheduleData\)/);
   });
 });
+
+describe('secretary dog search — owner columns guard', () => {
+  it('searchDogs scopes the owner include to dogSearchOwnerColumns', () => {
+    const src = readFileSync(join(__dirname, '../server/trpc/routers/secretary.ts'), 'utf8');
+    const block = src.slice(src.indexOf('searchDogs: secretaryProcedure'), src.indexOf('searchDogs: secretaryProcedure') + 900);
+    expect(block).toMatch(/owners: \{ columns: dogSearchOwnerColumns/);
+  });
+});
