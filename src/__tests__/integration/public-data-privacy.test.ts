@@ -330,3 +330,30 @@ describe("secretary dog search doesn't hand out owners' addresses or phones", ()
     expect(found[0].owners[0]).toMatchObject({ ownerName: 'Olive Owner', ownerEmail: 'olive@example.com' });
   });
 });
+
+/**
+ * Bug hunt 2026-09-22: dogs.getShowResults (any logged-in user, any dog id —
+ * dog ids are public on /dog/<id>) returned every placing, special award and
+ * critique for the dog with no publication gate, so a rival could read show-
+ * day results before the secretary published them.
+ */
+describe('dogs.getShowResults respects publication', () => {
+  it("hides a rival dog's unpublished placings; the owner still sees them", async () => {
+    const owner = await makeUser({ role: 'exhibitor' });
+    const rival = await makeUser({ role: 'exhibitor' });
+    const breed = await makeBreed();
+    const dog = await makeDog({ ownerId: owner.id, breedId: breed.id });
+    const org = await makeOrg();
+    const show = await makeShow({ organisationId: org.id, status: 'in_progress', startDate: pastDate(0), endDate: pastDate(0) });
+    const showClass = await makeShowClass({ showId: show.id, breedId: breed.id });
+    const entry = await makeEntry({ showId: show.id, dogId: dog.id, exhibitorId: owner.id, status: 'confirmed' });
+    const ec = await makeEntryClass({ entryId: entry.id, showClassId: showClass.id });
+    const result = await makeResult({ entryClassId: ec.id, placement: 1 });
+
+    expect(await createTestCaller(rival).dogs.getShowResults({ dogId: dog.id })).toHaveLength(0);
+    expect(await createTestCaller(owner).dogs.getShowResults({ dogId: dog.id })).toHaveLength(1);
+
+    await testDb.update(results).set({ publishedAt: new Date() }).where(eq(results.id, result.id));
+    expect(await createTestCaller(rival).dogs.getShowResults({ dogId: dog.id })).toHaveLength(1);
+  });
+});

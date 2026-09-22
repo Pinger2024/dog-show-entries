@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { isVisibleToViewer } from '@/lib/result-visibility';
 import { SHOW_COLUMNS_FOR_PUBLIC_INCLUDE } from '../public-show-fields';
 import { TRPCError } from '@trpc/server';
 import { and, eq, desc, isNull, inArray, lt } from 'drizzle-orm';
@@ -75,7 +76,7 @@ export const timelineRouter = createTRPCRouter({
       // before the secretary publishes them — same gate as getLiveResults.
       const showResults = dogEntries
         .filter((e) =>
-          e.entryClasses.some((ec) => ec.result && ec.result.publishedAt != null)
+          e.entryClasses.some((ec) => isVisibleToViewer(ec.result, false))
         )
         .map((entry) => ({
           itemType: 'show_result' as const,
@@ -89,7 +90,7 @@ export const timelineRouter = createTRPCRouter({
             showType: entry.show.showType,
           },
           classes: entry.entryClasses
-            .filter((ec) => ec.result && ec.result.publishedAt != null)
+            .filter((ec) => isVisibleToViewer(ec.result, false))
             .map((ec) => ({
               className: ec.showClass.classDefinition.name,
               classNumber: ec.showClass.classNumber,

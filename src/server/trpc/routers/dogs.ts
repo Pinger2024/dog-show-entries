@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { isVisibleToViewer } from '@/lib/result-visibility';
 import { SHOW_COLUMNS_FOR_PUBLIC_INCLUDE } from '../public-show-fields';
 import { TRPCError } from '@trpc/server';
 import { and, eq, ne, inArray, isNull, isNotNull, or, asc, desc, sql } from 'drizzle-orm';
@@ -274,7 +275,7 @@ export const dogsRouter = createTRPCRouter({
           showType: entry.show.showType,
           classes: entry.entryClasses.map((ec) => {
             const result =
-              viewerIsOwner || ec.result?.publishedAt != null ? ec.result : null;
+              isVisibleToViewer(ec.result, viewerIsOwner) ? ec.result : null;
             return {
               className: ec.showClass.classDefinition.name,
               classNumber: ec.showClass.classNumber,
@@ -330,7 +331,7 @@ export const dogsRouter = createTRPCRouter({
         // stay hidden until published (owners see their own immediately).
         achievements: viewerIsOwner
           ? dog.achievements.map(withEffectiveType)
-          : dog.achievements.filter((a) => a.publishedAt != null).map(withEffectiveType),
+          : dog.achievements.filter((a) => isVisibleToViewer(a, false)).map(withEffectiveType),
         showHistory,
         stats: {
           totalShows,
@@ -1466,10 +1467,14 @@ export const dogsRouter = createTRPCRouter({
         );
       }
 
+      // The dog's own people see results as soon as they're keyed in; anyone
+      // else only once published (src/lib/result-visibility.ts).
+      const viewerMaySeeUnpublished = await userMayActOnDog(ctx.db, ctx.session.user.id, input.dogId);
+
       // Flatten to results with placements in a single pass
       const flatResults = dogEntries.flatMap((entry) =>
         entry.entryClasses
-          .filter((ec) => ec.result?.placement)
+          .filter((ec) => ec.result?.placement && isVisibleToViewer(ec.result, viewerMaySeeUnpublished))
           .map((ec) => ({
             id: ec.id,
             showId: entry.show.id,
