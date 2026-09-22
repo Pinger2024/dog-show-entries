@@ -550,12 +550,6 @@ export function CatalogueRingside({ show, entries, compact }: Props) {
           const chunkClasses = section.classes;
           return (
             <Fragment key={`section-${section.key}`}>
-              <View minPresenceAhead={80}>
-                <Text style={s.sexBand}>{section.label}</Text>
-                {section.judge && (
-                  <Text style={s.sexBandJudge}>Judge: {section.judge}</Text>
-                )}
-              </View>
               {chunkClasses.map((classGroup, classIdx) => {
               const sorted = sortEntries(classGroup.entries);
               const sps = classGroup.classLabel
@@ -583,8 +577,25 @@ export function CatalogueRingside({ show, entries, compact }: Props) {
                   key={`cls-${section.key}-${classGroup.classLabel || classGroup.className}-${classIdx}`}
                   wrap={!keepAtomic}
                 >
-                  {/* Header + sponsor lines + first entries kept atomic */}
+                  {/* Header + sponsor lines + first entries kept atomic.
+                      The SECTION band travels inside this block too, for the
+                      first class of each section — as a sibling it carried
+                      minPresenceAhead={80}, which react-pdf satisfied while
+                      this block (needing ~100pt, more with sponsor lines)
+                      moved on without it, stranding "JUNIOR HANDLING" and its
+                      judge at a page foot. Mandy hit exactly that on the
+                      regional by-class catalogue, 22 Sept 2026; the same
+                      shape was here. A look-ahead number cannot express "as
+                      much room as the next atomic block needs". */}
                   <View wrap={false} minPresenceAhead={keepAtomic ? undefined : 100}>
+                    {classIdx === 0 && (
+                      <View style={{ marginBottom: 2 }}>
+                        <Text style={s.sexBand}>{section.label}</Text>
+                        {section.judge && (
+                          <Text style={s.sexBandJudge}>Judge: {section.judge}</Text>
+                        )}
+                      </View>
+                    )}
                     <View style={s.classHeader}>
                       <Text style={s.classHeaderText}>
                         {classGroup.classLabel
