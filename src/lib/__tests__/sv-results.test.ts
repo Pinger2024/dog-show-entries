@@ -128,7 +128,6 @@ function entry(opts: {
   dogSeq += 1;
   return {
     id: `e${dogSeq}`,
-    absent: opts.absent ?? false,
     catalogueNumber: opts.ring ?? String(100 + dogSeq),
     entryType: 'standard',
     dog: {
@@ -163,6 +162,7 @@ function entry(opts: {
     entryClasses: [
       {
         showClassId: opts.showClassId,
+        absent: opts.absent ?? false,
         result:
           opts.grade === undefined && opts.placement === undefined
             ? null
@@ -176,12 +176,11 @@ function jhEntry(showClassId: string, handler: string, placement: number, ring: 
   dogSeq += 1;
   return {
     id: `jh${dogSeq}`,
-    absent: false,
     catalogueNumber: ring,
     entryType: 'junior_handler',
     dog: null,
     juniorHandler: { handlerName: handler, dateOfBirth: '2015-01-01' },
-    entryClasses: [{ showClassId, result: { svGrade: null, placement, placementStatus: null } }],
+    entryClasses: [{ showClassId, absent: false, result: { svGrade: null, placement, placementStatus: null } }],
   };
 }
 
@@ -257,11 +256,11 @@ describe('computeClassMembers', () => {
   it('ranks within grade and restarts per grade, absentees last at 90+', () => {
     const sc = svClass('c1', 'Working', 'dog', 'stock');
     const members = [
-      { entry: entry({ showClassId: 'c1', name: 'A', grade: 'v', placement: 1, ring: '10' }), result: { svGrade: 'v', placement: 1, placementStatus: null } },
-      { entry: entry({ showClassId: 'c1', name: 'B', grade: 'v', placement: 2, ring: '11' }), result: { svGrade: 'v', placement: 2, placementStatus: null } },
-      { entry: entry({ showClassId: 'c1', name: 'C', grade: 'g', placement: 3, ring: '12' }), result: { svGrade: 'g', placement: 3, placementStatus: null } },
-      { entry: entry({ showClassId: 'c1', name: 'D', absent: true, ring: '14' }), result: null },
-      { entry: entry({ showClassId: 'c1', name: 'E', absent: true, ring: '13' }), result: null },
+      { entry: entry({ showClassId: 'c1', name: 'A', grade: 'v', placement: 1, ring: '10' }), result: { svGrade: 'v', placement: 1, placementStatus: null }, absent: false },
+      { entry: entry({ showClassId: 'c1', name: 'B', grade: 'v', placement: 2, ring: '11' }), result: { svGrade: 'v', placement: 2, placementStatus: null }, absent: false },
+      { entry: entry({ showClassId: 'c1', name: 'C', grade: 'g', placement: 3, ring: '12' }), result: { svGrade: 'g', placement: 3, placementStatus: null }, absent: false },
+      { entry: entry({ showClassId: 'c1', name: 'D', absent: true, ring: '14' }), result: null, absent: true },
+      { entry: entry({ showClassId: 'c1', name: 'E', absent: true, ring: '13' }), result: null, absent: true },
     ];
     const rows = computeClassMembers(sc, members);
     expect(rows.map((r) => [r.gradeDisplay, r.placementDisplay, r.entry.dog?.registeredName])).toEqual([
@@ -358,5 +357,18 @@ describe('buildSvResultsXlsxRows', () => {
     const tornado = rows.find((r) => r.dogName === 'Tornado')!;
     expect(tornado.grading).toBe('Abs');
     expect(tornado.placing).toBe(90);
+  });
+});
+
+// Guard (register §4, 2026-09-11): the SV report's loader must feed the
+// PER-CLASS absent flag, never the entries.absent roll-up. The input type has
+// no entry-level `absent`; this keeps anyone from re-adding it on the loader.
+describe('SV results absent flag — one owner guard', () => {
+  it('sv-results-data reads entry_classes.absent, not the entries.absent roll-up', async () => {
+    const { readFileSync } = await import('node:fs');
+    const { join } = await import('node:path');
+    const src = readFileSync(join(process.cwd(), 'src/server/services/sv-results-data.ts'), 'utf8');
+    expect(src).toMatch(/absent:\s*ec\.absent/);
+    expect(src).not.toMatch(/\be\.absent\b/);
   });
 });

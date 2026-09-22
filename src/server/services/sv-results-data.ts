@@ -78,7 +78,6 @@ export async function loadSvResultsData(
     .filter((e) => e.status === 'confirmed' && !e.deletedAt)
     .map((e) => ({
       id: e.id,
-      absent: e.absent,
       catalogueNumber: e.catalogueNumber ?? null,
       entryType: e.entryType,
       dog: e.dog
@@ -114,6 +113,8 @@ export async function loadSvResultsData(
         : null,
       entryClasses: e.entryClasses.map((ec) => ({
         showClassId: ec.showClassId,
+        // Per-class flag, never the entries.absent roll-up — see SvEntryClassInput.
+        absent: ec.absent,
         result: ec.result
           ? {
               svGrade: ec.result.svGrade ?? null,

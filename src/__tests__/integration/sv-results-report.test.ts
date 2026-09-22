@@ -62,10 +62,10 @@ async function svEntry(opts: {
   return row!;
 }
 
-async function svEntryClass(entryId: string, showClassId: string) {
+async function svEntryClass(entryId: string, showClassId: string, opts: { absent?: boolean } = {}) {
   const [row] = await testDb
     .insert(schema.entryClasses)
-    .values({ entryId, showClassId, fee: 2000 })
+    .values({ entryId, showClassId, fee: 2000, absent: opts.absent ?? false })
     .returning();
   return row!;
 }
@@ -134,7 +134,7 @@ describe('SV graded results report — end to end', () => {
     // Entry → class links + graded results
     const ecAnton = await svEntryClass(eAnton.id, cWorkMaleStock.id);
     await svResult(ecAnton.id, 'v', 1);
-    const ecTornado = await svEntryClass(eTornado.id, cWorkMaleStock.id); // absent → no grade
+    const ecTornado = await svEntryClass(eTornado.id, cWorkMaleStock.id, { absent: true }); // absent → no grade
     void ecTornado;
     const ecBailey = await svEntryClass(eBailey.id, cWorkBitchStock.id);
     await svResult(ecBailey.id, 'v', 1);
@@ -215,6 +215,57 @@ describe('SV graded results report — end to end', () => {
     // xlsx files are ZIP archives — first two bytes are 'PK'.
     expect(xlsx[0]).toBe(0x50);
     expect(xlsx[1]).toBe(0x4b);
+  });
+
+  // Register §4 (2026-09-11): entry_classes.absent is authoritative per class;
+  // entries.absent is a roll-up that is true only when EVERY class is absent.
+  // A dog absent from her graded class but shown in a Special Award class has
+  // entries.absent = false — the report must still list her as Abs, not grade
+  // and rank her in a class she never walked into.
+  it('lists a dog absent from her graded class as Abs even when she was shown in a Special Award class', async () => {
+    const { org, breed } = await makeSecretaryWithOrgAndBreed();
+    const exhibitor = await makeUser({ role: 'exhibitor' });
+    const show = await makeShow({
+      organisationId: org.id,
+      showRuleset: 'wusv',
+      showScope: 'single_breed',
+      breedId: breed.id,
+      status: 'completed',
+      startDate: '2026-10-04',
+      endDate: '2026-10-04',
+    });
+    const workingDef = await makeClassDef({ name: 'SV Working', type: 'sv_age' });
+    const sacDef = await makeClassDef({ name: 'Special Award Veteran', type: 'special' });
+    const cWorkMale = await svShowClass({ showId: show.id, classDefinitionId: workingDef.id, sex: 'dog', svCoatType: 'stock', sortOrder: 1 });
+    const cSac = await svShowClass({ showId: show.id, classDefinitionId: sacDef.id, sex: null, svCoatType: null, sortOrder: 40 });
+
+    const shown = await makeDog({ ownerId: exhibitor.id, breedId: breed.id, registeredName: 'Arko Vom Present', sex: 'dog', coatType: 'stock' });
+    const sacOnly = await makeDog({ ownerId: exhibitor.id, breedId: breed.id, registeredName: 'Bruno Vom Sac Only', sex: 'dog', coatType: 'stock' });
+
+    const eShown = await svEntry({ showId: show.id, exhibitorId: exhibitor.id, dogId: shown.id, catalogueNumber: '10' });
+    const ecShown = await svEntryClass(eShown.id, cWorkMale.id);
+    await svResult(ecShown.id, 'v', 1);
+
+    // Roll-up false: Bruno WAS shown (in the SAC). Absent from the graded class only.
+    const eSacOnly = await svEntry({ showId: show.id, exhibitorId: exhibitor.id, dogId: sacOnly.id, catalogueNumber: '11', absent: false });
+    await svEntryClass(eSacOnly.id, cWorkMale.id, { absent: true });
+    const ecSac = await svEntryClass(eSacOnly.id, cSac.id);
+    await svResult(ecSac.id, null, 1);
+
+    const load = await loadSvResultsData(testDb, show.id);
+    const report = buildSvResultsReport(load!.reportInput);
+    const workingMale = report.coatSections.find((s) => s.title === 'Short Coat')!.classes[0];
+    expect(workingMale.rows.map((r) => [r.grade, r.placement, r.name, r.absent])).toEqual([
+      ['V', '1', 'Arko Vom Present', false],
+      ['Abs', '90', 'Bruno Vom Sac Only', true],
+    ]);
+    expect(report.entered).toBe(2);
+    expect(report.present).toBe(1);
+    expect(report.absent).toBe(1);
+
+    const rows = buildSvResultsXlsxRows(load!.reportInput, { venue: 'x', date: '04/10/2026' });
+    const bruno = rows.find((r) => r.ringNumber === '11')!;
+    expect(bruno.grading).toBe('Abs');
   });
 
   it('non-WUSV shows still load (the route gate handles ruleset)', async () => {
