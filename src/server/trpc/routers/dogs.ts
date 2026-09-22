@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { SHOW_COLUMNS_FOR_PUBLIC_INCLUDE } from '../public-show-fields';
 import { TRPCError } from '@trpc/server';
 import { and, eq, ne, inArray, isNull, isNotNull, or, asc, desc, sql } from 'drizzle-orm';
 import { protectedProcedure, publicProcedure } from '../procedures';
@@ -234,7 +235,7 @@ export const dogsRouter = createTRPCRouter({
           isNull(entries.deletedAt)
         ),
         with: {
-          show: true,
+          show: { columns: SHOW_COLUMNS_FOR_PUBLIC_INCLUDE },
           entryClasses: {
             with: {
               showClass: {

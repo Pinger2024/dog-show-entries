@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { SHOW_COLUMNS_FOR_PUBLIC_INCLUDE } from '../public-show-fields';
 import { TRPCError } from '@trpc/server';
 import { and, eq, isNull, inArray, desc, sql, asc, ilike, or } from 'drizzle-orm';
 import { differenceInWeeks } from 'date-fns';
@@ -993,6 +994,7 @@ export const ordersRouter = createTRPCRouter({
         where: eq(orders.id, input.id),
         with: {
           show: {
+            columns: SHOW_COLUMNS_FOR_PUBLIC_INCLUDE,
             with: {
               organisation: { columns: publicOrgColumns },
               venue: true,
@@ -1040,7 +1042,7 @@ export const ordersRouter = createTRPCRouter({
       const items = await ctx.db.query.orders.findMany({
         where,
         with: {
-          show: { with: { venue: true } },
+          show: { columns: SHOW_COLUMNS_FOR_PUBLIC_INCLUDE, with: { venue: true } },
           entries: {
             with: {
               dog: true,

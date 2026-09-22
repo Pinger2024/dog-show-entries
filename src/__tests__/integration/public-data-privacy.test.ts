@@ -257,3 +257,51 @@ describe('public show payloads never include judge approval tokens or judge cont
     expect(result.judgeAssignments[0].judge.contactEmail).toBe('judge.private@example.com');
   });
 });
+
+/**
+ * Bug hunt 2026-09-22: guarantors' HOME ADDRESSES (entered for the RKC
+ * licence, never printed on the schedule or catalogue) rode along in every
+ * public show payload inside scheduleData — shows.list, shows.getById — and in
+ * exhibitor payloads that embed the whole show row.
+ */
+describe('guarantor home addresses never leave club scope', () => {
+  const ADDRESS = '12 Private Lane, Hometown HT1 2AB';
+  async function showWithGuarantors() {
+    const { user: secretary, org } = await makeSecretaryWithOrg();
+    const show = await makeShow({
+      organisationId: org.id,
+      status: 'entries_open',
+      scheduleData: { guarantors: [{ name: 'Jane Guarantor', address: ADDRESS }], catering: 'Tea and cake' },
+    });
+    return { secretary, org, show };
+  }
+
+  it('shows.getById (anonymous) keeps the schedule details but drops guarantor addresses', async () => {
+    const { show } = await showWithGuarantors();
+    const result = await anon().shows.getById({ id: show.id });
+    expect(JSON.stringify(result)).not.toContain(ADDRESS);
+    expect(result.scheduleData?.catering).toBe('Tea and cake');
+  });
+
+  it('shows.list never carries guarantor addresses', async () => {
+    await showWithGuarantors();
+    const { items } = await anon().shows.list({ limit: 50, cursor: 0 });
+    expect(JSON.stringify(items)).not.toContain(ADDRESS);
+  });
+
+  it("an exhibitor's own entries and orders don't carry them either", async () => {
+    const { show } = await showWithGuarantors();
+    const exhibitor = await makeUser({ role: 'exhibitor' });
+    const dog = await makeDog({ ownerId: exhibitor.id });
+    await makeEntry({ showId: show.id, dogId: dog.id, exhibitorId: exhibitor.id, status: 'confirmed' });
+    const caller = createTestCaller(exhibitor);
+    expect(JSON.stringify(await caller.entries.list({}))).not.toContain(ADDRESS);
+    expect(JSON.stringify(await caller.dashboard.getSummary())).not.toContain(ADDRESS);
+  });
+
+  it("the club's own secretary still gets the addresses (schedule settings form needs them)", async () => {
+    const { secretary, show } = await showWithGuarantors();
+    const result = await createTestCaller(secretary).shows.getById({ id: show.id });
+    expect(result.scheduleData?.guarantors?.[0]?.address).toBe(ADDRESS);
+  });
+});

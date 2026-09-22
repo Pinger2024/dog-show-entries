@@ -11,6 +11,7 @@ import {
   isNotNull,
   notInArray,
 } from 'drizzle-orm';
+import { SHOW_COLUMNS_FOR_PUBLIC_INCLUDE } from '../public-show-fields';
 import { protectedProcedure } from '../procedures';
 import { createTRPCRouter } from '../init';
 import {
@@ -113,6 +114,7 @@ export const dashboardRouter = createTRPCRouter({
         ),
         with: {
           show: {
+            columns: SHOW_COLUMNS_FOR_PUBLIC_INCLUDE,
             with: { venue: true },
           },
           dog: {
@@ -136,7 +138,7 @@ export const dashboardRouter = createTRPCRouter({
           isNull(entries.deletedAt)
         ),
         with: {
-          show: true,
+          show: { columns: SHOW_COLUMNS_FOR_PUBLIC_INCLUDE },
           dog: {
             columns: { id: true, registeredName: true },
           },

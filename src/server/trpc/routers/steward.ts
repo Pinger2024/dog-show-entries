@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { SHOW_COLUMNS_FOR_PUBLIC_INCLUDE } from '../public-show-fields';
 import { TRPCError } from '@trpc/server';
 import { and, eq, ne, isNotNull, asc, sql, inArray } from 'drizzle-orm';
 import { stewardProcedure, publicProcedure } from '../procedures';
@@ -174,6 +175,7 @@ export const stewardRouter = createTRPCRouter({
       where: eq(stewardAssignments.userId, ctx.session.user.id),
       with: {
         show: {
+          columns: SHOW_COLUMNS_FOR_PUBLIC_INCLUDE,
           with: {
             organisation: { columns: publicOrgColumns },
             venue: true,

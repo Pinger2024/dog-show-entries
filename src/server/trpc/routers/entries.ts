@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { SHOW_COLUMNS_FOR_PUBLIC_INCLUDE } from '../public-show-fields';
 import { entryClassChangeBlock, ENTRY_CLASS_CHANGE_MESSAGES } from '@/lib/entry-edit-rules';
 import { TRPCError } from '@trpc/server';
 import { and, or, eq, isNull, inArray, notInArray, asc, desc, sql } from 'drizzle-orm';
@@ -417,6 +418,7 @@ export const entriesRouter = createTRPCRouter({
         where,
         with: {
           show: {
+            columns: SHOW_COLUMNS_FOR_PUBLIC_INCLUDE,
             with: {
               organisation: { columns: publicOrgColumns },
               venue: true,
@@ -505,6 +507,7 @@ export const entriesRouter = createTRPCRouter({
         where: and(eq(entries.id, input.id), isNull(entries.deletedAt)),
         with: {
           show: {
+            columns: SHOW_COLUMNS_FOR_PUBLIC_INCLUDE,
             with: {
               organisation: { columns: publicOrgColumns },
               venue: true,
@@ -734,7 +737,7 @@ export const entriesRouter = createTRPCRouter({
       const entry = await ctx.db.query.entries.findFirst({
         where: and(eq(entries.id, input.id), isNull(entries.deletedAt)),
         with: {
-          show: true,
+          show: { columns: SHOW_COLUMNS_FOR_PUBLIC_INCLUDE },
           entryClasses: true,
           payments: true,
         },
