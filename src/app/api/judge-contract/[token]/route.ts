@@ -7,11 +7,14 @@ import { getBaseUrl } from '@/server/lib/utils';
 import { Resend } from 'resend';
 import { generateJudgeContractPdf } from '@/server/services/judge-contract-pdf';
 import { emailHeader } from '@/server/services/email';
+import { html, rawHtml, type SafeHtml } from '@/lib/html-escape';
 import { BRAND } from '@/lib/brand';
 import { FEEDBACK_REPLY_TO } from '@/lib/email-addresses';
 
-function renderPage(title: string, body: string) {
-  return `
+// Built with `html` (src/lib/html-escape.ts): show, club and judge names and
+// the secretary's notes are user-typed, so every interpolation is escaped.
+function renderPage(title: string, body: SafeHtml): string {
+  return html`
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -74,7 +77,7 @@ function renderPage(title: string, body: string) {
 </head>
 <body>
   <div class="container">
-    ${emailHeader()}
+    ${rawHtml(emailHeader())}
     <div class="card">
       ${body}
     </div>
@@ -83,7 +86,7 @@ function renderPage(title: string, body: string) {
     </div>
   </div>
 </body>
-</html>`;
+</html>`.toString();
 }
 
 export async function GET(
@@ -103,7 +106,7 @@ export async function GET(
 
   if (!contract) {
     return new NextResponse(
-      renderPage('Not Found', `
+      renderPage('Not Found', html`
         <div class="banner"><h2>Link Not Found</h2></div>
         <div class="body">
           <p>This contract link is not valid. It may have already been used or the contract may have been cancelled.</p>
@@ -117,7 +120,7 @@ export async function GET(
   // Check token expiry
   if (contract.tokenExpiresAt && new Date() > contract.tokenExpiresAt) {
     return new NextResponse(
-      renderPage('Link Expired', `
+      renderPage('Link Expired', html`
         <div class="banner"><h2>Link Expired</h2></div>
         <div class="body">
           <p>This offer link has expired. Please contact the show secretary to request a new offer.</p>
@@ -130,7 +133,7 @@ export async function GET(
   // If already responded
   if (contract.stage === 'offer_accepted' || contract.stage === 'confirmed') {
     return new NextResponse(
-      renderPage('Already Accepted', `
+      renderPage('Already Accepted', html`
         <div class="banner">
           <div class="success-icon">&#10003;</div>
           <h2>Already Accepted</h2>
@@ -145,7 +148,7 @@ export async function GET(
 
   if (contract.stage === 'declined') {
     return new NextResponse(
-      renderPage('Declined', `
+      renderPage('Declined', html`
         <div class="banner"><h2>Offer Declined</h2></div>
         <div class="body">
           <p>You have already declined this judging appointment. If you would like to reconsider, please contact the show secretary directly.</p>
@@ -184,7 +187,7 @@ export async function GET(
   // Show acceptance page or decline confirmation based on action
   if (action === 'decline') {
     return new NextResponse(
-      renderPage('Decline Appointment', `
+      renderPage('Decline Appointment', html`
         <div class="banner">
           <h2>Decline Appointment</h2>
           <div class="sub">${orgName}</div>
@@ -208,7 +211,7 @@ export async function GET(
 
   // Default: show the full offer page
   return new NextResponse(
-    renderPage('Judging Offer', `
+    renderPage('Judging Offer', html`
       <div class="banner">
         <h2>Judging Appointment Offer</h2>
         <div class="sub">from ${orgName}</div>
@@ -222,10 +225,10 @@ export async function GET(
           <tr><td class="label">Date</td><td>${showDate}</td></tr>
           <tr><td class="label">Venue</td><td>${venue}</td></tr>
           <tr><td class="label">Breeds</td><td>${breedsText}</td></tr>
-          ${show.showType ? `<tr><td class="label">Show Type</td><td>${show.showType.replace('_', ' ').replace(/\b\w/g, (c: string) => c.toUpperCase())}</td></tr>` : ''}
+          ${show.showType ? html`<tr><td class="label">Show Type</td><td>${show.showType.replace('_', ' ').replace(/\b\w/g, (c: string) => c.toUpperCase())}</td></tr>` : ''}
         </table>
 
-        ${contract.notes ? `<p style="padding: 12px; background: ${BRAND.paper}; border-radius: 8px; font-size: 14px; color: ${BRAND.ink2};">${contract.notes}</p>` : ''}
+        ${contract.notes ? html`<p style="padding: 12px; background: ${BRAND.paper}; border-radius: 8px; font-size: 14px; color: ${BRAND.ink2};">${contract.notes}</p>` : ''}
 
         <p>Please click the button below to accept or decline this appointment.</p>
 
@@ -261,7 +264,7 @@ export async function POST(
 
   if (!contract) {
     return new NextResponse(
-      renderPage('Not Found', `
+      renderPage('Not Found', html`
         <div class="banner"><h2>Link Not Found</h2></div>
         <div class="body"><p>This contract link is not valid.</p></div>
       `),
@@ -271,7 +274,7 @@ export async function POST(
 
   if (contract.tokenExpiresAt && new Date() > contract.tokenExpiresAt) {
     return new NextResponse(
-      renderPage('Link Expired', `
+      renderPage('Link Expired', html`
         <div class="banner"><h2>Link Expired</h2></div>
         <div class="body"><p>This offer link has expired. Please contact the show secretary.</p></div>
       `),
@@ -281,7 +284,7 @@ export async function POST(
 
   if (contract.stage !== 'offer_sent') {
     return new NextResponse(
-      renderPage('Already Responded', `
+      renderPage('Already Responded', html`
         <div class="banner"><h2>Already Responded</h2></div>
         <div class="body"><p>This offer has already been responded to.</p></div>
       `),
@@ -342,13 +345,13 @@ export async function POST(
         to: notifyEmail,
         replyTo: FEEDBACK_REPLY_TO,
         subject: `Judge Accepted — ${contract.judgeName} for ${show.name}`,
-        html: `
+        html: html`
 <!DOCTYPE html>
 <html>
 <head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
 <body style="margin: 0; padding: 0; background-color: ${BRAND.paper}; font-family: 'Hanken Grotesk', -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
   <div style="max-width: 600px; margin: 0 auto; padding: 24px 16px;">
-    ${emailHeader()}
+    ${rawHtml(emailHeader())}
     <div style="background: #ffffff; border: 1px solid ${BRAND.line}; border-radius: 14px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
       <div style="background: ${BRAND.deep}; padding: 24px; text-align: center;">
         <div style="font-size: 32px; margin-bottom: 8px;">&#10003;</div>
@@ -371,14 +374,14 @@ export async function POST(
     </div>
   </div>
 </body>
-</html>`,
+</html>`.toString(),
       });
     } catch (error) {
       console.error('[email] Failed to notify secretary of judge acceptance:', error);
     }
 
     return new NextResponse(
-      renderPage('Accepted', `
+      renderPage('Accepted', html`
         <div class="banner">
           <div class="success-icon">&#10003;</div>
           <h2>Thank You</h2>
@@ -435,13 +438,13 @@ export async function POST(
         to: notifyEmail,
         replyTo: FEEDBACK_REPLY_TO,
         subject: `Judge Declined — ${contract.judgeName} for ${show.name}`,
-        html: `
+        html: html`
 <!DOCTYPE html>
 <html>
 <head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
 <body style="margin: 0; padding: 0; background-color: ${BRAND.paper}; font-family: 'Hanken Grotesk', -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
   <div style="max-width: 600px; margin: 0 auto; padding: 24px 16px;">
-    ${emailHeader()}
+    ${rawHtml(emailHeader())}
     <div style="background: #ffffff; border: 1px solid ${BRAND.line}; border-radius: 14px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
       <div style="background: #dc2626; padding: 24px; text-align: center;">
         <h2 style="margin: 0; color: ${BRAND.cream}; font-size: 22px; font-weight: 700;">Judge Declined</h2>
@@ -450,7 +453,7 @@ export async function POST(
         <p style="font-size: 15px; color: ${BRAND.ink}; line-height: 1.6;">
           <strong>${contract.judgeName}</strong> has declined the invitation to judge at <strong>${show.name}</strong>.
         </p>
-        ${reason ? `<p style="font-size: 14px; color: ${BRAND.ink2}; line-height: 1.6; padding: 12px; background: #fef2f2; border-radius: 8px; border-left: 3px solid #dc2626;"><strong>Reason:</strong> ${reason}</p>` : ''}
+        ${reason ? html`<p style="font-size: 14px; color: ${BRAND.ink2}; line-height: 1.6; padding: 12px; background: #fef2f2; border-radius: 8px; border-left: 3px solid #dc2626;"><strong>Reason:</strong> ${reason}</p>` : ''}
         <p style="font-size: 15px; color: ${BRAND.ink}; line-height: 1.6;">
           You may need to find a replacement judge and send a new offer. All checklist items for this judge have been marked as not applicable.
         </p>
@@ -464,14 +467,14 @@ export async function POST(
     </div>
   </div>
 </body>
-</html>`,
+</html>`.toString(),
       });
     } catch (error) {
       console.error('[email] Failed to notify secretary of judge decline:', error);
     }
 
     return new NextResponse(
-      renderPage('Declined', `
+      renderPage('Declined', html`
         <div class="banner"><h2>Offer Declined</h2></div>
         <div class="body">
           <p>You have declined the invitation to judge at <strong>${show.name}</strong>.</p>
@@ -484,7 +487,7 @@ export async function POST(
   }
 
   return new NextResponse(
-    renderPage('Invalid Action', `
+    renderPage('Invalid Action', html`
       <div class="banner"><h2>Invalid Action</h2></div>
       <div class="body"><p>The action you requested is not valid.</p></div>
     `),

@@ -25,6 +25,7 @@
  * to GOOGLE_*.
  */
 
+import { escapeHtml } from './html-escape';
 import { FEEDBACK_REPLY_TO } from '@/lib/email-addresses';
 
 type GscRow = {
@@ -113,14 +114,6 @@ function delta(now: number, prev: number): string {
   return `${sign}${pct.toFixed(0)}%`;
 }
 
-function esc(s: string): string {
-  return s
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;');
-}
 
 export async function buildWeeklyReportHtml(): Promise<{
   html: string;
@@ -176,7 +169,7 @@ export async function buildWeeklyReportHtml(): Promise<{
       const posLabel = pos === 1 ? 'Page 1' : `Page ${pos}`;
       return `
       <tr>
-        <td style="padding:10px 12px;border-bottom:1px solid #eee;">${esc(r.keys?.[0] ?? '')}</td>
+        <td style="padding:10px 12px;border-bottom:1px solid #eee;">${escapeHtml(r.keys?.[0] ?? '')}</td>
         <td style="padding:10px 12px;border-bottom:1px solid #eee;text-align:right;">${r.clicks}</td>
         <td style="padding:10px 12px;border-bottom:1px solid #eee;text-align:right;color:#666;">${r.impressions}</td>
         <td style="padding:10px 12px;border-bottom:1px solid #eee;text-align:right;color:#666;">${posLabel}</td>
@@ -193,7 +186,7 @@ export async function buildWeeklyReportHtml(): Promise<{
           .replace('https://www.remishowmanager.co.uk', '') || '/';
       return `
       <tr>
-        <td style="padding:10px 12px;border-bottom:1px solid #eee;"><a href="${esc(url)}" style="color:#2D5F3F;text-decoration:none;">${esc(short)}</a></td>
+        <td style="padding:10px 12px;border-bottom:1px solid #eee;"><a href="${escapeHtml(url)}" style="color:#2D5F3F;text-decoration:none;">${escapeHtml(short)}</a></td>
         <td style="padding:10px 12px;border-bottom:1px solid #eee;text-align:right;">${r.clicks}</td>
         <td style="padding:10px 12px;border-bottom:1px solid #eee;text-align:right;color:#666;">${r.impressions}</td>
       </tr>`;
@@ -211,7 +204,7 @@ export async function buildWeeklyReportHtml(): Promise<{
 
         <tr><td style="padding:28px 36px 8px;text-align:center;">
           <h1 style="margin:0;font-size:22px;color:#2D5F3F;font-weight:600;letter-spacing:0.5px;">Remi · weekly SEO report</h1>
-          <p style="margin:6px 0 0;color:#7A7A7A;font-size:13px;">${esc(startA)} to ${esc(endA)}</p>
+          <p style="margin:6px 0 0;color:#7A7A7A;font-size:13px;">${escapeHtml(startA)} to ${escapeHtml(endA)}</p>
         </td></tr>
 
         <tr><td style="padding:20px 36px 4px;">
