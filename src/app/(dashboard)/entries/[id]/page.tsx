@@ -36,6 +36,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog';
+import { canChangeEntryClasses } from '@/lib/entry-edit-rules';
 
 const statusConfig: Record<
   string,
@@ -250,7 +251,7 @@ export default function EntryDetailPage() {
             </Link>
           </Button>
         )}
-        {(entry.status === 'confirmed' || entry.status === 'pending') && entry.show.status === 'entries_open' && (
+        {canChangeEntryClasses(entry, entry.show) && (
           <Button variant="outline" asChild className="w-full sm:w-auto min-h-[2.75rem]">
             <Link href={`/shows/${entry.show.slug ?? entry.showId}/entries/${entry.id}/edit`}>
               <Pencil className="size-4" />

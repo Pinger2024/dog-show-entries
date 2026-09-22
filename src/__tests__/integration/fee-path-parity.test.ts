@@ -32,6 +32,7 @@ import {
   makeClassDef,
   makeDog,
   makeSecretaryWithOrg,
+  settleOrderLikeWebhook,
 } from '../helpers/factories';
 
 const FIRST = 2000; // £20
@@ -140,6 +141,7 @@ describe('cross-path fee parity (single dog)', () => {
         entries: [{ entryType: 'standard', dogId: eDog.id, classIds: [...classIds, extraClass], isNfc: false }],
       });
       const seedEntry = await testDb.query.entries.findFirst({ where: eq(entries.orderId, seedCheckout.orderId) });
+      await settleOrderLikeWebhook(seedCheckout.orderId); // only a paid entry can change classes
       const edited = await createTestCaller(exhibitor).entries.update({ id: seedEntry!.id, classIds });
       expect(edited.requiresPayment).toBe(false); // downgrade → applied now
 
@@ -190,6 +192,7 @@ describe('cross-path fee parity (multi-dog package survives an edit)', () => {
     // deliberately DEFERRED until the top-up is paid (an abandoned top-up must
     // not grant free classes). So nothing persists yet and the package is
     // untouched — the money-safety guarantee we care about here.
+    await settleOrderLikeWebhook(checkout.orderId); // only a paid entry can change classes
     const orderEntries = await testDb.query.entries.findMany({ where: eq(entries.orderId, checkout.orderId) });
     const dog1Entry = orderEntries.find((e) => e.dogId === dogList[0].id)!;
     const edited = await createTestCaller(exhibitor).entries.update({

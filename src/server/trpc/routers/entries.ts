@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { entryClassChangeBlock, ENTRY_CLASS_CHANGE_MESSAGES } from '@/lib/entry-edit-rules';
 import { TRPCError } from '@trpc/server';
 import { and, or, eq, isNull, inArray, notInArray, asc, desc, sql } from 'drizzle-orm';
 import { differenceInWeeks } from 'date-fns';
@@ -747,18 +748,11 @@ export const entriesRouter = createTRPCRouter({
         throw new TRPCError({ code: 'FORBIDDEN', message: 'Not your entry' });
       }
 
-      if (entry.show.status !== 'entries_open') {
-        throw new TRPCError({
-          code: 'BAD_REQUEST',
-          message: 'Show is no longer accepting entry changes',
-        });
-      }
-
-      if (entry.status !== 'confirmed' && entry.status !== 'pending') {
-        throw new TRPCError({
-          code: 'BAD_REQUEST',
-          message: 'Only confirmed or pending entries can be modified',
-        });
+      // One rule for who may change classes (src/lib/entry-edit-rules.ts):
+      // a PAID entry on a show still taking entries.
+      const block = entryClassChangeBlock(entry, entry.show);
+      if (block) {
+        throw new TRPCError({ code: 'BAD_REQUEST', message: ENTRY_CLASS_CHANGE_MESSAGES[block] });
       }
 
       // Validate new classes
