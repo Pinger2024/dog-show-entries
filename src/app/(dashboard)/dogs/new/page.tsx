@@ -8,6 +8,7 @@ import { cn } from '@/lib/utils';
 import { SE_H } from '@/components/show-experience/tokens';
 import { Button } from '@/components/ui/button';
 import { DogForm } from '@/components/dogs/dog-form';
+import { safeCallbackUrl } from '@/lib/safe-redirect';
 
 export default function NewDogPage() {
   // If the exhibitor came here from an entry ("+ Add a new dog"), send them
@@ -16,8 +17,9 @@ export default function NewDogPage() {
   // (Mandy 2026-07-07). Read the query param client-side (the codebase pattern).
   const [returnTo, setReturnTo] = useState<string | null>(null);
   useEffect(() => {
-    const rt = new URLSearchParams(window.location.search).get('returnTo');
-    setReturnTo(rt && rt.startsWith('/shows/') ? rt : null);
+    // Same-site paths only (safe-redirect.ts), and only back to a show.
+    const rt = safeCallbackUrl(new URLSearchParams(window.location.search).get('returnTo'), { fallback: '' });
+    setReturnTo(rt.startsWith('/shows/') ? rt : null);
   }, []);
   const returnShowId = returnTo?.match(/\/shows\/([^/]+)\/enter/)?.[1] ?? null;
   const { data: returnShow, isLoading: returnShowLoading } = trpc.shows.getById.useQuery(

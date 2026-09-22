@@ -9,6 +9,7 @@ import { SE_H } from '@/components/show-experience/tokens';
 import { Button } from '@/components/ui/button';
 import { DogForm } from '@/components/dogs/dog-form';
 import { DogSvHealthCard } from '@/components/dogs/dog-sv-health-card';
+import { safeCallbackUrl } from '@/lib/safe-redirect';
 
 export default function EditDogPage({
   params,
@@ -24,8 +25,9 @@ export default function EditDogPage({
   // boundary for useSearchParams.
   const [returnTo, setReturnTo] = useState<string | null>(null);
   useEffect(() => {
-    const rt = new URLSearchParams(window.location.search).get('returnTo');
-    setReturnTo(rt && rt.startsWith('/shows/') ? rt : null);
+    // Same-site paths only (safe-redirect.ts), and only back to a show.
+    const rt = safeCallbackUrl(new URLSearchParams(window.location.search).get('returnTo'), { fallback: '' });
+    setReturnTo(rt.startsWith('/shows/') ? rt : null);
   }, []);
   const returnShowId = returnTo?.match(/\/shows\/([^/]+)\/enter/)?.[1] ?? null;
   const { data: returnShow } = trpc.shows.getById.useQuery(
