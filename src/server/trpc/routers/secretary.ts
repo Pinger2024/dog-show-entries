@@ -3757,34 +3757,6 @@ export const secretaryRouter = createTRPCRouter({
         })
         .returning();
 
-      // Catalogue number for this late entry. While numbers are still
-      // PROVISIONAL (the show hasn't been locked for printing), we leave the
-      // number null here and re-sort the whole show after the classes are
-      // attached, so the new entry slots into its class. Once the secretary has
-      // LOCKED numbers for printing, append at max+1 so the printed catalogue's
-      // existing numbers never shift.
-      const showForNumbering = await ctx.db.query.shows.findFirst({
-        where: eq(shows.id, input.showId),
-        columns: { catalogueNumbersLockedAt: true },
-      });
-      const numbersLocked = Boolean(showForNumbering?.catalogueNumbersLockedAt);
-      let nextCatalogueNumber: string | null = null;
-      if (numbersLocked) {
-        const allNumbered = await ctx.db.query.entries.findMany({
-          where: and(
-            eq(entries.showId, input.showId),
-            eq(entries.status, 'confirmed'),
-            isNotNull(entries.catalogueNumber),
-          ),
-          columns: { catalogueNumber: true },
-        });
-        const highest = allNumbered.reduce((max, e) => {
-          const n = Number(e.catalogueNumber);
-          return Number.isFinite(n) && n > max ? n : max;
-        }, 0);
-        nextCatalogueNumber = String(highest + 1);
-      }
-
       // Create entry — auto-confirmed for secretary entries
       const [entry] = await ctx.db
         .insert(entries)
@@ -3800,7 +3772,8 @@ export const secretaryRouter = createTRPCRouter({
           totalFee: classFee,
           orderId: order!.id,
           status: 'confirmed',
-          catalogueNumber: nextCatalogueNumber,
+          // Numbered below by syncCatalogueNumbers once the classes exist.
+          catalogueNumber: null,
         })
         .returning();
 
@@ -3813,12 +3786,13 @@ export const secretaryRouter = createTRPCRouter({
         }))
       );
 
-      // Provisional numbers re-sort the whole show now that this entry's classes
-      // exist, so it lands in its class (and Junior Handlers / NFC stay grouped
-      // at the end) rather than tacked on. Locked shows keep the append above.
-      if (!numbersLocked) {
-        await resortCatalogueNumbers(ctx.db, input.showId);
-      }
+      // Catalogue number, via the one numbering owner now that the classes
+      // exist. Provisional numbers re-sort the whole show so the entry lands in
+      // its class (JH / NFC stay grouped at the end). LOCKED numbers append at
+      // max+1 without shifting the printed catalogue — and a dog that already
+      // holds a number keeps it, so a late class never gives it a second one
+      // (register §6: this path used to compute highest+1 itself, dog-blind).
+      await syncCatalogueNumbers(ctx.db, input.showId);
 
       // Create sundry item records
       if (selectedSundryItems.length > 0) {

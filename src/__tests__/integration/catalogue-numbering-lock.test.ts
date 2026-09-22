@@ -188,6 +188,48 @@ describe('catalogue numbering — one number per dog', () => {
     expect(await catNum(late.id)).toBe(originalNumber); // late row joins its dog
   });
 
+  // Register §6 (2026-09-11): createManualEntry computed highest+1 itself
+  // with no dog lookup, so a secretary adding a class for an already-numbered
+  // dog on a LOCKED show printed that dog twice under two numbers.
+  it('gives a secretary-added late class the number its dog already holds, when locked', async () => {
+    const { user, org } = await makeSecretaryWithOrg();
+    const show = await makeShow({ organisationId: org.id, status: 'entries_closed' });
+    const caller = createTestCaller(user);
+    const mainDef = await makeClassDef({ type: 'age', name: 'Limit' });
+    const sacDef = await makeClassDef({ type: 'special', name: 'Special Award Class - Open' });
+    const mainClass = await makeShowClass({ showId: show.id, classDefinitionId: mainDef.id });
+    const sacClass = await makeShowClass({ showId: show.id, classDefinitionId: sacDef.id });
+
+    const dog = await makeDog({ ownerId: user.id });
+    const otherDog = await makeDog({ ownerId: user.id });
+    const [main] = await testDb
+      .insert(entries)
+      .values({ showId: show.id, dogId: dog.id, exhibitorId: user.id, status: 'confirmed', totalFee: 2000 })
+      .returning();
+    await makeEntryClass({ entryId: main.id, showClassId: mainClass.id });
+    const [other] = await testDb
+      .insert(entries)
+      .values({ showId: show.id, dogId: otherDog.id, exhibitorId: user.id, status: 'confirmed', totalFee: 2000 })
+      .returning();
+    await makeEntryClass({ entryId: other.id, showClassId: mainClass.id });
+    await resortCatalogueNumbers(testDb, show.id);
+    const dogNumber = await catNum(main.id);
+
+    await caller.secretary.lockCatalogueNumbers({ showId: show.id });
+
+    const late = await caller.secretary.createManualEntry({
+      showId: show.id,
+      dogId: dog.id,
+      classIds: [sacClass.id],
+      exhibitorEmail: 'late@example.com',
+    });
+
+    expect(await catNum(late.id)).toBe(dogNumber); // joins its dog, no second number
+    expect(await catNum(main.id)).toBe(dogNumber); // printed number untouched
+    const all = await testDb.query.entries.findMany({ where: eq(entries.showId, show.id) });
+    expect([...new Set(all.map((e) => e.catalogueNumber))].sort()).toEqual(['1', '2']);
+  });
+
   it('still numbers dogless Junior Handler entries individually', async () => {
     const { user, org } = await makeSecretaryWithOrg();
     const show = await makeShow({ organisationId: org.id, status: 'entries_closed' });
@@ -325,5 +367,18 @@ describe('catalogue numbering — no confirmed entry is left unnumbered', () => 
     await syncCatalogueNumbers(testDb, show.id);
     expect(await catNum(lateInEarlierClass.id)).toBe('1');
     expect(await catNum(seeded.id)).toBe('2');
+  });
+});
+
+// Guard (register §6): catalogue numbers are assigned in ONE module. A second
+// "highest + 1" elsewhere is how a dog got two numbers on a locked show.
+describe('catalogue numbering — one owner guard', () => {
+  it('no router or route computes a catalogue number itself', async () => {
+    const { execSync } = await import('node:child_process');
+    const hits = execSync(
+      "git grep -nE 'catalogueNumber:[[:space:]]*(String\\(|next|highest)' -- 'src/server/**' 'src/app/**' ':!**/__tests__/**' || true",
+      { encoding: 'utf8' },
+    ).trim();
+    expect(hits).toBe('');
   });
 });
