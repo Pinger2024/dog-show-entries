@@ -23,6 +23,11 @@ test that fails if the rule is written down a second time.
 | 7 | Correcting a Best award leaves two winners; a correction after publishing never goes public | `c3190424` | ☐ | ☐ | ☐ |
 | 8 | Saving show details moves the entry close an hour earlier each time (summer time) | `0a8c0bf4` | ☐ | ☐ | ☐ |
 | 9 | New shows close at 00:00 on the chosen date instead of 23:59 | `e0a3f6be` | ☐ | ☐ | ☐ |
+| 10 | Judges who aren't logged in can't open their results-approval link | `69abe6b3` | ☐ | ☐ | ☐ |
+| 11 | An unpaid entry can be confirmed by paying only a class top-up | `4de36818` | ☐ | ☐ | ☐ |
+| 12 | Guarantors' home addresses go out with public show data | `dcca581a` | ☐ | ☐ | ☐ |
+| 13 | Secretary dog search returns every owner's address and phone | `1ef74f23` | ☐ | ☐ | ☐ |
+| 14 | A rival can read a dog's show-day placings before they're published | `27610734` | ☐ | ☐ | ☐ |
 
 ---
 
@@ -186,3 +191,123 @@ date they choose, it's 11:59pm".
 
 **Note:** shows already created this way still close at 00:00. Moving them to 23:59 is a production data
 change, so it needs your OK first.
+
+---
+
+## 10. A judge can't open their approval link unless they're logged in to Remi
+
+**Who notices:** the judge, and the secretary chasing them. The "Review & Approve Results" link in the
+judge's email went to the Remi login page for anyone not signed in (most judges), so approval stayed
+"pending" forever.
+
+**Reproduce (demo, before the fix):** submit a judge for approval, then open the emailed link in a
+logged-out private window. **Before:** the login page. **After:** the results approval page with
+**I Approve These Results**.
+
+---
+
+## 11. An unpaid entry can be confirmed by paying only a class top-up
+
+**Who notices:** the club, which is short a full entry fee while the dog is in the catalogue. An exhibitor
+who stopped at checkout's payment step has a "pending" entry. **Edit Classes** was offered on it; adding a
+class charged only the extra class, and paying that confirmed the whole entry.
+
+**Reproduce (demo, before the fix):** as an exhibitor, start an entry and stop at the card-payment step.
+From the dashboard's **Payment needed** card open the entry. **Before:** **Edit Classes** is offered, and
+adding a class asks for just the difference. **After:** no Edit Classes button. Going to the edit page
+directly says "Only a paid entry can have its classes changed."
+
+**Also check after the fix:** a paid entry can still add and remove classes while entries are open.
+
+---
+
+## 12. Guarantors' home addresses go out with public show data
+
+**Who notices:** nobody, until someone looks. The addresses typed into Schedule settings for the
+guarantors (never printed anywhere) were sent to every visitor of the show pages and inside exhibitors'
+entry and order data.
+
+**Reproduce (demo, before the fix):** give a demo show a guarantor with an address. Open the public show
+page logged out, and in developer tools → **Network** look at `shows.getById` (or `shows.list` on the Shows
+page). **Before:** the address is there. **After:** only the guarantor's name.
+
+**Also check after the fix:** the secretary's Schedule settings still show and save guarantor addresses.
+
+---
+
+## 13. The secretary's dog search hands out owners' addresses and phone numbers
+
+**Who notices:** nobody, until someone uses it. Anyone who registers a club becomes a secretary. The
+dog search on **Add Entry** searches every dog on Remi and returned the owner's home address and phone.
+
+**Reproduce (demo, before the fix):** Secretary → show → **Entries** → **Add Entry**, search for a dog
+from another club, and look at `secretary.searchDogs` in developer tools → **Network**.
+**Before:** `ownerAddress` and `ownerPhone` are there. **After:** only the owner's name and email.
+
+**Also check after the fix:** the search still shows "Owner: …" and fills in the exhibitor's email.
+
+---
+
+## 14. A rival can read a dog's show-day placings before they're published
+
+**Who notices:** exhibitors, who see results early. The results list on a dog's page (any logged-in user,
+any dog) showed placings and critiques as soon as the steward keyed them in.
+
+**Reproduce (demo, before the fix):** record a placing for a dog on an in-progress show without
+publishing. Sign in as a different exhibitor and open that dog's page (`/dogs/<id>`).
+**Before:** the placing is listed. **After:** it appears only once results are published. The dog's own
+owner still sees it straight away.
+
+---
+
+## Found in the bug hunt but NOT fixed — needs a decision
+
+The full list of findings, with evidence, is from the 22 Sept hunt. These are real, but the right
+behaviour is a decision for Michael or Mandy, or they overlap unpushed work.
+
+**Money: Edit Classes and refunds (Michael). One design decision unlocks most of these.**
+- Removing a class refunds the difference **and** lowers the entry fee, so the refund is deducted twice.
+  The secretary's "collected for you" figure comes out too low, and the club statement refuses to issue.
+- A class top-up payment is never linked to its order. The statement refuses to issue, "Refund entire
+  order" misses the top-up, and a later class removal can fail after the classes have already changed.
+- Regional: editing a dog in an EARLIER order re-prices it behind the exhibitor's LATER dogs. That can
+  refund money for a same-price swap and store a negative fee.
+- RKC multi-dog package: removing a dog's last regular class refunds that dog but silently re-prices the
+  others with no money moving.
+- The secretary's per-entry Refund can be pressed twice for the same entry. The second refund comes out
+  of the other dogs' money.
+- A refund that fails at Stripe is still counted in the club statement. Should it count or not?
+
+The decision: when a fee goes down, does `totalFee` stay the gross amount (with the refund recorded
+separately, as issueRefund does), or go down (with the refund not counted)? This overlaps the unpushed
+`one-owner-weekend` branch (entry-change-pricing.ts), so it's best built on top of that once it lands.
+
+**Rules for Mandy**
+- **Withdrawing after entries close or after the show:** the button is always offered. A late withdrawal
+  removes the dog from the catalogue, the absentee list and SH01 (instead of marking it absent), and after
+  the show it erases published placings. When should Withdraw stop, and should a late one mean "absent"?
+- **Regional postal entries keyed by the secretary** for people without a Remi account are all counted as
+  the SECRETARY's dogs on the multi-dog scale. The 3rd postal dog is priced £16 and the 4th onwards free,
+  although each person paid in full. What makes two postal entries "the same exhibitor"?
+- **Most Promising Dog/Bitch picker** offers the wrong sex (bitches for "Most Promising Dog"). Fixing it
+  moves "Most Promising" onto the dog/bitch pages of the regional judges' book. Before Midland on 4 Oct?
+- **Secretary dog search:** should it search only dogs already entered with the club, or keep searching
+  every dog on Remi?
+- **Grading cards print the show's name**, and Midland's is just "Regional Show". Should the card also
+  print the club name?
+- **Re-entering a withdrawn or refunded dog at a regional** is refused as "already entered". Allowed?
+- **SH01:** is a dog absent from all her breed classes but shown in a Special Award class an absentee?
+
+**Smaller, safe to do next (no decision needed)**
+- The duplicate-class check looks at only one of a dog's entries, so a dog with two entry rows can be
+  entered and charged for the same class twice. Touches the same code as Michael's
+  `feat-entry-requirements-one-gate`.
+- On all-breed shows, the Best in Show or group judge prints as the Junior Handling judge.
+- The show-level steward pages still hand-write the "published" check (use `isVisibleToViewer`).
+- Unpublishing results doesn't hide already-published award rows.
+
+**Data fixes for prod (need an OK first)**
+- Shows created in the new-show wizard close at 00:00 (bug 9). Moving them to 23:59 on the same date is
+  a production write.
+- Duplicate award holders already in prod from bug 7. The read-only SQL to list them is in the
+  awards commit's notes (`dup-holders.sql`).
