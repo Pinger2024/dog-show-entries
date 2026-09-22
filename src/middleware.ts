@@ -4,8 +4,11 @@ import { NextResponse } from 'next/server';
 const publicRoutes = ['/', '/login', '/register', '/forgot-password', '/reset-password'];
 // `/critiques` (judge review page) and `/api/critique-upload` (its upload
 // route) are token-gated, not session-gated — the judge never logs in. See
-// research/DESIGN-judge-critique-upload-2026-07-31.md.
-const publicPrefixes = ['/shows', '/dog', '/api/auth', '/api/trpc', '/api/upload', '/api/webhooks', '/api/catalogue', '/api/schedule', '/api/judge-contract', '/api/critique-upload', '/api/share-events', '/api/shares', '/api/cron', '/api/health', '/about', '/help', '/privacy', '/terms', '/invite', '/critiques', '/pricing', '/promo', '/features', '/for-secretaries', '/reviews'];
+// research/DESIGN-judge-critique-upload-2026-07-31.md. `/api/results-approval`
+// is the same: the judge's emailed link carries the token, and most judges
+// have no Remi account (bug hunt 2026-09-22 — they were bounced to /login).
+// middleware-public-paths.test.ts fails if any `[token]` API route is missing.
+const publicPrefixes = ['/shows', '/dog', '/api/auth', '/api/trpc', '/api/upload', '/api/webhooks', '/api/catalogue', '/api/schedule', '/api/judge-contract', '/api/critique-upload', '/api/results-approval', '/api/share-events', '/api/shares', '/api/cron', '/api/health', '/about', '/help', '/privacy', '/terms', '/invite', '/critiques', '/pricing', '/promo', '/features', '/for-secretaries', '/reviews'];
 
 // Routes that match a public prefix but require authentication
 const authRequiredPatterns = [
