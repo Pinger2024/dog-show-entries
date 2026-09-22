@@ -309,5 +309,5 @@ separately, as issueRefund does), or go down (with the refund not counted)? This
 **Data fixes for prod (need an OK first)**
 - Shows created in the new-show wizard close at 00:00 (bug 9). Moving them to 23:59 on the same date is
   a production write.
-- Duplicate award holders already in prod from bug 7. The read-only SQL to list them is in the
-  awards commit's notes (`dup-holders.sql`).
+- Duplicate award holders already in prod from bug 7. The read-only SQL to list them is in
+  `docs/bug-hunt-2026-09-22-dup-award-holders.sql`.
