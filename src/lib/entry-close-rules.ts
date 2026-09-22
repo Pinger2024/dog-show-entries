@@ -1,5 +1,5 @@
 import { differenceInCalendarDays, format, subDays } from 'date-fns';
-import { parseLocalDate, londonCalendarDateStr } from './date-utils';
+import { parseLocalDate, londonCalendarDateStr, parseLondonDateTimeInput } from './date-utils';
 
 /**
  * Mandy's hard rule (2026-08-04, "two weeks give or take a day"): a show's entry
@@ -51,6 +51,49 @@ export function isCloseDateWithinFloor(
   const closeCalendarDate = parseLocalDate(londonCalendarDateStr(closeInstant));
   const showStart = parseLocalDate(startDate);
   return differenceInCalendarDays(showStart, closeCalendarDate) >= MIN_DAYS_BEFORE_SHOW_START;
+}
+
+/** Result of {@link checkCloseInput}. */
+export type CloseInputCheck =
+  | { ok: true; instant: string | null }
+  | { ok: false; reason: 'incomplete' | 'too-late'; message: string };
+
+/**
+ * THE check for an entry-close / postal-close value AS THE FORMS HOLD IT —
+ * UK wall clock `YYYY-MM-DDTHH:mm` (see `toLondonDateTimeInput` /
+ * `closeInputForPickedDate` in date-utils). Every form path uses it: the edit
+ * dialog and setup wizard on change and on Save, the start-date auto-adjust,
+ * and the new-show wizard's validation.
+ *
+ * - `''` → ok, no close date (`instant: null`).
+ * - Not a complete real date yet — a half-typed box, a 5-digit year —
+ *   → `reason: 'incomplete'`. Never a throw: this runs while the secretary
+ *   is typing. On change, wait quietly; on Save / validation, show `message`.
+ * - Inside the {@link MIN_DAYS_BEFORE_SHOW_START} floor → `reason:
+ *   'too-late'` with the same {@link entryCloseFloorMessage} the server uses.
+ * - Otherwise ok, with the exact instant to send (`instant`), so the value
+ *   checked is the value saved.
+ *
+ * With no `startDate` yet, only the "real date" part is checked.
+ */
+export function checkCloseInput(
+  closeInput: string,
+  startDate: string | null | undefined,
+  field: 'entry close date' | 'postal close date',
+): CloseInputCheck {
+  if (!closeInput) return { ok: true, instant: null };
+  const instant = parseLondonDateTimeInput(closeInput);
+  if (instant === null) {
+    return {
+      ok: false,
+      reason: 'incomplete',
+      message: `The ${field} isn't a full date yet — please pick it again from the calendar.`,
+    };
+  }
+  if (startDate && !isCloseDateWithinFloor(instant, startDate)) {
+    return { ok: false, reason: 'too-late', message: entryCloseFloorMessage(startDate, field) };
+  }
+  return { ok: true, instant };
 }
 
 /**

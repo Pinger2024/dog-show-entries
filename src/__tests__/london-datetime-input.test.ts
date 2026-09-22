@@ -1,8 +1,16 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync, readdirSync, statSync } from 'fs';
 import { join, relative, sep } from 'path';
-import { toLondonDateTimeInput, fromLondonDateTimeInput } from '@/lib/date-utils';
-import { isCloseDateWithinFloor } from '@/lib/entry-close-rules';
+import {
+  toLondonDateTimeInput,
+  fromLondonDateTimeInput,
+  parseLondonDateTimeInput,
+  closeInputForPickedDate,
+  closeInputDate,
+  closeInputTime,
+} from '@/lib/date-utils';
+import { isCloseDateWithinFloor, checkCloseInput, entryCloseFloorMessage } from '@/lib/entry-close-rules';
+import { createShowSchema, newShowDatesPayload } from '@/app/(secretary)/secretary/shows/new/page';
 
 /**
  * Entry close / postal close are stored as instants (timestamptz). The
@@ -168,6 +176,124 @@ describe('UK clock-change edges (Europe/London rules, independent of the browser
   });
 });
 
+// ── A picked close date means 23:59 UK time on that date ─────────────────────
+//
+// Founder rule (commit 44ffeaad, 2026-07-23): "whatever date they choose, it's
+// 11:59pm unless they specifically change it". The edit forms wrote that rule
+// by hand seven times; the new-show wizard didn't follow it at all and stored
+// 00:00 — entries closed at the START of the last day the schedule advertised.
+
+describe('a picked close date means 23:59 UK time (one owner)', () => {
+  it('the form value for a picked date is 23:59 on that date, unless a time is given', () => {
+    expect(closeInputForPickedDate('2026-08-16')).toBe('2026-08-16T23:59');
+    expect(closeInputForPickedDate('2026-08-16', '17:00')).toBe('2026-08-16T17:00');
+    expect(closeInputForPickedDate('2026-08-16', '')).toBe('2026-08-16T23:59'); // time box cleared
+    expect(closeInputDate('2026-08-16T17:00')).toBe('2026-08-16');
+    expect(closeInputTime('2026-08-16T17:00')).toBe('17:00');
+    expect(closeInputTime('')).toBe('23:59'); // what the empty (disabled) time box pre-shows
+  });
+
+  it('new show: a picked close date is sent as 23:59 UK — 22:59Z in summer, 23:59Z in winter', () => {
+    inEachBrowserZone((tz) => {
+      expect(
+        newShowDatesPayload({ entriesOpenDate: '2026-07-01', entryCloseDate: '2026-08-16', postalCloseDate: '2026-08-09' }),
+        tz,
+      ).toEqual({
+        entriesOpenDate: '2026-06-30T23:00:00.000Z', // entries OPEN at the start of the day — 00:00 BST
+        entryCloseDate: '2026-08-16T22:59:00.000Z', // 23:59 BST
+        postalCloseDate: '2026-08-09T22:59:00.000Z', // 23:59 BST
+      });
+      expect(newShowDatesPayload({ entriesOpenDate: '', entryCloseDate: '2026-12-05', postalCloseDate: '' }), tz).toEqual({
+        entriesOpenDate: undefined,
+        entryCloseDate: '2026-12-05T23:59:00.000Z', // 23:59 GMT
+        postalCloseDate: undefined,
+      });
+    });
+  });
+
+  it('new show: the close the wizard sends is exactly what the edit dialog then shows (23:59 on the picked date)', () => {
+    inEachBrowserZone((tz) => {
+      const { entryCloseDate } = newShowDatesPayload({ entriesOpenDate: '', entryCloseDate: '2026-08-16', postalCloseDate: '' });
+      expect(toLondonDateTimeInput(entryCloseDate!), tz).toBe('2026-08-16T23:59');
+    });
+  });
+});
+
+// ── Half-typed or odd values never throw in a check reachable while typing ──
+//
+// A desktop date box can hold a 5- or 6-digit year while the secretary is
+// typing (Chrome allows up to 275760), and passes through 0002, 0020, 0202 on
+// the way to 2026. Save may refuse such a value; a check that runs on every
+// keystroke or in the form's validation must never throw.
+
+const SHOW_29_AUG = '2026-08-29'; // latest close: Sun 16 Aug
+
+const NEW_SHOW_BASE = {
+  name: 'Test Championship Show',
+  showType: 'championship',
+  showScope: 'single_breed',
+  organisationId: '00000000-0000-4000-8000-000000000001',
+  startDate: SHOW_29_AUG,
+  endDate: SHOW_29_AUG,
+};
+
+describe('close-date checks while typing: "not valid yet", never a throw', () => {
+  it('parseLondonDateTimeInput returns null for a value that is not a complete real date', () => {
+    expect(parseLondonDateTimeInput('20266-08-16T23:59')).toBeNull(); // 5-digit year
+    expect(parseLondonDateTimeInput('202660-08-16')).toBeNull(); // 6-digit year
+    expect(parseLondonDateTimeInput('2026-02-30T23:59')).toBeNull();
+    expect(parseLondonDateTimeInput('')).toBeNull();
+    expect(parseLondonDateTimeInput('2026-08-16T23:59')).toBe('2026-08-16T22:59:00.000Z');
+  });
+
+  it('a year typed digit by digit (0002, 0020, 0202) is a real, if silly, date — not a crash', () => {
+    for (const v of ['0002-08-16T23:59', '0020-08-16T23:59', '0202-08-16T23:59']) {
+      expect(() => parseLondonDateTimeInput(v), v).not.toThrow();
+      const iso = parseLondonDateTimeInput(v);
+      expect(iso, v).not.toBeNull();
+      expect(toLondonDateTimeInput(iso!), v).toBe(v); // and it round-trips
+    }
+  });
+
+  it('checkCloseInput: a half-typed value is "incomplete" (no throw); a good one passes with its instant; a late one names the floor', () => {
+    expect(checkCloseInput('20266-08-16T23:59', SHOW_29_AUG, 'entry close date')).toMatchObject({
+      ok: false,
+      reason: 'incomplete',
+    });
+    expect(checkCloseInput('20266-08-16T23:59', '', 'entry close date')).toMatchObject({ ok: false, reason: 'incomplete' });
+    expect(checkCloseInput('', SHOW_29_AUG, 'entry close date')).toEqual({ ok: true, instant: null });
+    expect(checkCloseInput('2026-08-16T23:59', SHOW_29_AUG, 'entry close date')).toEqual({
+      ok: true,
+      instant: '2026-08-16T22:59:00.000Z',
+    });
+    expect(checkCloseInput('2026-08-17T23:59', SHOW_29_AUG, 'postal close date')).toEqual({
+      ok: false,
+      reason: 'too-late',
+      message: entryCloseFloorMessage(SHOW_29_AUG, 'postal close date'),
+    });
+  });
+
+  it('new show validation: a 5-digit-year close date is a validation error on that field, not a crash', () => {
+    for (const field of ['entryCloseDate', 'postalCloseDate'] as const) {
+      let result: ReturnType<typeof createShowSchema.safeParse> | undefined;
+      expect(() => {
+        result = createShowSchema.safeParse({ ...NEW_SHOW_BASE, [field]: '20266-08-16' });
+      }, field).not.toThrow();
+      expect(result?.success, field).toBe(false);
+      expect(result?.error?.issues.map((i) => i.path.join('.')), field).toContain(field);
+    }
+  });
+
+  it('new show validation: 16 Aug passes, 17 Aug is past the 13-day floor', () => {
+    expect(createShowSchema.safeParse({ ...NEW_SHOW_BASE, entryCloseDate: '2026-08-16' }).success).toBe(true);
+    const late = createShowSchema.safeParse({ ...NEW_SHOW_BASE, entryCloseDate: '2026-08-17' });
+    expect(late.success).toBe(false);
+    expect(late.error?.issues.find((i) => i.path.join('.') === 'entryCloseDate')?.message).toBe(
+      entryCloseFloorMessage(SHOW_29_AUG, 'entry close date'),
+    );
+  });
+});
+
 // ── Guard: one owner for "instant ↔ UK wall-clock form value" ───────────────
 
 const SRC = join(__dirname, '..');
@@ -207,24 +333,44 @@ describe('guard: show date/time forms go through the London owner', () => {
     expect(offenders, 'use toLondonDateTimeInput() from @/lib/date-utils').toEqual([]);
   });
 
-  it.each(SHOW_DATE_FORMS)('%s converts show dates only through the owner', (file) => {
+  it('no raw T23:59 outside date-utils — "a picked close date means 23:59" has one owner', () => {
+    // Seed data holds fixed demo instants ('2026-04-18T23:59:00Z'), not the rule.
+    const allowed = new Set([OWNER, 'server/db/seed.ts']);
+    const offenders = walk(SRC)
+      .filter((f) => !allowed.has(rel(f)))
+      .flatMap((f) =>
+        readFileSync(f, 'utf8')
+          .split('\n')
+          .map((line, i) => ({ line, at: `${rel(f)}:${i + 1}` }))
+          .filter(({ line }) => /T23:59/.test(line))
+          .map(({ at, line }) => `${at}  ${line.trim()}`),
+      );
+    expect(offenders, 'use closeInputForPickedDate() from @/lib/date-utils').toEqual([]);
+  });
+
+  it.each(SHOW_DATE_FORMS)('%s converts show dates only through the owners', (file) => {
     const src = readFileSync(join(SRC, file), 'utf8');
     const lines = src.split('\n').map((line, i) => ({ line, at: `${file}:${i + 1}  ${line.trim()}` }));
+    const hits = (re: RegExp) => lines.filter(({ line }) => re.test(line)).map(({ at }) => at);
 
     // Never builds a show-date instant itself — `new Date(formText)` reads the
-    // BROWSER's zone. The owner does it.
-    const selfBuilt = lines.filter(({ line }) => /\.toISOString\(/.test(line)).map(({ at }) => at);
-    expect(selfBuilt, 'send fromLondonDateTimeInput(value) instead').toEqual([]);
-    expect(src).toMatch(/\bfromLondonDateTimeInput\(/);
+    // BROWSER's zone. The owners do it.
+    expect(hits(/\.toISOString\(/), 'use fromLondonDateTimeInput / checkCloseInput().instant').toEqual([]);
 
-    // The 13-day floor is checked on the UK instant, never the raw form text.
-    const floorCalls = src.match(/isCloseDateWithinFloor\(\s*[^,]*/g) ?? [];
-    expect(floorCalls.length).toBeGreaterThan(0);
-    const raw = floorCalls.filter((c) => !/isCloseDateWithinFloor\(\s*fromLondonDateTimeInput\(/.test(c));
-    expect(raw, 'wrap the form value in fromLondonDateTimeInput()').toEqual([]);
+    // The 23:59 default is the owner's, not a literal in the form.
+    expect(hits(/['"`]23:59['"`]/), 'use closeInputForPickedDate / closeInputTime').toEqual([]);
 
-    // The two edit forms fill their close date/time boxes from the owner.
-    if (!file.endsWith('shows/new/page.tsx')) {
+    // The 13-day floor (and "is this a real date yet?") goes through
+    // checkCloseInput — never isCloseDateWithinFloor on raw form text.
+    expect(hits(/isCloseDateWithinFloor\(/), 'use checkCloseInput()').toEqual([]);
+    expect(src).toMatch(/\bcheckCloseInput\(/);
+
+    if (file.endsWith('shows/new/page.tsx')) {
+      // Both picked close dates become 23:59 UK before they are sent.
+      expect(src).toMatch(/fromLondonDateTimeInput\(\s*closeInputForPickedDate\(\s*values\.entryCloseDate\s*\)\s*\)/);
+      expect(src).toMatch(/fromLondonDateTimeInput\(\s*closeInputForPickedDate\(\s*values\.postalCloseDate\s*\)\s*\)/);
+    } else {
+      // The edit forms fill their close date/time boxes from the owner.
       expect(src).toMatch(/toLondonDateTimeInput\(\s*show\.entryCloseDate\s*\)/);
       expect(src).toMatch(/toLondonDateTimeInput\(\s*show\.postalCloseDate\s*\)/);
     }
