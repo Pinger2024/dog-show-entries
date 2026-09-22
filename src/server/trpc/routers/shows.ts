@@ -29,6 +29,7 @@ import {
 } from '@/server/db/schema';
 import { verifyShowAccess } from '../verify-show-access';
 import { publicOrgColumns } from '../public-org-columns';
+import { redactJudgeAssignmentForPublic } from '../public-judge-fields';
 import { isUuid, generateShowSlug } from '@/lib/slugify';
 import { hasUserPurchasedCatalogue, CATALOGUE_AVAILABLE_STATUSES, CATALOGUE_NAME_PATTERN } from '@/lib/catalogue-utils';
 import { isShowDayReached } from '@/lib/date-utils';
@@ -335,7 +336,13 @@ export const showsRouter = createTRPCRouter({
         );
       const hasPublishedResults = (publishedCount[0]?.n ?? 0) > 0;
 
-      return { ...show, hasPublishedResults };
+      // Non-members get judge rows without the approval token, approval state
+      // or the judge's personal contact details (see public-judge-fields.ts).
+      const judgeAssignmentsView = isPrivileged
+        ? show.judgeAssignments
+        : show.judgeAssignments.map(redactJudgeAssignmentForPublic);
+
+      return { ...show, judgeAssignments: judgeAssignmentsView, hasPublishedResults };
     }),
 
   getClasses: publicProcedure

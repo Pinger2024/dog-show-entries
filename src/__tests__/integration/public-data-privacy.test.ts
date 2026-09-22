@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { eq } from 'drizzle-orm';
-import { results } from '@/server/db/schema';
+import { judgeAssignments, results } from '@/server/db/schema';
 import { testDb } from '../helpers/db';
 import { createTestCaller } from '../helpers/context';
 import {
@@ -13,6 +13,9 @@ import {
   makeEntryClass,
   makeShowClass,
   makeResult,
+  makeJudge,
+  makeJudgeAssignment,
+  makeSecretaryWithOrg,
   dateStr,
 } from '../helpers/factories';
 
@@ -202,5 +205,55 @@ describe('public dog profile pre-judging and publication gates', () => {
 
     timeline = await anon().timeline.getForDog({ dogId: dog.id, limit: 20 });
     expect(timeline.items.filter((i) => i.itemType === 'show_result')).toHaveLength(1);
+  });
+});
+
+/**
+ * Bug hunt 2026-09-22: shows.getById is public and joined judge_assignments
+ * and judges with no column scoping, so every visitor received the judge's
+ * results-approval token (the only credential /api/results-approval/<token>
+ * checks — enough to read unpublished placings and approve them as the
+ * judge) and the judge's personal email and phone.
+ */
+describe('public show payloads never include judge approval tokens or judge contact details', () => {
+  async function showWithPendingApproval() {
+    const { user: secretary, org } = await makeSecretaryWithOrg();
+    const show = await makeShow({ organisationId: org.id, status: 'in_progress' });
+    const judge = await makeJudge({ contactEmail: 'judge.private@example.com', contactPhone: '07700 900123' });
+    const ja = await makeJudgeAssignment({ showId: show.id, judgeId: judge.id });
+    const token = '11111111-2222-4333-8444-555555555555';
+    await testDb
+      .update(judgeAssignments)
+      .set({ approvalToken: token, approvalStatus: 'pending', approvalSentAt: new Date(), approvalNote: 'private note' })
+      .where(eq(judgeAssignments.id, ja.id));
+    return { secretary, show, judge, token };
+  }
+
+  it('anonymous visitors get the judge name but no token, approval state or contact details', async () => {
+    const { show, judge, token } = await showWithPendingApproval();
+    const result = await anon().shows.getById({ id: show.id });
+
+    expect(JSON.stringify(result)).not.toContain(token);
+    expect(JSON.stringify(result)).not.toContain('judge.private@example.com');
+    expect(JSON.stringify(result)).not.toContain('07700 900123');
+    const ja = result.judgeAssignments[0] as Record<string, unknown>;
+    expect((ja.judge as Record<string, unknown>).name).toBe(judge.name);
+    expect(ja.approvalToken ?? null).toBeNull();
+    expect(ja.approvalStatus ?? null).toBeNull();
+    expect(ja.approvalNote ?? null).toBeNull();
+  });
+
+  it('a logged-in exhibitor outside the club gets the same public view', async () => {
+    const { show, token } = await showWithPendingApproval();
+    const exhibitor = await makeUser({ role: 'exhibitor' });
+    const result = await createTestCaller(exhibitor).shows.getById({ id: show.id });
+    expect(JSON.stringify(result)).not.toContain(token);
+    expect(JSON.stringify(result)).not.toContain('judge.private@example.com');
+  });
+
+  it("the club's own secretary still sees judge contact details (judge section needs them)", async () => {
+    const { secretary, show } = await showWithPendingApproval();
+    const result = await createTestCaller(secretary).shows.getById({ id: show.id });
+    expect(result.judgeAssignments[0].judge.contactEmail).toBe('judge.private@example.com');
   });
 });
