@@ -381,7 +381,9 @@ function AdvertDialog({
           <DialogTitle>{existing ? 'Edit advert' : 'Add advert'}</DialogTitle>
         </DialogHeader>
 
-        <div className="space-y-4">
+        {/* pb-2 keeps the last field clear of the sticky footer below rather
+            than resting half-hidden behind it. */}
+        <div className="space-y-4 pb-2">
           {/* Artwork upload */}
           <div className="space-y-2">
             <Label>Artwork (full-page A5)</Label>
@@ -389,7 +391,7 @@ function AdvertDialog({
               type="button"
               onClick={() => fileInputRef.current?.click()}
               disabled={uploading}
-              className="relative w-full overflow-hidden rounded-lg border-2 border-dashed border-muted-foreground/30 bg-muted/30 hover:bg-muted/50 transition-colors aspect-[148/210]"
+              className="relative w-full overflow-hidden rounded-lg border-2 border-dashed border-muted-foreground/30 bg-muted/30 hover:bg-muted/50 transition-colors aspect-[148/210] max-h-[30dvh]"
             >
               {imageUrl ? (
                 <>
@@ -477,7 +479,10 @@ function AdvertDialog({
           </div>
         </div>
 
-        <div className="flex items-center justify-end gap-2 pt-2">
+
+        {/* Sticky so Save/Cancel are reachable without hunting for the
+            bottom of a tall form (Mandy, 22 Sept 2026). */}
+        <div className="sticky bottom-0 flex items-center justify-end gap-2 border-t bg-background pt-3 pb-1">
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={saving}>
             Cancel
           </Button>

@@ -656,7 +656,7 @@ function EditShowDetailsDialog({
         Edit
       </Button>
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="max-w-2xl max-h-[min(85vh,calc(100dvh-4rem))] overflow-y-auto">
+        <DialogContent className="max-w-2xl">
           <DialogHeader>
             <DialogTitle>Edit Show Details</DialogTitle>
             <DialogDescription>

@@ -564,7 +564,7 @@ function BreedAssignmentDialog({
 
   return (
     <Dialog open onOpenChange={(open) => { if (!open) onClose(); }}>
-      <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-lg">
+      <DialogContent className="sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>Breed Assignments — {stewardName}</DialogTitle>
           <DialogDescription>

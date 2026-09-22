@@ -141,6 +141,34 @@ describe('mobile overflow protection', () => {
 
   // ─── Test 4: No overflow-x-auto combined with negative margins ────
 
+  /**
+   * Mandy, 22 Sept 2026: a secretary on the live site could not reach the
+   * "Add advert" button — the dialog ran under the phone's browser toolbar.
+   * Two causes, both now owned by the base DialogContent: `vh` counts the
+   * area hidden behind mobile browser chrome (so a 90vh bottom sheet hides
+   * its own footer), and above the `sm` breakpoint there was no height cap
+   * or overflow at ALL. Three pages had already hand-patched themselves with
+   * `dvh` — the rule was written four times and disagreed.
+   */
+  it('the base dialog caps its height in dvh, and scrolls, at every width', () => {
+    const src = fs.readFileSync(path.join(PROJECT_ROOT, 'src/components/ui/dialog.tsx'), 'utf-8');
+    expect(src).toMatch(/max-sm:max-h-\[90dvh\]/);
+    expect(src).toMatch(/max-sm:overflow-y-auto/);
+    expect(src).toMatch(/sm:max-h-\[90dvh\]/);
+    expect(src).toMatch(/sm:overflow-y-auto/);
+    // A `vh` cap anywhere in the base IS the bug — mobile chrome is excluded.
+    expect(src).not.toMatch(/max-h-\[\d+vh\]/);
+  });
+
+  it('no dialog hand-rolls its own height cap or scrolling', () => {
+    const offenders = scanFiles(
+      ['src/app', 'src/components'],
+      ['.tsx'],
+      /<DialogContent[^>]*className="[^"]*(?:max-h-\[|overflow-y-)/,
+    ).map((m) => `${m.file}:${m.line}`);
+    expect(offenders).toEqual([]);
+  });
+
   it('should not combine overflow-x-auto with negative margins on the same element', () => {
     // Full-bleed scroll patterns with sm:-mx-0 reset are safe
     const OVERFLOW_COMBO_ALLOWLIST = [

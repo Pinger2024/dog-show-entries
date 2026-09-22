@@ -1348,7 +1348,7 @@ function EditAwardsDialog({
           Edit Awards
         </Button>
       </DialogTrigger>
-      <DialogContent className="max-h-[85vh] max-w-md overflow-y-auto">
+      <DialogContent className="max-w-md">
         <DialogHeader>
           <DialogTitle>Edit Best Awards</DialogTitle>
         </DialogHeader>

@@ -15,6 +15,7 @@ import { SV, SV_FONTS } from '@/components/schedule/shared/sv-styles';
 import { svCoatDisplayName, sectionClasses } from '@/lib/class-labels';
 import { AdvertPage } from '@/components/schedule/shared/advert-page';
 import { formatSvGradeBare } from '@/lib/sv-grading';
+import { catalogueBackMatter } from '@/lib/catalogue-back-matter';
 
 /**
  * One dog's recorded result, for the "judge-copy" format only — the SV/WUSV
@@ -614,7 +615,11 @@ function groupByClass(entries: CatalogueEntry[]) {
  *  `minPresenceAhead` stops it stranding at the foot of a page. */
 function ClassSectionBand({ title, judge }: { title: string; judge: string | null }) {
   return (
-    <View wrap={false} minPresenceAhead={90} style={{ marginTop: 12 }}>
+    // No minPresenceAhead: this band is rendered INSIDE the first class's
+    // atomic wrap={false} block (see its call site), so it moves with the
+    // class it introduces instead of relying on a look-ahead that cannot
+    // know how tall that block will be.
+    <View wrap={false} style={{ marginTop: 12 }}>
       <View style={{ ...styles.sectionBand, marginTop: 0, marginBottom: judge ? 3 : 8 }}>
         <Text style={styles.sectionBandText}>{title}</Text>
       </View>
@@ -647,6 +652,7 @@ function ChallengeCertificateHeader({ sex }: { sex: 'DOG' | 'BITCH' }) {
 
 export function CatalogueByClass({ show, entries, compact, judgeResults }: Props) {
   const isSvShow = show.showRuleset === 'wusv';
+  const backMatter = catalogueBackMatter(show);
   // Build a lookup: classLabel -> sponsorship info (array, since one class
   // can have multiple sponsors — e.g. one for the trophy and another for
   // the rosettes). Keyed on label rather than classNumber so that JH class
@@ -980,12 +986,6 @@ export function CatalogueByClass({ show, entries, compact, judgeResults }: Props
             {showsChallengeCertificateHeaders && classKey === firstBitchKey && (
               <ChallengeCertificateHeader sex="BITCH" />
             )}
-            {classKey === firstSpecialKey && (
-              <ClassSectionBand title="Special Awards Classes" judge={specialAwardsJudge} />
-            )}
-            {classKey === firstJhKey && (
-              <ClassSectionBand title="Junior Handling" judge={juniorHandlingJudge} />
-            )}
           <View
             wrap={!keepTogether}
             style={idx > 0 ? { marginTop: 4 } : undefined}
@@ -1007,6 +1007,26 @@ export function CatalogueByClass({ show, entries, compact, judgeResults }: Props
                 is the price of the rule, and changing it is Mandy's call, not
                 a silent trade (2026-07-27). */}
             <View wrap={false}>
+              {/* The section band travels INSIDE this atomic block, not as a
+                  sibling before it (Mandy, 22 Sept 2026: "the junior handling
+                  class have orphaned" — the Midland regional catalogue put
+                  JUNIOR HANDLING + its judge alone at the foot of a page).
+                  As a sibling the band carried minPresenceAhead={90}, which
+                  react-pdf honoured — 90pt WAS free — and then this block,
+                  which on a regional can be ~200pt (sponsor banner up to
+                  142pt + class header + first entry), did not fit and moved
+                  on without it. A presence-ahead value cannot express "as
+                  much room as the next atomic block happens to need", and
+                  raising it would strand the band differently; being part of
+                  the same unwrappable block is what actually guarantees they
+                  stay together. See the note below on minPresenceAhead being
+                  ignored on a WRAPPING view — the same trap, other end. */}
+              {classKey === firstSpecialKey && (
+                <ClassSectionBand title="Special Awards Classes" judge={specialAwardsJudge} />
+              )}
+              {classKey === firstJhKey && (
+                <ClassSectionBand title="Junior Handling" judge={juniorHandlingJudge} />
+              )}
               {/* Class-sponsor banner — landscape strip above the class
                   header when a class sponsor has uploaded a banner image
                   (HUNDARK / ROBASDAN-style festive strips). SV/WUSV
@@ -1184,14 +1204,14 @@ export function CatalogueByClass({ show, entries, compact, judgeResults }: Props
       </Page>
       ))}
 
-      {/* Back matter. SV catalogues keep their own structure (owner +
-          results details already live on each SV entry line), so the RKC
-          back-of-book pages are skipped for them. Order: principal-awards
-          write-in (results, straight after the last class) → Not For
-          Competition list → exhibitor index. */}
-      {!isSvShow && <BestsWriteInPage show={show} />}
-      {!isSvShow && <NotForCompetitionPage entries={entries} />}
-      {!isSvShow && (
+      {/* Back matter — which of these three pages print is owned by
+          catalogueBackMatter() (src/lib/catalogue-back-matter.ts), not by
+          `isSvShow` here. Order: principal-awards write-in (results,
+          straight after the last class) → Not For Competition list →
+          exhibitor index. */}
+      {backMatter.awardsWriteIn && <BestsWriteInPage show={show} />}
+      {backMatter.notForCompetition && <NotForCompetitionPage entries={entries} />}
+      {backMatter.exhibitorIndex && (
         <ExhibitorIndexPage show={show} entries={entries} compact={compact} />
       )}
       <AdvertPages adverts={show.adverts} position="inside_back" />

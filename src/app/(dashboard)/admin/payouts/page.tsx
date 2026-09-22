@@ -225,7 +225,7 @@ export default function AdminPayoutsPage() {
       </Card>
 
       <Dialog open={!!recordingOrgId} onOpenChange={(v) => { if (!v) setRecordingOrgId(null); }}>
-        <DialogContent className="max-h-[90dvh] overflow-y-auto sm:max-w-lg">
+        <DialogContent className="sm:max-w-lg">
           <DialogHeader>
             <DialogTitle className="font-serif">Record a payout</DialogTitle>
             <DialogDescription>
