@@ -458,7 +458,7 @@ export default function MyClubPage() {
 
       {/* Add/Edit Person Dialog */}
       <Dialog open={dialogOpen} onOpenChange={(open) => { if (!open) closeDialog(); }}>
-        <DialogContent className="max-h-[90dvh] overflow-y-auto sm:max-w-lg">
+        <DialogContent className="sm:max-w-lg">
           <DialogHeader>
             <DialogTitle className="font-serif">
               {editingId ? 'Edit Person' : 'Add Person'}

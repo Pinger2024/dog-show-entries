@@ -49,7 +49,7 @@ export function ShareKitDialog(props: ShareKitDialogProps) {
           <span className="hidden sm:inline">Share</span>
         </Button>
       </DialogTrigger>
-      <DialogContent className="max-h-[92vh] overflow-y-auto sm:max-w-lg">
+      <DialogContent className="sm:max-w-lg">
         <DialogHeader>
           <DialogTitle className="font-serif">Share this show</DialogTitle>
           <DialogDescription>
