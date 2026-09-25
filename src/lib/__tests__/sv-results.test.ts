@@ -4,6 +4,7 @@ import {
   buildSvResultsXlsxRows,
   svResultsSheetClassName,
   findPlacedWithoutGrade,
+  svGradeGapsWarning,
   splitPersonName,
   splitAffix,
   svClassLabel,
@@ -516,5 +517,38 @@ describe('findPlacedWithoutGrade', () => {
 
   it('is empty when every placed dog has a grade', () => {
     expect(findPlacedWithoutGrade(buildFixture())).toEqual([]);
+  });
+});
+
+// The documents-page warning. Built here, not in the page: the page imports a
+// `Map` icon from lucide-react, which hid the built-in Map and crashed the
+// documents page ("Map is not a constructor") when the wording was grouped in
+// the component (caught walking demo, 25 Sept 2026).
+describe('svGradeGapsWarning', () => {
+  it('is undefined when nothing is missing', () => {
+    expect(svGradeGapsWarning([])).toBeUndefined();
+  });
+
+  it('names one dog and asks for "the grade"', () => {
+    expect(
+      svGradeGapsWarning([{ catalogueNumber: '11', dogName: 'DRAMANA ANNO DOMINI', className: 'Minor Puppy Dog, Long Coat' }]),
+    ).toBe(
+      '1 placed dog has no grade — Minor Puppy Dog, Long Coat: No. 11 DRAMANA ANNO DOMINI. ' +
+        'Ask your steward to add the grade on the steward screen before you send these to the League.',
+    );
+  });
+
+  it('groups several dogs by class and asks for "the grades"', () => {
+    expect(
+      svGradeGapsWarning([
+        { catalogueNumber: '25', dogName: 'Donamead Falcon', className: 'Minor Puppy Bitch, Long Coat' },
+        { catalogueNumber: '66', dogName: 'Donamead Water Lily', className: 'Minor Puppy Bitch, Long Coat' },
+        { catalogueNumber: '49', dogName: 'MARINITA KAYLEIGH', className: 'Adult Female, Short Coat' },
+      ]),
+    ).toBe(
+      '3 placed dogs have no grade — Minor Puppy Bitch, Long Coat: No. 25 Donamead Falcon, No. 66 Donamead Water Lily. ' +
+        'Adult Female, Short Coat: No. 49 MARINITA KAYLEIGH. ' +
+        'Ask your steward to add the grades on the steward screen before you send these to the League.',
+    );
   });
 });

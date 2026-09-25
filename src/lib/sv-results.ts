@@ -795,3 +795,23 @@ export function findPlacedWithoutGrade(input: SvResultsReportInput): SvGradeGap[
       })),
   );
 }
+
+/**
+ * The secretary's warning for placed dogs with no grade, grouped by class —
+ * "3 placed dogs have no grade — Minor Puppy Bitch, Long Coat: No. 25 …,
+ * No. 66 …. Ask your steward to add the grades …". Undefined when there is
+ * nothing to say. Shown on both SV rows of the documents page.
+ */
+export function svGradeGapsWarning(gaps: SvGradeGap[]): string | undefined {
+  if (gaps.length === 0) return undefined;
+  const byClass = new Map<string, string[]>();
+  for (const g of gaps) {
+    byClass.set(g.className, [...(byClass.get(g.className) ?? []), `No. ${g.catalogueNumber ?? '—'} ${g.dogName}`]);
+  }
+  const one = gaps.length === 1;
+  const dogs = [...byClass].map(([cls, list]) => `${cls}: ${list.join(', ')}`).join('. ');
+  return (
+    `${one ? '1 placed dog has' : `${gaps.length} placed dogs have`} no grade — ${dogs}. ` +
+    `Ask your steward to add ${one ? 'the grade' : 'the grades'} on the steward screen before you send these to the League.`
+  );
+}
