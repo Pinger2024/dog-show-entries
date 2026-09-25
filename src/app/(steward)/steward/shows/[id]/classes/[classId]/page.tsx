@@ -21,7 +21,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { trpc } from '@/lib/trpc';
-import { SPECIAL_AWARDS } from '@/lib/placements';
+import { SPECIAL_AWARDS, comparePlacing } from '@/lib/placements';
 import { allowedSvGradesForClass, isPlacedWithoutSvGrade } from '@/lib/sv-grading';
 import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
@@ -255,9 +255,9 @@ export default function StewardClassResultsPage({
   // the League blank — so the class isn't "ready" until each placed dog has
   // one. Publishing is never blocked; this only changes the prompt.
   const needGrade = isWusv
-    ? Array.from(placedByValue.values()).filter((e) =>
-        isPlacedWithoutSvGrade({ placement: e.result?.placement, svGrade: e.result?.svGrade }),
-      )
+    ? Array.from(placedByValue.values())
+        .filter((e) => isPlacedWithoutSvGrade({ placement: e.result?.placement, svGrade: e.result?.svGrade }))
+        .sort((a, b) => comparePlacing(a.result?.placement, b.result?.placement))
     : [];
   const readyToPublish =
     remaining.length === 0 && placedCount > 0 && needGrade.length === 0 && !showClass.isPublished;
@@ -486,7 +486,7 @@ export default function StewardClassResultsPage({
                       >
                         <SelectTrigger
                           className={cn(
-                            'h-9 w-[108px] shrink-0 text-xs',
+                            'h-9 w-[100px] shrink-0 text-xs',
                             needGrade.includes(placed) && 'border-2 border-se-honey bg-se-honey-soft',
                           )}
                           aria-label={needGrade.includes(placed) ? `Grade needed for #${placed.catalogueNumber ?? ''}` : 'Grade'}
