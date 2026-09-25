@@ -197,7 +197,13 @@ describe('SV graded results report — end to end', () => {
 
     // ── Spreadsheet ──
     const rows = buildSvResultsXlsxRows(load!.reportInput, { venue: 'Armitage, GB', date: '22/03/2026' });
-    expect(rows.map((r) => r.ringNumber)).toEqual(['141', '190', '191', '200', '202', '203']);
+    // Class by class in the show's own class order (this fixture stores Working
+    // Male Stock first), each class in placing order with absentees last —
+    // never plain ring-number order (Shirley, GSDL BRG, 24 Sept 2026).
+    expect(rows.map((r) => r.ringNumber)).toEqual(['202', '200', '190', '191', '141', '203']);
+    expect(rows.map((r) => r.className)).toEqual([
+      'Working SCD', 'Working SCD', 'Working SCB', 'Working SCB', '6-9 months SCB', 'Working LCD',
+    ]);
     // Name is split into given name + affix for the SV sheet (Mandy 2026-07-01).
     const antonRow = rows.find((r) => r.dogName === 'Anton')!;
     expect(antonRow.dogAffix).toBe('Vom Haus Garyn');

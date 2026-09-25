@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { svCoatDisplayName, formatSvClassName, classNameAbbreviation } from '../class-labels';
+import { svCoatDisplayName, svCoatCode, formatSvClassName, classNameAbbreviation } from '../class-labels';
 
 /**
  * Regional coat-type WORDING (regional groups' decision 2026-08-11, via
@@ -80,5 +80,19 @@ describe('classNameAbbreviation', () => {
 
   it('is case-insensitive when matching the trailing sex word', () => {
     expect(classNameAbbreviation('Veteran dog', 'dog')).toBe('VD');
+  });
+});
+
+// The League's SV results sheet writes the coat as a two-letter code inside
+// the Class column — "Adult LCB", "Working SCD" (Shirley, GSDL BRG, 24 Sept 2026).
+describe('svCoatCode', () => {
+  it('abbreviates Long Coat to LC and Short (stock) Coat to SC', () => {
+    expect(svCoatCode('long_stock')).toBe('LC');
+    expect(svCoatCode('stock')).toBe('SC');
+  });
+
+  it('is empty when the class has no coat', () => {
+    expect(svCoatCode(null)).toBe('');
+    expect(svCoatCode(undefined)).toBe('');
   });
 });

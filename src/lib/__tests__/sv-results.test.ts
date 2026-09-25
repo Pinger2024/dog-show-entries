@@ -2,6 +2,8 @@ import { describe, it, expect } from 'vitest';
 import {
   buildSvResultsReport,
   buildSvResultsXlsxRows,
+  svResultsSheetClassName,
+  findPlacedWithoutGrade,
   splitPersonName,
   splitAffix,
   svClassLabel,
@@ -335,7 +337,7 @@ describe('buildSvResultsReport', () => {
 describe('buildSvResultsXlsxRows', () => {
   const rows = buildSvResultsXlsxRows(buildFixture(), { venue: 'Armitage, GB', date: '22/03/2026' });
 
-  it('emits one row per dog, ordered by ring number, excluding JH', () => {
+  it('emits one row per dog, class by class in the show\'s class order, excluding JH', () => {
     expect(rows.map((r) => r.ringNumber)).toEqual(['10', '11', '12', '13', '14', '15', '16']);
   });
 
@@ -343,7 +345,7 @@ describe('buildSvResultsXlsxRows', () => {
     const anton = rows.find((r) => r.dogName === 'Anton')!;
     expect(anton.grading).toBe('V');
     expect(anton.placing).toBe(1);
-    expect(anton.className).toBe('Working');
+    expect(anton.className).toBe('Working SCD');
     expect(anton.venue).toBe('Armitage, GB');
     expect(anton.registrationBody).toBe('KC');
     expect(anton.sireName).toBe('Grimm');
@@ -358,5 +360,142 @@ describe('buildSvResultsXlsxRows', () => {
     const tornado = rows.find((r) => r.dogName === 'Tornado')!;
     expect(tornado.grading).toBe('Abs');
     expect(tornado.placing).toBe(90);
+  });
+});
+
+// ── The League's corrections to the NE Regional sheet ──────────────
+//
+// Shirley (GSDL British Regional Group, 24 Sept 2026) re-sorted our North East
+// Regional spreadsheet before sending it on to the SV and Win-sys: "it needs
+// to be ordered in placing order and the classes need to show age, coat and
+// sex". Her corrected file (the spec) runs the classes in schedule order and
+// each class in placing order, with the Class column reading "6-9 months SCB",
+// "Adult LCB", "Working SCD". The League's own sample sheet only said "Minor
+// Puppy" / "Adult", which is why we had copied that.
+
+describe('svResultsSheetClassName — age, coat and sex, as the League writes it', () => {
+  it.each([
+    ['Baby Puppy', 'long_stock', 'bitch', '4-6 months LCB'],
+    ['Baby Puppy', 'stock', 'dog', '4-6 months SCD'],
+    ['Minor Puppy', 'stock', 'bitch', '6-9 months SCB'],
+    ['Minor Puppy', 'long_stock', 'dog', '6-9 months LCD'],
+    ['Puppy', 'long_stock', 'dog', '9-12 months LCD'],
+    ['Junior', 'stock', 'bitch', '12-18 months SCB'],
+    ['Yearling', 'long_stock', 'dog', '18-24 months LCD'],
+    ['Adult', 'long_stock', 'bitch', 'Adult LCB'],
+    ['Adult', 'stock', 'dog', 'Adult SCD'],
+    ['Working', 'stock', 'dog', 'Working SCD'],
+  ] as const)('%s / %s / %s → %s', (age, coat, sex, expected) => {
+    expect(svResultsSheetClassName(age, coat, sex)).toBe(expected);
+  });
+
+  it('accepts the stored class name with its "SV " prefix', () => {
+    expect(svResultsSheetClassName('SV Minor Puppy', 'stock', 'bitch')).toBe('6-9 months SCB');
+  });
+
+  it('leaves the coat out on a show that does not split by coat', () => {
+    expect(svResultsSheetClassName('Adult', null, 'dog')).toBe('Adult D');
+  });
+});
+
+describe('buildSvResultsXlsxRows — the League\'s order (NE Regional, 5 Sept 2026)', () => {
+  // Real dogs from the NE Regional, with the placings the judge gave and the
+  // ring numbers the catalogue gave them. Ring order and placing order differ
+  // inside a class — the old sheet sorted by ring number and scrambled them.
+  // Classes and dogs are fed in deliberately jumbled.
+  function neFixture(): SvResultsReportInput {
+    const workingDogShort = svClass('wds', 'Working', 'dog', 'stock', 'sv_age', 27);
+    const adultBitchLong = svClass('abl', 'Adult', 'bitch', 'long_stock', 'sv_age', 20);
+    const minorBitchShort = svClass('mbs', 'Minor Puppy', 'bitch', 'stock', 'sv_age', 5);
+    const juniorBitchShort = svClass('jbs', 'Junior', 'bitch', 'stock', 'sv_age', 13);
+    const minorDogLong = svClass('mdl', 'Minor Puppy', 'dog', 'long_stock', 'sv_age', 6);
+    return {
+      showClasses: [workingDogShort, adultBitchLong, minorBitchShort, juniorBitchShort, minorDogLong],
+      entries: [
+        entry({ showClassId: 'wds', name: 'IBAR VOM RADHAUS MONFORTIS', grade: 'v', placement: 2, ring: '69' }),
+        entry({ showClassId: 'wds', name: 'Anton vom Haus Garyn', absent: true, ring: '68' }),
+        entry({ showClassId: 'wds', name: 'Obi AV Røstadgärden', grade: 'v', placement: 1, ring: '67' }),
+        entry({ showClassId: 'abl', name: 'HAZROH FINTE', absent: true, ring: '40', sex: 'bitch' }),
+        entry({ showClassId: 'abl', name: 'Tanita Wolf Empire', grade: 'sg', placement: 6, ring: '43', sex: 'bitch' }),
+        entry({ showClassId: 'abl', name: 'HAZELGROVE QUINTA', grade: 'sg', placement: 5, ring: '38', sex: 'bitch' }),
+        entry({ showClassId: 'abl', name: 'AAREET BONNY LASS', absent: true, ring: '37', sex: 'bitch' }),
+        entry({ showClassId: 'abl', name: 'Fluffycox Von Shotaan', grade: 'sg', placement: 4, ring: '41', sex: 'bitch' }),
+        entry({ showClassId: 'abl', name: 'DARK VALLEY GALLAGOTH', grade: 'sg', placement: 3, ring: '36', sex: 'bitch' }),
+        entry({ showClassId: 'abl', name: 'KLEEHUEGEL HELGA', grade: 'sg', placement: 2, ring: '42', sex: 'bitch' }),
+        entry({ showClassId: 'abl', name: 'YAKASIMBA BUBBLES', grade: 'sg', placement: 1, ring: '39', sex: 'bitch' }),
+        entry({ showClassId: 'mbs', name: 'CARLSBRO ORIANNA', grade: 'vp', placement: 4, ring: '9', sex: 'bitch' }),
+        entry({ showClassId: 'mbs', name: 'MONFORTIS DRAXA', grade: 'vp', placement: 3, ring: '10', sex: 'bitch' }),
+        entry({ showClassId: 'mbs', name: 'STARKWILL EMI KOUSSI', grade: 'vp', placement: 2, ring: '8', sex: 'bitch' }),
+        entry({ showClassId: 'mbs', name: 'ZAROMAK ARIA', grade: 'vp', placement: 1, ring: '7', sex: 'bitch' }),
+        entry({ showClassId: 'jbs', name: 'FAIRYCROSS ANNIE', absent: true, ring: '22', sex: 'bitch' }),
+        entry({ showClassId: 'jbs', name: 'HUNDENKRAFT PUMA', grade: 'g', placement: 3, ring: '23', sex: 'bitch' }),
+        entry({ showClassId: 'jbs', name: 'PALUKA DOMINO', grade: 'sg', placement: 2, ring: '20', sex: 'bitch' }),
+        entry({ showClassId: 'jbs', name: "LIEPSNA'S BONKERS", grade: 'sg', placement: 1, ring: '21', sex: 'bitch' }),
+        entry({ showClassId: 'mdl', name: 'Bailhaus Makavusi', absent: true, ring: '12' }),
+        entry({ showClassId: 'mdl', name: 'DRAMANA ANNO DOMINI', grade: 'vp', placement: 1, ring: '11' }),
+      ],
+      achievements: [],
+      judges,
+    };
+  }
+
+  it('runs the classes in schedule order and each class in placing order, absentees last', () => {
+    const rows = buildSvResultsXlsxRows(neFixture(), { venue: 'Outpaw Pursuits', date: '05/09/2026' });
+    // Exactly the order of these rows in Shirley's corrected file.
+    expect(rows.map((r) => [r.className, r.ringNumber, r.grading, r.placing])).toEqual([
+      ['6-9 months SCB', '7', 'VP', 1],
+      ['6-9 months SCB', '8', 'VP', 2],
+      ['6-9 months SCB', '10', 'VP', 3],
+      ['6-9 months SCB', '9', 'VP', 4],
+      ['6-9 months LCD', '11', 'VP', 1],
+      ['6-9 months LCD', '12', 'Abs', 90],
+      ['12-18 months SCB', '21', 'SG', 1],
+      ['12-18 months SCB', '20', 'SG', 2],
+      ['12-18 months SCB', '23', 'G', 1],
+      ['12-18 months SCB', '22', 'Abs', 90],
+      ['Adult LCB', '39', 'SG', 1],
+      ['Adult LCB', '42', 'SG', 2],
+      ['Adult LCB', '36', 'SG', 3],
+      ['Adult LCB', '41', 'SG', 4],
+      ['Adult LCB', '38', 'SG', 5],
+      ['Adult LCB', '43', 'SG', 6],
+      ['Adult LCB', '37', 'Abs', 90],
+      ['Adult LCB', '40', 'Abs', 91],
+      ['Working SCD', '67', 'V', 1],
+      ['Working SCD', '69', 'V', 2],
+      ['Working SCD', '68', 'Abs', 90],
+    ]);
+  });
+});
+
+describe('findPlacedWithoutGrade', () => {
+  function gapFixture(): SvResultsReportInput {
+    const minorDogLong = svClass('mdl', 'Minor Puppy', 'dog', 'long_stock', 'sv_age', 6);
+    const adultBitchShort = svClass('abs', 'Adult', 'bitch', 'stock', 'sv_age', 21);
+    return {
+      showClasses: [minorDogLong, adultBitchShort],
+      entries: [
+        // The NE case: placed 1st, never graded.
+        entry({ showClassId: 'mdl', name: 'DRAMANA ANNO DOMINI', placement: 1, ring: '11' }),
+        entry({ showClassId: 'mdl', name: 'Bailhaus Makavusi', absent: true, ring: '12' }),
+        entry({ showClassId: 'abs', name: 'Rosebud Edie of Hundark', grade: 'sg', placement: 1, ring: '44', sex: 'bitch' }),
+        entry({ showClassId: 'abs', name: 'MARINITA KAYLEIGH', placement: 2, ring: '49', sex: 'bitch' }),
+        entry({ showClassId: 'abs', name: 'Disqualified Dog', grade: 'disqualified', ring: '50', sex: 'bitch' }),
+        entry({ showClassId: 'abs', name: 'Not Yet Placed', ring: '51', sex: 'bitch' }),
+      ],
+      achievements: [],
+      judges,
+    };
+  }
+
+  it('lists every placed dog that has no grade, in class order, with its class', () => {
+    expect(findPlacedWithoutGrade(gapFixture())).toEqual([
+      { catalogueNumber: '11', dogName: 'DRAMANA ANNO DOMINI', className: 'Minor Puppy Dog (6-9 months), Long Coat' },
+      { catalogueNumber: '49', dogName: 'MARINITA KAYLEIGH', className: 'Adult Female (2 years +), Short Coat' },
+    ]);
+  });
+
+  it('is empty when every placed dog has a grade', () => {
+    expect(findPlacedWithoutGrade(buildFixture())).toEqual([]);
   });
 });
