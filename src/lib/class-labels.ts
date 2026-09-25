@@ -466,6 +466,29 @@ export function svCoatDisplayName(
 }
 
 /**
+ * Two-letter coat code — "LC" Long Coat, "SC" Short (stock) Coat, '' when the
+ * class has no coat. The League's SV results sheet writes it inside the Class
+ * column ("Adult LCB", "Working SCD" — Shirley, GSDL BRG, 24 Sept 2026).
+ */
+export function svCoatCode(coatType: 'stock' | 'long_stock' | null | undefined): string {
+  if (coatType === 'stock') return 'SC';
+  if (coatType === 'long_stock') return 'LC';
+  return '';
+}
+
+/**
+ * One-letter sex code — "D" dog, "B" bitch, '' for a class with no sex (Junior
+ * Handling, Special Awards). Used wherever a class is abbreviated: the
+ * Challenge Register ("MPD"), the SV results sheet ("Adult LCB"), the
+ * absentee and judging catalogues and the ring board.
+ */
+export function sexLetter(sex: string | null | undefined): string {
+  if (sex === 'dog') return 'D';
+  if (sex === 'bitch') return 'B';
+  return '';
+}
+
+/**
  * Abbreviate a breed class name for the Challenge Register (steward
  * catalogue's final page) — e.g. "Minor Puppy" (dog) → "MPD", "Post
  * Graduate" (bitch) → "PGB". Strips a trailing " Dog"/" Bitch" word first so
@@ -487,8 +510,7 @@ export function classNameAbbreviation(
     .filter(Boolean)
     .map((word) => (/^[a-zA-Z]/.test(word) ? word[0]!.toUpperCase() : ''))
     .join('');
-  const sexLetter = sex === 'dog' ? 'D' : sex === 'bitch' ? 'B' : '';
-  return `${initials}${sexLetter}`;
+  return `${initials}${sexLetter(sex)}`;
 }
 
 /**
@@ -559,13 +581,30 @@ export interface EntryClassWithShowClassOrder {
 export function sortEntryClassesByShowClassOrder<T extends EntryClassWithShowClassOrder>(
   entryClasses: T[],
 ): T[] {
-  return entryClasses.slice().sort((a, b) => {
-    const aSort = a.showClass?.sortOrder ?? Number.MAX_SAFE_INTEGER;
-    const bSort = b.showClass?.sortOrder ?? Number.MAX_SAFE_INTEGER;
-    if (aSort !== bSort) return aSort - bSort;
-    const aNum = a.showClass?.classNumber ?? Number.MAX_SAFE_INTEGER;
-    const bNum = b.showClass?.classNumber ?? Number.MAX_SAFE_INTEGER;
-    if (aNum !== bNum) return aNum - bNum;
-    return (a.showClass?.id ?? '').localeCompare(b.showClass?.id ?? '');
-  });
+  return entryClasses.slice().sort((a, b) => compareShowClassRunningOrder(a.showClass, b.showClass));
+}
+
+/** The running-order columns {@link compareShowClassRunningOrder} reads. */
+export type ShowClassRunningOrder = {
+  sortOrder?: number | null;
+  classNumber?: number | null;
+  id: string;
+} | null | undefined;
+
+/**
+ * THE show's class running order — `show_classes.sortOrder`, then
+ * `classNumber`, then id as a final stable tiebreak (a missing class sorts
+ * last). Every output that lists a show's classes in schedule order sorts
+ * with this: a dog's own classes ({@link sortEntryClassesByShowClassOrder})
+ * and the SV results sheet (Shirley, GSDL BRG, 24 Sept 2026: "ordered in
+ * placing order" — class by class in schedule order).
+ */
+export function compareShowClassRunningOrder(a: ShowClassRunningOrder, b: ShowClassRunningOrder): number {
+  const aSort = a?.sortOrder ?? Number.MAX_SAFE_INTEGER;
+  const bSort = b?.sortOrder ?? Number.MAX_SAFE_INTEGER;
+  if (aSort !== bSort) return aSort - bSort;
+  const aNum = a?.classNumber ?? Number.MAX_SAFE_INTEGER;
+  const bNum = b?.classNumber ?? Number.MAX_SAFE_INTEGER;
+  if (aNum !== bNum) return aNum - bNum;
+  return (a?.id ?? '').localeCompare(b?.id ?? '');
 }

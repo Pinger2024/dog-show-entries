@@ -552,35 +552,34 @@ export const stewardRouter = createTRPCRouter({
         }
       }
 
-      // Upsert the result
+      // Upsert the result. On an existing result, change ONLY the fields the
+      // caller sent — a field left out means "leave it as it is", a field sent
+      // as null means "clear it". The steward screen saves partial results
+      // (the grade dropdown doesn't send the critique or winner photo; the
+      // special-award dialog doesn't send the grade), and writing every
+      // unsent field as blank silently erased a judge's critique and the
+      // winner photo whenever a grade was changed (found 25 Sept 2026).
+      // A numeric placing always clears withheld/unplaced — the two are
+      // mutually exclusive.
+      const placementStatus =
+        input.placement != null ? null : input.placementStatus;
+      const changes = {
+        placement: input.placement,
+        ...(placementStatus !== undefined ? { placementStatus } : {}),
+        ...(input.specialAward !== undefined ? { specialAward: input.specialAward } : {}),
+        ...(input.critiqueText !== undefined ? { critiqueText: input.critiqueText } : {}),
+        ...(input.winnerPhotoUrl !== undefined ? { winnerPhotoUrl: input.winnerPhotoUrl } : {}),
+        ...(input.winnerPhotoStorageKey !== undefined
+          ? { winnerPhotoStorageKey: input.winnerPhotoStorageKey }
+          : {}),
+        ...(input.svGrade !== undefined ? { svGrade: input.svGrade } : {}),
+        recordedBy: ctx.session.user.id,
+        recordedAt: new Date(),
+      };
       const [result] = await ctx.db
         .insert(results)
-        .values({
-          entryClassId: input.entryClassId,
-          placement: input.placement,
-          placementStatus: input.placementStatus ?? null,
-          specialAward: input.specialAward ?? null,
-          critiqueText: input.critiqueText ?? null,
-          winnerPhotoUrl: input.winnerPhotoUrl ?? null,
-          winnerPhotoStorageKey: input.winnerPhotoStorageKey ?? null,
-          svGrade: input.svGrade ?? null,
-          recordedBy: ctx.session.user.id,
-          recordedAt: new Date(),
-        })
-        .onConflictDoUpdate({
-          target: results.entryClassId,
-          set: {
-            placement: input.placement,
-            placementStatus: input.placementStatus ?? null,
-            specialAward: input.specialAward ?? null,
-            critiqueText: input.critiqueText ?? null,
-            winnerPhotoUrl: input.winnerPhotoUrl ?? null,
-            winnerPhotoStorageKey: input.winnerPhotoStorageKey ?? null,
-            svGrade: input.svGrade ?? null,
-            recordedBy: ctx.session.user.id,
-            recordedAt: new Date(),
-          },
-        })
+        .values({ entryClassId: input.entryClassId, ...changes })
+        .onConflictDoUpdate({ target: results.entryClassId, set: changes })
         .returning();
 
       // Auto-start the show. The first placing recorded on show day flips an

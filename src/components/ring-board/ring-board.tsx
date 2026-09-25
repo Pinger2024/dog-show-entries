@@ -1,6 +1,7 @@
 import { Document, Page, Text, View, StyleSheet, Font } from '@react-pdf/renderer';
 import path from 'path';
 import { formatLondonShortDate } from '@/lib/date-utils';
+import { sexLetter } from '@/lib/class-labels';
 
 const fontsDir = path.join(process.cwd(), 'public', 'fonts');
 Font.register({
@@ -227,7 +228,7 @@ export function RingBoard({
                     <Text style={s.breedName}>{breed.breedName}</Text>
                   )}
                   {breed.classes.map((cls, ci) => {
-                    const sexLabel = cls.sex === 'dog' ? 'D' : cls.sex === 'bitch' ? 'B' : '';
+                    const sexLabel = sexLetter(cls.sex);
                     return (
                       <View key={ci} style={s.classRow}>
                         <Text style={s.classNumber}>

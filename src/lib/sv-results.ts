@@ -15,16 +15,31 @@
  *
  * SV conventions baked in here (source: GSDL British Regional Group Spring
  * Show 2026 results sheet — see research/regional-reports/):
- *   - The RESULTS sheet runs OLDEST class first (Working → Minor Puppy),
+ *   - The results PDF runs OLDEST class first (Working → Minor Puppy),
  *     MALE before female — the reverse of the schedule/catalogue, which runs
  *     youngest-first, bitch-first. We key off the shared SV_AGE_ORDER and flip.
+ *   - The results SPREADSHEET runs the other way: class by class in the
+ *     show's own schedule order, each class in placing order, and its Class
+ *     column reads age + coat + sex ("6-9 months SCB", "Adult LCB") — the
+ *     League re-sorted our NE Regional sheet into exactly that before sending
+ *     it to the SV and Win-sys (Shirley, GSDL BRG, 24 Sept 2026). Their own
+ *     sample sheet only said "Minor Puppy" / "Adult", which we had copied.
  *   - Within a class, dogs are ranked WITHIN their grade and the count
- *     restarts per grade (V1, V2, then G1…). Absentees stay in the list,
- *     shown as `Abs` with placing 90, 91, 92… in ring-number order.
+ *     restarts per grade (V1, V2, then G1…) — `rankWithinGrades` in
+ *     sv-grading.ts. Absentees stay in the list, shown as `Abs` with placing
+ *     90, 91, 92… in ring-number order.
  *   - Grade tiers, best-of awards and the age bands all match the SV rulebook.
  */
 
-import { SV_AGE_ORDER, svDisplayAge } from './class-labels';
+import {
+  SV_AGE_ORDER,
+  svDisplayAge,
+  svCoatCode,
+  svCoatDisplayName,
+  sexLetter,
+  compareShowClassRunningOrder,
+} from './class-labels';
+import { rankWithinGrades, isPlacedWithoutSvGrade, formatSvGradeBare } from './sv-grading';
 import { formatRegNumber } from '@/components/catalogue/catalogue-utils';
 import { REGIONAL_BEST_AWARDS } from './best-awards';
 import { awardNameToType } from './top-awards';
@@ -164,22 +179,6 @@ export interface SvResultsReportData {
 
 // ── Constants ───────────────────────────────────────────────────────
 
-/** Highest → lowest grade, used to order dogs within a class. */
-const SV_GRADE_RANK = ['v', 'sg', 'g', 'a', 'm', 'u', 'vp', 'p', 'wv', 'disqualified'];
-
-const GRADE_DISPLAY: Record<string, string> = {
-  v: 'V',
-  sg: 'SG',
-  g: 'G',
-  a: 'A',
-  m: 'M',
-  u: 'U',
-  vp: 'VP',
-  p: 'P',
-  wv: 'WV',
-  disqualified: 'Disqualified',
-};
-
 /** SV age bands (months) — differ from RKC. Source: reference_sv_schedule. */
 const AGE_RANGE: Record<string, string> = {
   'Baby Puppy': '4-6 months',
@@ -248,6 +247,24 @@ export function svClassLabel(age: string, sex: 'dog' | 'bitch' | null): string {
   return range ? `${base} (${range})` : base;
 }
 
+/**
+ * The Class column of the SV results spreadsheet — age, coat and sex, written
+ * the way the League writes it: "4-6 months LCB", "12-18 months SCD",
+ * "Adult LCB", "Working SCD" (Shirley, GSDL BRG, 24 Sept 2026). The puppy to
+ * yearling classes go by their age band; Adult and Working share "2 years +"
+ * so they keep their names. Takes the stored class name, "SV " prefix or not.
+ */
+export function svResultsSheetClassName(
+  className: string | null | undefined,
+  coat: SvCoat | null | undefined,
+  sex: 'dog' | 'bitch' | null | undefined,
+): string {
+  const age = svDisplayAge(className);
+  const ageText = age === 'Adult' || age === 'Working' ? age : (AGE_RANGE[age] ?? age);
+  const code = `${svCoatCode(coat)}${sexLetter(sex)}`;
+  return code ? `${ageText} ${code}` : ageText;
+}
+
 /** "Anton x Bailey" — the pedigree line. Blank halves are tolerated. */
 export function formatSireDam(sire: string | null, dam: string | null): { sire: string; dam: string } {
   return { sire: (sire ?? '').trim(), dam: (dam ?? '').trim() };
@@ -276,9 +293,10 @@ export interface SvComputedRow {
 }
 
 /**
- * Rank every dog in one show-class. Present dogs are grouped by grade (in
- * SV_GRADE_RANK order) and numbered 1..n within each grade, in the steward's
- * placing order; absentees follow, numbered 90, 91… in ring-number order.
+ * Rank every dog in one show-class. Present dogs are grouped by grade (best
+ * first) and numbered 1..n within each grade, in the steward's placing order
+ * (`rankWithinGrades`); Disqualified and ungraded dogs follow; absentees come
+ * last, numbered 90, 91… in ring-number order.
  */
 export function computeClassMembers(
   showClass: SvShowClassInput,
@@ -288,37 +306,23 @@ export function computeClassMembers(
   const absent = members.filter((m) => m.entry.absent);
   const out: SvComputedRow[] = [];
 
-  // Present dogs, grade by grade.
-  const byGrade = new Map<string, { entry: SvEntryInput; result: SvResultInput | null }[]>();
-  const ungraded: { entry: SvEntryInput; result: SvResultInput | null }[] = [];
-  for (const m of present) {
-    const grade = m.result?.svGrade ?? null;
-    if (grade && grade !== 'disqualified') {
-      const list = byGrade.get(grade) ?? [];
-      list.push(m);
-      byGrade.set(grade, list);
-    } else {
-      ungraded.push(m);
-    }
-  }
-
-  for (const grade of SV_GRADE_RANK) {
-    if (grade === 'disqualified') continue;
-    const list = byGrade.get(grade);
-    if (!list) continue;
-    list.sort((a, b) => (a.result?.placement ?? 9999) - (b.result?.placement ?? 9999));
-    list.forEach((m, i) => {
-      out.push({
-        entry: m.entry,
-        showClass,
-        gradeCode: grade,
-        gradeDisplay: GRADE_DISPLAY[grade] ?? grade.toUpperCase(),
-        placementDisplay: String(i + 1),
-        placementNumber: i + 1,
-        absent: false,
-      });
+  // Present dogs, grade by grade — rankWithinGrades is the one SV ranking.
+  const ranked = rankWithinGrades(
+    present.map((m) => ({ m, svGrade: m.result?.svGrade ?? null, placement: m.result?.placement ?? null })),
+  );
+  for (const { item, grade, rank } of ranked) {
+    out.push({
+      entry: item.m.entry,
+      showClass,
+      gradeCode: grade,
+      gradeDisplay: formatSvGradeBare(grade),
+      placementDisplay: String(rank),
+      placementNumber: rank,
+      absent: false,
     });
   }
+  const rankedMembers = new Set(ranked.map((r) => r.item.m));
+  const ungraded = present.filter((m) => !rankedMembers.has(m));
 
   // Disqualified + ungraded-but-present dogs (rare) after the graded block.
   for (const m of ungraded) {
@@ -328,7 +332,7 @@ export function computeClassMembers(
         entry: m.entry,
         showClass,
         gradeCode: 'disqualified',
-        gradeDisplay: GRADE_DISPLAY.disqualified,
+        gradeDisplay: formatSvGradeBare('disqualified'),
         placementDisplay: '',
         placementNumber: null,
         absent: false,
@@ -388,6 +392,29 @@ function membersByShowClass(
   return map;
 }
 
+/** One SV age class with every dog in it ranked by `computeClassMembers`. */
+interface SvComputedClass {
+  showClass: SvShowClassInput;
+  rows: SvComputedRow[];
+}
+
+/**
+ * Every SV age class that has at least one dog, ranked, in the show's own
+ * class running order (`compareShowClassRunningOrder`). The one place the
+ * results code works out each class — the PDF, the spreadsheet and the
+ * ungraded-placings warning all read from it.
+ */
+function computeSvAgeClasses(input: SvResultsReportInput): SvComputedClass[] {
+  const memberMap = membersByShowClass(input.entries);
+  return input.showClasses
+    .filter((c) => c.classDefinition?.type === 'sv_age')
+    .sort(compareShowClassRunningOrder)
+    .flatMap((showClass) => {
+      const members = memberMap.get(showClass.id) ?? [];
+      return members.length > 0 ? [{ showClass, rows: computeClassMembers(showClass, members) }] : [];
+    });
+}
+
 function judgeNames(judges: SvJudgeRowInput[]): { breed: string[]; jh: string[] } {
   const breed = new Map<string, string>();
   const jh = new Map<string, string>();
@@ -412,14 +439,15 @@ export function buildSvResultsReport(input: SvResultsReportInput): SvResultsRepo
   const memberMap = membersByShowClass(entries);
 
   const svAgeClasses = showClasses.filter((c) => c.classDefinition?.type === 'sv_age');
+  const computedClasses = computeSvAgeClasses(input);
 
   // Coat sections in fixed order; within each, oldest class first then
   // male-before-female. Only classes with at least one dog appear.
   const coatSections: SvResultsCoatSection[] = [];
   for (const { coat, title } of COAT_ORDER) {
-    const classesForCoat = svAgeClasses
-      .filter((c) => (c.svCoatType ?? null) === coat)
-      .sort((a, b) => {
+    const classesForCoat = computedClasses
+      .filter(({ showClass: c }) => (c.svCoatType ?? null) === coat)
+      .sort(({ showClass: a }, { showClass: b }) => {
         const ai = ageIndex(a.classDefinition?.name);
         const bi = ageIndex(b.classDefinition?.name);
         if (ai !== bi) return bi - ai; // OLDEST first (reverse age order)
@@ -429,10 +457,7 @@ export function buildSvResultsReport(input: SvResultsReportInput): SvResultsRepo
       });
 
     const classes: SvResultsClass[] = [];
-    for (const sc of classesForCoat) {
-      const members = memberMap.get(sc.id) ?? [];
-      if (members.length === 0) continue;
-      const computed = computeClassMembers(sc, members);
+    for (const { showClass: sc, rows: computed } of classesForCoat) {
       const age = svDisplayAge(sc.classDefinition?.name);
       classes.push({
         label: svClassLabel(age, sc.sex),
@@ -667,9 +692,13 @@ function primaryOwner(owners: SvOwnerInput[]): SvOwnerInput | null {
 }
 
 /**
- * Build the flat one-row-per-dog spreadsheet rows, ordered by ring number
- * (which the catalogue assigns in age-ascending, class-grouped order, so the
- * sheet reads the same way the GSDL sample does).
+ * Build the flat one-row-per-dog spreadsheet rows: class by class in the
+ * show's own schedule order, each class in placing order (graded dogs by
+ * grade, then ungraded, then absentees 90, 91…), with the Class column as
+ * age + coat + sex. That is how the League re-sorted our NE Regional sheet
+ * before sending it to the SV and Win-sys (Shirley, GSDL BRG, 24 Sept 2026);
+ * it used to run in plain ring-number order, which scrambles the placings
+ * inside a class.
  *
  * Columns Remi doesn't store granularly (affix splits, height/depth) are left
  * blank — the data Remi holds always lands in the right column.
@@ -678,17 +707,11 @@ export function buildSvResultsXlsxRows(
   input: SvResultsReportInput,
   context: { venue: string; date: string },
 ): SvXlsxRow[] {
-  const { showClasses, entries, judges } = input;
-  const memberMap = membersByShowClass(entries);
-  const svAgeClasses = showClasses.filter((c) => c.classDefinition?.type === 'sv_age');
-  const judge = judgeNames(judges).breed.join(' & ');
+  const judge = judgeNames(input.judges).breed.join(' & ');
 
-  const rows: { ring: string | null; row: SvXlsxRow }[] = [];
-  for (const sc of svAgeClasses) {
-    const members = memberMap.get(sc.id) ?? [];
-    if (members.length === 0) continue;
-    const computed = computeClassMembers(sc, members);
-    const className = svDisplayAge(sc.classDefinition?.name);
+  const rows: SvXlsxRow[] = [];
+  for (const { showClass: sc, rows: computed } of computeSvAgeClasses(input)) {
+    const className = svResultsSheetClassName(sc.classDefinition?.name, sc.svCoatType, sc.sex);
     for (const r of computed) {
       const dog = r.entry.dog;
       const owner = primaryOwner(dog?.owners ?? []);
@@ -698,45 +721,68 @@ export function buildSvResultsXlsxRows(
       const sireNm = splitAffix(dog?.sireName ?? null);
       const damNm = splitAffix(dog?.damName ?? null);
       rows.push({
-        ring: r.entry.catalogueNumber,
-        row: {
-          venue: context.venue,
-          date: context.date,
-          className,
-          judge,
-          ringNumber: r.entry.catalogueNumber ?? '',
-          dogName: dogNm.name,
-          dogAdditionalAffix: dogNm.additionalAffix,
-          dogAffix: dogNm.affix,
-          registrationBody: regBody(dog?.registrationBody ?? null, dog?.registrationBodyOther ?? null),
-          registrationNumber: formatRegNumber(dog?.kcRegNumber),
-          dateOfBirth: dog?.dateOfBirth ?? '',
-          microchip: dog?.microchipNumber ?? '',
-          sireName: sireNm.name,
-          sireAdditionalAffix: sireNm.additionalAffix,
-          sireAffix: sireNm.affix,
-          sireRegistrationBody: regBody(dog?.sireRegistrationBody ?? null),
-          sireRegistrationNumber: dog?.sireRegistrationNumber ?? '',
-          damName: damNm.name,
-          damAdditionalAffix: damNm.additionalAffix,
-          damAffix: damNm.affix,
-          damRegistrationBody: regBody(dog?.damRegistrationBody ?? null),
-          damRegistrationNumber: dog?.damRegistrationNumber ?? '',
-          breederFirstName: breeder.first,
-          breederSurname: breeder.surname,
-          breederCityPostcode: joinCityPostcode(dog?.breederCity ?? null, dog?.breederPostcode ?? null),
-          breederCountry: dog?.breederCountry ?? '',
-          ownerFirstName: ownerName.first,
-          ownerSurname: ownerName.surname,
-          ownerCityPostcode: cityAndPostcode(owner?.ownerAddress ?? null),
-          ownerCountry: owner ? 'UK' : '',
-          grading: r.gradeDisplay,
-          placing: r.placementNumber ?? '',
-        },
+        venue: context.venue,
+        date: context.date,
+        className,
+        judge,
+        ringNumber: r.entry.catalogueNumber ?? '',
+        dogName: dogNm.name,
+        dogAdditionalAffix: dogNm.additionalAffix,
+        dogAffix: dogNm.affix,
+        registrationBody: regBody(dog?.registrationBody ?? null, dog?.registrationBodyOther ?? null),
+        registrationNumber: formatRegNumber(dog?.kcRegNumber),
+        dateOfBirth: dog?.dateOfBirth ?? '',
+        microchip: dog?.microchipNumber ?? '',
+        sireName: sireNm.name,
+        sireAdditionalAffix: sireNm.additionalAffix,
+        sireAffix: sireNm.affix,
+        sireRegistrationBody: regBody(dog?.sireRegistrationBody ?? null),
+        sireRegistrationNumber: dog?.sireRegistrationNumber ?? '',
+        damName: damNm.name,
+        damAdditionalAffix: damNm.additionalAffix,
+        damAffix: damNm.affix,
+        damRegistrationBody: regBody(dog?.damRegistrationBody ?? null),
+        damRegistrationNumber: dog?.damRegistrationNumber ?? '',
+        breederFirstName: breeder.first,
+        breederSurname: breeder.surname,
+        breederCityPostcode: joinCityPostcode(dog?.breederCity ?? null, dog?.breederPostcode ?? null),
+        breederCountry: dog?.breederCountry ?? '',
+        ownerFirstName: ownerName.first,
+        ownerSurname: ownerName.surname,
+        ownerCityPostcode: cityAndPostcode(owner?.ownerAddress ?? null),
+        ownerCountry: owner ? 'UK' : '',
+        grading: r.gradeDisplay,
+        placing: r.placementNumber ?? '',
       });
     }
   }
+  return rows;
+}
 
-  rows.sort((a, b) => ringSort(a.ring, b.ring));
-  return rows.map((r) => r.row);
+/** A placed dog with no grade, for the secretary's warning. */
+export interface SvGradeGap {
+  catalogueNumber: string | null;
+  dogName: string;
+  /** e.g. "Minor Puppy Dog (6-9 months), Long Coat". */
+  className: string;
+}
+
+/**
+ * Every dog that was placed but has no grade, in class order — what the
+ * secretary is warned about before sending the results to the League
+ * (`isPlacedWithoutSvGrade` is the rule; NE Regional no. 11, 5 Sept 2026).
+ * Absent dogs are never listed.
+ */
+export function findPlacedWithoutGrade(input: SvResultsReportInput): SvGradeGap[] {
+  return computeSvAgeClasses(input).flatMap(({ showClass: sc, rows }) =>
+    rows
+      .filter((r) => !r.absent && isPlacedWithoutSvGrade({ placement: r.placementNumber, svGrade: r.gradeCode }))
+      .map((r) => ({
+        catalogueNumber: r.entry.catalogueNumber,
+        dogName: r.entry.dog?.registeredName ?? '',
+        className: [svClassLabel(svDisplayAge(sc.classDefinition?.name), sc.sex), svCoatDisplayName(sc.svCoatType)]
+          .filter(Boolean)
+          .join(', '),
+      })),
+  );
 }

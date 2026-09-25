@@ -6,7 +6,9 @@ import { scanFiles } from './helpers/static-scan';
  * the NE Regional results sheet added (25 Sept 2026):
  *
  *  - the two-letter coat code in the SV results sheet's Class column
- *    ("Adult LCB") is `svCoatCode` in lib/class-labels.ts;
+ *    ("Adult LCB") is `svCoatCode` in lib/class-labels.ts, and the D/B sex
+ *    letter is `sexLetter` beside it (it had been hand-written in four
+ *    places — the Challenge Register, two catalogues and the ring board);
  *  - "this dog was placed but has no grade" is `isPlacedWithoutSvGrade` in
  *    lib/sv-grading.ts — the steward page, the secretary's warning and the
  *    results code all ask it, so they can never disagree about which dogs
@@ -15,6 +17,13 @@ import { scanFiles } from './helpers/static-scan';
 describe('SV results sheet rules have one owner', () => {
   it('only class-labels.ts spells out the LC / SC coat codes', () => {
     const hits = scanFiles(['src'], ['.ts', '.tsx'], /['"`](LC|SC)['"`]/).filter(
+      (m) => m.file !== 'src/lib/class-labels.ts' && !m.file.includes('__tests__'),
+    );
+    expect(hits).toEqual([]);
+  });
+
+  it('only class-labels.ts turns a sex into D / B', () => {
+    const hits = scanFiles(['src'], ['.ts', '.tsx'], /===\s*['"]dog['"]\s*\?\s*['"]D['"]|===\s*['"]bitch['"]\s*\?\s*['"]B['"]/).filter(
       (m) => m.file !== 'src/lib/class-labels.ts' && !m.file.includes('__tests__'),
     );
     expect(hits).toEqual([]);

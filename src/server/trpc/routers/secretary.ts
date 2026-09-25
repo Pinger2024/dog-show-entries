@@ -1,4 +1,6 @@
 import { z } from 'zod';
+import { loadSvResultsData } from '@/server/services/sv-results-data';
+import { findPlacedWithoutGrade } from '@/lib/sv-results';
 import { TRPCError } from '@trpc/server';
 import { and, eq, sql, isNull, isNotNull, inArray, asc, desc, ilike } from 'drizzle-orm';
 import { secretaryProcedure, publicProcedure } from '../procedures';
@@ -1054,6 +1056,23 @@ export const secretaryRouter = createTRPCRouter({
         .groupBy(entryClasses.showClassId);
 
       return computePrizeCardCounts(rows.map((r) => Number(r.count)));
+    }),
+
+  /**
+   * Placed dogs with no grade at a regional — the documents page warns the
+   * secretary before they send the SV results to the League (NE Regional
+   * no. 11 went out with a blank grade, 5 Sept 2026). Same loader and same
+   * class computation as the SV results PDF and spreadsheet, so the warning
+   * can never disagree with the documents it is warning about. Empty for an
+   * RKC show.
+   */
+  getSvResultsGradeGaps: secretaryProcedure
+    .input(z.object({ showId: z.string().uuid() }))
+    .query(async ({ ctx, input }) => {
+      await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId, { callerIsAdmin: ctx.callerIsAdmin });
+      const load = await loadSvResultsData(ctx.db, input.showId);
+      if (!load || load.show.showRuleset !== 'wusv') return [];
+      return findPlacedWithoutGrade(load.reportInput);
     }),
 
   getPaymentReport: secretaryProcedure

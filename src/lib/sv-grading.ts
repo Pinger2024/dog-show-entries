@@ -150,17 +150,8 @@ export function computeSvClassRatings(
 ): Map<string, string> {
   const map = new Map<string, string>();
 
-  const byGrade = new Map<string, { entryClassId: string; placement: number | null | undefined }[]>();
-  for (const r of results) {
-    if (!r.svGrade || r.svGrade === 'disqualified') continue;
-    const list = byGrade.get(r.svGrade) ?? [];
-    list.push({ entryClassId: r.entryClassId, placement: r.placement });
-    byGrade.set(r.svGrade, list);
-  }
-
-  for (const [grade, list] of byGrade) {
-    list.sort((a, b) => (a.placement ?? 9999) - (b.placement ?? 9999));
-    list.forEach((r, i) => map.set(r.entryClassId, formatSvRating(grade, i + 1)));
+  for (const { item, grade, rank } of rankWithinGrades(results)) {
+    map.set(item.entryClassId, formatSvRating(grade, rank));
   }
 
   // Disqualified + ungraded fallbacks.
@@ -168,10 +159,70 @@ export function computeSvClassRatings(
     if (map.has(r.entryClassId)) continue;
     if (r.svGrade === 'disqualified') {
       map.set(r.entryClassId, 'Disqualified');
-    } else if (!r.svGrade && r.placement != null) {
+    } else if (isPlacedWithoutSvGrade(r)) {
       map.set(r.entryClassId, String(r.placement));
     }
   }
 
   return map;
+}
+
+/** Highest → lowest SV grade: the adult scale, then the under-12 scale. */
+export const SV_GRADE_ORDER: readonly SvGradeCode[] = ['v', 'sg', 'g', 'a', 'm', 'u', 'vp', 'p', 'wv'];
+
+/** What {@link rankWithinGrades} and {@link isPlacedWithoutSvGrade} read. */
+export interface SvGradedPlacing {
+  svGrade: string | null | undefined;
+  placement: number | null | undefined;
+}
+
+/**
+ * THE SV within-grade ranking — the one place Remi works out "SG2" or "G1".
+ * SV ranks each grade separately and restarts the count per grade, so a class
+ * graded SG, SG, G placed 1..3 reads SG1, SG2, G1.
+ *
+ * Returns the graded dogs only (ungraded and Disqualified are left for the
+ * caller to place), best grade first in {@link SV_GRADE_ORDER}, each grade in
+ * the steward's placing order, each with its 1-based rank. The public results
+ * page ({@link computeSvClassRatings}) and the SV graded results PDF and
+ * spreadsheet (`computeClassMembers` in sv-results.ts) both rank with this —
+ * they used to carry two copies of the same loop (register §4, 2026-09-11).
+ */
+export function rankWithinGrades<T extends SvGradedPlacing>(
+  items: ReadonlyArray<T>,
+): { item: T; grade: string; rank: number }[] {
+  const byGrade = new Map<string, T[]>();
+  for (const item of items) {
+    if (!item.svGrade || item.svGrade === 'disqualified') continue;
+    const list = byGrade.get(item.svGrade) ?? [];
+    list.push(item);
+    byGrade.set(item.svGrade, list);
+  }
+
+  // Known grades best-first; anything unexpected after them rather than lost.
+  const gradeRank = (g: string) => {
+    const i = (SV_GRADE_ORDER as readonly string[]).indexOf(g);
+    return i === -1 ? SV_GRADE_ORDER.length : i;
+  };
+  const grades = [...byGrade.keys()].sort((a, b) => gradeRank(a) - gradeRank(b));
+
+  const out: { item: T; grade: string; rank: number }[] = [];
+  for (const grade of grades) {
+    const list = byGrade.get(grade)!;
+    list.sort((a, b) => (a.placement ?? 9999) - (b.placement ?? 9999));
+    list.forEach((item, i) => out.push({ item, grade, rank: i + 1 }));
+  }
+  return out;
+}
+
+/**
+ * THE rule for "this dog still needs a grade": it has been placed but carries
+ * no SV grade (Disqualified counts as a grade). At a regional every dog the
+ * judge places is graded, so a placing with no grade is a slip on the day —
+ * the NE Regional's no. 11 went to the League with a blank grade (5 Sept
+ * 2026). The steward's class page, the secretary's documents page warning and
+ * the results code all ask this, so they can never disagree.
+ */
+export function isPlacedWithoutSvGrade(r: SvGradedPlacing): boolean {
+  return r.placement != null && !r.svGrade;
 }
