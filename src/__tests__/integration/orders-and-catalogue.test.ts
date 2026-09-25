@@ -18,11 +18,20 @@ async function paidCatalogueOrder() {
   const exhibitor = await makeUser({ role: 'exhibitor' });
   const org = await makeOrg();
   const breed = await makeBreed();
+  // Past start date so the show-day catalogue lock (Amanda 2026-05-28) is
+  // satisfied — a 'completed' show is by definition past its start date.
+  const past = (() => {
+    const d = new Date();
+    d.setUTCDate(d.getUTCDate() - 30);
+    return d.toISOString().slice(0, 10);
+  })();
   const show = await makeShow({
     organisationId: org.id,
     breedId: breed.id,
     status: 'completed',
     name: 'Catalogue Show',
+    startDate: past,
+    endDate: past,
   });
   // Create a sundry item that matches the CATALOGUE_NAME_PATTERN ('catalog' / 'catalogue')
   const [sundry] = await testDb.insert(sundryItems).values({
@@ -137,8 +146,14 @@ describe('shows.getShowDogPhotos (public)', () => {
     const exhibitor = await makeUser({ role: 'exhibitor' });
     const org = await makeOrg();
     const breed = await makeBreed();
+    const past = (() => {
+      const d = new Date();
+      d.setUTCDate(d.getUTCDate() - 30);
+      return d.toISOString().slice(0, 10);
+    })();
     const show = await makeShow({
       organisationId: org.id, breedId: breed.id, status: 'completed',
+      startDate: past, endDate: past,
     });
     // Confirmed entry on a dog with a primary photo should appear
     const dog = await makeDog({ ownerId: exhibitor.id, breedId: breed.id });

@@ -287,10 +287,10 @@ function FeedItem({ item }: { item: FeedItemData }) {
 
       {/* Show result content */}
       {item.itemType === 'show_result' && item.show && (
-        <div className="rounded-md border border-amber-200/40 bg-amber-50/20 p-3">
+        <div className="rounded-md border border-se-honey-line/60 bg-se-honey-soft/40 p-3">
           <div className="flex items-start gap-2.5">
-            <div className="flex size-7 shrink-0 items-center justify-center rounded-full bg-amber-100">
-              <Trophy className="size-3.5 text-amber-600" />
+            <div className="flex size-7 shrink-0 items-center justify-center rounded-full bg-se-honey-soft">
+              <Trophy className="size-3.5 text-se-honey-deep" />
             </div>
             <div className="min-w-0 flex-1">
               <Link
@@ -319,7 +319,7 @@ function FeedItem({ item }: { item: FeedItemData }) {
                         </Badge>
                       )}
                       {cls.specialAward && (
-                        <span className="inline-flex items-center gap-0.5 text-[9px] font-medium text-amber-700">
+                        <span className="inline-flex items-center gap-0.5 text-[9px] font-medium text-se-honey-deep">
                           <Award className="size-2" />
                           {cls.specialAward}
                         </span>

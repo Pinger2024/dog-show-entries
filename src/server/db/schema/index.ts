@@ -3,6 +3,7 @@ export {
   showTypeEnum,
   showScopeEnum,
   showStatusEnum,
+  showRulesetEnum,
   sexEnum,
   entryStatusEnum,
   paymentStatusEnum,
@@ -25,6 +26,7 @@ export {
   clubTypeEnum,
   serviceTierEnum,
   subscriptionStatusEnum,
+  stripeAccountStatusEnum,
   invitationStatusEnum,
   secretaryApplicationStatusEnum,
   classSexArrangementEnum,
@@ -32,9 +34,22 @@ export {
   sponsorCategoryEnum,
   sponsorTierEnum,
   adSizeEnum,
+  advertDocumentEnum,
+  advertPositionEnum,
   printOrderStatusEnum,
   printServiceLevelEnum,
+  coatTypeEnum,
+  registrationBodyEnum,
+  hipGradeEnum,
+  elbowGradeEnum,
+  haemophiliaClearEnum,
+  dmTestEnum,
+  dnaRecordingEnum,
+  koerungEnum,
+  wusvClubEnum,
+  svGradeEnum,
 } from './enums';
+export { critiqueDocStatusEnum } from './critique-documents';
 
 // Tables
 export { organisations, organisationsRelations } from './organisations';
@@ -48,10 +63,11 @@ export {
   classDefinitionsRelations,
 } from './class-definitions';
 export { showClasses, showClassesRelations } from './show-classes';
+export { showBreeds, showBreedsRelations } from './show-breeds';
 export { users, usersRelations } from './users';
 export { accounts, sessions, verificationTokens } from './auth';
 export { dogs, dogsRelations } from './dogs';
-export { entries, entriesRelations } from './entries';
+export { entries, entriesRelations, catalogueNumberAsc } from './entries';
 export { entryClasses, entryClassesRelations } from './entry-classes';
 export { results, resultsRelations } from './results';
 export { judges, judgesRelations } from './judges';
@@ -60,6 +76,7 @@ export {
   judgeAssignments,
   judgeAssignmentsRelations,
 } from './judge-assignments';
+export { judgeRoles } from './judge-roles';
 export { achievements, achievementsRelations } from './achievements';
 export { memberships, membershipsRelations } from './memberships';
 export { payments, paymentsRelations } from './payments';
@@ -68,6 +85,7 @@ export { payments, paymentsRelations } from './payments';
 export { dogOwners, dogOwnersRelations } from './dog-owners';
 export { dogTitles, dogTitlesRelations } from './dog-titles';
 export { orders, ordersRelations } from './orders';
+export { payouts, payoutsRelations } from './payouts';
 export { entryAuditLog, entryAuditLogRelations } from './entry-audit-log';
 export {
   juniorHandlerDetails,
@@ -104,6 +122,7 @@ export {
   orderSundryItemsRelations,
 } from './order-sundry-items';
 export { invitations, invitationsRelations } from './invitations';
+export { shareEvents, shareEventsRelations } from './share-events';
 export {
   secretaryApplications,
   secretaryApplicationsRelations,
@@ -132,3 +151,29 @@ export {
   printOrderItemsRelations,
 } from './print-orders';
 export { printPriceCache } from './print-price-cache';
+export { dogSvProfile, dogSvProfileRelations } from './dog-sv-profile';
+export { userSvProfile, userSvProfileRelations } from './user-sv-profile';
+export { catalogueAdverts, catalogueAdvertsRelations } from './catalogue-adverts';
+export { showDiscountGroups, showDiscountGroupsRelations } from './show-discount-groups';
+export { showDonations, showDonationsRelations } from './show-donations';
+export {
+  invoices,
+  invoicesRelations,
+  type InvoiceLineItem,
+  type SettlementLine,
+  type SettlementSection,
+  type SettlementSnapshot,
+} from './invoices';
+export {
+  critiqueDocuments,
+  critiqueDocumentsRelations,
+  type CritiqueBlockConfidence,
+  type CritiqueParsedBlock,
+  type CritiqueParsedJson,
+} from './critique-documents';
+export {
+  documentRenderJobs,
+  documentRenderJobsRelations,
+  type DocumentRenderJobStatus,
+  type DocumentRenderJobFormat,
+} from './document-render-jobs';

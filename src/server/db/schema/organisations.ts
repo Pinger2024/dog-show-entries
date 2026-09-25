@@ -1,6 +1,6 @@
-import { pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core';
+import { pgTable, text, timestamp, uuid, boolean, integer } from 'drizzle-orm/pg-core';
 import { relations } from 'drizzle-orm';
-import { subscriptionStatusEnum } from './enums';
+import { subscriptionStatusEnum, stripeAccountStatusEnum, showRulesetEnum } from './enums';
 import { shows } from './shows';
 import { memberships } from './memberships';
 import { plans } from './plans';
@@ -18,7 +18,33 @@ export const organisations = pgTable('organisations', {
   contactEmail: text('contact_email'),
   contactPhone: text('contact_phone'),
   website: text('website'),
+  // Where we BACS exhibitor entry fees on to. Remi is merchant of record;
+  // these are the only bank details a club needs to give us.
+  payoutAccountName: text('payout_account_name'),
+  payoutSortCode: text('payout_sort_code'),
+  payoutAccountNumber: text('payout_account_number'),
+
+  // Legacy Stripe Connect columns — unused, kept to avoid a disruptive
+  // drop. Safe to remove once prod migrations can tolerate it.
   stripeAccountId: text('stripe_account_id'),
+  stripeAccountStatus: stripeAccountStatusEnum('stripe_account_status')
+    .notNull()
+    .default('not_started'),
+  stripeDetailsSubmitted: boolean('stripe_details_submitted')
+    .notNull()
+    .default(false),
+  stripeChargesEnabled: boolean('stripe_charges_enabled')
+    .notNull()
+    .default(false),
+  stripePayoutsEnabled: boolean('stripe_payouts_enabled')
+    .notNull()
+    .default(false),
+  stripeOnboardingCompletedAt: timestamp('stripe_onboarding_completed_at', {
+    withTimezone: true,
+  }),
+
+  // ── Stripe Billing (club subscribing to Remi) ──
+  // This is the club-as-customer side — completely separate from Connect.
   stripeCustomerId: text('stripe_customer_id'),
   planId: uuid('plan_id').references(() => plans.id),
   subscriptionStatus: subscriptionStatusEnum('subscription_status')
@@ -28,7 +54,21 @@ export const organisations = pgTable('organisations', {
   subscriptionCurrentPeriodEnd: timestamp('subscription_current_period_end', {
     withTimezone: true,
   }),
+  showRuleset: showRulesetEnum('show_ruleset').notNull().default('rkc'),
   logoUrl: text('logo_url'),
+  /** Hex codes extracted from the logo via node-vibrant — used to tint
+   *  the SV schedule's tonal wash so the prospectus looks brand-aligned
+   *  per club. Null until extraction has run; logoMonochrome=true means
+   *  the logo had no saturated colours and the renderer should fall back
+   *  to the default Sieger dusty pink + blue wash. */
+  logoColorPrimary: text('logo_color_primary'),
+  logoColorSecondary: text('logo_color_secondary'),
+  logoMonochrome: boolean('logo_monochrome').notNull().default(false),
+  // Club-invoice numbering (admin-invoices.issue). Incremented atomically
+  // inside the issue transaction via an UPDATE ... RETURNING row-level
+  // lock — the returned value becomes the invoice's sequenceNumber. See
+  // src/server/db/schema/invoices.ts for the full numbering rationale.
+  nextInvoiceSequence: integer('next_invoice_sequence').notNull().default(1),
   createdAt: timestamp('created_at', { withTimezone: true })
     .defaultNow()
     .notNull(),

@@ -49,6 +49,24 @@ export const ACHIEVEMENT_TYPES = [
   'best_long_coat_dog',
   'best_long_coat_bitch',
   'best_long_coat_in_show',
+  // SV/WUSV regional top awards (Amanda 2026-05-28). Regionals have NO
+  // Best of Breed / CCs / BIS — only these four.
+  'most_promising_young_dog',
+  'most_promising_young_bitch',
+  'best_dog',
+  'best_bitch',
+  // Reserve Best Dog/Bitch — non-CC shows (and some breed clubs like BAGSD)
+  // award "Best Dog/Bitch" + a reserve instead of CCs. Appended 2026-06-26.
+  'reserve_best_dog',
+  'reserve_best_bitch',
+  // Long-coat and baby-puppy top awards — configured by South Western GSD
+  // club and others but previously had no recordable type, so they printed
+  // in the catalogue/judges' book yet could never appear in results
+  // (found 2026-07-27 fixing the public results page). Appended at the end
+  // per the ordering rule above.
+  'best_long_coat_adult',
+  'best_long_coat_puppy',
+  'best_baby_puppy',
 ] as const;
 
 export type AchievementType = typeof ACHIEVEMENT_TYPES[number];
@@ -101,6 +119,22 @@ export const SPECIAL_AWARDS = [
   'Reserve Best Veteran in Show',
 ] as const;
 
+/**
+ * THE placing order: 1st, 2nd, 3rd… by number, with anything that has no
+ * placing (withheld, unplaced, not yet judged, graded but unplaced) after
+ * every placing. Two unplaced dogs compare equal, so a stable sort keeps
+ * their existing order. Every list of results sorts with this — six places
+ * each wrote their own `placement ?? 99 / 100 / 9999` until 25 Sept 2026.
+ */
+export function comparePlacing(a: number | null | undefined, b: number | null | undefined): number {
+  const aPlaced = a != null;
+  const bPlaced = b != null;
+  if (aPlaced && bPlaced) return a - b;
+  if (aPlaced) return -1;
+  if (bPlaced) return 1;
+  return 0;
+}
+
 export function getPlacementLabel(value: number): string {
   return KC_PLACEMENTS.find((p) => p.value === value)?.label ?? `${value}th`;
 }
@@ -143,6 +177,16 @@ export const achievementLabels: Record<string, string> = {
   best_long_coat_in_show: 'Best Long Coat in Show',
   cc: 'CC',
   reserve_cc: 'Reserve CC',
+  // SV/WUSV regional top awards
+  most_promising_young_dog: 'Most Promising Young Dog',
+  most_promising_young_bitch: 'Most Promising Young Bitch',
+  best_dog: 'Best Dog',
+  best_bitch: 'Best Bitch',
+  reserve_best_dog: 'Reserve Best Dog',
+  reserve_best_bitch: 'Reserve Best Bitch',
+  best_long_coat_adult: 'Best Long Coat Adult',
+  best_long_coat_puppy: 'Best Long Coat Puppy',
+  best_baby_puppy: 'Best Baby Puppy',
 };
 
 export const placementColors: Record<number, string> = {

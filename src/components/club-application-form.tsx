@@ -32,6 +32,7 @@ export function ClubApplicationForm({
   tall,
 }: ClubApplicationFormProps) {
   const { update: updateSession } = useSession();
+  const [showRuleset, setShowRuleset] = useState<'rkc' | 'wusv'>('rkc');
   const [clubType, setClubType] = useState<string>('');
   const [organisationName, setOrganisationName] = useState('');
   const [breedId, setBreedId] = useState<string>('');
@@ -77,6 +78,7 @@ export function ClubApplicationForm({
     submitMutation.mutate({
       organisationName,
       clubType: clubType as 'single_breed' | 'multi_breed',
+      showRuleset,
       breedOrGroup,
       breedId: isSingleBreed ? breedId || undefined : undefined,
       kcRegNumber: kcRegNumber || undefined,
@@ -102,6 +104,26 @@ export function ClubApplicationForm({
           className={inputCn}
           required
         />
+      </div>
+
+      <div className="space-y-2">
+        <label className="text-sm font-medium">Show Regulations *</label>
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+          {([
+            { value: 'rkc' as const, label: 'Royal Kennel Club (RKC)', desc: 'Standard UK dog shows — placements, CCs, breed classes.' },
+            { value: 'wusv' as const, label: 'WUSV / SV', desc: 'German Shepherd shows under SV rules — graded V/SG/G, coat types, working tests.' },
+          ]).map((opt) => (
+            <button
+              key={opt.value}
+              type="button"
+              onClick={() => setShowRuleset(opt.value)}
+              className={`flex flex-col gap-1 rounded-lg border p-4 text-left transition-colors ${showRuleset === opt.value ? 'border-primary bg-primary/5 ring-1 ring-primary' : 'hover:bg-accent'}`}
+            >
+              <span className="text-sm font-semibold">{opt.label}</span>
+              <span className="text-xs text-muted-foreground">{opt.desc}</span>
+            </button>
+          ))}
+        </div>
       </div>
 
       <div className="space-y-2">

@@ -1,19 +1,20 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import Link from 'next/link';
 import {
   BookOpen,
-  CheckSquare,
   ClipboardList,
-  Download,
-  ExternalLink,
+  FolderOpen,
   Hash,
-  List,
-  Save,
-  Users,
+  Info,
+  Lock,
+  LockOpen,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { trpc } from '@/lib/trpc';
+import { formatDogName } from '@/lib/utils';
+import { appendRegistrationFlags } from '@/lib/registration-flags';
 import { Button } from '@/components/ui/button';
 import {
   Card,
@@ -22,11 +23,6 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card';
-import {
-  Dialog,
-  DialogContent,
-  DialogTitle,
-} from '@/components/ui/dialog';
 import {
   Table,
   TableBody,
@@ -38,6 +34,7 @@ import {
 import { EmptyState } from '@/components/ui/empty-state';
 import { StatCard } from '@/components/ui/stat-card';
 import { useShowId } from '../_lib/show-context';
+import { DataChecksCard } from './_components/data-checks-card';
 
 export default function CataloguePage() {
   const showId = useShowId();
@@ -55,89 +52,134 @@ export default function CataloguePage() {
     onError: () => toast.error('Failed to assign catalogue numbers'),
   });
 
+  const lockMutation = trpc.secretary.lockCatalogueNumbers.useMutation({
+    onSuccess: () => {
+      utils.secretary.getCatalogueData.invalidate({ showId });
+      toast.success('Catalogue numbers locked for printing');
+    },
+    onError: () => toast.error('Could not lock catalogue numbers'),
+  });
+  const unlockMutation = trpc.secretary.unlockCatalogueNumbers.useMutation({
+    onSuccess: () => {
+      utils.secretary.getCatalogueData.invalidate({ showId });
+      toast.success('Numbers unlocked and put back in order');
+    },
+    onError: () => toast.error('Could not unlock catalogue numbers'),
+  });
+
   const entries = catalogueData?.entries ?? [];
   const hasNumbers = entries.some((e) => e.catalogueNumber);
-  const resultsFinalised = Boolean(catalogueData?.show?.resultsPublishedAt);
+  const entriesStillOpen = catalogueData?.show?.status === 'entries_open';
+  const entryCloseDate = catalogueData?.show?.entryCloseDate;
+  const numbersLocked = Boolean(catalogueData?.show?.catalogueNumbersLockedAt);
 
-  // Auto-assign catalogue numbers the first time a secretary lands on the
-  // page with confirmed entries but no numbers yet. There is no manual
-  // reassignment button any more — numbers should always appear
-  // automatically (backlog #81).
+  // Auto-assign catalogue numbers when a secretary lands on the page and any
+  // confirmed entry is missing one. There is no manual reassignment button any
+  // more — numbers should always appear automatically (backlog #81).
+  //
+  // Gated on "every entry numbered", not "any entry numbered" (2026-07-27):
+  // South Western closed with 55 of 93 numbered, and the old `hasNumbers`
+  // guard meant the page saw numbers, skipped the assign, and left 38 paid
+  // dogs printing blank with no button to fix it. The mutation is lock-aware,
+  // so on a locked show this fills the blanks instead of shifting.
+  const allNumbered = entries.length > 0 && entries.every((e) => e.catalogueNumber);
   const autoAssignedRef = useRef(false);
   useEffect(() => {
     if (autoAssignedRef.current) return;
     if (isLoading) return;
     if (entries.length === 0) return;
-    if (hasNumbers) return;
+    if (allNumbered) return;
     if (assignMutation.isPending) return;
     autoAssignedRef.current = true;
     assignMutation.mutate({ showId });
-  }, [isLoading, entries.length, hasNumbers, assignMutation, showId]);
+  }, [isLoading, entries.length, allNumbered, assignMutation, showId]);
 
   return (
     <div className="space-y-6">
-      {/* Actions — appear once catalogue numbers have been auto-assigned.
-          Each button opens the PDF inside an in-Remi dialog viewer rather
-          than navigating away. Amanda's mobile testing showed that
-          target="_blank" + download attribute still left her stuck inside
-          the PWA when tapping a PDF link — iOS ignores the download hint
-          and the PWA has no browser chrome, so there was no back button.
-          The dialog approach guarantees a clean close button regardless
-          of how iOS handles the iframe contents (backlog #82 round 2). */}
-      {hasNumbers && (
-        <div className="flex flex-wrap items-center gap-2 sm:gap-3">
-          <PdfViewerButton
-            icon={<BookOpen className="size-4" />}
-            label="Standard"
-            url={`/api/catalogue/${showId}/standard`}
-          />
-          <PdfViewerButton
-            icon={<List className="size-4" />}
-            label="By Class"
-            url={`/api/catalogue/${showId}/by-class`}
-          />
-          <PdfViewerButton
-            icon={<Users className="size-4" />}
-            label="Steward"
-            url={`/api/catalogue/${showId}/judging`}
-          />
-          <PdfViewerButton
-            icon={<Download className="size-4" />}
-            label="Absentees"
-            url={`/api/catalogue/${showId}/absentees`}
-          />
-          {/* Marked for RKC — only usable once results are finalised
-              (backlog #89). Before results are published the button is
-              disabled with a hint so clicks don't produce an empty doc. */}
-          {resultsFinalised ? (
-            <PdfViewerButton
-              icon={<CheckSquare className="size-4" />}
-              label="Marked (for RKC)"
-              url={`/api/catalogue/${showId}/marked`}
-            />
-          ) : (
-            <Button
-              variant="outline"
-              disabled
-              title="Available once results are finalised"
-            >
-              <CheckSquare className="size-4" />
-              Marked (for RKC)
-            </Button>
-          )}
-          <PdfViewerButton
-            icon={<ClipboardList className="size-4" />}
-            label="Judge's Book"
-            url={`/api/judges-book/${showId}`}
-          />
+      {entriesStillOpen && (
+        <div className="flex items-start gap-3 rounded-lg border border-se-honey-line bg-se-honey-soft p-4 text-sm text-se-honey-ink">
+          <Info className="size-5 shrink-0" />
+          <div className="space-y-1">
+            <p className="font-medium">The catalogue won&apos;t be generated until entries close.</p>
+            <p className="text-se-honey-ink/80">
+              {entryCloseDate
+                ? `Entries close on ${new Date(entryCloseDate).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}. Anything you download before then shows the entries received so far.`
+                : 'Anything you download before entries close shows the entries received so far.'}
+            </p>
+          </div>
         </div>
       )}
 
+      {/* Printing and downloads moved to Documents & Reports (backlog:
+          reports-merge) — every catalogue format, the Judge's Book, and
+          the rest live there now, always available regardless of phase. */}
+      <Link
+        href={`/secretary/shows/${showId}/documents`}
+        className="flex items-center gap-2 rounded-lg border bg-muted/40 px-4 py-3 text-sm font-medium text-foreground transition-colors hover:bg-muted min-h-[2.75rem]"
+      >
+        <FolderOpen className="size-4 shrink-0" />
+        Printing and downloads have moved to Documents &amp; Reports
+      </Link>
+
+      {/* Check before print — a glance-list of owner records worth a second
+          look, shown before the secretary heads off to print or order. */}
+      {entries.length > 0 && <DataChecksCard showId={showId} />}
+
+      {/* Catalogue numbers — provisional (auto-resort on every add) vs locked
+          for printing (late entries append so printed numbers never shift). */}
+      {hasNumbers &&
+        (numbersLocked ? (
+          <div className="flex flex-col gap-3 rounded-lg border border-se-fresh-line bg-se-fresh-soft p-4 text-sm text-se-fresh-deep sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-start gap-3">
+              <Lock className="size-5 shrink-0" />
+              <div className="space-y-0.5">
+                <p className="font-medium">Numbers are locked for printing</p>
+                <p className="text-se-fresh-deep/80">
+                  New entries are added at the end, so the numbers on your
+                  printed catalogue stay correct.
+                </p>
+              </div>
+            </div>
+            <Button
+              variant="outline"
+              className="min-h-[2.75rem] shrink-0"
+              onClick={() => unlockMutation.mutate({ showId })}
+              disabled={unlockMutation.isPending}
+            >
+              <LockOpen className="size-4" />
+              Unlock &amp; re-sort
+            </Button>
+          </div>
+        ) : (
+          <div className="flex flex-col gap-3 rounded-lg border bg-muted/40 p-4 text-sm sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-start gap-3">
+              <Info className="size-5 shrink-0 text-muted-foreground" />
+              <div className="space-y-0.5">
+                <p className="font-medium">Numbers update automatically</p>
+                <p className="text-muted-foreground">
+                  As you add entries they slot into the right place. When
+                  you&apos;re ready to print, lock the numbers so they stop
+                  changing.
+                </p>
+              </div>
+            </div>
+            <Button
+              variant="outline"
+              className="min-h-[2.75rem] shrink-0"
+              onClick={() => lockMutation.mutate({ showId })}
+              disabled={lockMutation.isPending}
+            >
+              <Lock className="size-4" />
+              Lock for printing
+            </Button>
+          </div>
+        ))}
+
       {/* Stats */}
-      <div className="grid gap-4 sm:grid-cols-3">
+      <div className="grid gap-4 lg:grid-cols-3">
         <StatCard label="Catalogue Entries" value={entries.length} icon={BookOpen} />
         <StatCard label="Absentees" value={absentees?.length ?? 0} icon={ClipboardList} />
-        <StatCard label="Numbers Assigned" value={hasNumbers ? 'Yes' : 'Not yet'} icon={Hash} />
+        <StatCard label="Numbers Assigned" value={allNumbered ? 'Yes' : hasNumbers ? 'Some missing' : 'Not yet'} icon={Hash} />
       </div>
 
       {/* Empty state when there are no entries yet — the previous in-page
@@ -170,7 +212,11 @@ export default function CataloguePage() {
                     #{entry.catalogueNumber ?? '—'}
                   </span>
                   <div className="min-w-0 flex-1">
-                    <p className="font-medium truncate">{entry.dog?.registeredName ?? '—'}</p>
+                    <p className="font-medium truncate">
+                      {entry.dog
+                        ? appendRegistrationFlags(formatDogName(entry.dog), entry)
+                        : '—'}
+                    </p>
                     <p className="text-xs text-muted-foreground truncate">
                       {entry.dog?.breed?.name ?? '—'} &middot; {entry.exhibitor?.name ?? '—'}
                     </p>
@@ -196,7 +242,9 @@ export default function CataloguePage() {
                         {entry.catalogueNumber ?? '—'}
                       </TableCell>
                       <TableCell>
-                        {entry.dog?.registeredName ?? '—'}
+                        {entry.dog
+                          ? appendRegistrationFlags(formatDogName(entry.dog), entry)
+                          : '—'}
                       </TableCell>
                       <TableCell>{entry.dog?.breed?.name ?? '—'}</TableCell>
                       <TableCell>{entry.exhibitor?.name ?? '—'}</TableCell>
@@ -209,113 +257,5 @@ export default function CataloguePage() {
         </Card>
       )}
     </div>
-  );
-}
-
-// ── PDF Viewer Button ─────────────────────────────────────────
-//
-// Opens a PDF inside a full-screen Remi dialog instead of navigating
-// the current window/PWA to the PDF URL. This is the backlog #82 round
-// 2 fix: Amanda's iOS PWA was leaving her stuck on the PDF view with
-// no way back, because target="_blank" navigates within the PWA shell
-// and iOS Safari ignores the `download` attribute for PDFs.
-//
-// The dialog always has a close button (top-right X from DialogContent)
-// so even if iOS refuses to render the PDF in the iframe, Amanda is
-// one tap from returning to the catalogue page. No app force-quit.
-//
-// The iframe loads the PDF with `?preview=1` so makePdfResponse sends
-// `Content-Disposition: inline`, which allows embedding. The dialog
-// also offers a fallback "Open in new tab" link that uses
-// window.open() — on desktop this is the quickest way to print, and on
-// iOS it breaks out into real Safari (escaping the PWA shell).
-
-function PdfViewerButton({
-  icon,
-  label,
-  url,
-}: {
-  icon: React.ReactNode;
-  label: string;
-  url: string;
-}) {
-  const [open, setOpen] = useState(false);
-  const inlineUrl = url.includes('?') ? `${url}&preview=1` : `${url}?preview=1`;
-
-  return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <Button variant="outline" onClick={() => setOpen(true)}>
-        {icon}
-        {label}
-      </Button>
-      <DialogContent
-        showCloseButton={false}
-        /* Mobile: max-sm:inset-0 overrides Radix's default bottom-
-           sheet position to fill the viewport. max-h-none cancels
-           the default max-h-[90vh] that would otherwise cap height.
-           max-sm:translate-x-0 + max-sm:translate-y-0 cancels the
-           centering transforms. The inset-0 gives full width safely
-           (no scrollbar-width overflow issues on mobile).
-           Desktop: sm:w-[95vw] sm:h-[95vh] for a large but not
-           fullscreen modal. */
-        className="max-w-none sm:max-w-none p-0 gap-0 sm:w-[95vw] sm:h-[95vh] sm:rounded-lg max-sm:inset-0 max-sm:top-0 max-sm:bottom-0 max-sm:left-0 max-sm:right-0 max-sm:max-h-none max-sm:translate-x-0 max-sm:translate-y-0 max-sm:rounded-none flex flex-col"
-      >
-        <DialogTitle className="sr-only">{label}</DialogTitle>
-        {/* Header with title + actions + close */}
-        <div className="flex items-center justify-between gap-2 border-b bg-background px-3 py-2 sm:px-4 sm:py-3">
-          <h2 className="flex min-w-0 items-center gap-2 truncate text-sm font-semibold sm:text-base">
-            {icon}
-            <span className="truncate">{label}</span>
-          </h2>
-          <div className="flex shrink-0 items-center gap-1 sm:gap-2">
-            {/* Save button — uses the attachment URL (no ?preview=1) so
-                the server sends Content-Disposition: attachment. The
-                `download` attribute is a hint for desktop browsers; on
-                iOS it typically opens the share sheet with "Save to
-                Files" as an option. */}
-            <Button variant="outline" size="sm" asChild>
-              <a
-                href={url}
-                download
-                target="_blank"
-                rel="noopener noreferrer"
-                className="gap-1"
-              >
-                <Save className="size-3.5" />
-                <span className="hidden sm:inline">Save</span>
-              </a>
-            </Button>
-            {/* Open in new tab — fallback when the iframe refuses to
-                render the PDF (common on some mobile browsers). Points
-                at the preview URL so the new tab displays inline. */}
-            <Button variant="outline" size="sm" asChild>
-              <a
-                href={inlineUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="gap-1"
-              >
-                <ExternalLink className="size-3.5" />
-                <span className="hidden sm:inline">Open in new tab</span>
-              </a>
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => setOpen(false)}
-              className="gap-1"
-            >
-              Close
-            </Button>
-          </div>
-        </div>
-        {/* PDF iframe — grows to fill remaining space */}
-        <iframe
-          src={inlineUrl}
-          title={label}
-          className="min-h-0 flex-1 w-full border-0"
-        />
-      </DialogContent>
-    </Dialog>
   );
 }

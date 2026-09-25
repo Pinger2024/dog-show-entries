@@ -1,18 +1,23 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { publicOrgColumns } from '@/server/trpc/public-org-columns';
 import { db } from '@/server/db';
 import { eq, asc } from 'drizzle-orm';
 import * as schema from '@/server/db/schema';
-import { renderToBuffer } from '@react-pdf/renderer';
-import { ShowSchedule } from '@/components/schedule/show-schedule';
+import { renderScheduleWithFit } from '@/server/services/schedule-render';
+import { pickScheduleComponent, designedSchedulePageCount } from '@/components/schedule';
 import type {
   ScheduleShowInfo,
   ScheduleClass,
   ScheduleJudge,
   ScheduleSponsor,
-} from '@/components/schedule/show-schedule';
+  SchedulePanelJudge,
+} from '@/components/schedule';
+import type { ScheduleAdvert } from '@/components/schedule/shared/types';
 import React from 'react';
 import { sanitizeFilename } from '@/lib/slugify';
 import { authenticatePdfRequest, makePdfResponse } from '@/lib/pdf-utils';
+import { buildClassLabelMap } from '@/lib/class-labels';
+import { stripUnembeddedBase14Fonts } from '@/lib/pdf-pad';
 
 export async function GET(
   request: NextRequest,
@@ -26,7 +31,7 @@ export async function GET(
 
   const show = await db.query.shows.findFirst({
     where: eq(schema.shows.id, showId),
-    with: { organisation: true, venue: true },
+    with: { organisation: { columns: publicOrgColumns }, venue: true, breed: true },
   });
 
   if (!show) {
@@ -39,19 +44,20 @@ export async function GET(
     if (authResult instanceof NextResponse) return authResult;
   }
 
-  // Fetch show classes, judge assignments, and sponsors concurrently
-  const [showClasses, judgeAssignments, showSponsorData] = await Promise.all([
+  // Fetch show classes, judge assignments, sponsors, discount groups,
+  // and catalogue adverts concurrently
+  const [showClasses, judgeAssignments, showSponsorData, discountGroups, advertRows, sundryItemRows, showBreedRows] = await Promise.all([
     db.query.showClasses.findMany({
       where: eq(schema.showClasses.showId, showId),
       with: {
         classDefinition: true,
-        breed: true,
+        breed: { with: { group: true } },
       },
       orderBy: [asc(schema.showClasses.sortOrder), asc(schema.showClasses.classNumber)],
     }),
     db.query.judgeAssignments.findMany({
       where: eq(schema.judgeAssignments.showId, showId),
-      with: { judge: true, breed: true },
+      with: { judge: true, breed: true, breedGroup: true, judgeRole: true },
     }),
     db.query.showSponsors.findMany({
       where: eq(schema.showSponsors.showId, showId),
@@ -63,16 +69,53 @@ export async function GET(
       },
       orderBy: [asc(schema.showSponsors.displayOrder)],
     }),
+    db.query.showDiscountGroups.findMany({
+      where: eq(schema.showDiscountGroups.showId, showId),
+      orderBy: [asc(schema.showDiscountGroups.displayOrder)],
+    }),
+    db.query.catalogueAdverts.findMany({
+      where: eq(schema.catalogueAdverts.showId, showId),
+      orderBy: [asc(schema.catalogueAdverts.sortOrder)],
+    }),
+    db.query.sundryItems.findMany({
+      where: eq(schema.sundryItems.showId, showId),
+      orderBy: [asc(schema.sundryItems.sortOrder)],
+    }),
+    db.query.showBreeds.findMany({
+      where: eq(schema.showBreeds.showId, showId),
+      columns: { breedId: true, ccOffered: true },
+    }),
   ]);
 
-  // Build classes data
+  const adverts: ScheduleAdvert[] = advertRows.map((ad) => ({
+    id: ad.id,
+    advertiserName: ad.advertiserName,
+    document: ad.document,
+    position: ad.position,
+    imageUrl: ad.imageUrl,
+    sortOrder: ad.sortOrder,
+  }));
+
+  // Build classes data — classLabel is what the PDF actually renders
+  // (non-JH classes show their classNumber, JH classes show JHA/JHB…).
+  const classLabelMap = buildClassLabelMap(showClasses, show.showRuleset);
+  const ccOfferedByBreed = new Map(showBreedRows.map((row) => [row.breedId, row.ccOffered]));
   const classes: ScheduleClass[] = showClasses.map((sc) => ({
     classNumber: sc.classNumber,
+    classLabel: classLabelMap.get(sc.id) ?? '',
     className: sc.classDefinition?.name ?? 'Unknown Class',
     classDescription: sc.classDefinition?.description ?? null,
     sex: sc.sex,
     breedName: sc.breed?.name ?? null,
     classType: sc.classDefinition?.type ?? null,
+    svCoatType: (sc as { svCoatType?: 'stock' | 'long_stock' | null }).svCoatType ?? null,
+    breedGroupName: sc.breed?.group?.name ?? sc.classGroup ?? null,
+    breedGroupSortOrder: sc.breed?.group?.sortOrder ?? (sc.classGroup
+      ? ['Gundog', 'Hound', 'Pastoral', 'Terrier', 'Toy', 'Utility', 'Working'].indexOf(sc.classGroup) + 1
+      : null),
+    classGroup: sc.classGroup,
+    entryFee: sc.entryFee ?? null,
+    ccOffered: sc.breedId ? ccOfferedByBreed.get(sc.breedId) === true : false,
   }));
 
   // Build judges data (deduplicated by judge id). For each judge we track
@@ -108,9 +151,26 @@ export async function GET(
     sexes: Set<string>; // 'dog' | 'bitch'
     hasNullSexAssignment: boolean; // any assignment with sex=null
   };
-  const judgeMap = new Map<string, JudgeAggregate>();
+  const judgeMap = new Map<string, JudgeAggregate & { subjectToRkcApproval: boolean }>();
+  // Separate bucket for the lunchtime Special Awards Classes judge — gets
+  // its own row on the schedule labelled "special awards classes" instead
+  // of the breed name. Amanda's spec 2026-05-14.
+  const specialAwardsJudges: Array<{ name: string; affix: string | null; subjectToRkcApproval: boolean }> = [];
   for (const ja of judgeAssignments) {
     if (!ja.judge?.id || !ja.judge?.name) continue;
+    const subjectToRkcApproval = (ja as { subjectToRkcApproval?: boolean }).subjectToRkcApproval === true;
+    if (ja.isSpecialAwardsClassesJudge) {
+      specialAwardsJudges.push({
+        name: ja.judge.name,
+        affix: ja.judge.kennelClubAffix ?? null,
+        subjectToRkcApproval,
+      });
+      continue;
+    }
+    // Multi-breed group/show-level assignments (Group Judge, BIS, etc.) are
+    // surfaced via panelJudges below — skip them here so they don't pollute
+    // the per-breed roll-up that drives the cover page judge list.
+    if (ja.judgeRoleId) continue;
     const key = ja.judge.id;
     if (!judgeMap.has(key)) {
       judgeMap.set(key, {
@@ -119,6 +179,7 @@ export async function GET(
         breeds: new Set(),
         sexes: new Set(),
         hasNullSexAssignment: false,
+        subjectToRkcApproval,
       });
     }
     const agg = judgeMap.get(key)!;
@@ -128,50 +189,94 @@ export async function GET(
     } else {
       agg.hasNullSexAssignment = true;
     }
+    // Any single assignment carrying the flag promotes the whole judge.
+    if (subjectToRkcApproval) agg.subjectToRkcApproval = true;
   }
 
-  const judges: ScheduleJudge[] = Array.from(judgeMap.values())
-    .sort((a, b) => a.name.localeCompare(b.name))
-    .map((agg) => {
-      const breedArr = Array.from(agg.breeds).sort();
-      // Is this judge doing junior handling?
-      // Three signals: (1) all their breeds are JH-only, (2) they have a
-      // null-sex assignment in a show with JH classes AND no sex-specific
-      // assignments, (3) single-breed show with JH classes.
-      const onlyJhBreeds =
-        breedArr.length > 0 && breedArr.every((b) => juniorBreedSet.has(b) && !breedBreedSet.has(b));
-      const nullSexInJhShow =
-        hasJuniorHandlerClasses && agg.hasNullSexAssignment && agg.sexes.size === 0;
-      const isJuniorOnly = onlyJhBreeds || nullSexInJhShow;
-
-      // Build the role label for display
-      let role: string;
-      if (isJuniorOnly) {
-        role = 'Junior Handling';
-      } else if (agg.sexes.has('dog') && agg.sexes.has('bitch')) {
-        role = 'Dogs & Bitches';
-      } else if (agg.sexes.has('dog')) {
-        role = 'Dogs';
-      } else if (agg.sexes.has('bitch')) {
-        role = 'Bitches';
-      } else if (breedArr.length > 0) {
-        role = breedArr.join(', ');
-      } else {
-        role = show.showScope === 'single_breed' ? 'Breed Classes' : 'All Breeds';
-      }
-
-      // displayLabel format: "Name (Affix) — Role" or "Name — Role"
-      const namePart = agg.affix ? `${agg.name} (${agg.affix})` : agg.name;
-      const displayLabel = `${namePart} — ${role}`;
+  // Multi-breed panel judges (group-level + show-level). Single-breed shows
+  // never populate this — judge_roles is a multi-breed-only taxonomy.
+  const panelJudges: SchedulePanelJudge[] = judgeAssignments
+    .filter((ja) => ja.judgeRoleId && ja.judge?.name && ja.judgeRole)
+    .map((ja) => {
+      const subjectToRkcApproval = (ja as { subjectToRkcApproval?: boolean }).subjectToRkcApproval === true;
+      const baseName = ja.judge!.kennelClubAffix
+        ? `${ja.judge!.name} (${ja.judge!.kennelClubAffix})`
+        : ja.judge!.name;
+      const namePart = `${baseName}${subjectToRkcApproval ? ' (subject to RKC approval)' : ''}`;
       return {
-        name: agg.name,
-        affix: agg.affix,
-        breeds: breedArr,
-        sex: agg.sexes.size === 1 ? Array.from(agg.sexes)[0] : null,
-        role,
-        displayLabel,
+        displayLabel: namePart,
+        roleName: ja.judgeRole!.name,
+        roleShortLabel: ja.judgeRole!.shortLabel ?? null,
+        roleSortOrder: ja.judgeRole!.sortOrder,
+        isGroupLevel: ja.judgeRole!.isGroupLevel,
+        groupName: ja.breedGroup?.name ?? null,
+        groupSortOrder: ja.breedGroup?.sortOrder ?? null,
       };
     });
+
+  // Build each judge's row, resolving the JH-vs-breed role up front so we
+  // can use it as a sort key below.
+  const judgeRows = Array.from(judgeMap.values()).map((agg) => {
+    const breedArr = Array.from(agg.breeds).sort();
+    const onlyJhBreeds =
+      breedArr.length > 0 && breedArr.every((b) => juniorBreedSet.has(b) && !breedBreedSet.has(b));
+    const nullSexInJhShow =
+      hasJuniorHandlerClasses && agg.hasNullSexAssignment && agg.sexes.size === 0;
+    const isJuniorOnly = onlyJhBreeds || nullSexInJhShow;
+
+    let role: string;
+    if (isJuniorOnly) {
+      role = 'Junior Handling';
+    } else if (agg.sexes.has('dog') && agg.sexes.has('bitch')) {
+      role = 'Dogs & Bitches';
+    } else if (agg.sexes.has('dog')) {
+      role = 'Dogs';
+    } else if (agg.sexes.has('bitch')) {
+      role = 'Bitches';
+    } else if (breedArr.length > 0) {
+      role = breedArr.join(', ');
+    } else {
+      role = show.showScope === 'single_breed' ? 'Breed Classes' : 'All Breeds';
+    }
+
+    const baseNamePart = agg.affix ? `${agg.name} (${agg.affix})` : agg.name;
+    const namePart = `${baseNamePart}${agg.subjectToRkcApproval ? ' (subject to RKC approval)' : ''}`;
+    const displayLabel = `${namePart} — ${role}`;
+    return {
+      name: agg.name,
+      affix: agg.affix,
+      breeds: breedArr,
+      sex: (agg.sexes.size === 1 ? Array.from(agg.sexes)[0] : null) as string | null,
+      role,
+      displayLabel,
+      isJuniorOnly,
+    };
+  });
+
+  // Breed judges first, JH judges after — RKC convention puts the main
+  // judging assignment ahead of the Junior Handling role on the schedule.
+  // Alphabetical within each tier for stable ordering.
+  const judges: ScheduleJudge[] = judgeRows
+    .sort((a, b) => {
+      if (a.isJuniorOnly !== b.isJuniorOnly) return a.isJuniorOnly ? 1 : -1;
+      return a.name.localeCompare(b.name);
+    })
+    // Strip the helper field — not part of the ScheduleJudge contract.
+    .map(({ isJuniorOnly: _isJuniorOnly, ...rest }) => rest);
+
+  // Append Special Awards Classes judges with their own role label.
+  for (const sac of specialAwardsJudges) {
+    const baseNamePart = sac.affix ? `${sac.name} (${sac.affix})` : sac.name;
+    const namePart = `${baseNamePart}${sac.subjectToRkcApproval ? ' (subject to RKC approval)' : ''}`;
+    judges.push({
+      name: sac.name,
+      affix: sac.affix,
+      breeds: [],
+      sex: null,
+      role: 'Special Awards Classes',
+      displayLabel: `Special Awards Classes — ${namePart}`,
+    });
+  }
 
   // Build sponsors data (defensive: skip sponsors with missing sponsor record)
   const sponsors: ScheduleSponsor[] = showSponsorData
@@ -214,7 +319,24 @@ export async function GET(
     subsequentEntryFee: show.subsequentEntryFee ?? null,
     nfcEntryFee: show.nfcEntryFee ?? null,
     juniorHandlerFee: show.juniorHandlerFee ?? null,
+    multiDogThreshold: show.multiDogThreshold ?? null,
+    multiDogPackagePence: show.multiDogPackagePence ?? null,
+    regionalFeeConfig: show.regionalFeeConfig ?? null,
+    discountGroups: discountGroups.map((g) => ({
+      label: g.label,
+      firstEntryFeePence: g.firstEntryFeePence,
+      multiDogPackagePence: g.multiDogPackagePence,
+    })),
     acceptsPostalEntries: show.acceptsPostalEntries ?? false,
+    sundryItems: sundryItemRows
+      .filter((s) => s.enabled)
+      .map((s) => ({
+        name: s.name,
+        description: s.description,
+        priceInPence: s.priceInPence,
+      })),
+    showRuleset: (show as { showRuleset?: 'rkc' | 'wusv' }).showRuleset,
+    breedName: (show as { breed?: { name?: string | null } }).breed?.name ?? null,
     scheduleData: show.scheduleData ?? null,
     organisation: show.organisation
       ? {
@@ -223,6 +345,9 @@ export async function GET(
           contactPhone: show.organisation.contactPhone ?? null,
           website: show.organisation.website ?? null,
           logoUrl: show.organisation.logoUrl ?? null,
+          logoColorPrimary: (show.organisation as { logoColorPrimary?: string | null }).logoColorPrimary ?? null,
+          logoColorSecondary: (show.organisation as { logoColorSecondary?: string | null }).logoColorSecondary ?? null,
+          logoMonochrome: (show.organisation as { logoMonochrome?: boolean | null }).logoMonochrome ?? null,
         }
       : null,
     venue: show.venue
@@ -243,13 +368,51 @@ export async function GET(
   }
 
   try {
-    const pdfDocument = React.createElement(ShowSchedule, {
-      show: showInfo,
-      classes,
-      judges,
-      sponsors,
-    });
-    const buffer = await renderToBuffer(pdfDocument);
+    const ScheduleComponent = pickScheduleComponent(
+      showInfo.showScope,
+      showInfo.showRuleset ?? 'rkc',
+    );
+
+    // For SV/WUSV shows we pre-bake the tonal-wash backgrounds (one for
+    // the cover, one for inside pages) from the club's brand colours so
+    // the React-PDF render is fully synchronous. The wash baker is
+    // memoised per (primary, secondary, variant) for the lifetime of
+    // the process — repeated renders of the same show are free.
+    let washes: { cover: Buffer; inside: Buffer } | undefined;
+    if (showInfo.showRuleset === 'wusv') {
+      const { getTonalWash } = await import('@/server/services/sv-tonal-wash');
+      const primary = showInfo.organisation?.logoMonochrome
+        ? null
+        : showInfo.organisation?.logoColorPrimary ?? null;
+      const secondary = showInfo.organisation?.logoMonochrome
+        ? null
+        : showInfo.organisation?.logoColorSecondary ?? null;
+      const [cover, inside] = await Promise.all([
+        getTonalWash(primary, secondary, 'cover'),
+        getTonalWash(primary, secondary, 'inside'),
+      ]);
+      washes = { cover, inside };
+    }
+
+    // Fit fallback: if a fee-rich show overflows its designed page count,
+    // renderScheduleWithFit re-renders at compact density rather than
+    // shipping an orphaned extra page.
+    const rawBuffer = await renderScheduleWithFit(
+      ScheduleComponent as React.ComponentType<Record<string, unknown>>,
+      {
+        show: showInfo,
+        classes,
+        judges,
+        sponsors,
+        adverts,
+        panelJudges,
+        washes,
+      },
+      designedSchedulePageCount(showInfo.showRuleset ?? 'rkc', adverts),
+    );
+    // Strip react-pdf's unembedded base-14 phantom font refs (Helvetica etc.)
+    // so the schedule passes the same print-preflight bar as the catalogue.
+    const buffer = Buffer.from(await stripUnembeddedBase14Fonts(rawBuffer));
     const filename = `${sanitizeFilename(show.name)}-Schedule.pdf`;
     const isPreview = request.nextUrl.searchParams.has('preview');
     return makePdfResponse(buffer, filename, isPreview);

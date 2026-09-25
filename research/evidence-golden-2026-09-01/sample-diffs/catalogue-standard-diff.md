@@ -1,0 +1,249 @@
+## synthetic-rkc-champ — catalogue-standard
+
+- Fonts changed:
+  - baseline: Inter-SemiBold(embedded), HankenGrotesk-ExtraBold(embedded), TimesNewRomanPS-BoldMT(embedded), TimesNewRomanPS-ItalicMT(embedded), Inter-Regular(embedded), HankenGrotesk-Bold(embedded), TimesNewRomanPSMT(embedded), LibreBaskerville-Bold(embedded), Inter-SemiBold-9750(embedded), Inter-Regular-7572(embedded)
+  - current:  Inter-SemiBold(embedded), HankenGrotesk-ExtraBold(embedded), TimesNewRomanPS-BoldMT(embedded), TimesNewRomanPS-ItalicMT(embedded), Inter-Regular(embedded), HankenGrotesk-Bold(embedded), TimesNewRomanPSMT(embedded), LibreBaskerville-Bold(embedded)
+- Page 3:
+  - 1 word(s) removed: "18"
+  - 1 word(s) added: "19"
+- Page 4:
+  - 31 word(s) moved:
+    - "Jswvhfl" (22, 115) → (22, 131)
+    - "lw" (51, 115) → (51, 131)
+    - "pzs" (62, 115) → (62, 131)
+    - "5411" (76, 115) → (76, 131)
+    - "jfoxkqlocrip" (95.5, 115) → (95.5, 131)
+    - "gshp" (141, 115) → (141, 131)
+    - "—" (160.5, 115) → (160.5, 131)
+    - "om" (170.5, 115) → (170.5, 131)
+    - "itqv" (184, 115) → (184, 131)
+    - "iuf" (199.5, 115) → (199.5, 131)
+    - "oyjp" (211.5, 115) → (211.5, 131)
+    - "i" (229, 115) → (229, 131)
+    - "xyxdeetfe" (234, 115) → (234, 131)
+    - "whk" (269.5, 115) → (269.5, 131)
+    - "erum" (286.5, 115) → (286.5, 131)
+    - "pzex" (307, 115) → (307, 131)
+    - "cveg." (325.5, 115) → (325.5, 131)
+    - "NFC" (22, 168.5) → (22, 200)
+    - "Entries" (43, 168.5) → (43, 200)
+    - "Accepted" (210, 168.5) → (210, 200)
+    - … and 11 more
+  - 62 word(s) removed: "W", "E", "LC", "O", "M", "E", "P", "R", "AC", "T", "I", "CA", "L", "I", "N", "F", "O", "R", "M", "AT", …
+  - 5 word(s) added: "WELCOME", "PRACTICAL", "INFORMATION", "REGULATIONS", "19"
+- Page 5:
+  - 4 word(s) moved:
+    - "OF" (213.5, 45) → (189.5, 45)
+    - "Junior" (22, 106.5) → (22, 150.5)
+    - "Special" (22, 203) → (22, 180)
+    - "Handling" (47, 215) → (48, 150.5)
+  - 18 word(s) removed: "DEFINITIONS", "CLASSES", "Minor", "Puppy", "Puppy", "Yearling", "Novice", "Undergraduate", "Graduate", "Post", "Graduate", "Limit", "Open", "Award", "Class", "A", "Junior", "18"
+  - 25 word(s) added: "LIST", "JUDGES", "Breed", "Judge", "Ring", "German", "Shepherd", "Dog", "Dmuw", "Lyqiz", "Pvqjm", "1", "OTH", "ER", "JUD", "GES", "Jqqs", "IM", "Twioc", "Ozrh", …
+- Page 6:
+  - 1 word(s) moved:
+    - "Puppy" (43.5, 83.5) → (45, 82.5)
+  - 122 word(s) removed: "SPONSORS", "Best", "in", "Show", "WINNER", "Best", "in", "Show", "WINNER", "Best", "Veteran", "in", "Show", "WINNER", "DOG", "1.", "MINOR", "PUPPY", "2", "Entries", …
+  - 21 word(s) added: "DEFINITIONS", "OF", "CLASSES", "Minor", "Puppy", "Junior", "Yearling", "Novice", "Undergraduate", "Graduate", "Post", "Graduate", "Limit", "Open", "Special", "Award", "Class", "A", "Junior", "Handling", …
+- Page 7:
+  - 41 word(s) moved:
+    - "2" (356.5, 27.5) → (356.5, 192)
+    - "Entries" (363.5, 27.5) → (363.5, 192)
+    - "1st" (28, 75) → (28, 239.5)
+    - "2nd" (100.5, 75) → (100.5, 239.5)
+    - "3rd" (173.5, 75) → (173.5, 239.5)
+    - "Res" (246, 75) → (246, 239.5)
+    - "VHC" (319, 75) → (319, 239.5)
+    - "2" (356.5, 94.5) → (210, 207.5)
+    - "Entries" (363.5, 94.5) → (363.5, 259)
+    - "1st" (28, 142) → (28, 306.5)
+    - "2nd" (100.5, 142) → (100.5, 306.5)
+    - "3rd" (173.5, 142) → (173.5, 306.5)
+    - "Res" (246, 142) → (246, 306.5)
+    - "VHC" (319, 142) → (319, 306.5)
+    - "2" (356.5, 161.5) → (356.5, 259)
+    - "Entries" (363.5, 161.5) → (363.5, 326)
+    - "1st" (28, 209) → (28, 373.5)
+    - "2nd" (100.5, 209) → (100.5, 373.5)
+    - "3rd" (173.5, 209) → (173.5, 373.5)
+    - "Res" (246, 209) → (246, 373.5)
+    - … and 21 more
+  - 120 word(s) removed: "6.", "UNDERGRADUATE", "11", "KIFM", "DNT", "44", "HL", "ZSHQXIKHIT", "12", "CHWB", "ILB", "27", "EQ", "HYHFJRKQLC", "7.", "GRADUATE", "13", "JFYY", "ERO", "38", …
+  - 82 word(s) added: "SPONSORS", "Best", "in", "Show", "WINNER", "Best", "Puppy", "in", "Show", "WINNER", "Best", "Veteran", "in", "Show", "WINNER", "DOG", "1.", "1", "BJGI", "WRI", …
+- Page 8:
+  - 36 word(s) moved:
+    - "DU" (288, 43) → (101.5, 322)
+    - "27" (28, 110) → (269, 43)
+    - "24" (283.5, 110) → (210, 482.5)
+    - "20" (102, 177) → (210, 322)
+    - "69" (285.5, 177) → (282, 415)
+    - "UNDERGRADUATE" (46, 228) → (41.5, 27)
+    - "GRADUATE" (43.5, 295.5) → (39, 94)
+    - "33" (28, 311) → (85.5, 244)
+    - "16" (98.5, 311) → (210, 177)
+    - "34" (210, 311) → (96.5, 415)
+    - "1st" (28, 343.5) → (28, 354.5)
+    - "2nd" (100.5, 343.5) → (100.5, 354.5)
+    - "3rd" (173.5, 343.5) → (173.5, 354.5)
+    - "Res" (246, 343.5) → (246, 354.5)
+    - "VHC" (319, 343.5) → (319, 354.5)
+    - "POST" (46, 362.5) → (41.5, 161)
+    - "GRADUATE" (75, 362.5) → (71, 161)
+    - "2" (356.5, 363) → (356.5, 400)
+    - "Entries" (363.5, 363) → (363.5, 400)
+    - "44" (99.5, 378) → (87, 43)
+    - … and 16 more
+  - 104 word(s) removed: "13.", "JUNIOR", "25", "AORV", "XFZTE", "02", "AI", "VJIGUPHLXB", "26", "IOTE", "GLEVA", "85", "KFBMZKAPXM", "14.", "YEARLING", "XCLV", "HLRCR", "01", "KQ", "JBFGOAGDPM", …
+  - 95 word(s) added: "6.", "11", "KIFM", "DNT", "HL", "ZSHQXIKHIT", "12", "CHWB", "ILB", "EQ", "HYHFJRKQLC", "7.", "13", "JFYY", "ERO", "FZ", "HMRMHZGBFU", "14", "OIMK", "XLX", …
+- Page 9:
+  - 14 word(s) moved:
+    - "Entries" (363.5, 64) → (363.5, 27.5)
+    - "1st" (28, 111) → (28, 75)
+    - "2nd" (100.5, 111) → (100.5, 75)
+    - "3rd" (173.5, 111) → (173.5, 75)
+    - "Res" (246, 111) → (246, 75)
+    - "VHC" (319, 111) → (319, 75)
+    - "JUNIOR" (127.5, 128) → (46, 27)
+    - "Entries" (363.5, 170) → (363.5, 94.5)
+    - "43" (28, 197) → (282, 311)
+    - "1st" (28, 229) → (28, 142)
+    - "2nd" (100.5, 229) → (100.5, 142)
+    - "3rd" (173.5, 229) → (173.5, 142)
+    - "Res" (246, 229) → (246, 142)
+    - "VHC" (319, 229) → (319, 142)
+  - 54 word(s) removed: "S", "P", "E", "C", "I", "A", "L", "AWA", "R", "D", "S", "C", "L", "A", "S", "S", "E", "S", "Judge:", "Ozrh", …
+  - 156 word(s) added: "13.", "2", "25", "AORV", "XFZTE", "02", "AI", "VJIGUPHLXB", "26", "IOTE", "GLEVA", "85", "DU", "KFBMZKAPXM", "14.", "YEARLING", "2", "27", "XCLV", "HLRCR", …
+- Page 10:
+  - 7 word(s) moved:
+    - "E" (173.5, 9) → (114.5, 25)
+    - "S" (181, 9) → (94, 25)
+    - "AWA" (201, 9) → (172, 25)
+    - "R" (229.5, 9) → (210, 25)
+    - "D" (238, 9) → (222, 25)
+    - "S" (246.5, 9) → (235, 25)
+    - "Show" (55.5, 64) → (205, 577.5)
+  - 21 word(s) removed: "B", "T", "To", "be", "completed", "as", "the", "principal", "awards", "are", "decided.", "Best", "in", "Best", "Puppy", "in", "Show", "Best", "Veteran", "in", …
+  - 75 word(s) added: "P", "C", "I", "A", "L", "C", "L", "A", "S", "S", "E", "S", "Judge:", "Ozrh", "DBP", "Fokcx", "A.", "SPECIAL", "AWARD", "CLASS", …
+- Page 11:
+  - 1 word(s) moved:
+    - "are" (85.5, 40) → (153.5, 40)
+  - 21 word(s) removed: "NOT", "FOR", "COMPETITION", "The", "following", "dogs", "exhibited", "Not", "For", "Competition.", "1", "BJGI", "WRI", "6", "YF", "UNHNDHKULG", "German", "Shepherd", "Dog", "·", …
+  - 27 word(s) added: "B", "E", "S", "T", "AWA", "R", "D", "S", "To", "be", "completed", "as", "the", "principal", "awards", "decided.", "Best", "in", "Show", "Best", …
+- Page 12:
+  - 11 word(s) moved:
+    - "BJGI" (41, 56.5) → (44, 57.5)
+    - "WRI" (60, 56.5) → (64, 57.5)
+    - "6" (76.5, 56.5) → (81.5, 57.5)
+    - "YF" (83, 56.5) → (89, 57.5)
+    - "UNHNDHKULG" (95, 56.5) → (101.5, 57.5)
+    - "·" (102.5, 68) → (118, 67.5)
+    - "Dog" (108, 68) → (102, 67.5)
+    - "Dog" (108, 126) → (123.5, 67.5)
+    - "1" (112, 344.5) → (22, 57.5)
+    - "German" (86.5, 577.5) → (44, 67.5)
+    - "Shepherd" (110.5, 577.5) → (70, 67.5)
+  - 229 word(s) removed: "LIST", "OF", "EXHIBITORS", "0-0,", "X", "1.", "DOB", "01.01.2022", "·", "Sire:", "Qmzu", "Kyoh", "Dam:", "Yqjm", "Mrt", "·", "br", "Khdu", "Jozvflf", "Class:", …
+  - 11 word(s) added: "NOT", "FOR", "COMPETITION", "The", "following", "dogs", "are", "exhibited", "Not", "For", "Competition."
+- Page 13:
+  - 141 word(s) moved:
+    - "K" (40.5, 22) → (29.5, 334.5)
+    - "DOB" (50, 44) → (50, 68)
+    - "01.01.2022" (65.5, 44) → (65.5, 68)
+    - "·" (102.5, 44) → (102.5, 68)
+    - "Bitch" (108, 44) → (108, 241)
+    - "·" (127, 44) → (124, 68)
+    - "Sire:" (132.5, 44) → (129.5, 68)
+    - "Qmzu" (148, 44) → (145.5, 68)
+    - "Kyoh" (168, 44) → (165, 68)
+    - "Dam:" (187, 44) → (184.5, 68)
+    - "Yqjm" (205, 44) → (202, 68)
+    - "Mrt" (222, 44) → (219, 68)
+    - "·" (236, 44) → (233, 68)
+    - "br" (241.5, 44) → (238.5, 68)
+    - "Khdu" (250, 44) → (247, 68)
+    - "Jozvflf" (267.5, 44) → (265, 68)
+    - "Class:" (50, 54) → (50, 78.5)
+    - "15." (70.5, 54) → (70.5, 308.5)
+    - "Novice" (80.5, 54) → (80.5, 308.5)
+    - "DOB" (50, 101.5) → (50, 126)
+    - … and 121 more
+  - 98 word(s) removed: "18-7,", "30.", "VMAV", "UWOXT", "69", "QY", "DRPJKMYGME", "2-7,", "B", "5.", "THXT", "KDS", "8", "YQ", "WUXNBDYKVW", "20-6,", "J", "22.", "AWKV", "TFRAX", …
+  - 85 word(s) added: "LIST", "OF", "EXHIBITORS", "0-0,", "X", "1.", "BJGI", "WRI", "YF", "UNHNDHKULG", "1.", "0-2,", "E", "12.", "CHWB", "ILB", "27", "EQ", "HYHFJRKQLC", "6.", …
+- Page 14:
+  - 157 word(s) moved:
+    - "3." (34, 22) → (70.5, 111.5)
+    - "DOB" (50, 33.5) → (50, 44)
+    - "01.01.2022" (65.5, 33.5) → (65.5, 44)
+    - "·" (102.5, 33.5) → (102.5, 44)
+    - "Dog" (108, 33.5) → (108, 101.5)
+    - "·" (124, 33.5) → (127, 44)
+    - "Sire:" (129.5, 33.5) → (132.5, 44)
+    - "Qmzu" (145.5, 33.5) → (148, 44)
+    - "Kyoh" (165, 33.5) → (168, 44)
+    - "Dam:" (184.5, 33.5) → (187, 44)
+    - "Yqjm" (202, 33.5) → (205, 44)
+    - "Mrt" (219, 33.5) → (222, 44)
+    - "·" (233, 33.5) → (236, 44)
+    - "br" (238.5, 33.5) → (241.5, 44)
+    - "Khdu" (247, 33.5) → (250, 44)
+    - "Jozvflf" (265, 33.5) → (267.5, 44)
+    - "Class:" (50, 43.5) → (50, 54)
+    - "Puppy" (78, 43.5) → (99, 169)
+    - "20." (34, 79.5) → (70.5, 342)
+    - "DOB" (50, 91) → (50, 101.5)
+    - … and 137 more
+  - 79 word(s) removed: "YQVK", "OTP", "1", "KL", "CITBTGBMZP", "2.", "4-3,", "L", "JXII", "EKA", "48", "ZM", "GYTAPZHJMY", "10.", "4-5,", "X", "NJOJ", "RPA", "53", "AO", …
+  - 82 word(s) added: "18-7,", "30.", "VMAV", "UWOXT", "69", "QY", "DRPJKMYGME", "Novice", "2-7,", "B", "5.", "THXT", "KDS", "8", "YQ", "WUXNBDYKVW", "Junior", "20-6,", "22.", "AWKV", …
+- Page 15:
+  - 92 word(s) moved:
+    - "8." (34, 22) → (70.5, 159)
+    - "Yearling" (78, 43.5) → (81, 447)
+    - "E" (37, 69) → (40, 184.5)
+    - "2." (34, 79.5) → (70.5, 43.5)
+    - "Puppy" (96.5, 101) → (78, 43.5)
+    - "Bitch" (108, 148.5) → (108, 321.5)
+    - "·" (127, 148.5) → (124, 148.5)
+    - "Sire:" (132.5, 148.5) → (129.5, 148.5)
+    - "Qmzu" (148, 148.5) → (145.5, 148.5)
+    - "Kyoh" (168, 148.5) → (165, 148.5)
+    - "Dam:" (187, 148.5) → (184.5, 148.5)
+    - "Yqjm" (205, 148.5) → (202, 148.5)
+    - "Mrt" (222, 148.5) → (219, 148.5)
+    - "·" (236, 148.5) → (233, 148.5)
+    - "br" (241.5, 148.5) → (238.5, 148.5)
+    - "Khdu" (250, 148.5) → (247, 148.5)
+    - "Jozvflf" (267.5, 148.5) → (265, 148.5)
+    - "14." (70.5, 159) → (70.5, 447)
+    - "Class:" (50, 206.5) → (50, 216.5)
+    - "10." (34, 242.5) → (70.5, 101)
+    - … and 72 more
+  - 81 word(s) removed: "FRVM", "YKI", "3", "FT", "VNTPTBNSCP", "4.", "5-7,", "RAVH", "EWQ", "6", "HF", "WLVPUUIHKX", "1.", "Minor", "54-8,", "A", "28.", "WJQR", "EWXBT", "24", …
+  - 108 word(s) added: "3.", "YQVK", "OTP", "1", "KL", "CITBTGBMZP", "4-3,", "L", "20.", "JXII", "EKA", "48", "ZM", "GYTAPZHJMY", "Open", "4-5,", "X", "15.", "NJOJ", "RPA", …
+- Page 16:
+  - 124 word(s) moved:
+    - "DOB" (50, 44) → (50, 33.5)
+    - "01.01.2022" (65.5, 44) → (65.5, 33.5)
+    - "·" (102.5, 44) → (102.5, 33.5)
+    - "Bitch" (108, 44) → (108, 148.5)
+    - "·" (127, 44) → (124, 33.5)
+    - "Sire:" (132.5, 44) → (129.5, 33.5)
+    - "Qmzu" (148, 44) → (145.5, 33.5)
+    - "Kyoh" (168, 44) → (165, 33.5)
+    - "Dam:" (187, 44) → (184.5, 33.5)
+    - "Yqjm" (205, 44) → (202, 33.5)
+    - "Mrt" (222, 44) → (219, 33.5)
+    - "·" (236, 44) → (233, 33.5)
+    - "br" (241.5, 44) → (238.5, 33.5)
+    - "Khdu" (250, 44) → (247, 33.5)
+    - "Jozvflf" (267.5, 44) → (265, 33.5)
+    - "Class:" (50, 54) → (50, 43.5)
+    - "C" (37.5, 79.5) → (39, 394.5)
+    - "DOB" (50, 101.5) → (50, 91)
+    - "01.01.2022" (65.5, 101.5) → (65.5, 91)
+    - "·" (102.5, 101.5) → (102.5, 91)
+    - … and 104 more
+  - 62 word(s) removed: "72-6,", "K", "38.", "QEKW", "BRMYB", "78", "GL", "RGMALTJUCF", "19.", "Limit", "8-7,", "19.", "TWCN", "LTZ", "56", "DU", "ATGENNEIZA", "Open", "8-8,", "ETXF", …
+  - 86 word(s) added: "8.", "FRVM", "YKI", "3", "FT", "VNTPTBNSCP", "5-7,", "E", "RAVH", "EWQ", "HF", "WLVPUUIHKX", "1.", "54-8,", "28.", "WJQR", "EWXBT", "24", "RM", "JAANDPKWGQ", …
+- Page 17:
+  - 199 word(s) added: "72-6,", "K", "38.", "QEKW", "BRMYB", "78", "GL", "RGMALTJUCF", "DOB", "01.01.2022", "·", "Bitch", "·", "Sire:", "Qmzu", "Kyoh", "Dam:", "Yqjm", "Mrt", "·", …
+- Page 19:
+  - 6 word(s) removed: "NOTES", "Notes", "·", "Generated", "by", "Remi"

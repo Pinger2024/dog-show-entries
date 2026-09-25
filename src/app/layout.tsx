@@ -1,6 +1,6 @@
 import type { Metadata, Viewport } from 'next';
 import { Suspense } from 'react';
-import { Inter } from 'next/font/google';
+import { Hanken_Grotesk } from 'next/font/google';
 import { Toaster } from '@/components/ui/sonner';
 import { Providers } from '@/components/providers';
 import { ImpersonationBannerWrapper } from '@/components/layout/impersonation-banner-wrapper';
@@ -10,9 +10,15 @@ import { UpdateNotification } from '@/components/pwa/update-notification';
 import { ReportProblemWidget } from '@/components/report-problem-widget';
 import './globals.css';
 
-const inter = Inter({
-  variable: '--font-inter',
+// Show Experience (green) theme font — now the app-wide default. Loaded
+// once at the root; globals.css aliases --font-sans/--font-serif to
+// --font-hanken so every shadcn component and legacy `font-serif` heading
+// picks it up automatically. Previously scoped to (shows) only.
+const hankenGrotesk = Hanken_Grotesk({
+  variable: '--font-hanken',
   subsets: ['latin'],
+  weight: ['400', '500', '600', '700', '800'],
+  display: 'swap',
 });
 
 
@@ -50,7 +56,7 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: '#2D5F3F',
+  themeColor: '#2f6b43',
   width: 'device-width',
   initialScale: 1,
   maximumScale: 5,
@@ -63,9 +69,9 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" suppressHydrationWarning>
+    <html lang="en" suppressHydrationWarning className={hankenGrotesk.variable}>
       <body
-        className={`${inter.variable} antialiased`}
+        className="antialiased"
       >
         <Providers>
           <Suspense fallback={null}>

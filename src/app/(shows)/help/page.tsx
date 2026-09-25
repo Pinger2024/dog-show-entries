@@ -12,6 +12,8 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card';
+import { SE_H } from '@/components/show-experience/tokens';
+import { cn } from '@/lib/utils';
 
 export const metadata = {
   title: 'Help Centre',
@@ -60,7 +62,7 @@ const faqs = [
 export default function HelpPage() {
   return (
     <div className="mx-auto max-w-3xl px-4 py-8 sm:py-14 sm:px-6">
-      <h1 className="gold-rule font-serif text-3xl font-bold tracking-tight sm:text-4xl">
+      <h1 className={cn(SE_H, "after:mt-3 after:block after:h-0.5 after:w-12 after:bg-se-honey after:content-[''] text-3xl sm:text-4xl")}>
         Help Centre
       </h1>
       <p className="mt-5 text-lg text-muted-foreground">

@@ -39,9 +39,9 @@ const STAGE_ORDER: Record<string, number> = {
 
 const STAGE_CONFIG: Record<string, { label: string; color: string; icon: string }> = {
   no_offer: { label: 'No Offer', color: 'text-muted-foreground', icon: '○' },
-  offer_sent: { label: 'Offer Sent', color: 'text-amber-600', icon: '◔' },
-  offer_accepted: { label: 'Accepted', color: 'text-blue-600', icon: '◐' },
-  confirmed: { label: 'Confirmed', color: 'text-green-600', icon: '●' },
+  offer_sent: { label: 'Offer Sent', color: 'text-se-honey-deep', icon: '◔' },
+  offer_accepted: { label: 'Accepted', color: 'text-se-fresh-deep', icon: '◐' },
+  confirmed: { label: 'Confirmed', color: 'text-se-fresh-deep', icon: '●' },
   declined: { label: 'Declined', color: 'text-destructive', icon: '✕' },
 };
 
@@ -394,17 +394,17 @@ export function JudgeOffersAction({ showId }: ActionPanelProps) {
           {/* Summary bar */}
           <div className="flex flex-wrap gap-2 text-xs">
             {summary.confirmed > 0 && (
-              <Badge variant="outline" className="border-green-200 bg-green-50 text-green-700">
+              <Badge variant="outline" className="border-se-fresh-line bg-se-fresh-soft text-se-fresh-deep">
                 {summary.confirmed} confirmed
               </Badge>
             )}
             {summary.accepted > 0 && (
-              <Badge variant="outline" className="border-blue-200 bg-blue-50 text-blue-700">
+              <Badge variant="outline" className="border-se-fresh-line bg-se-fresh-soft text-se-fresh-deep">
                 {summary.accepted} accepted
               </Badge>
             )}
             {summary.offerSent > 0 && (
-              <Badge variant="outline" className="border-amber-200 bg-amber-50 text-amber-700">
+              <Badge variant="outline" className="border-se-honey-line bg-se-honey-soft text-se-honey-deep">
                 {summary.offerSent} awaiting
               </Badge>
             )}
@@ -414,7 +414,7 @@ export function JudgeOffersAction({ showId }: ActionPanelProps) {
               </Badge>
             )}
             {summary.declined > 0 && (
-              <Badge variant="outline" className="border-red-200 bg-red-50 text-red-700">
+              <Badge variant="outline" className="border-destructive bg-destructive/10 text-destructive">
                 {summary.declined} declined
               </Badge>
             )}
@@ -553,7 +553,7 @@ export function JudgeOffersAction({ showId }: ActionPanelProps) {
                       </Button>
                     )}
                     {stage === 'confirmed' && (
-                      <Check className="size-4 text-green-500" />
+                      <Check className="size-4 text-se-fresh-deep" />
                     )}
                   </div>
                 </div>

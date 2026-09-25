@@ -15,9 +15,19 @@ import {
   Users,
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { cn } from '@/lib/utils';
 import { trpc } from '@/lib/trpc';
+import { SECard, Eyebrow } from '@/components/show-experience/kit';
+import { SE_H } from '@/components/show-experience/tokens';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import {
   Dialog,
   DialogContent,
@@ -40,7 +50,16 @@ import { statusConfig } from './_lib/show-utils';
 import { ShowIdProvider } from './_lib/show-context';
 import { ShowSectionNav } from './_components/show-section-nav';
 import { LifecycleBanner } from './_components/lifecycle-banner';
-import { formatRelativeTime, formatCompactRevenue } from './_lib/show-utils';
+import { EditShowNameDialog } from './_components/edit-show-name-dialog';
+import {
+  formatRelativeTime,
+  formatCompactRevenue,
+  formatWholePounds,
+  joinWorkings,
+  formatDogsEnteredParts,
+  classEntryBreakdownParts,
+  dogCountParts,
+} from './_lib/show-utils';
 
 export default function ShowManagementLayout({
   children,
@@ -73,7 +92,7 @@ export default function ShowManagementLayout({
 
   if (showLoading) {
     return (
-      <div className="space-y-4 sm:space-y-6 pb-16 md:pb-0">
+      <div className="space-y-4 sm:space-y-6 pb-16 lg:pb-0">
         <div className="h-8 w-48 animate-pulse rounded bg-muted" />
         <div className="h-64 animate-pulse rounded-xl bg-muted" />
       </div>
@@ -82,7 +101,7 @@ export default function ShowManagementLayout({
 
   if (!show) {
     return (
-      <div className="space-y-4 sm:space-y-6 pb-16 md:pb-0">
+      <div className="space-y-4 sm:space-y-6 pb-16 lg:pb-0">
         <div className="rounded-xl border bg-card p-6 text-center sm:p-8">
           <div className="text-4xl font-bold text-muted-foreground/30">?</div>
           <h2 className="mt-3 text-lg font-semibold">Show not found</h2>
@@ -158,7 +177,7 @@ export default function ShowManagementLayout({
   }
 
   return (
-    <div className="space-y-4 sm:space-y-6 pb-16 md:pb-0">
+    <div className="space-y-4 sm:space-y-6 pb-16 lg:pb-0">
       {/* Header */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
         <div className="min-w-0">
@@ -168,12 +187,34 @@ export default function ShowManagementLayout({
                 <ArrowLeft className="size-4" />
               </Link>
             </Button>
-            <h1 className="truncate text-lg font-bold tracking-tight sm:text-2xl">
+            <h1 className={cn(SE_H, 'truncate text-lg tracking-tight sm:text-2xl')}>
               {show.name}
             </h1>
-            <Badge variant={showStatus.variant} className="shrink-0">
-              {showStatus.label}
-            </Badge>
+            <EditShowNameDialog showId={show.id} currentName={show.name} />
+            {/* Status — the badge is now a clickable dropdown so the
+                secretary can jump between draft / entries open / closed /
+                cancelled etc. without waiting for the auto-transition.
+                Amanda 2026-05-22 reported the free-form switcher had gone
+                missing; restored. */}
+            <Select value={show.status} onValueChange={handleStatusChange}>
+              <SelectTrigger
+                aria-label="Change show status"
+                className="h-auto shrink-0 gap-1 border-none bg-transparent p-0 shadow-none focus:ring-0 focus:ring-offset-0"
+              >
+                <Badge variant={showStatus.variant} className="shrink-0 cursor-pointer hover:opacity-80">
+                  {showStatus.label}
+                </Badge>
+              </SelectTrigger>
+              <SelectContent align="end">
+                <SelectItem value="draft">Draft</SelectItem>
+                <SelectItem value="published">Published</SelectItem>
+                <SelectItem value="entries_open">Entries Open</SelectItem>
+                <SelectItem value="entries_closed">Entries Closed</SelectItem>
+                <SelectItem value="in_progress">In Progress</SelectItem>
+                <SelectItem value="completed">Completed</SelectItem>
+                <SelectItem value="cancelled">Cancelled</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
           <p className="mt-1 text-sm text-muted-foreground">
             {show.organisation?.name}
@@ -236,15 +277,15 @@ export default function ShowManagementLayout({
       {/* Admin test data tools — only visible to admins */}
       {isAdmin && (
         <>
-          <div className="flex flex-col gap-2 rounded-lg border border-dashed border-orange-300 bg-orange-50 p-3 dark:border-orange-700 dark:bg-orange-950/30 sm:flex-row sm:items-center">
+          <div className="flex flex-col gap-2 rounded-lg border border-dashed border-se-honey-line bg-se-honey-soft p-3 sm:flex-row sm:items-center">
             <div className="flex items-center gap-2">
-              <Database className="size-4 text-orange-600 dark:text-orange-400 shrink-0" />
-              <span className="text-xs font-medium text-orange-700 dark:text-orange-300">Admin Tools</span>
+              <Database className="size-4 text-se-honey-deep shrink-0" />
+              <span className="text-xs font-medium text-se-honey-deep">Admin Tools</span>
             </div>
             {(populateMutation.isPending || clearMutation.isPending) ? (
               <div className="flex items-center gap-2 sm:ml-auto">
-                <Loader2 className="size-4 animate-spin text-orange-600" />
-                <span className="text-xs text-orange-700 dark:text-orange-300">
+                <Loader2 className="size-4 animate-spin text-se-honey-deep" />
+                <span className="text-xs text-se-honey-deep">
                   {populateMutation.isPending ? 'Generating test data... this takes about a minute' : 'Clearing data...'}
                 </span>
               </div>
@@ -307,7 +348,7 @@ export default function ShowManagementLayout({
                     catalogue numbers, RKC registration numbers, realistic Scottish addresses,
                     sponsors, sundry items, and full show configuration.
                   </p>
-                  <p className="text-sm font-medium text-orange-600">
+                  <p className="text-sm font-medium text-se-honey-deep">
                     Existing entries will be kept. Use &quot;Clear Data&quot; first if you want a fresh start.
                   </p>
                 </div>
@@ -380,53 +421,89 @@ export default function ShowManagementLayout({
       )}
 
       {/* Stats */}
-      {entryStats && entryStats.totalEntries > 0 && (
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-          <div className="rounded-lg border bg-card p-3">
-            <div className="flex items-center gap-1.5 text-muted-foreground">
+      {entryStats && entryStats.dogsEntered > 0 && (
+        <div className="grid grid-cols-2 gap-2.5 lg:grid-cols-4">
+          <SECard className="p-3.5">
+            <div className="flex items-center gap-1.5 text-se-ink3">
               <ClipboardList className="size-3.5" />
-              <span className="text-xs font-medium uppercase tracking-wider">Entries</span>
+              <Eyebrow>Entries</Eyebrow>
             </div>
-            <p className="mt-1 text-lg font-bold">{entryStats.totalEntries}</p>
-            <p className="text-[11px] text-muted-foreground">
-              {entryStats.confirmed > 0 && <span className="text-emerald-600">{entryStats.confirmed} confirmed</span>}
-              {entryStats.pending > 0 && <span>{entryStats.confirmed > 0 ? ' · ' : ''}<span className="text-amber-600">{entryStats.pending} pending</span></span>}
+            {/* Headline = CLASS ENTRIES, the figure a club actually announces.
+                Mandy 2026-07-27: "when we share the numbers we will be giving
+                the breakdown with a total of 110 entries". It used to lead with
+                a dog count, which was both the wrong figure to publish AND
+                wrong in itself — it counted entry ROWS, so a dog who came back
+                to buy a Special Award was counted twice and the card read 91
+                against a catalogue of 90.
+
+                Beneath it: the split she'd quote, then the dog figures. A
+                Junior Handler has no dog, so JH is a class-entry part and never
+                a dog — her RKC return is the competing-dogs number. */}
+            <p className={cn(SE_H, 'mt-1.5 text-[22px] leading-none tabular-nums text-se-ink')}>
+              {entryStats.classEntries ?? entryStats.dogsEntered}
             </p>
-          </div>
-          <div className="rounded-lg border bg-card p-3">
-            <div className="flex items-center gap-1.5 text-muted-foreground">
+            <p className="mt-1 text-[11px] text-se-ink3">entries</p>
+            {classEntryBreakdownParts(entryStats).length > 0 && (
+              <p className="mt-1 text-[11px] leading-snug text-se-ink3">
+                {classEntryBreakdownParts(entryStats).join(' · ')}
+              </p>
+            )}
+            {dogCountParts(entryStats).length > 0 && (
+              <p className="mt-1 text-[11px] leading-snug text-se-ink3">
+                {dogCountParts(entryStats).join(' · ')}
+              </p>
+            )}
+            {entryStats.pending > 0 && (
+              <p className="mt-1 text-[11px] text-se-honey-deep">{entryStats.pending} awaiting payment</p>
+            )}
+            {entryStats.withdrawn > 0 && (
+              <p className="mt-1 text-[11px] text-se-ink3">{entryStats.withdrawn} withdrawn — fee kept</p>
+            )}
+          </SECard>
+          <SECard className="p-3.5">
+            <div className="flex items-center gap-1.5 text-se-ink3">
               <PoundSterling className="size-3.5" />
-              <span className="text-xs font-medium uppercase tracking-wider">Revenue</span>
+              <Eyebrow>Revenue</Eyebrow>
             </div>
-            <p className="mt-1 text-lg font-bold text-emerald-700">
+            <p className={cn(SE_H, 'mt-1.5 text-[22px] leading-none tabular-nums text-se-fresh-deep')}>
               {formatCompactRevenue(entryStats.totalRevenue)}
             </p>
-            <p className="text-[11px] text-muted-foreground">{entryStats.paidOrders} paid</p>
-          </div>
-          <div className="rounded-lg border bg-card p-3">
-            <div className="flex items-center gap-1.5 text-muted-foreground">
+            {(() => {
+              const revenueWorkings = joinWorkings([
+                entryStats.paidThroughRemiFeesPence > 0 ? `${formatWholePounds(entryStats.paidThroughRemiFeesPence)} fees` : null,
+                entryStats.withdrawnKeptPence > 0 ? `${formatWholePounds(entryStats.withdrawnKeptPence)} kept` : null,
+                entryStats.sundriesPence > 0 ? `${formatWholePounds(entryStats.sundriesPence)} sundries` : null,
+              ]);
+              return revenueWorkings ? (
+                <p className="mt-1 truncate text-[11px] text-se-ink3">{revenueWorkings}</p>
+              ) : null;
+            })()}
+            <p className="mt-1 text-[11px] text-se-ink3">{entryStats.paidOrders} paid orders</p>
+          </SECard>
+          <SECard className="p-3.5">
+            <div className="flex items-center gap-1.5 text-se-ink3">
               <Users className="size-3.5" />
-              <span className="text-xs font-medium uppercase tracking-wider">Exhibitors</span>
+              <Eyebrow>Exhibitors</Eyebrow>
             </div>
-            <p className="mt-1 text-lg font-bold">{entryStats.uniqueExhibitors}</p>
-            <p className="text-[11px] text-muted-foreground">unique</p>
-          </div>
-          <div className="rounded-lg border bg-card p-3">
-            <div className="flex items-center gap-1.5 text-muted-foreground">
+            <p className={cn(SE_H, 'mt-1.5 text-[22px] leading-none tabular-nums text-se-ink')}>{entryStats.uniqueExhibitors}</p>
+            <p className="mt-1 text-[11px] text-se-ink3">unique</p>
+          </SECard>
+          <SECard className="p-3.5">
+            <div className="flex items-center gap-1.5 text-se-ink3">
               <Clock className="size-3.5" />
-              <span className="text-xs font-medium uppercase tracking-wider">Latest</span>
+              <Eyebrow>Latest</Eyebrow>
             </div>
-            <p className="mt-1 text-lg font-bold">
+            <p className={cn(SE_H, 'mt-1.5 truncate text-[22px] leading-none text-se-ink')}>
               {entryStats.lastEntryAt ? formatRelativeTime(new Date(entryStats.lastEntryAt)) : '—'}
             </p>
-            <p className="text-[11px] text-muted-foreground">most recent</p>
-          </div>
+            <p className="mt-1 text-[11px] text-se-ink3">most recent</p>
+          </SECard>
         </div>
       )}
 
       {/* Section navigation + content */}
-      <div className="md:flex md:gap-6">
-        <ShowSectionNav showId={show.id} />
+      <div className="lg:flex lg:gap-6">
+        <ShowSectionNav showId={show.id} isWusv={show.showRuleset === 'wusv'} />
         <div className="min-w-0 flex-1">
           <ShowIdProvider showId={show.id}>{children}</ShowIdProvider>
         </div>

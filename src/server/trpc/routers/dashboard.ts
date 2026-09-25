@@ -32,6 +32,9 @@ import {
   dogTimelinePosts,
 } from '@/server/db/schema';
 import { isCcType, isRccType } from '@/lib/placements';
+import { effectiveCcType } from '@/lib/effective-achievement-type';
+import { dogAccessCondition } from '@/server/dog-access';
+import { isRkcChampion } from '@/lib/dog-champion-status';
 
 export const dashboardRouter = createTRPCRouter({
   getSummary: protectedProcedure.query(async ({ ctx }) => {
@@ -48,7 +51,8 @@ export const dashboardRouter = createTRPCRouter({
       now.getTime() + 7 * 24 * 60 * 60 * 1000
     );
 
-    // ── Step 1: Get the user's dogs and breeds (needed by most queries) ──
+    // ── Step 1: Get the user's dogs and breeds (owned or co-owned; needed
+    // by most queries) ──
     const userDogs = await ctx.db
       .select({
         id: dogs.id,
@@ -56,7 +60,7 @@ export const dashboardRouter = createTRPCRouter({
         breedId: dogs.breedId,
       })
       .from(dogs)
-      .where(and(eq(dogs.ownerId, userId), isNull(dogs.deletedAt)));
+      .where(and(dogAccessCondition(ctx.db, userId), isNull(dogs.deletedAt)));
 
     const userDogIds = userDogs.map((d) => d.id);
     const userBreedIds = [...new Set(userDogs.map((d) => d.breedId))];
@@ -97,12 +101,15 @@ export const dashboardRouter = createTRPCRouter({
       // For recommendedShows
       recommendedShowRows,
     ] = await Promise.all([
-      // ── userEntries: all confirmed/pending entries with show + classes ──
+      // ── userEntries: confirmed entries with show + classes. Pending
+      //    (unpaid/abandoned-checkout) entries are excluded — an entry isn't
+      //    "booked in" until payment completes, so it shouldn't drive the
+      //    next-show card or deadline alerts (Amanda 2026-05-28). ──
       ctx.db.query.entries.findMany({
         where: and(
           eq(entries.exhibitorId, userId),
           isNull(entries.deletedAt),
-          inArray(entries.status, ['confirmed', 'pending'])
+          eq(entries.status, 'confirmed')
         ),
         with: {
           show: {
@@ -153,8 +160,13 @@ export const dashboardRouter = createTRPCRouter({
               type: achievements.type,
               judgeId: achievements.judgeId,
               date: achievements.date,
+              // show type/scope so a single-breed championship Best Dog/Bitch
+              // counts as the CC it is (Mandy 2026-07-09).
+              showType: shows.showType,
+              showScope: shows.showScope,
             })
             .from(achievements)
+            .leftJoin(shows, eq(achievements.showId, shows.id))
             .where(inArray(achievements.dogId, userDogIds))
         : Promise.resolve([]),
 
@@ -417,7 +429,7 @@ export const dashboardRouter = createTRPCRouter({
         const hasCc = allAchievements.some(
           (a) =>
             a.dogId === entry.dogId &&
-            isCcType(a.type) &&
+            isCcType(effectiveCcType(a.type, a.showType, a.showScope)) &&
             a.date === entry.show.startDate
         );
 
@@ -483,18 +495,27 @@ export const dashboardRouter = createTRPCRouter({
         const dogAchievements = achievementsByDog.get(dog.id) ?? [];
         const dogTitlesList = titlesByDog.get(dog.id) ?? [];
 
-        const ccCount = dogAchievements.filter((a) => isCcType(a.type)).length;
+        const dEff = (a: (typeof dogAchievements)[number]) =>
+          effectiveCcType(a.type, a.showType, a.showScope);
+        const ccCount = dogAchievements.filter((a) => isCcType(dEff(a))).length;
 
-        const rccCount = dogAchievements.filter((a) => isRccType(a.type)).length;
+        const rccCount = dogAchievements.filter((a) => isRccType(dEff(a))).length;
 
         // Distinct judges who awarded CCs (for the 3-different-judges rule)
         const ccJudgeIds = new Set(
           dogAchievements
-            .filter((a) => isCcType(a.type) && a.judgeId)
+            .filter((a) => isCcType(dEff(a)) && a.judgeId)
             .map((a) => a.judgeId!)
         );
 
-        const isChampion = dogTitlesList.some((t) => t.title === 'ch');
+        // "Champion" for this widget means the RKC title itself (Ch/Sh Ch),
+        // not the broader "barred from all classes but Open" concept used
+        // for class-eligibility (that's `isShowChampion` — see
+        // `lib/dog-champion-status.ts`, one owner for both).
+        const isChampion = isRkcChampion({
+          titles: dogTitlesList,
+          registeredName: dog.registeredName,
+        });
 
         return {
           dogId: dog.id,
@@ -515,16 +536,27 @@ export const dashboardRouter = createTRPCRouter({
       .slice(0, 5);
 
     // ── Build: judgeIntel ────────────────────────────────────────────
-    // Prioritise shows the user HASN'T entered, limit to 5
-    const judgeIntelAll = upcomingJudgeAssignments.map((row) => ({
-      showId: row.showId,
-      showName: row.showName,
-      showSlug: row.showSlug,
-      showDate: row.showDate,
-      judgeName: row.judgeName,
-      breedName: row.breedName,
-      alreadyEntered: enteredShowIds.has(row.showId),
-    }));
+    // Prioritise shows the user HASN'T entered, limit to 5.
+    // De-dupe by show + judge + breed: a judge with separate dog/bitch (or
+    // stale + current) assignments would otherwise appear multiple times for
+    // the same show — Amanda saw Hugh De Zutter listed twice (2026-06-01).
+    const seenJudgeIntel = new Set<string>();
+    const judgeIntelAll = upcomingJudgeAssignments
+      .map((row) => ({
+        showId: row.showId,
+        showName: row.showName,
+        showSlug: row.showSlug,
+        showDate: row.showDate,
+        judgeName: row.judgeName,
+        breedName: row.breedName,
+        alreadyEntered: enteredShowIds.has(row.showId),
+      }))
+      .filter((j) => {
+        const key = `${j.showId}|${j.judgeName}|${j.breedName}`;
+        if (seenJudgeIntel.has(key)) return false;
+        seenJudgeIntel.add(key);
+        return true;
+      });
     const judgeIntel = [
       ...judgeIntelAll.filter((j) => !j.alreadyEntered),
       ...judgeIntelAll.filter((j) => j.alreadyEntered),
