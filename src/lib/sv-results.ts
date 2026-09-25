@@ -40,6 +40,7 @@ import {
   compareShowClassRunningOrder,
 } from './class-labels';
 import { rankWithinGrades, isPlacedWithoutSvGrade, formatSvGradeBare } from './sv-grading';
+import { comparePlacing } from './placements';
 import { formatRegNumber } from '@/components/catalogue/catalogue-utils';
 import { REGIONAL_BEST_AWARDS } from './best-awards';
 import { awardNameToType } from './top-awards';
@@ -322,9 +323,12 @@ export function computeClassMembers(
     });
   }
   const rankedMembers = new Set(ranked.map((r) => r.item.m));
-  const ungraded = present.filter((m) => !rankedMembers.has(m));
+  const ungraded = present
+    .filter((m) => !rankedMembers.has(m))
+    .sort((a, b) => comparePlacing(a.result?.placement, b.result?.placement));
 
-  // Disqualified + ungraded-but-present dogs (rare) after the graded block.
+  // Disqualified + ungraded-but-present dogs (rare) after the graded block,
+  // in placing order.
   for (const m of ungraded) {
     const grade = m.result?.svGrade ?? null;
     if (grade === 'disqualified') {
@@ -505,7 +509,7 @@ export function buildSvResultsReport(input: SvResultsReportInput): SvResultsRepo
       .map((e) => ({ entry: e, result: e.entryClasses.find((ec) => ec.showClassId === jc.id)?.result ?? null }));
     const placed = members
       .filter((m) => !m.entry.absent && m.result?.placement != null)
-      .sort((a, b) => (a.result?.placement ?? 9999) - (b.result?.placement ?? 9999));
+      .sort((a, b) => comparePlacing(a.result?.placement, b.result?.placement));
     if (placed.length === 0) continue;
     jhGroups.push({
       label: svDisplayAge(jc.classDefinition?.name) || 'Junior Handling',

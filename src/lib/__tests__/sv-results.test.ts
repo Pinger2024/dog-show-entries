@@ -275,6 +275,25 @@ describe('computeClassMembers', () => {
       ['Abs', '91', 'D'],
     ]);
   });
+
+  // Demo "Oktoberfest bonanza", 25 Sept 2026: three Minor Puppy Bitches placed
+  // 1st, 2nd, 3rd and never graded came out of the sheet as 1, 3, 2 — the
+  // order they were loaded in. Ungraded dogs keep their placing order too.
+  it('keeps ungraded dogs in placing order, after the graded ones', () => {
+    const sc = svClass('mbl', 'Minor Puppy', 'bitch', 'long_stock');
+    const members = [
+      { entry: entry({ showClassId: 'mbl', name: 'Falcon', placement: 1, ring: '25', sex: 'bitch' }), result: { svGrade: null, placement: 1, placementStatus: null } },
+      { entry: entry({ showClassId: 'mbl', name: 'Legacy', placement: 3, ring: '37', sex: 'bitch' }), result: { svGrade: null, placement: 3, placementStatus: null } },
+      { entry: entry({ showClassId: 'mbl', name: 'Water Lily', placement: 2, ring: '66', sex: 'bitch' }), result: { svGrade: null, placement: 2, placementStatus: null } },
+      { entry: entry({ showClassId: 'mbl', name: 'Graded', grade: 'vp', placement: 4, ring: '70', sex: 'bitch' }), result: { svGrade: 'vp', placement: 4, placementStatus: null } },
+    ];
+    expect(computeClassMembers(sc, members).map((r) => [r.gradeDisplay, r.placementDisplay, r.entry.catalogueNumber])).toEqual([
+      ['VP', '1', '70'],
+      ['', '1', '25'],
+      ['', '2', '66'],
+      ['', '3', '37'],
+    ]);
+  });
 });
 
 describe('buildSvResultsReport', () => {

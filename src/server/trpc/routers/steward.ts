@@ -4,7 +4,7 @@ import { and, eq, ne, isNull, isNotNull, asc, sql, inArray } from 'drizzle-orm';
 import { stewardProcedure, publicProcedure } from '../procedures';
 import { createTRPCRouter } from '../init';
 import type { Database } from '@/server/db';
-import { ACHIEVEMENT_TYPES, getPlacementLabel, type AchievementType } from '@/lib/placements';
+import { ACHIEVEMENT_TYPES, getPlacementLabel, comparePlacing, type AchievementType } from '@/lib/placements';
 import { isShowDayReached } from '@/lib/date-utils';
 import { resolveTopAwards } from '@/lib/top-awards';
 import {
@@ -1224,9 +1224,8 @@ export const stewardRouter = createTRPCRouter({
             dogDateOfBirth: ec.entry.dog?.dateOfBirth ?? null,
             exhibitorName: ec.entry.exhibitor?.name ?? '',
           }))
-          // Sort numeric placements ascending (1st, 2nd, 3rd...), then
-          // withheld/unplaced at the end (99 sentinel for sort).
-          .sort((a, b) => (a.placement ?? 99) - (b.placement ?? 99));
+          // 1st, 2nd, 3rd…, then withheld/unplaced at the end.
+          .sort((a, b) => comparePlacing(a.placement, b.placement));
 
         // A class with no results shows only when it was actually reached:
         // at least one confirmed entry, and EVERY confirmed entry in it is

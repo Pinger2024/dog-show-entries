@@ -23,6 +23,7 @@
 import { eq } from 'drizzle-orm';
 import type { Database } from '@/server/db';
 import { showClasses } from '@/server/db/schema';
+import { comparePlacing } from '@/lib/placements';
 import type { ClassListEntry } from '@/lib/critique-parse';
 import type { ResultsGraphEntry, ResultsGraphShowClass } from '@/lib/critique-match';
 
@@ -80,7 +81,7 @@ export async function loadShowClassRows(db: Database, showId: string): Promise<S
       }))
       // Placement order within each class — the review pickers walk this
       // list, and a secretary expects 1st, 2nd, 3rd… (Mandy, 2026-07-31).
-      .sort((a, b) => a.placement - b.placement),
+      .sort((a, b) => comparePlacing(a.placement, b.placement)),
   }));
 }
 

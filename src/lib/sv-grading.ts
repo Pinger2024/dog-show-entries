@@ -6,6 +6,8 @@
  * Source: GSDL-BRG / WUSV reference + Sieger Editorial design brief.
  */
 
+import { comparePlacing } from './placements';
+
 export interface SvGrade {
   code: string;
   german: string;
@@ -209,7 +211,7 @@ export function rankWithinGrades<T extends SvGradedPlacing>(
   const out: { item: T; grade: string; rank: number }[] = [];
   for (const grade of grades) {
     const list = byGrade.get(grade)!;
-    list.sort((a, b) => (a.placement ?? 9999) - (b.placement ?? 9999));
+    list.sort((a, b) => comparePlacing(a.placement, b.placement));
     list.forEach((item, i) => out.push({ item, grade, rank: i + 1 }));
   }
   return out;

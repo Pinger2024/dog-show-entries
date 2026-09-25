@@ -119,6 +119,22 @@ export const SPECIAL_AWARDS = [
   'Reserve Best Veteran in Show',
 ] as const;
 
+/**
+ * THE placing order: 1st, 2nd, 3rd… by number, with anything that has no
+ * placing (withheld, unplaced, not yet judged, graded but unplaced) after
+ * every placing. Two unplaced dogs compare equal, so a stable sort keeps
+ * their existing order. Every list of results sorts with this — six places
+ * each wrote their own `placement ?? 99 / 100 / 9999` until 25 Sept 2026.
+ */
+export function comparePlacing(a: number | null | undefined, b: number | null | undefined): number {
+  const aPlaced = a != null;
+  const bPlaced = b != null;
+  if (aPlaced && bPlaced) return a - b;
+  if (aPlaced) return -1;
+  if (bPlaced) return 1;
+  return 0;
+}
+
 export function getPlacementLabel(value: number): string {
   return KC_PLACEMENTS.find((p) => p.value === value)?.label ?? `${value}th`;
 }

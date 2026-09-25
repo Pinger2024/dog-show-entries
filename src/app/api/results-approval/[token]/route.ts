@@ -12,7 +12,7 @@ import {
   achievements,
   breeds,
 } from '@/server/db/schema';
-import { getPlacementLabel, achievementLabels } from '@/lib/placements';
+import { getPlacementLabel, achievementLabels, comparePlacing } from '@/lib/placements';
 import { buildClassLabelMap, svCoatDisplayName, svDisplayAge } from '@/lib/class-labels';
 import { resend, FROM, emailHeader } from '@/server/services/email';
 import { BRAND } from '@/lib/brand';
@@ -250,7 +250,7 @@ export async function GET(
 
     const resultRows = sc.entryClasses
       .filter((ec) => ec.result && ec.entry.status === 'confirmed' && !ec.entry.deletedAt)
-      .sort((a, b) => (a.result!.placement ?? 99) - (b.result!.placement ?? 99))
+      .sort((a, b) => comparePlacing(a.result!.placement, b.result!.placement))
       .map((ec) => {
         const r = ec.result!;
         const pLabel = r.placement ? getPlacementLabel(r.placement) : '—';
