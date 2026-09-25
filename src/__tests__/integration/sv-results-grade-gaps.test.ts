@@ -94,7 +94,7 @@ describe('SV regional — a placed dog with no grade is caught before the result
       {
         catalogueNumber: '11',
         dogName: 'DRAMANA ANNO DOMINI',
-        className: 'Minor Puppy Dog (6-9 months), Long Coat',
+        className: 'Minor Puppy Dog, Long Coat',
       },
     ]);
 

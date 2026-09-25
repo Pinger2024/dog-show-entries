@@ -241,10 +241,15 @@ export function svSexWord(age: string, sex: 'dog' | 'bitch'): string {
   return isPuppy ? 'Bitch' : 'Female';
 }
 
+/** "Working Male" / "Minor Puppy Bitch" — the class without its age band. */
+export function svClassBaseLabel(age: string, sex: 'dog' | 'bitch' | null): string {
+  return sex ? `${age} ${svSexWord(age, sex)}` : age;
+}
+
 /** "Working Male (2 years +)" / "Minor Puppy Bitch (6-9 months)". */
 export function svClassLabel(age: string, sex: 'dog' | 'bitch' | null): string {
   const range = AGE_RANGE[age];
-  const base = sex ? `${age} ${svSexWord(age, sex)}` : age;
+  const base = svClassBaseLabel(age, sex);
   return range ? `${base} (${range})` : base;
 }
 
@@ -767,7 +772,7 @@ export function buildSvResultsXlsxRows(
 export interface SvGradeGap {
   catalogueNumber: string | null;
   dogName: string;
-  /** e.g. "Minor Puppy Dog (6-9 months), Long Coat". */
+  /** e.g. "Minor Puppy Dog, Long Coat". */
   className: string;
 }
 
@@ -784,7 +789,7 @@ export function findPlacedWithoutGrade(input: SvResultsReportInput): SvGradeGap[
       .map((r) => ({
         catalogueNumber: r.entry.catalogueNumber,
         dogName: r.entry.dog?.registeredName ?? '',
-        className: [svClassLabel(svDisplayAge(sc.classDefinition?.name), sc.sex), svCoatDisplayName(sc.svCoatType)]
+        className: [svClassBaseLabel(svDisplayAge(sc.classDefinition?.name), sc.sex), svCoatDisplayName(sc.svCoatType)]
           .filter(Boolean)
           .join(', '),
       })),
