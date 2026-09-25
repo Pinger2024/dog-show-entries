@@ -509,8 +509,8 @@ describe('findPlacedWithoutGrade', () => {
 
   it('lists every placed dog that has no grade, in class order, with its class', () => {
     expect(findPlacedWithoutGrade(gapFixture())).toEqual([
-      { catalogueNumber: '11', dogName: 'DRAMANA ANNO DOMINI', className: 'Minor Puppy Dog (6-9 months), Long Coat' },
-      { catalogueNumber: '49', dogName: 'MARINITA KAYLEIGH', className: 'Adult Female (2 years +), Short Coat' },
+      { catalogueNumber: '11', dogName: 'DRAMANA ANNO DOMINI', className: 'Minor Puppy Dog, Long Coat' },
+      { catalogueNumber: '49', dogName: 'MARINITA KAYLEIGH', className: 'Adult Female, Short Coat' },
     ]);
   });
 
