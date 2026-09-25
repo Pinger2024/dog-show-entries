@@ -27,6 +27,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { trpc } from '@/lib/trpc';
+import { svGradeGapsWarning } from '@/lib/sv-results';
 import { Button } from '@/components/ui/button';
 import {
   Card,
@@ -235,18 +236,8 @@ export default function DocumentsPage() {
   const isKcChampionship = documentRowVisible('sh01', docCtx);
   // A placed dog with no grade prints a blank grade on both SV documents —
   // the NE Regional's no. 11 went to the League like that (5 Sept 2026). Say
-  // which dogs, grouped by class, before the secretary sends anything. Never
-  // blocks a download.
-  const svGradeGapNote = (() => {
-    if (!svGradeGaps || svGradeGaps.length === 0) return undefined;
-    const byClass = new Map<string, string[]>();
-    for (const g of svGradeGaps) {
-      byClass.set(g.className, [...(byClass.get(g.className) ?? []), `No. ${g.catalogueNumber ?? '—'} ${g.dogName}`]);
-    }
-    const one = svGradeGaps.length === 1;
-    const dogs = [...byClass].map(([cls, list]) => `${cls}: ${list.join(', ')}`).join('. ');
-    return `${one ? '1 placed dog has' : `${svGradeGaps.length} placed dogs have`} no grade — ${dogs}. Ask your steward to add ${one ? 'the grade' : 'the grades'} on the steward screen before you send these to the League.`;
-  })();
+  // which dogs before the secretary sends anything. Never blocks a download.
+  const svGradeGapNote = svGradeGapsWarning(svGradeGaps ?? []);
 
   // Distinct judges (by id) so a multi-judge show can offer a separate Judge's
   // Book per judge — e.g. the breed judge's book and the Junior Handling
