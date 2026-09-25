@@ -486,7 +486,7 @@ export default function StewardClassResultsPage({
                       >
                         <SelectTrigger
                           className={cn(
-                            'h-9 w-[92px] shrink-0 text-xs',
+                            'h-9 w-[108px] shrink-0 text-xs',
                             needGrade.includes(placed) && 'border-2 border-se-honey bg-se-honey-soft',
                           )}
                           aria-label={needGrade.includes(placed) ? `Grade needed for #${placed.catalogueNumber ?? ''}` : 'Grade'}
@@ -494,7 +494,7 @@ export default function StewardClassResultsPage({
                           <SelectValue placeholder="Grade" />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="none">— Grade —</SelectItem>
+                          <SelectItem value="none">No grade</SelectItem>
                           {svGradeOptions.map((g) => (
                             <SelectItem key={g.value} value={g.value}>
                               {g.label}
