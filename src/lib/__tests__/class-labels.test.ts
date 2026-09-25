@@ -182,6 +182,9 @@ describe('isUnnumberedClassDef', () => {
   it('is false for null/undefined class definitions', () => {
     expect(isUnnumberedClassDef(null)).toBe(false);
     expect(isUnnumberedClassDef(undefined)).toBe(false);
+  });
+});
+
 // The League's SV results sheet writes the coat as a two-letter code inside
 // the Class column — "Adult LCB", "Working SCD" (Shirley, GSDL BRG, 24 Sept 2026).
 describe('svCoatCode', () => {
