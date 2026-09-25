@@ -1,5 +1,10 @@
 import { describe, it, expect } from 'vitest';
-import { allowedSvGradesForClass, formatSvRating, computeSvClassRatings } from '../sv-grading';
+import {
+  allowedSvGradesForClass,
+  formatSvRating,
+  computeSvClassRatings,
+  isPlacedWithoutSvGrade,
+} from '../sv-grading';
 
 const codes = (className: string) =>
   allowedSvGradesForClass(className).map((g) => g.value);
@@ -88,5 +93,25 @@ describe('computeSvClassRatings (within-grade numbering, Amanda 2026-05-28)', ()
     ]);
     expect(m.get('dq')).toBe('Disqualified');
     expect(m.get('np')).toBe('1');
+  });
+});
+
+// NE Regional, 5 Sept 2026: no. 11 Dramana Anno Domini was placed 1st in his
+// class and never graded. Remi printed the results with a blank grade and the
+// League had to add VP by hand (Shirley, GSDL BRG, 24 Sept 2026).
+describe('isPlacedWithoutSvGrade', () => {
+  it('is true for a placed dog with no grade', () => {
+    expect(isPlacedWithoutSvGrade({ placement: 1, svGrade: null })).toBe(true);
+    expect(isPlacedWithoutSvGrade({ placement: 3, svGrade: undefined })).toBe(true);
+  });
+
+  it('is false once the dog has a grade — including Disqualified', () => {
+    expect(isPlacedWithoutSvGrade({ placement: 1, svGrade: 'vp' })).toBe(false);
+    expect(isPlacedWithoutSvGrade({ placement: 1, svGrade: 'disqualified' })).toBe(false);
+  });
+
+  it('is false for a dog that has not been placed', () => {
+    expect(isPlacedWithoutSvGrade({ placement: null, svGrade: null })).toBe(false);
+    expect(isPlacedWithoutSvGrade({ placement: undefined, svGrade: undefined })).toBe(false);
   });
 });

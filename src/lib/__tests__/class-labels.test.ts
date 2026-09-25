@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   svCoatDisplayName,
+  svCoatCode,
   formatSvClassName,
   classNameAbbreviation,
   specialAwardClassFee,
@@ -181,5 +182,16 @@ describe('isUnnumberedClassDef', () => {
   it('is false for null/undefined class definitions', () => {
     expect(isUnnumberedClassDef(null)).toBe(false);
     expect(isUnnumberedClassDef(undefined)).toBe(false);
+// The League's SV results sheet writes the coat as a two-letter code inside
+// the Class column — "Adult LCB", "Working SCD" (Shirley, GSDL BRG, 24 Sept 2026).
+describe('svCoatCode', () => {
+  it('abbreviates Long Coat to LC and Short (stock) Coat to SC', () => {
+    expect(svCoatCode('long_stock')).toBe('LC');
+    expect(svCoatCode('stock')).toBe('SC');
+  });
+
+  it('is empty when the class has no coat', () => {
+    expect(svCoatCode(null)).toBe('');
+    expect(svCoatCode(undefined)).toBe('');
   });
 });

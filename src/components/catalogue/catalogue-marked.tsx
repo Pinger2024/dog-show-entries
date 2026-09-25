@@ -14,6 +14,7 @@ import {
 import { formatDobKC, formatPedigreeKC, formatOwnerKC, uppercaseName } from './catalogue-utils';
 import type { CatalogueEntry, CatalogueShowInfo } from './catalogue-types';
 import { catalogueBackMatter } from '@/lib/catalogue-back-matter';
+import { comparePlacing } from '@/lib/placements';
 
 // The marked catalogue is a secretary-only submission to the RKC, not a public
 // publication. RKC F(1).11.b.(6) withhold-from-publication rules apply to
@@ -103,7 +104,7 @@ function classPlacings(
   bucket: ClassBucket,
   results: Map<string, MarkedResult>,
 ): { marker: string; catNo: string; isFirst: boolean }[] {
-  const rows: { order: number; marker: string; catNo: string; isFirst: boolean }[] = [];
+  const rows: { placement: number | null; marker: string; catNo: string; isFirst: boolean }[] = [];
   const seen = new Set<string>();
   for (const entry of bucket.entries) {
     const catNo = entry.catalogueNumber ?? '';
@@ -115,13 +116,13 @@ function classPlacings(
     const marker = getResultMarker(result);
     if (!marker) continue;
     rows.push({
-      order: result?.placement ?? 100,
+      placement: result?.placement ?? null,
       marker,
       catNo,
       isFirst: result?.placement === 1,
     });
   }
-  rows.sort((a, b) => a.order - b.order);
+  rows.sort((a, b) => comparePlacing(a.placement, b.placement));
   return rows.map(({ marker, catNo, isFirst }) => ({ marker, catNo, isFirst }));
 }
 

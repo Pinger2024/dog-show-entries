@@ -8,7 +8,7 @@ import {
   displayEntryName,
 } from './catalogue-utils';
 import type { ClassGroup } from './catalogue-utils';
-import { sectionClasses, classNameAbbreviation } from '@/lib/class-labels';
+import { sectionClasses, classNameAbbreviation, sexLetter } from '@/lib/class-labels';
 
 interface Props {
   show: CatalogueShowInfo;
@@ -619,7 +619,7 @@ export function CatalogueJudging({ show, entries }: Props) {
                       <Text key={i} style={s.legendItem}>
                         {c.label ? `${c.label}. ` : ''}
                         {c.name}
-                        {c.sex ? ` (${c.sex === 'dog' ? 'D' : 'B'})` : ''}
+                        {sexLetter(c.sex) ? ` (${sexLetter(c.sex)})` : ''}
                       </Text>
                     ))}
                   </View>

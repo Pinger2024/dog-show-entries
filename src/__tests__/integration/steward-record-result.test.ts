@@ -234,6 +234,88 @@ async function closedShowReadyForFirstResult(startDate: string) {
   return { steward, show, ec };
 }
 
+// The steward screen saves a result by sending only some of its fields — the
+// grade dropdown sends placing + status + special award + grade, the special
+// award dialog leaves the grade out. The save used to write every field it
+// was NOT sent as blank, so changing a dog's grade silently erased the
+// judge's critique and the winner photo (found 25 Sept 2026 while tracing the
+// NE Regional's missing grade). Fields that aren't sent must be left alone.
+describe('steward.recordResult — only changes the fields it is sent', () => {
+  it('changing the grade keeps the critique and the winner photo', async () => {
+    const { steward, ec } = await showWithStewardAndEntry();
+    await makeResult({
+      entryClassId: ec.id,
+      placement: 1,
+      svGrade: 'sg',
+      critiqueText: 'Excellent head and pigment, firm back.',
+      winnerPhotoUrl: 'https://example.test/winner.jpg',
+    });
+    const caller = createTestCaller(steward);
+
+    // Exactly what the grade dropdown sends (setGrade on the steward page).
+    await caller.steward.recordResult({
+      entryClassId: ec.id,
+      placement: 1,
+      placementStatus: null,
+      specialAward: null,
+      svGrade: 'g',
+    });
+
+    const row = await testDb.query.results.findFirst({ where: eq(results.entryClassId, ec.id) });
+    expect(row?.svGrade).toBe('g');
+    expect(row?.critiqueText).toBe('Excellent head and pigment, firm back.');
+    expect(row?.winnerPhotoUrl).toBe('https://example.test/winner.jpg');
+  });
+
+  it('giving a special award keeps the grade', async () => {
+    const { steward, ec } = await showWithStewardAndEntry();
+    await makeResult({ entryClassId: ec.id, placement: 1, svGrade: 'vp' });
+    const caller = createTestCaller(steward);
+
+    // Exactly what the special award dialog sends — no grade.
+    await caller.steward.recordResult({
+      entryClassId: ec.id,
+      placement: 1,
+      placementStatus: null,
+      specialAward: 'Best Puppy',
+    });
+
+    const row = await testDb.query.results.findFirst({ where: eq(results.entryClassId, ec.id) });
+    expect(row?.specialAward).toBe('Best Puppy');
+    expect(row?.svGrade).toBe('vp');
+  });
+
+  it('a field sent as empty is still cleared', async () => {
+    const { steward, ec } = await showWithStewardAndEntry();
+    await makeResult({ entryClassId: ec.id, placement: 1, svGrade: 'sg', specialAward: 'Best Puppy' });
+    const caller = createTestCaller(steward);
+
+    await caller.steward.recordResult({
+      entryClassId: ec.id,
+      placement: 1,
+      placementStatus: null,
+      specialAward: null,
+      svGrade: null,
+    });
+
+    const row = await testDb.query.results.findFirst({ where: eq(results.entryClassId, ec.id) });
+    expect(row?.specialAward).toBeNull();
+    expect(row?.svGrade).toBeNull();
+  });
+
+  it('a numeric placing always clears a withheld/unplaced status, even when the status is not sent', async () => {
+    const { steward, ec } = await showWithStewardAndEntry();
+    await makeResult({ entryClassId: ec.id, placement: null, placementStatus: 'withheld' });
+    const caller = createTestCaller(steward);
+
+    await caller.steward.recordResult({ entryClassId: ec.id, placement: 2 });
+
+    const row = await testDb.query.results.findFirst({ where: eq(results.entryClassId, ec.id) });
+    expect(row?.placement).toBe(2);
+    expect(row?.placementStatus).toBeNull();
+  });
+});
+
 describe('steward.recordResult — auto-start the show on show day', () => {
   const PAST = '2020-01-01'; // show day has passed → reached
   const FUTURE = '2999-01-01'; // show day is years away → not reached

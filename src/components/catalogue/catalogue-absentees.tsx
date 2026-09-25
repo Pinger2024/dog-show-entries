@@ -3,6 +3,7 @@ import { styles } from './catalogue-styles';
 import { CatalogueHeader } from './catalogue-header';
 import type { CatalogueEntry, CatalogueShowInfo } from './catalogue-types';
 import { uppercaseName, sortEntries } from './catalogue-utils';
+import { sexLetter } from '@/lib/class-labels';
 
 interface Props {
   show: CatalogueShowInfo;
@@ -87,7 +88,7 @@ export function CatalogueAbsentees({ show, entries }: Props) {
                   {entry.breed ?? '—'}
                 </Cell>
                 <Cell width={colWidths.sex}>
-                  {entry.sex === 'dog' ? 'D' : entry.sex === 'bitch' ? 'B' : '—'}
+                  {sexLetter(entry.sex) || '—'}
                 </Cell>
                 <Cell width={colWidths.exhibitor}>
                   {entry.exhibitor ?? '—'}

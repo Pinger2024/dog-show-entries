@@ -221,6 +221,10 @@ export default function DocumentsPage() {
   const { data: paymentReport } = trpc.secretary.getPaymentReport.useQuery({ showId });
   const { data: withdrawnAndAbsent } = trpc.secretary.getAbsenteeList.useQuery({ showId });
   const { data: prizeCardCounts } = trpc.secretary.getPrizeCardCounts.useQuery({ showId });
+  const { data: svGradeGaps } = trpc.secretary.getSvResultsGradeGaps.useQuery(
+    { showId },
+    { enabled: stats?.showRuleset === 'wusv' },
+  );
 
   const resultsFinalised = Boolean(catalogueData?.show?.resultsPublishedAt);
   // SV / WUSV regional shows get the graded results report + spreadsheet the
@@ -229,6 +233,15 @@ export default function DocumentsPage() {
   const isWusvShow = stats?.showRuleset === 'wusv';
   const docCtx = { showRuleset: stats?.showRuleset, showType: show?.showType };
   const isKcChampionship = documentRowVisible('sh01', docCtx);
+  // A placed dog with no grade prints a blank grade on both SV documents —
+  // the NE Regional's no. 11 went to the League like that (5 Sept 2026). Say
+  // which dogs, before the secretary sends anything. Never blocks a download.
+  const svGradeGapNote =
+    svGradeGaps && svGradeGaps.length > 0
+      ? `${svGradeGaps.length === 1 ? '1 placed dog has' : `${svGradeGaps.length} placed dogs have`} no grade: ${svGradeGaps
+          .map((g) => `No. ${g.catalogueNumber ?? '—'} ${g.dogName} (${g.className})`)
+          .join('; ')}. Ask your steward to add it on the steward screen before you send these to the League.`
+      : undefined;
 
   // Distinct judges (by id) so a multi-judge show can offer a separate Judge's
   // Book per judge — e.g. the breed judge's book and the Junior Handling
@@ -593,6 +606,7 @@ export default function DocumentsPage() {
                 icon={<Trophy className="size-4" />}
                 label="SV Graded Results"
                 description="Graded results by coat and class — V/SG/G grades, placings, absentees kept in, with Best Male/Female, Most Promising, and Junior Handling"
+                note={svGradeGapNote}
               >
                 <PdfViewerButton icon={<Trophy className="size-4" />} label="View" url={`/api/reports/${showId}/sv-results`} />
               </DocRow>
@@ -610,6 +624,7 @@ export default function DocumentsPage() {
                 icon={<FileSpreadsheet className="size-4" />}
                 label="SV Results Spreadsheet"
                 description="One row per dog with full pedigree, grading and placing — the SV records format for the regional group"
+                note={svGradeGapNote}
               >
                 {downloadingKey === 'sv-results-xlsx' ? (
                   <Button disabled className="min-h-[2.75rem]">

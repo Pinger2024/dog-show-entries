@@ -22,7 +22,7 @@ import {
 import { toast } from 'sonner';
 import { trpc } from '@/lib/trpc';
 import { SPECIAL_AWARDS } from '@/lib/placements';
-import { allowedSvGradesForClass } from '@/lib/sv-grading';
+import { allowedSvGradesForClass, isPlacedWithoutSvGrade } from '@/lib/sv-grading';
 import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -250,7 +250,17 @@ export default function StewardClassResultsPage({
   // Everyone in the ring has been dealt with (placed / withheld / unplaced) but
   // the class isn't live yet — make the Publish call-to-action loud so the last
   // step doesn't get missed.
-  const readyToPublish = remaining.length === 0 && placedCount > 0 && !showClass.isPublished;
+  // Regionals: every dog the judge places gets a grade. A placing with no
+  // grade slipped through at the NE Regional (no. 11, 5 Sept 2026) and went to
+  // the League blank — so the class isn't "ready" until each placed dog has
+  // one. Publishing is never blocked; this only changes the prompt.
+  const needGrade = isWusv
+    ? Array.from(placedByValue.values()).filter((e) =>
+        isPlacedWithoutSvGrade({ placement: e.result?.placement, svGrade: e.result?.svGrade }),
+      )
+    : [];
+  const readyToPublish =
+    remaining.length === 0 && placedCount > 0 && needGrade.length === 0 && !showClass.isPublished;
 
   const sortedClasses = allClasses?.sort((a, b) => a.sortOrder - b.sortOrder);
   const currentIndex = sortedClasses?.findIndex((c) => c.id === classId) ?? -1;
@@ -474,7 +484,13 @@ export default function StewardClassResultsPage({
                         value={placed.result?.svGrade ?? 'none'}
                         onValueChange={(v) => setGrade(placed, v === 'none' ? null : (v as SvGradeValue))}
                       >
-                        <SelectTrigger className="h-9 w-[92px] shrink-0 text-xs">
+                        <SelectTrigger
+                          className={cn(
+                            'h-9 w-[92px] shrink-0 text-xs',
+                            needGrade.includes(placed) && 'border-2 border-se-honey bg-se-honey-soft',
+                          )}
+                          aria-label={needGrade.includes(placed) ? `Grade needed for #${placed.catalogueNumber ?? ''}` : 'Grade'}
+                        >
                           <SelectValue placeholder="Grade" />
                         </SelectTrigger>
                         <SelectContent>
@@ -620,7 +636,9 @@ export default function StewardClassResultsPage({
                         ? 'Live to public'
                         : readyToPublish
                           ? 'All dogs placed — publish the results'
-                          : 'Not yet visible to the public'}
+                          : remaining.length === 0 && needGrade.length > 0
+                            ? 'All dogs placed — now give each one a grade'
+                            : 'Not yet visible to the public'}
                     </p>
                     <p className="text-xs text-muted-foreground">
                       {showClass.isPublished
@@ -629,6 +647,11 @@ export default function StewardClassResultsPage({
                           : 'Anyone viewing the show results page can see these placements.'
                         : 'Once published, results show up on the public results page.'}
                     </p>
+                    {needGrade.length > 0 && (
+                      <p className="mt-1 text-xs font-medium text-se-honey-deep">
+                        Still needs a grade: {needGrade.map((e) => `#${e.catalogueNumber ?? '—'} ${e.dogName}`).join(', ')}
+                      </p>
+                    )}
                   </div>
                 </div>
                 <div className="flex gap-2">
@@ -691,6 +714,13 @@ export default function StewardClassResultsPage({
                   You're about to publish <strong>{placedCount}</strong> placement
                   {placedCount === 1 ? '' : 's'} for this class.
                 </p>
+                {needGrade.length > 0 && (
+                  <p className="font-medium text-se-honey-deep">
+                    {needGrade.length === 1 ? 'This dog has' : 'These dogs have'} no grade yet:{' '}
+                    {needGrade.map((e) => `#${e.catalogueNumber ?? '—'} ${e.dogName}`).join(', ')}.
+                    Pick the grade beside each one before you publish.
+                  </p>
+                )}
               </div>
               <div className="flex gap-2 sm:justify-end">
                 <Button

@@ -4,7 +4,7 @@ import { and, eq, ne, isNull, isNotNull, asc, sql, inArray } from 'drizzle-orm';
 import { stewardProcedure, publicProcedure } from '../procedures';
 import { createTRPCRouter } from '../init';
 import type { Database } from '@/server/db';
-import { ACHIEVEMENT_TYPES, getPlacementLabel, type AchievementType } from '@/lib/placements';
+import { ACHIEVEMENT_TYPES, getPlacementLabel, comparePlacing, type AchievementType } from '@/lib/placements';
 import { isShowDayReached } from '@/lib/date-utils';
 import { resolveTopAwards } from '@/lib/top-awards';
 import {
@@ -562,35 +562,34 @@ export const stewardRouter = createTRPCRouter({
         }
       }
 
-      // Upsert the result
+      // Upsert the result. On an existing result, change ONLY the fields the
+      // caller sent — a field left out means "leave it as it is", a field sent
+      // as null means "clear it". The steward screen saves partial results
+      // (the grade dropdown doesn't send the critique or winner photo; the
+      // special-award dialog doesn't send the grade), and writing every
+      // unsent field as blank silently erased a judge's critique and the
+      // winner photo whenever a grade was changed (found 25 Sept 2026).
+      // A numeric placing always clears withheld/unplaced — the two are
+      // mutually exclusive.
+      const placementStatus =
+        input.placement != null ? null : input.placementStatus;
+      const changes = {
+        placement: input.placement,
+        ...(placementStatus !== undefined ? { placementStatus } : {}),
+        ...(input.specialAward !== undefined ? { specialAward: input.specialAward } : {}),
+        ...(input.critiqueText !== undefined ? { critiqueText: input.critiqueText } : {}),
+        ...(input.winnerPhotoUrl !== undefined ? { winnerPhotoUrl: input.winnerPhotoUrl } : {}),
+        ...(input.winnerPhotoStorageKey !== undefined
+          ? { winnerPhotoStorageKey: input.winnerPhotoStorageKey }
+          : {}),
+        ...(input.svGrade !== undefined ? { svGrade: input.svGrade } : {}),
+        recordedBy: ctx.session.user.id,
+        recordedAt: new Date(),
+      };
       const [result] = await ctx.db
         .insert(results)
-        .values({
-          entryClassId: input.entryClassId,
-          placement: input.placement,
-          placementStatus: input.placementStatus ?? null,
-          specialAward: input.specialAward ?? null,
-          critiqueText: input.critiqueText ?? null,
-          winnerPhotoUrl: input.winnerPhotoUrl ?? null,
-          winnerPhotoStorageKey: input.winnerPhotoStorageKey ?? null,
-          svGrade: input.svGrade ?? null,
-          recordedBy: ctx.session.user.id,
-          recordedAt: new Date(),
-        })
-        .onConflictDoUpdate({
-          target: results.entryClassId,
-          set: {
-            placement: input.placement,
-            placementStatus: input.placementStatus ?? null,
-            specialAward: input.specialAward ?? null,
-            critiqueText: input.critiqueText ?? null,
-            winnerPhotoUrl: input.winnerPhotoUrl ?? null,
-            winnerPhotoStorageKey: input.winnerPhotoStorageKey ?? null,
-            svGrade: input.svGrade ?? null,
-            recordedBy: ctx.session.user.id,
-            recordedAt: new Date(),
-          },
-        })
+        .values({ entryClassId: input.entryClassId, ...changes })
+        .onConflictDoUpdate({ target: results.entryClassId, set: changes })
         .returning();
 
       // Auto-start the show. The first placing recorded on show day flips an
@@ -1234,9 +1233,8 @@ export const stewardRouter = createTRPCRouter({
             dogDateOfBirth: ec.entry.dog?.dateOfBirth ?? null,
             exhibitorName: ec.entry.exhibitor?.name ?? '',
           }))
-          // Sort numeric placements ascending (1st, 2nd, 3rd...), then
-          // withheld/unplaced at the end (99 sentinel for sort).
-          .sort((a, b) => (a.placement ?? 99) - (b.placement ?? 99));
+          // 1st, 2nd, 3rd…, then withheld/unplaced at the end.
+          .sort((a, b) => comparePlacing(a.placement, b.placement));
 
         // A class with no results shows only when it was actually reached:
         // at least one confirmed entry, and EVERY confirmed entry in it is
