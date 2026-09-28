@@ -513,8 +513,9 @@ export default function EnterShowPage() {
       // Regional dogs sit in one class; a Baby Puppy class priced away from
       // the scale charges flat, outside the discount (Mandy 2026-07-10).
       const classById = new Map((allShowClasses ?? []).map((sc) => [sc.id, sc]));
-      const rEntries: RegionalDogEntryInput[] = completeEntries.map((e, i) => ({
-        key: String(i),
+      // Keyed by cart entry id so each dog's card can show its own price.
+      const rEntries: RegionalDogEntryInput[] = completeEntries.map((e) => ({
+        key: e.id,
         kind: e.entryType === 'junior_handler' ? 'junior_handler' : 'standard',
         flatFeePence: resolveClassFlatFee(e.classIds[0], classById, regionalCfg.tiers),
       }));
@@ -525,6 +526,7 @@ export default function EnterShowPage() {
         multiDogSavings: 0,
         payingDogCount: r.payingDogCount,
         showPayingDogCount: r.payingDogCount + (regionalPriorDogCount ?? 0),
+        perEntry: r.perEntry,
       };
     }
 
@@ -550,8 +552,9 @@ export default function EnterShowPage() {
     );
     const dogEntries: DogEntryInput[] = cart.entries
       .filter((e) => e.classIds.length > 0 || e.isNfc)
-      .map((e, i) => ({
-        key: String(i),
+      // Keyed by cart entry id so each dog's card can show its own price.
+      .map((e) => ({
+        key: e.id,
         kind:
           e.entryType === 'junior_handler'
             ? 'junior_handler'
@@ -570,6 +573,12 @@ export default function EnterShowPage() {
     return computeOrderFees(dogEntries, feeCtx);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [show, regionalCfg, regionalMembership, regionalFirstTime, regionalPriorDogCount, packagePriorStanding, discountGroups, cart.discountGroupId, cart.entries, allShowClasses]);
+
+  // Each dog's own price for its card on the Review step — straight from the
+  // engine's per-entry breakdown above, so a card can't show £18 above a total
+  // of £8 (28 Sept 2026). Falls back to the class-picker estimate only while
+  // the preview is still loading.
+  const reviewFeeByEntryId = new Map((feePreview?.perEntry ?? []).map((p) => [p.key, p.fee]));
 
   // Checkout preview totals. The club-collected subtotal is entries + add-ons +
   // donation — the exact base the server charges the platform fee on (orders
@@ -2069,7 +2078,7 @@ export default function EnterShowPage() {
                       onChange={(next) => cart.setRegistrationFlags(entry.id, next)}
                     />
                   )}
-                  <p className="font-bold text-se-ink">{formatCurrency(entry.totalFee)}</p>
+                  <p className="font-bold text-se-ink">{formatCurrency(reviewFeeByEntryId.get(entry.id) ?? entry.totalFee)}</p>
                 </div>
               </SECard>
             ))}
