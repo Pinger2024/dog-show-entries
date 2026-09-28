@@ -822,6 +822,8 @@ export const entriesRouter = createTRPCRouter({
         // sibling entry so the scale total is computed across the full order.
         let regionalMembershipLabel: string | null = null;
         let regionalFirstTime = false;
+        // When this order was placed — only baskets placed before it count.
+        let regionalPlacedAt: Date = entry.createdAt;
         let siblingEntries: RegSib[] = [
           {
             id: input.id,
@@ -838,6 +840,7 @@ export const entriesRouter = createTRPCRouter({
               columns: {
                 regionalMembership: true,
                 regionalFirstTimeExhibitor: true,
+                createdAt: true,
               },
             }),
             ctx.db.query.entries.findMany({
@@ -858,6 +861,7 @@ export const entriesRouter = createTRPCRouter({
           regionalMembershipLabel = orderRow?.regionalMembership ?? null;
           regionalFirstTime = !!orderRow?.regionalFirstTimeExhibitor;
           siblingEntries = dbSiblings as RegSib[];
+          if (orderRow?.createdAt) regionalPlacedAt = orderRow.createdAt;
         }
 
         const declared = regionalMembershipLabel
@@ -869,13 +873,15 @@ export const entriesRouter = createTRPCRouter({
           firstTimeExhibitor: regionalFirstTime && !!regionalCfg.firstTimeEnabled,
           firstTimeFeePence: regionalCfg.firstTimeFeePence ?? 0,
           juniorHandlerFeePence: entry.show.juniorHandlerFee ?? 0,
-          // Dogs this exhibitor has at the show in OTHER orders keep their scale
-          // positions while this order is re-priced (Mandy 2026-09-16). The
-          // siblings below are this order's own dogs, so exclude it.
+          // Dogs this exhibitor had at the show BEFORE this order keep their
+          // scale positions while it is re-priced (Mandy 2026-09-16); a later
+          // basket never counts, so the order prices exactly as it was
+          // charged. The siblings below are this order's own dogs, so exclude it.
           priorPayingDogCount: await countPriorRegionalPayingDogs(ctx.db, {
             showId: entry.showId,
             exhibitorId: entry.exhibitorId,
             excludeOrderId: orderId,
+            placedBefore: regionalPlacedAt,
           }),
         };
 

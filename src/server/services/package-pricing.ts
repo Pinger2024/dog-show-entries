@@ -15,7 +15,7 @@
  * entries.update, secretary.createManualEntry, and the enter-page preview (via
  * entries.packagePriorStanding). Already-paid entries are never re-priced.
  */
-import { and, eq, sql, type SQL } from 'drizzle-orm';
+import { and, eq, type SQL } from 'drizzle-orm';
 import type { db as Database } from '@/server/db';
 import { entries, entryClasses, orders, showClasses, classDefinitions } from '@/server/db/schema';
 import { subsequentClassFee, type PriorPackageStanding } from '@/lib/fee-calc';
@@ -53,7 +53,7 @@ export async function priorPackageStanding(
     };
     /** Order being re-priced — its own entries must not count as prior. */
     excludeOrderId?: string | null;
-    /** Only count baskets placed before this moment (re-pricing an order). */
+    /** Only baskets placed before this — see `heldPlaceConditions`. */
     placedBefore?: Date | null;
   },
 ): Promise<PriorPackageStanding> {
@@ -64,12 +64,6 @@ export async function priorPackageStanding(
     ...heldPlaceConditions(params),
     eq(entries.isNfc, false),
   ];
-  if (params.placedBefore) {
-    // ISO string + explicit cast: postgres-js can't bind a raw Date inside sql``.
-    conditions.push(
-      sql`coalesce(${orders.createdAt}, ${entries.createdAt}) < ${params.placedBefore.toISOString()}::timestamptz`,
-    );
-  }
 
   const rows = await database
     .select({ entryId: entries.id, fee: entryClasses.fee, classType: classDefinitions.type })
