@@ -754,6 +754,16 @@ function AddEntryDialog({
     { enabled: step === 'classes' }
   );
 
+  // What this entry will cost — priced on the server by the SAME function the
+  // entry is recorded with (priceManualEntry): the subsequent-class rate, the
+  // regional scale, the multi-dog package and the exhibitor's dogs already
+  // entered. Never add up class fees here (28 Sept 2026: that showed one figure
+  // while Remi recorded another).
+  const { data: feePreview, isFetching: feePreviewLoading } = trpc.secretary.previewManualEntryFee.useQuery(
+    { showId, classIds: selectedClassIds, exhibitorEmail, isNfc },
+    { enabled: step === 'classes' && selectedClassIds.length > 0 },
+  );
+
   // Get breeds for registration
   const { data: allBreeds } = trpc.breeds.list.useQuery(undefined, {
     enabled: step === 'register',
@@ -1110,13 +1120,14 @@ function AddEntryDialog({
                 )}
               </div>
               {selectedClassIds.length > 0 && (
-                <p className="text-sm font-medium">
-                  Entry fees: {formatCurrency(
-                    (classesData ?? [])
-                      .filter((sc) => selectedClassIds.includes(sc.id))
-                      .reduce((sum, sc) => sum + sc.entryFee, 0)
-                  )}
-                </p>
+                <div>
+                  <p className="text-sm font-medium">
+                    Entry fees: {feePreview && !feePreviewLoading ? formatCurrency(feePreview.entryFee) : 'working it out…'}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    Includes any multi-dog discount for dogs this exhibitor has already entered at this show.
+                  </p>
+                </div>
               )}
             </div>
 

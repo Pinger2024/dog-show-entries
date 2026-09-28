@@ -43,9 +43,9 @@ describe('regional pricing — one owner', () => {
     const rel = callers.map((f) => f.slice(SRC.length + 1)).sort();
     expect(rel).toEqual([
       'app/(shows)/shows/[id]/enter/page.tsx',
+      'server/services/manual-entry-pricing.ts',
       'server/trpc/routers/entries.ts',
       'server/trpc/routers/orders.ts',
-      'server/trpc/routers/secretary.ts',
     ]);
   });
 
