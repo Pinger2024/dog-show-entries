@@ -17,14 +17,14 @@ import { computeRegionalOrderFees, regionalClassFlatFee } from '@/lib/regional-f
 import { countPriorRegionalPayingDogs } from '@/server/services/regional-pricing';
 import { validateSundrySelection } from '@/server/services/sundry-selection';
 import { computeJudgeCoverage } from '@/server/services/judge-coverage';
-import { priorPackageStanding } from '@/server/services/package-pricing';
+import { priceManualEntry } from '@/server/services/manual-entry-pricing';
 import { formatAtcNumber } from '@/lib/registration-flags';
 import { computePrizeCardCounts } from '@/lib/prize-card-counts';
 import { BRAND } from '@/lib/brand';
 import { FEEDBACK_REPLY_TO } from '@/lib/email-addresses';
 import { checkOwnerRecord, type OwnerCheckIssue } from '@/lib/catalogue-data-checks';
 import { requiredGuarantorCount, hasEnoughGuarantors, showFeesConfigured } from '@/lib/show-setup-requirements';
-import { SV_CLASS_AUTO_CREATE_COMBOS, specialAwardClassFee, isUnnumberedClassDef } from '@/lib/class-labels';
+import { SV_CLASS_AUTO_CREATE_COMBOS, isUnnumberedClassDef } from '@/lib/class-labels';
 import {
   shows,
   entries,
@@ -100,6 +100,24 @@ import { championshipClassesComplete } from '@/lib/championship-class-requiremen
  * not be able to redirect or break club B's judge correspondence, on ANY
  * write path that touches judge contact details.
  */
+/**
+ * The exhibitor a manual entry is for, by email — ONE lookup for
+ * createManualEntry and previewManualEntryFee, so the preview counts the same
+ * exhibitor's earlier dogs that the entry will. An unknown email falls back to
+ * the secretary's own account (the entry's long-standing behaviour).
+ */
+async function manualEntryExhibitorId(
+  database: Database,
+  email: string,
+  fallbackUserId: string,
+): Promise<string> {
+  const exhibitor = await database.query.users.findFirst({
+    where: eq(users.email, email.toLowerCase()),
+    columns: { id: true },
+  });
+  return exhibitor?.id ?? fallbackUserId;
+}
+
 async function judgeEngagedOutsideCallerOrgs(
   db: Database,
   userId: string,
@@ -3422,6 +3440,45 @@ export const secretaryRouter = createTRPCRouter({
       return dog!;
     }),
 
+  /**
+   * What a manual entry will cost — the "Add entry" dialog shows this, and it
+   * is the SAME function createManualEntry records with (priceManualEntry), so
+   * the secretary is never shown one figure while Remi records another. Counts
+   * the exhibitor's dogs already entered once their email is typed.
+   */
+  previewManualEntryFee: secretaryProcedure
+    .input(
+      z.object({
+        showId: z.string().uuid(),
+        classIds: z.array(z.string().uuid()).min(1),
+        exhibitorEmail: z.string().optional(),
+        isNfc: z.boolean().default(false),
+      }),
+    )
+    .query(async ({ ctx, input }) => {
+      await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId, { callerIsAdmin: ctx.callerIsAdmin });
+      const show = await ctx.db.query.shows.findFirst({ where: eq(shows.id, input.showId) });
+      if (!show) throw new TRPCError({ code: 'NOT_FOUND', message: 'Show not found' });
+      const found = await ctx.db.query.showClasses.findMany({
+        where: and(inArray(showClasses.id, input.classIds), eq(showClasses.showId, input.showId)),
+        with: { classDefinition: { columns: { type: true, name: true } } },
+      });
+      // Keep the caller's class order — perClassFees line up with it.
+      const byId = new Map(found.map((c) => [c.id, c]));
+      const selectedClasses = input.classIds.map((id) => byId.get(id)).filter((c) => c != null);
+      const email = input.exhibitorEmail?.trim() ?? '';
+      const exhibitorId = z.string().email().safeParse(email).success
+        ? await manualEntryExhibitorId(ctx.db, email, ctx.session.user.id)
+        : null;
+      const { classFee } = await priceManualEntry(ctx.db, {
+        show,
+        exhibitorId,
+        selectedClasses,
+        isNfc: input.isNfc,
+      });
+      return { entryFee: classFee };
+    }),
+
   createManualEntry: secretaryProcedure
     .input(
       z.object({
@@ -3470,12 +3527,8 @@ export const secretaryRouter = createTRPCRouter({
         throw new TRPCError({ code: 'NOT_FOUND', message: 'Dog not found' });
       }
 
-      // Find exhibitor by email
-      const exhibitor = await ctx.db.query.users.findFirst({
-        where: eq(users.email, input.exhibitorEmail.toLowerCase()),
-      });
-
-      const exhibitorId = exhibitor?.id ?? ctx.session.user.id;
+      // Find exhibitor by email — the same lookup the fee preview uses.
+      const exhibitorId = await manualEntryExhibitorId(ctx.db, input.exhibitorEmail, ctx.session.user.id);
 
       // Validate classes belong to this show
       const selectedClasses = await ctx.db.query.showClasses.findMany({
@@ -3551,102 +3604,15 @@ export const secretaryRouter = createTRPCRouter({
         }));
       }
 
-      // Price through the SAME fee engine the online checkout uses, so a
-      // postal/cash entry costs exactly what the identical dog + classes would
-      // cost online: first-class fee + subsequent-class fee per extra class.
-      // Summing each class's entryFee (every class carries the first-class
-      // rate) previously charged the first-class fee for EVERY class, so a
-      // 3-class entry was billed 3× the first fee instead of first + 2×
-      // subsequent — overcharging the exhibitor and inflating club revenue
-      // reports (bug hunt #2). Legacy shows with no show-level fee keep the
-      // per-class fallback, matching orders.checkout.
-      const feeCtx: FeeContext = {
-        firstEntryFeePence: show.firstEntryFee,
-        subsequentEntryFeePence: show.subsequentEntryFee,
-        nfcEntryFeePence: show.nfcEntryFee,
-        juniorHandlerFeePence: show.juniorHandlerFee,
-        multiDogThreshold: show.multiDogThreshold,
-        multiDogPackagePence: show.multiDogPackagePence,
-        discountGroup: null,
-        // The exhibitor's dogs already at this show count toward the multi-dog
-        // package, same as checkout (Mandy 2026-09-28). ONE owner:
-        // priorPackageStanding.
-        prior: await priorPackageStanding(ctx.db, {
-          showId: input.showId,
-          exhibitorId,
-          show,
-        }),
-      };
-      // Regional (SV/WUSV) shows price on the tiered per-dog scale, NOT the RKC
-      // first/subsequent-class fees — and until 2026-09-16 this path used the RKC
-      // engine regardless, so a manually-keyed regional dog was charged full
-      // price with no multi-dog scale at all (found on the NE Regional: four
-      // dogs keyed in one at a time, £20 each, when the scale says £20/£20/£16/£0).
-      //
-      // Manual entries price at the show's STANDARD tiers — there is no member
-      // tick on this form, and Mandy 2026-09-16 decided not to add one: "if they
-      // only want to charge the lesser amount they can, but they will need to
-      // reconcile their fees against the account". A secretary who wants to give
-      // a postal member the member rate adjusts it themselves. Do not add a
-      // membership control here without asking her again.
-      const regionalCfg =
-        show.showRuleset === 'wusv' ? show.regionalFeeConfig : null;
-      // A manual entry is always one dog in one class — there is no junior-handler
-      // or NFC variant on this path (regionals take no NFC entries at all).
-      const regionalFeeResult = regionalCfg
-        ? computeRegionalOrderFees(
-            [
-              {
-                key: 'manual',
-                kind: 'standard' as const,
-                flatFeePence: regionalClassFlatFee(
-                  {
-                    className: selectedClasses[0]?.classDefinition?.name,
-                    classType: selectedClasses[0]?.classDefinition?.type,
-                    entryFee: selectedClasses[0]?.entryFee ?? null,
-                  },
-                  regionalCfg.tiers,
-                ),
-              },
-            ],
-            {
-              tiers: regionalCfg.tiers,
-              isMember: false,
-              firstTimeExhibitor: false,
-              firstTimeFeePence: regionalCfg.firstTimeFeePence ?? 0,
-              juniorHandlerFeePence: show.juniorHandlerFee ?? 0,
-              // Same rule as checkout: the dogs this exhibitor already has at
-              // this show set the starting position on the scale.
-              priorPayingDogCount: await countPriorRegionalPayingDogs(ctx.db, {
-                showId: input.showId,
-                exhibitorId,
-              }),
-            },
-          )
-        : null;
-
-      const feeResult =
-        regionalFeeResult != null || show.firstEntryFee == null
-          ? null
-          : computeOrderFees(
-              [{
-                key: 'manual',
-                kind: input.isNfc ? 'nfc' : 'standard',
-                classCount: selectedClasses.length,
-                // Special Award Classes charge their own fee (Mandy 2026-07-19).
-                // ONE owner: specialAwardClassFee. Aligned to selectedClasses
-                // order (perClassFees[i] matches it).
-                specialClassFees: selectedClasses.map((sc) => specialAwardClassFee(sc)),
-              }],
-              feeCtx,
-            );
-      const perClassFees =
-        regionalFeeResult?.perEntry[0]?.perClassFees ?? feeResult?.perEntry[0]?.perClassFees ?? null;
-      const classFee = regionalFeeResult
-        ? regionalFeeResult.entriesTotal
-        : feeResult
-          ? feeResult.total
-          : selectedClasses.reduce((sum, sc) => sum + sc.entryFee, 0);
+      // ONE owner for what a manual entry costs — the same function the "Add
+      // entry" dialog previews with (secretary.previewManualEntryFee), so the
+      // figure the secretary sees is the figure Remi records.
+      const { classFee, perClassFees } = await priceManualEntry(ctx.db, {
+        show,
+        exhibitorId,
+        selectedClasses,
+        isNfc: input.isNfc,
+      });
       const sundryFee = selectedSundryItems.reduce((sum, s) => sum + s.priceInPence * s.quantity, 0);
       const totalAmount = classFee + sundryFee;
 

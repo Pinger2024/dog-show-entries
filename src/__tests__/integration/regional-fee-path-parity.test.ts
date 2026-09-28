@@ -333,3 +333,43 @@ describe('regional scale spans separate orders', () => {
     expect(fees).toEqual([2000, 2000, 1600, 0]);
   });
 });
+
+// Found 28 Sept 2026 while fixing the RKC package the same way: the regional
+// edit path counted every OTHER order as "already entered" — including ones
+// placed AFTER the order being edited. So a class swap on an exhibitor's first
+// basket, once a later basket existed, re-priced the first basket's dogs as if
+// they came after the later one. An edit must price the order exactly as it
+// was charged: only baskets placed before it count.
+describe('regional edit — a later basket never re-prices an earlier one', () => {
+  it("editing a dog in the FIRST basket keeps its £20 after a 3rd dog was entered later", async () => {
+    const { breed, show, classA, classB } = await regionalShow();
+    const exhibitor = await makeUser({ role: 'exhibitor' });
+    const [d1, d2, d3] = await Promise.all([1, 2, 3].map((i) => regionalDog(exhibitor.id, breed.id, 40 + i)));
+    const caller = createTestCaller(exhibitor);
+
+    const first = await caller.orders.checkout({
+      showId: show.id,
+      entries: [
+        { entryType: 'standard', dogId: d1.id, classIds: [classA.id], isNfc: false },
+        { entryType: 'standard', dogId: d2.id, classIds: [classA.id], isNfc: false },
+      ],
+    });
+    expect(first.totalAmount).toBe(4000);
+    await settleOrder(first.orderId);
+
+    const later = await caller.orders.checkout({
+      showId: show.id,
+      entries: [{ entryType: 'standard', dogId: d3.id, classIds: [classA.id], isNfc: false }],
+    });
+    expect(later.totalAmount).toBe(1600);
+    await settleOrder(later.orderId);
+
+    const firstDogs = await testDb.query.entries.findMany({ where: eq(entries.orderId, first.orderId) });
+    const edited = await caller.entries.update({ id: firstDogs[0]!.id, classIds: [classB.id] });
+    expect(edited.feeDiff).toBe(0);
+    expect(edited.newFee).toBe(2000);
+
+    const after = await testDb.query.entries.findMany({ where: eq(entries.orderId, first.orderId) });
+    expect(after.reduce((s, e) => s + (e.totalFee ?? 0), 0)).toBe(4000);
+  });
+});

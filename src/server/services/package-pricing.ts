@@ -15,10 +15,11 @@
  * entries.update, secretary.createManualEntry, and the enter-page preview (via
  * entries.packagePriorStanding). Already-paid entries are never re-priced.
  */
-import { and, eq, sql, type SQL } from 'drizzle-orm';
+import { and, eq, type SQL } from 'drizzle-orm';
 import type { db as Database } from '@/server/db';
 import { entries, entryClasses, orders, showClasses, classDefinitions } from '@/server/db/schema';
 import { subsequentClassFee, type PriorPackageStanding } from '@/lib/fee-calc';
+import { isSpecialAwardClass } from '@/lib/class-labels';
 import { heldPlaceConditions } from './regional-pricing';
 
 const NONE: PriorPackageStanding = { payingDogCount: 0, firstClassPaidPence: 0 };
@@ -53,7 +54,7 @@ export async function priorPackageStanding(
     };
     /** Order being re-priced — its own entries must not count as prior. */
     excludeOrderId?: string | null;
-    /** Only count baskets placed before this moment (re-pricing an order). */
+    /** Only baskets placed before this — see `heldPlaceConditions`. */
     placedBefore?: Date | null;
   },
 ): Promise<PriorPackageStanding> {
@@ -64,15 +65,14 @@ export async function priorPackageStanding(
     ...heldPlaceConditions(params),
     eq(entries.isNfc, false),
   ];
-  if (params.placedBefore) {
-    // ISO string + explicit cast: postgres-js can't bind a raw Date inside sql``.
-    conditions.push(
-      sql`coalesce(${orders.createdAt}, ${entries.createdAt}) < ${params.placedBefore.toISOString()}::timestamptz`,
-    );
-  }
 
   const rows = await database
-    .select({ entryId: entries.id, fee: entryClasses.fee, classType: classDefinitions.type })
+    .select({
+      entryId: entries.id,
+      fee: entryClasses.fee,
+      classType: classDefinitions.type,
+      className: classDefinitions.name,
+    })
     .from(entries)
     .leftJoin(orders, eq(entries.orderId, orders.id))
     .innerJoin(entryClasses, eq(entryClasses.entryId, entries.id))
@@ -81,13 +81,12 @@ export async function priorPackageStanding(
     .where(and(...conditions));
 
   // A dog's normal (tier-priced) class fees. Special Award Classes sit outside
-  // the tier and the package — the same `type === 'special'` test every RKC
-  // pricing path uses today (pending one owner: `specialAwardClassFee` on the
-  // one-owner-weekend branch; move this call site with the others).
+  // the tier and the package — ONE owner: isSpecialAwardClass, the same rule
+  // checkout prices them with (specialAwardClassFee).
   const normalFeesByEntry = new Map<string, number[]>();
   for (const r of rows) {
     const list = normalFeesByEntry.get(r.entryId) ?? [];
-    if (r.classType !== 'special') list.push(r.fee);
+    if (!isSpecialAwardClass({ classType: r.classType, className: r.className })) list.push(r.fee);
     normalFeesByEntry.set(r.entryId, list);
   }
 

@@ -46,7 +46,12 @@ const FEE_SITES = [
   // entries.update's pricing moved into this service on 2026-09-18 (the
   // entry-change one-owner fix), taking its specialAwardClassFee calls with it.
   'server/services/entry-change-pricing.ts',
-  'server/trpc/routers/secretary.ts',
+  // secretary.createManualEntry's pricing moved into this service on
+  // 2026-09-28 (shared with the Add-entry dialog preview).
+  'server/services/manual-entry-pricing.ts',
+  // The RKC package's earlier-dogs count (2026-09-28) must agree with checkout
+  // on which classes are Special Award Classes.
+  'server/services/package-pricing.ts',
   'app/(shows)/shows/[id]/enter/page.tsx',
 ];
 

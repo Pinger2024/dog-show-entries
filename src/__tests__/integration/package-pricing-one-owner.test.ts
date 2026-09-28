@@ -47,8 +47,8 @@ describe('RKC package pricing — one owner', () => {
       'app/(shows)/shows/[id]/enter/page.tsx',
       'app/(shows)/shows/[id]/enter/use-entry-cart.ts',
       'server/services/entry-change-pricing.ts',
+      'server/services/manual-entry-pricing.ts',
       'server/trpc/routers/orders.ts',
-      'server/trpc/routers/secretary.ts',
     ]);
   });
 
@@ -59,7 +59,7 @@ describe('RKC package pricing — one owner', () => {
       // paths call it directly; the enter page reads it over tRPC
       // (entries.packagePriorStanding), which calls the same function.
       const handsOver =
-        /prior:\s*await priorPackageStanding\(/.test(src) || /prior:\s*packagePriorStanding\b/.test(src);
+        /prior:\s*(\w+\s*\?\s*)?await priorPackageStanding\(/.test(src) || /prior:\s*packagePriorStanding\b/.test(src);
       expect(handsOver).toBe(true);
     });
   }

@@ -19,7 +19,7 @@
  * Already-paid entries are never re-priced — this only affects the dogs being
  * priced now.
  */
-import { and, eq, isNull, ne, or, notInArray, inArray, count, type SQL } from 'drizzle-orm';
+import { and, eq, isNull, ne, or, notInArray, inArray, count, sql, type SQL } from 'drizzle-orm';
 import type { db as Database } from '@/server/db';
 import { entries, orders } from '@/server/db/schema';
 
@@ -64,6 +64,15 @@ export function heldPlaceConditions(params: {
   exhibitorId: string;
   /** Order being re-priced — its own entries must not count as prior. */
   excludeOrderId?: string | null;
+  /**
+   * Only count baskets placed before this moment. Pass the order's own
+   * placing time when RE-pricing an existing order (an entry edit), so it is
+   * priced exactly as it was charged — a LATER basket must never count as
+   * "already entered" for an earlier one (found 28 Sept 2026: a class swap on
+   * a first regional basket re-priced it £4 lower once a 3rd dog had been
+   * entered later). New baskets (checkout, manual entry) leave it unset.
+   */
+  placedBefore?: Date | null;
 }): SQL[] {
   const conditions: SQL[] = [
     eq(entries.showId, params.showId),
@@ -77,6 +86,13 @@ export function heldPlaceConditions(params: {
     // No order at all (secretary-created entries, order_id NULL) still counts.
     or(isNull(entries.orderId), inArray(orders.status, ['paid', 'refunded']))!,
   ];
+
+  if (params.placedBefore) {
+    // ISO string + explicit cast: postgres-js can't bind a raw Date inside sql``.
+    conditions.push(
+      sql`coalesce(${orders.createdAt}, ${entries.createdAt}) < ${params.placedBefore.toISOString()}::timestamptz`,
+    );
+  }
 
   if (params.excludeOrderId) {
     // A confirmed entry can carry NO order at all (project_club_settlement_statement
@@ -97,6 +113,8 @@ export async function countPriorRegionalPayingDogs(
     exhibitorId: string;
     /** Order being re-priced — its own entries must not count as prior. */
     excludeOrderId?: string | null;
+    /** Only baskets placed before this — see `heldPlaceConditions`. */
+    placedBefore?: Date | null;
   },
 ): Promise<number> {
   const [row] = await database
