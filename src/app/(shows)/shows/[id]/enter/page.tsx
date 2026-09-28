@@ -430,6 +430,12 @@ export default function EnterShowPage() {
     { showId: showId as string },
     { enabled: !!showId && show?.showRuleset === 'wusv' },
   );
+  // Same for an RKC multi-dog package: dogs already entered in earlier paid
+  // baskets count toward it, and what they cost comes off it (Mandy 2026-09-28).
+  const { data: packagePriorStanding } = trpc.entries.packagePriorStanding.useQuery(
+    { showId: showId as string },
+    { enabled: !!showId && show?.showRuleset !== 'wusv' && show?.multiDogThreshold != null },
+  );
 
   const { data: sundryItemsData } = trpc.shows.getSundryItems.useQuery(
     { showId },
@@ -518,6 +524,7 @@ export default function EnterShowPage() {
         multiDogApplied: false,
         multiDogSavings: 0,
         payingDogCount: r.payingDogCount,
+        showPayingDogCount: r.payingDogCount + (regionalPriorDogCount ?? 0),
       };
     }
 
@@ -536,6 +543,7 @@ export default function EnterShowPage() {
             multiDogPackagePence: selectedGroup.multiDogPackagePence,
           }
         : null,
+      prior: packagePriorStanding ?? null,
     };
     const classTypeById = new Map(
       (allShowClasses ?? []).map((sc) => [sc.id, sc]),
@@ -561,7 +569,7 @@ export default function EnterShowPage() {
     if (dogEntries.length === 0) return null;
     return computeOrderFees(dogEntries, feeCtx);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [show, regionalCfg, regionalMembership, regionalFirstTime, regionalPriorDogCount, discountGroups, cart.discountGroupId, cart.entries, allShowClasses]);
+  }, [show, regionalCfg, regionalMembership, regionalFirstTime, regionalPriorDogCount, packagePriorStanding, discountGroups, cart.discountGroupId, cart.entries, allShowClasses]);
 
   // Checkout preview totals. The club-collected subtotal is entries + add-ons +
   // donation — the exact base the server charges the platform fee on (orders
@@ -2346,7 +2354,9 @@ export default function EnterShowPage() {
                 Multi-dog discount applied — saving {formatCurrency(feePreview.multiDogSavings)}
               </p>
               <p className="mt-0.5 text-xs text-se-ink2">
-                You&apos;ve entered {feePreview.payingDogCount} dogs in paying classes.
+                {(packagePriorStanding?.payingDogCount ?? 0) > 0
+                  ? `Your ${packagePriorStanding!.payingDogCount} ${packagePriorStanding!.payingDogCount === 1 ? 'dog' : 'dogs'} already entered count too — ${feePreview.showPayingDogCount} dogs at this show in total.`
+                  : `You've entered ${feePreview.payingDogCount} dogs in paying classes.`}
               </p>
             </div>
           )}

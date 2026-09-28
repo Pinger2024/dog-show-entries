@@ -7,6 +7,7 @@ import { createTRPCRouter } from '../init';
 import { publicOrgColumns } from '../public-org-columns';
 import { syncCatalogueNumbers } from '@/server/services/catalogue-numbering';
 import { countPriorRegionalPayingDogs } from '@/server/services/regional-pricing';
+import { priorPackageStanding } from '@/server/services/package-pricing';
 import {
   orders,
   entries,
@@ -702,7 +703,19 @@ export const ordersRouter = createTRPCRouter({
           }),
         }));
         const usePerClassFallback = show.firstEntryFee == null;
-        const feeResult = usePerClassFallback ? null : computeOrderFees(dogEntries, feeCtx);
+        // Dogs this exhibitor already has at this show count toward the
+        // multi-dog package — per exhibitor per show, not per basket (Mandy
+        // 2026-09-28). ONE owner: priorPackageStanding.
+        const feeResult = usePerClassFallback
+          ? null
+          : computeOrderFees(dogEntries, {
+              ...feeCtx,
+              prior: await priorPackageStanding(ctx.db, {
+                showId: input.showId,
+                exhibitorId: ctx.session.user.id,
+                show,
+              }),
+            });
         if (feeResult) {
           entriesSubtotal = feeResult.total;
           perEntryBreakdown = feeResult.perEntry.map((e) => ({

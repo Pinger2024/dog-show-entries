@@ -8,6 +8,7 @@ import {
 } from '../procedures';
 import { createTRPCRouter } from '../init';
 import { countPriorRegionalPayingDogs } from '@/server/services/regional-pricing';
+import { priorPackageStanding } from '@/server/services/package-pricing';
 import { verifyShowAccess } from '../verify-show-access';
 import { publicOrgColumns } from '../public-org-columns';
 import {
@@ -925,6 +926,9 @@ export const entriesRouter = createTRPCRouter({
             : 'standard';
 
         let discountGroup: FeeContext['discountGroup'] = null;
+        // When this order was placed — earlier baskets count toward the
+        // package, later ones never re-price it (see priorPackageStanding).
+        let placedAt: Date = entry.createdAt;
         type SiblingClass = { id: string; showClass?: { entryFee: number; classDefinition?: { type: string } | null } | null };
         let siblingEntries: { id: string; entryType: string; isNfc: boolean; entryClasses: SiblingClass[]; totalFee: number }[] = [
           {
@@ -940,7 +944,7 @@ export const entriesRouter = createTRPCRouter({
           const [orderRow, dbSiblings] = await Promise.all([
             ctx.db.query.orders.findFirst({
               where: eq(orders.id, orderId),
-              columns: { discountGroupId: true },
+              columns: { discountGroupId: true, createdAt: true },
             }),
             ctx.db.query.entries.findMany({
               where: and(eq(entries.orderId, orderId), isNull(entries.deletedAt)),
@@ -953,6 +957,7 @@ export const entriesRouter = createTRPCRouter({
             }),
           ]);
           siblingEntries = dbSiblings;
+          if (orderRow?.createdAt) placedAt = orderRow.createdAt;
 
           if (orderRow?.discountGroupId) {
             const dg = await ctx.db.query.showDiscountGroups.findFirst({
@@ -975,6 +980,17 @@ export const entriesRouter = createTRPCRouter({
           multiDogThreshold: entry.show.multiDogThreshold,
           multiDogPackagePence: entry.show.multiDogPackagePence,
           discountGroup,
+          // The exhibitor's dogs from baskets placed BEFORE this one count
+          // toward the multi-dog package (per exhibitor per show, Mandy
+          // 2026-09-28), so the order re-prices exactly as it was charged and
+          // a later basket never shifts it. ONE owner: priorPackageStanding.
+          prior: await priorPackageStanding(ctx.db, {
+            showId: entry.showId,
+            exhibitorId: entry.exhibitorId,
+            show: entry.show,
+            excludeOrderId: orderId,
+            placedBefore: placedAt,
+          }),
         };
 
         // Special Award Classes charge their own fee, not the tier (Mandy
@@ -1182,6 +1198,27 @@ export const entriesRouter = createTRPCRouter({
         exhibitorId: ctx.session.user.id,
       }),
     ),
+
+  /**
+   * The exhibitor's dogs already entered at this show for the RKC multi-dog
+   * package — the enter-page preview needs it so the price shown matches the
+   * price charged (same ONE owner as checkout). Zero when the show has no
+   * package.
+   */
+  packagePriorStanding: protectedProcedure
+    .input(z.object({ showId: z.string().uuid() }))
+    .query(async ({ ctx, input }) => {
+      const show = await ctx.db.query.shows.findFirst({
+        where: eq(shows.id, input.showId),
+        columns: { multiDogThreshold: true, firstEntryFee: true, subsequentEntryFee: true },
+      });
+      if (!show) return { payingDogCount: 0, firstClassPaidPence: 0 };
+      return priorPackageStanding(ctx.db, {
+        showId: input.showId,
+        exhibitorId: ctx.session.user.id,
+        show,
+      });
+    }),
 
   validateExhibitorForEntry: protectedProcedure
     .query(async ({ ctx }) => {

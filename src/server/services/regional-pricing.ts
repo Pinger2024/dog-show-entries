@@ -51,15 +51,20 @@ import { entries, orders } from '@/server/db/schema';
  *  - entries belonging to `excludeOrderId`, used when re-pricing that order so
  *    its own dogs are not counted twice.
  */
-export async function countPriorRegionalPayingDogs(
-  database: typeof Database,
-  params: {
-    showId: string;
-    exhibitorId: string;
-    /** Order being re-priced — its own entries must not count as prior. */
-    excludeOrderId?: string | null;
-  },
-): Promise<number> {
+/**
+ * THE rule for "entries that already hold a place at this show" for multi-dog
+ * pricing — shared by the regional scale (`countPriorRegionalPayingDogs`) and
+ * the RKC package (`priorPackageStanding` in package-pricing.ts), so the two
+ * can never disagree about which earlier dogs count. See the doc comment on
+ * `countPriorRegionalPayingDogs` for why each exclusion is there. The query
+ * must LEFT JOIN `orders` on `entries.orderId`.
+ */
+export function heldPlaceConditions(params: {
+  showId: string;
+  exhibitorId: string;
+  /** Order being re-priced — its own entries must not count as prior. */
+  excludeOrderId?: string | null;
+}): SQL[] {
   const conditions: SQL[] = [
     eq(entries.showId, params.showId),
     eq(entries.exhibitorId, params.exhibitorId),
@@ -82,12 +87,23 @@ export async function countPriorRegionalPayingDogs(
       or(isNull(entries.orderId), ne(entries.orderId, params.excludeOrderId))!,
     );
   }
+  return conditions;
+}
 
+export async function countPriorRegionalPayingDogs(
+  database: typeof Database,
+  params: {
+    showId: string;
+    exhibitorId: string;
+    /** Order being re-priced — its own entries must not count as prior. */
+    excludeOrderId?: string | null;
+  },
+): Promise<number> {
   const [row] = await database
     .select({ n: count() })
     .from(entries)
     .leftJoin(orders, eq(entries.orderId, orders.id))
-    .where(and(...conditions));
+    .where(and(...heldPlaceConditions(params)));
 
   return row?.n ?? 0;
 }
