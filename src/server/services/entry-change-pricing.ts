@@ -33,6 +33,7 @@ import {
   showDiscountGroups,
 } from '@/server/db/schema';
 import { countPriorRegionalPayingDogs } from '@/server/services/regional-pricing';
+import { priorPackageStanding } from '@/server/services/package-pricing';
 import {
   computeOrderFees,
   type DogEntryInput,
@@ -284,6 +285,9 @@ export async function priceEntryClassChange(
         : 'standard';
 
     let discountGroup: FeeContext['discountGroup'] = null;
+    // When this order was placed — earlier baskets count toward the package,
+    // later ones never re-price it (see priorPackageStanding).
+    let placedAt: Date = entry.createdAt;
     type SiblingClass = { id: string; showClass?: { entryFee: number; classDefinition?: { type: string; name: string } | null } | null };
     let siblingEntries: { id: string; entryType: string; isNfc: boolean; entryClasses: SiblingClass[]; totalFee: number }[] = [
       {
@@ -299,7 +303,7 @@ export async function priceEntryClassChange(
       const [orderRow, dbSiblings] = await Promise.all([
         database.query.orders.findFirst({
           where: eq(orders.id, orderId),
-          columns: { discountGroupId: true },
+          columns: { discountGroupId: true, createdAt: true },
         }),
         database.query.entries.findMany({
           where: and(eq(entries.orderId, orderId), isNull(entries.deletedAt)),
@@ -312,6 +316,7 @@ export async function priceEntryClassChange(
         }),
       ]);
       siblingEntries = dbSiblings;
+      if (orderRow?.createdAt) placedAt = orderRow.createdAt;
 
       if (orderRow?.discountGroupId) {
         const dg = await database.query.showDiscountGroups.findFirst({
@@ -334,6 +339,17 @@ export async function priceEntryClassChange(
       multiDogThreshold: entry.show.multiDogThreshold,
       multiDogPackagePence: entry.show.multiDogPackagePence,
       discountGroup,
+      // The exhibitor's dogs from baskets placed BEFORE this one count toward
+      // the multi-dog package (per exhibitor per show, Mandy 2026-09-28), so
+      // the order re-prices exactly as it was charged and a later basket never
+      // shifts it. ONE owner: priorPackageStanding.
+      prior: await priorPackageStanding(database, {
+        showId: entry.showId,
+        exhibitorId: entry.exhibitorId,
+        show: entry.show,
+        excludeOrderId: orderId,
+        placedBefore: placedAt,
+      }),
     };
 
     // Special Award Classes charge their own fee, not the tier (Mandy

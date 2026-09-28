@@ -14,6 +14,11 @@
  *    Package is flat for any count >= threshold — 10 dogs pay the same package
  *    price as 3 dogs.
  *  - Discount group + multi-dog stack: a declared member gets the member package.
+ *  - The package is per exhibitor per SHOW, not per basket (Mandy 2026-09-28 —
+ *    the regional rule of 2026-09-16 applied to RKC packages). Dogs already
+ *    entered in earlier paid baskets count toward the threshold, and what was
+ *    already paid for their first classes comes off the package, so a 3rd dog
+ *    entered a week later pays only what is left of it. See `prior`.
  */
 
 /**
@@ -66,6 +71,23 @@ export type FeeContext = {
   multiDogPackagePence: number | null;
   /** The discount group the exhibitor declared at checkout, or null. */
   discountGroup?: DiscountGroupConfig | null;
+  /**
+   * This exhibitor's dogs ALREADY entered at this show in earlier paid
+   * baskets: how many paying dogs, and what their first classes cost in
+   * total. The package is per exhibitor per show (Mandy 2026-09-28), so these
+   * count toward the threshold and come off the package price. Get it from
+   * `priorPackageStanding` in server/services/package-pricing.ts — never
+   * hand-roll the query. Null/undefined → nothing entered before.
+   */
+  prior?: PriorPackageStanding | null;
+};
+
+/** Dogs an exhibitor already has at a show, for the multi-dog package. */
+export type PriorPackageStanding = {
+  /** Paying dogs (a normal class, not JH / NFC / Special-Award-only). */
+  payingDogCount: number;
+  /** What those dogs' FIRST normal classes cost in total, in pence. */
+  firstClassPaidPence: number;
 };
 
 export type EntryFeeBreakdown = {
@@ -80,12 +102,26 @@ export type OrderFeeResult = {
   total: number;
   /** True if the multi-dog package was applied to this order. */
   multiDogApplied: boolean;
-  /** Number of distinct paying dogs (used for threshold and on-screen messaging). */
+  /** Number of distinct paying dogs in THIS basket. */
   payingDogCount: number;
+  /** Paying dogs at the show once this basket is added — earlier baskets'
+   *  dogs plus this one's. What the threshold is tested against, and what the
+   *  "you've entered N dogs" message should say. */
+  showPayingDogCount: number;
   /** Pence saved vs. paying each paying dog's first-class fee individually. 0 if not applied. */
   multiDogSavings: number;
   perEntry: EntryFeeBreakdown[];
 };
+
+/** The fee for a dog's second and later normal classes — the show-wide
+ *  subsequent rate, falling back to the first-entry fee. Discount groups never
+ *  change it (rules above). ONE owner: the engine and `priorPackageStanding`
+ *  both read it from here. */
+export function subsequentClassFee(
+  ctx: Pick<FeeContext, 'subsequentEntryFeePence' | 'firstEntryFeePence'>,
+): number {
+  return ctx.subsequentEntryFeePence ?? ctx.firstEntryFeePence ?? 0;
+}
 
 function payingFirstClassFee(ctx: FeeContext): number {
   if (ctx.discountGroup) return ctx.discountGroup.firstEntryFeePence;
@@ -104,7 +140,7 @@ export function computeOrderFees(
   entries: DogEntryInput[],
   ctx: FeeContext,
 ): OrderFeeResult {
-  const subsequent = ctx.subsequentEntryFeePence ?? ctx.firstEntryFeePence ?? 0;
+  const subsequent = subsequentClassFee(ctx);
   const firstFee = payingFirstClassFee(ctx);
   const packagePence = paidPackagePence(ctx);
 
@@ -121,18 +157,36 @@ export function computeOrderFees(
     (e) => e.kind === 'standard' && regularClassCount(e) > 0,
   );
   const payingDogCount = payingEntries.length;
+  // Dogs from earlier paid baskets count toward the threshold (per exhibitor
+  // per show), and what their first classes already cost comes off the
+  // package.
+  const priorDogs = Math.max(0, ctx.prior?.payingDogCount ?? 0);
+  const priorPaid = Math.max(0, ctx.prior?.firstClassPaidPence ?? 0);
+  const showPayingDogCount = priorDogs + payingDogCount;
   const multiDogApplied =
     packagePence != null &&
     ctx.multiDogThreshold != null &&
-    payingDogCount >= ctx.multiDogThreshold;
+    payingDogCount > 0 &&
+    showPayingDogCount >= ctx.multiDogThreshold;
 
-  // Pre-compute the package split for the paying entries' first-class slot
-  // so the entry_classes breakdown lines up. Rounding remainder lands on
-  // the last paying entry so the per-entry sum exactly equals the package.
+  // What this basket's first classes cost between them under the package:
+  // whatever is left of it after the earlier baskets, never more than the
+  // dogs' normal first-class fees. With nothing entered before this is the
+  // package price itself — the rule as it always was.
+  const firstClassBudget =
+    multiDogApplied && packagePence != null
+      ? priorDogs > 0
+        ? Math.min(firstFee * payingDogCount, Math.max(0, packagePence - priorPaid))
+        : packagePence
+      : 0;
+
+  // Split it across the paying entries' first-class slot so the
+  // entry_classes breakdown lines up. Rounding remainder lands on the last
+  // paying entry so the per-entry sum exactly equals the budget.
   const packageSplits: number[] = [];
-  if (multiDogApplied && packagePence != null && payingDogCount > 0) {
-    const perDog = Math.floor(packagePence / payingDogCount);
-    const remainder = packagePence - perDog * payingDogCount;
+  if (multiDogApplied && payingDogCount > 0) {
+    const perDog = Math.floor(firstClassBudget / payingDogCount);
+    const remainder = firstClassBudget - perDog * payingDogCount;
     for (let i = 0; i < payingDogCount; i++) {
       packageSplits.push(i === payingDogCount - 1 ? perDog + remainder : perDog);
     }
@@ -187,13 +241,14 @@ export function computeOrderFees(
 
   const total = perEntry.reduce((sum, e) => sum + e.fee, 0);
   const multiDogSavings = multiDogApplied
-    ? Math.max(firstFee * payingDogCount - (packagePence ?? 0), 0)
+    ? Math.max(firstFee * payingDogCount - firstClassBudget, 0)
     : 0;
 
   return {
     total,
     multiDogApplied,
     payingDogCount,
+    showPayingDogCount,
     multiDogSavings,
     perEntry,
   };

@@ -319,3 +319,85 @@ describe('calculatePlatformFee', () => {
     expect(subtotal + calculatePlatformFee(subtotal)).toBe(2120);
   });
 });
+
+// ── The package is per exhibitor per show, not per basket (Mandy 2026-09-28) ──
+//
+// North Eastern GSD Club Championship 2026: first class £18 (members £16),
+// subsequent £18, package 3+ dogs £45 (members £40). Ann Robinson entered 3
+// dogs on the member package (£40), came back a week later for a 4th and was
+// charged £18; Claire Starkey had 2 member dogs (£32) and her 3rd would have
+// been £16 instead of the £8 the package leaves. Regionals were fixed for this
+// on 18 Sept; the RKC package never counted earlier baskets.
+describe('computeOrderFees — package counts dogs already entered at the show', () => {
+  const NE: FeeContext = {
+    firstEntryFeePence: 1800,
+    subsequentEntryFeePence: 1800,
+    nfcEntryFeePence: 500,
+    juniorHandlerFeePence: 300,
+    multiDogThreshold: 3,
+    multiDogPackagePence: 4500,
+    discountGroup: null,
+  };
+  const NE_MEMBER: FeeContext = {
+    ...NE,
+    discountGroup: { firstEntryFeePence: 1600, multiDogPackagePence: 4000 },
+  };
+
+  it("Claire: 2 member dogs already paid (£32), a 3rd member dog costs the £8 left of the £40 package", () => {
+    const r = computeOrderFees([dog('c3')], { ...NE_MEMBER, prior: { payingDogCount: 2, firstClassPaidPence: 3200 } });
+    expect(r.total).toBe(800);
+    expect(r.multiDogApplied).toBe(true);
+    expect(r.multiDogSavings).toBe(800); // £16 − £8
+    expect(r.showPayingDogCount).toBe(3);
+  });
+
+  it('Ann: 3 dogs already on the £40 member package, a 4th member dog costs nothing', () => {
+    const r = computeOrderFees([dog('a4')], { ...NE_MEMBER, prior: { payingDogCount: 3, firstClassPaidPence: 4000 } });
+    expect(r.total).toBe(0);
+    expect(r.showPayingDogCount).toBe(4);
+  });
+
+  it('a later basket without the member tick uses the standard package: £45 − £40 already paid = £5', () => {
+    const r = computeOrderFees([dog('a4')], { ...NE, prior: { payingDogCount: 3, firstClassPaidPence: 4000 } });
+    expect(r.total).toBe(500);
+  });
+
+  it('1 dog already paid (£18), 2 more later make 3: they share the £27 left of the £45 package', () => {
+    const r = computeOrderFees([dog('b'), dog('c')], { ...NE, prior: { payingDogCount: 1, firstClassPaidPence: 1800 } });
+    expect(r.total).toBe(2700);
+    expect(r.perEntry.map((e) => e.fee)).toEqual([1350, 1350]);
+  });
+
+  it('below the threshold even with earlier dogs, everyone pays the normal first-class fee', () => {
+    const r = computeOrderFees([dog('b')], { ...NE, prior: { payingDogCount: 1, firstClassPaidPence: 1800 } });
+    expect(r.total).toBe(1800);
+    expect(r.multiDogApplied).toBe(false);
+  });
+
+  it('never charges a dog more than its normal first-class fee, whatever was paid before', () => {
+    // Two earlier dogs that cost nothing (e.g. comp entries): the package is £45
+    // but one more dog must not be charged £45.
+    const r = computeOrderFees([dog('c')], { ...NE, prior: { payingDogCount: 2, firstClassPaidPence: 0 } });
+    expect(r.total).toBe(1800);
+  });
+
+  it('extra classes on the later dog are still charged at the subsequent rate', () => {
+    const r = computeOrderFees([dog('c3', 2)], { ...NE_MEMBER, prior: { payingDogCount: 2, firstClassPaidPence: 3200 } });
+    expect(r.perEntry[0]!.perClassFees).toEqual([800, 1800]);
+    expect(r.total).toBe(2600);
+  });
+
+  it('a basket of only a Junior Handler never triggers the package', () => {
+    const r = computeOrderFees([jh('j')], { ...NE_MEMBER, prior: { payingDogCount: 3, firstClassPaidPence: 4000 } });
+    expect(r.total).toBe(300);
+    expect(r.multiDogApplied).toBe(false);
+  });
+
+  it('with nothing entered before, behaves exactly as it always has', () => {
+    const without = computeOrderFees([dog('a'), dog('b'), dog('c')], NE_MEMBER);
+    const withZero = computeOrderFees([dog('a'), dog('b'), dog('c')], { ...NE_MEMBER, prior: { payingDogCount: 0, firstClassPaidPence: 0 } });
+    expect(withZero).toEqual(without);
+    expect(without.total).toBe(4000);
+    expect(without.perEntry.map((e) => e.fee)).toEqual([1333, 1333, 1334]);
+  });
+});

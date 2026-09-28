@@ -13,6 +13,7 @@ import { entryWindowOpen } from '@/lib/show-status';
 import { priceOrderExtras } from '@/server/services/order-extras-pricing';
 import { sundryViolationError } from '@/server/services/sundry-selection';
 import { sendExtrasAddedEmail } from '@/server/services/email';
+import { priorPackageStanding } from '@/server/services/package-pricing';
 import {
   orders,
   entries,
@@ -674,7 +675,19 @@ export const ordersRouter = createTRPCRouter({
           }),
         }));
         const usePerClassFallback = show.firstEntryFee == null;
-        const feeResult = usePerClassFallback ? null : computeOrderFees(dogEntries, feeCtx);
+        // Dogs this exhibitor already has at this show count toward the
+        // multi-dog package — per exhibitor per show, not per basket (Mandy
+        // 2026-09-28). ONE owner: priorPackageStanding.
+        const feeResult = usePerClassFallback
+          ? null
+          : computeOrderFees(dogEntries, {
+              ...feeCtx,
+              prior: await priorPackageStanding(ctx.db, {
+                showId: input.showId,
+                exhibitorId: ctx.session.user.id,
+                show,
+              }),
+            });
         if (feeResult) {
           entriesSubtotal = feeResult.total;
           perEntryBreakdown = feeResult.perEntry.map((e) => ({

@@ -10,6 +10,7 @@ import { createTRPCRouter } from '../init';
 import { countPriorRegionalPayingDogs } from '@/server/services/regional-pricing';
 import { priceEntryClassChange } from '@/server/services/entry-change-pricing';
 import { entryWindowOpen } from '@/lib/show-status';
+import { priorPackageStanding } from '@/server/services/package-pricing';
 import { verifyShowAccess } from '../verify-show-access';
 import { publicOrgColumns } from '../public-org-columns';
 import {
@@ -929,6 +930,27 @@ export const entriesRouter = createTRPCRouter({
         exhibitorId: ctx.session.user.id,
       }),
     ),
+
+  /**
+   * The exhibitor's dogs already entered at this show for the RKC multi-dog
+   * package — the enter-page preview needs it so the price shown matches the
+   * price charged (same ONE owner as checkout). Zero when the show has no
+   * package.
+   */
+  packagePriorStanding: protectedProcedure
+    .input(z.object({ showId: z.string().uuid() }))
+    .query(async ({ ctx, input }) => {
+      const show = await ctx.db.query.shows.findFirst({
+        where: eq(shows.id, input.showId),
+        columns: { multiDogThreshold: true, firstEntryFee: true, subsequentEntryFee: true },
+      });
+      if (!show) return { payingDogCount: 0, firstClassPaidPence: 0 };
+      return priorPackageStanding(ctx.db, {
+        showId: input.showId,
+        exhibitorId: ctx.session.user.id,
+        show,
+      });
+    }),
 
   validateExhibitorForEntry: protectedProcedure
     .query(async ({ ctx }) => {

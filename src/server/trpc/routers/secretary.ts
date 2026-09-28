@@ -17,6 +17,7 @@ import { computeRegionalOrderFees, regionalClassFlatFee } from '@/lib/regional-f
 import { countPriorRegionalPayingDogs } from '@/server/services/regional-pricing';
 import { validateSundrySelection } from '@/server/services/sundry-selection';
 import { computeJudgeCoverage } from '@/server/services/judge-coverage';
+import { priorPackageStanding } from '@/server/services/package-pricing';
 import { formatAtcNumber } from '@/lib/registration-flags';
 import { computePrizeCardCounts } from '@/lib/prize-card-counts';
 import { BRAND } from '@/lib/brand';
@@ -3567,6 +3568,14 @@ export const secretaryRouter = createTRPCRouter({
         multiDogThreshold: show.multiDogThreshold,
         multiDogPackagePence: show.multiDogPackagePence,
         discountGroup: null,
+        // The exhibitor's dogs already at this show count toward the multi-dog
+        // package, same as checkout (Mandy 2026-09-28). ONE owner:
+        // priorPackageStanding.
+        prior: await priorPackageStanding(ctx.db, {
+          showId: input.showId,
+          exhibitorId,
+          show,
+        }),
       };
       // Regional (SV/WUSV) shows price on the tiered per-dog scale, NOT the RKC
       // first/subsequent-class fees — and until 2026-09-16 this path used the RKC
