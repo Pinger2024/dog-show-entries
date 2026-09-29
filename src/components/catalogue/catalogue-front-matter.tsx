@@ -497,8 +497,16 @@ export function FrontMatterContent({ show, compact }: FrontMatterProps & { compa
           heading's own marginTop instead. */}
       <ShowInformationContent show={show} sectionGap={SECTION_GAP} />
 
+      {/* No minPresenceAhead on this wrapper. It used to carry 140pt as a
+          stand-in for "band + first judge", but minPresenceAhead demands
+          that much of the NEXT section follow the whole block — so a judges
+          list that fitted completely was still pushed to a fresh page,
+          leaving half a page blank above it (Mandy, North Eastern
+          2026-09-29). The band can't orphan without it: JudgesListContent
+          keeps the band atomic with the first judge in both of its layouts,
+          and Class Definitions (a Flow) glues its own heading. */}
       {showJudgesSection && (
-        <View style={{ marginTop: SECTION_GAP }} minPresenceAhead={140}>
+        <View style={{ marginTop: SECTION_GAP }}>
           <JudgesListContent show={show} />
         </View>
       )}
@@ -1505,11 +1513,45 @@ export function JudgesListContent({ show }: FrontMatterProps) {
     }
   }
 
+  // One breed's row: breed, judge, ring, then the judge's photo + bio.
+  // Unbreakable on its own; the first one also carries the band + header.
+  const renderBreedRow = (breed: string) => {
+    const judgeName = judges[breed];
+    const ringNo = ringNumbers[breed];
+    const bio = judgeBios[judgeName ?? ''];
+    const photoUrl = show.judgePhotos?.[judgeName ?? ''];
+    return (
+      <>
+        <View style={styles.judgesListRow}>
+          <Text style={styles.judgesListBreed}>{breed}</Text>
+          <Text style={styles.judgesListJudge}>{judgeName}</Text>
+          {hasRings && (
+            <Text style={{ fontFamily: 'Inter', fontSize: 7.5, width: 30, textAlign: 'right', color: ringNo ? C.textDark : C.textLight }}>
+              {ringNo ?? '—'}
+            </Text>
+          )}
+        </View>
+        {(bio || photoUrl) && (
+          <View style={{ flexDirection: 'row', paddingLeft: 6, paddingTop: 2, paddingBottom: 4, gap: 6 }}>
+            {photoUrl && (
+              <Image src={photoUrl} style={{ width: 36, height: 36, borderRadius: 18 }} />
+            )}
+            {bio && (
+              <Text style={{ ...styles.judgeBio, flex: 1, marginBottom: 0 }}>{bio}</Text>
+            )}
+          </View>
+        )}
+      </>
+    );
+  };
+
   return (
     <>
-      {/* Keep banner + table header atomic so the banner never sits
-          alone at the bottom of a page with the table flowing to the
-          next. */}
+      {/* Band + table header + FIRST breed row atomic, so the band never
+          sits alone at the bottom of a page with the table flowing to the
+          next — the same rule as the single-breed layout above. This is
+          what protects the band; the section wrapper in FrontMatterContent
+          no longer needs a minPresenceAhead guess to do it. */}
       <KeepTogether>
         <SectionBand title="List of Judges" />
         <View style={{ ...styles.judgesListRow, borderBottomWidth: 1.5, borderBottomColor: C.primary, marginBottom: 4 }}>
@@ -1519,37 +1561,12 @@ export function JudgesListContent({ show }: FrontMatterProps) {
             <Text style={{ fontFamily: 'Inter', fontSize: 7.5, fontWeight: 'bold', width: 30, textAlign: 'right' }}>Ring</Text>
           )}
         </View>
+        {renderBreedRow(sortedBreeds[0])}
       </KeepTogether>
 
-      {sortedBreeds.map((breed) => {
-        const judgeName = judges[breed];
-        const ringNo = ringNumbers[breed];
-        const bio = judgeBios[judgeName ?? ''];
-        const photoUrl = show.judgePhotos?.[judgeName ?? ''];
-        return (
-          <KeepTogether key={breed}>
-            <View style={styles.judgesListRow}>
-              <Text style={styles.judgesListBreed}>{breed}</Text>
-              <Text style={styles.judgesListJudge}>{judgeName}</Text>
-              {hasRings && (
-                <Text style={{ fontFamily: 'Inter', fontSize: 7.5, width: 30, textAlign: 'right', color: ringNo ? C.textDark : C.textLight }}>
-                  {ringNo ?? '—'}
-                </Text>
-              )}
-            </View>
-            {(bio || photoUrl) && (
-              <View style={{ flexDirection: 'row', paddingLeft: 6, paddingTop: 2, paddingBottom: 4, gap: 6 }}>
-                {photoUrl && (
-                  <Image src={photoUrl} style={{ width: 36, height: 36, borderRadius: 18 }} />
-                )}
-                {bio && (
-                  <Text style={{ ...styles.judgeBio, flex: 1, marginBottom: 0 }}>{bio}</Text>
-                )}
-              </View>
-            )}
-          </KeepTogether>
-        );
-      })}
+      {sortedBreeds.slice(1).map((breed) => (
+        <KeepTogether key={breed}>{renderBreedRow(breed)}</KeepTogether>
+      ))}
 
       {/* Other judges (JH, dogs/bitches-only, etc.) not in the breed
           table. Each gets a card-style row with photo + name + role +
@@ -1647,17 +1664,36 @@ export function JudgesListPage({ show }: FrontMatterProps) {
 export function ClassDefinitionsContent({ show, sectionGap = 0 }: FrontMatterProps & { sectionGap?: number }) {
   const defs = show.classDefinitions ?? [];
   if (defs.length === 0) return null;
-  // A single Flow block: heading = the section band, body = every
-  // definition. Flow keeps the heading glued to the START of the body
-  // (never orphaned alone at a page foot) WITHOUT forcing the whole list
-  // atomic — historically the "Definitions of Classes" block was one big
-  // wrap={false} unit (see FrontMatterContent), so a list just slightly
-  // too tall for the current page moved WHOLESALE onto a fresh page
-  // (Mandy 2026-07-20: "a 16-definition list spilled one item onto a
-  // near-blank page" — the hand-tuned fix was to tighten spacing so it
-  // fit, which doesn't generalise to a longer list). Now the list can
-  // split at a definition boundary like any other flowing content, and a
-  // list too long for even a fresh page paginates instead of overflowing.
+
+  const definitionItems = defs.map((def) => (
+    <KeepTogether key={def.name}>
+      <Text style={styles.classDefName}>{def.name}</Text>
+      {def.description && (
+        <Text style={styles.classDefDescription}>{def.description}</Text>
+      )}
+    </KeepTogether>
+  ));
+
+  // A list that fits on one page is never split (Mandy, North Eastern
+  // 2026-09-29: "start the definition of classes on the new page so it all
+  // fits on one page"). It stays where it is if there's room, otherwise it
+  // starts a fresh page whole.
+  if (estimateClassDefinitionsHeight(defs, sectionGap) <= FRONT_MATTER_PAGE_USABLE_HEIGHT) {
+    return (
+      <KeepTogether style={sectionGap ? { marginTop: sectionGap } : undefined}>
+        <SectionBand title="Definitions of Classes" />
+        {definitionItems}
+      </KeepTogether>
+    );
+  }
+
+  // Too long for any single page: a Flow block, heading = the section band,
+  // body = every definition. Flow keeps the heading glued to the START of
+  // the body (never orphaned alone at a page foot) and lets the list split
+  // at a definition boundary, so it paginates instead of overflowing. (A
+  // single wrap={false} unit this tall would run off the page — Mandy
+  // 2026-07-20 saw a 16-definition list spill one item onto a near-blank
+  // page under the old all-atomic layout.)
   return (
     <Flow
       blocks={[
@@ -1666,22 +1702,37 @@ export function ClassDefinitionsContent({ show, sectionGap = 0 }: FrontMatterPro
           heading: <SectionBand title="Definitions of Classes" />,
           headingStyle: sectionGap ? { marginTop: sectionGap } : undefined,
           keepWithHeadingHeight: 60,
-          body: (
-            <>
-              {defs.map((def) => (
-                <KeepTogether key={def.name}>
-                  <Text style={styles.classDefName}>{def.name}</Text>
-                  {def.description && (
-                    <Text style={styles.classDefDescription}>{def.description}</Text>
-                  )}
-                </KeepTogether>
-              ))}
-            </>
-          ),
+          body: <>{definitionItems}</>,
         },
       ]}
     />
   );
+}
+
+/**
+ * Conservative height (points) of the whole Definitions of Classes section:
+ * the band plus every name + description, from the real styles. Errs HIGH —
+ * an underestimate would make a too-tall list unbreakable and run it off
+ * the page, while an overestimate only lets a list that would have fitted
+ * flow as it always has.
+ */
+function estimateClassDefinitionsHeight(
+  defs: { name: string; description: string | null }[],
+  sectionGap: number,
+): number {
+  const width = 375; // frontMatterPage content width, A5 minus 22pt each side
+  // styles.sectionBand: 9pt padding top + bottom, 11pt HankenGrotesk text,
+  // 12pt margin below; plus the section gap above it (its -20pt bleed
+  // ignored, so this over-counts by 20).
+  const band = sectionGap + 9 * 2 + 11 * 1.3 + 12;
+  const items = defs.reduce((sum, def) => {
+    const name = 2 + estimateTextHeight(def.name, { width, family: 'Inter', weight: 'bold', size: 7.5, lineHeight: 1.3 }) + 1;
+    const description = def.description
+      ? estimateTextHeight(def.description, { width, family: 'Inter', size: 6.5, lineHeight: 1.3 }) + 2
+      : 0;
+    return sum + name + description;
+  }, 0);
+  return (band + items) * 1.1;
 }
 
 /** Standalone Class Definitions page — delegates to ClassDefinitionsContent. */
