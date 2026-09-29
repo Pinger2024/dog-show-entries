@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { hasWorkingTitle, svAgeClassAllowed } from '../sv-entry-readiness';
-import { svEntryMissingRequirements } from '../sv-entry-validation';
+import { entryRequirements } from '../entry-requirements';
 
 /**
  * BH / AD / WB are recorded qualifications, not working ones — Mandy
@@ -14,7 +14,24 @@ import { svEntryMissingRequirements } from '../sv-entry-validation';
  * Adult class it actually belongs in.
  */
 
-const fullDog = { kcRegNumber: 'SV12345', microchipNumber: '956000100061' };
+const fullDog = {
+  kcRegNumber: 'SV12345',
+  microchipNumber: '956000100061',
+  registrationBody: 'sv',
+  coatType: 'stock',
+  sireName: 'Sire',
+  sireRegistrationNumber: 'SZ1',
+  damName: 'Dam',
+  damRegistrationNumber: 'SZ2',
+  breederName: 'Breeder',
+  breederCity: 'Perth',
+  breederPostcode: 'PH1 1AA',
+  colour: 'Black & Gold',
+};
+
+/** What the server's entry gate refuses a regional entry for (the SV half). */
+const svEntryGaps = (opts: { dog: typeof fullDog; svProfile: Record<string, unknown>; classNames: string[] }) =>
+  entryRequirements({ ...opts, showRuleset: 'wusv', entryType: 'standard', isNfc: false }).sv;
 const health = { hipGrade: 'normal', elbowGrade: 'normal', dna: 'recorded' };
 
 describe('BH / AD / WB are not working qualifications', () => {
@@ -68,17 +85,17 @@ describe('class routing for a dog holding only BH / AD / WB', () => {
 describe('the server entry gate agrees with the client', () => {
   it('blocks a Working-class entry when the dog holds only a BH', () => {
     expect(
-      svEntryMissingRequirements({
+      svEntryGaps({
         dog: fullDog,
         svProfile: { ...health, workingTitle: 'BH' },
         classNames: ['Working'],
       }),
-    ).toContain('working title');
+    ).toContain('Working title');
   });
 
   it('admits the same dog to Adult', () => {
     expect(
-      svEntryMissingRequirements({
+      svEntryGaps({
         dog: fullDog,
         svProfile: { ...health, workingTitle: 'BH' },
         classNames: ['Adult'],
@@ -88,7 +105,7 @@ describe('the server entry gate agrees with the client', () => {
 
   it('admits a genuinely titled dog to Working', () => {
     expect(
-      svEntryMissingRequirements({
+      svEntryGaps({
         dog: fullDog,
         svProfile: { ...health, workingTitle: 'IGP1' },
         classNames: ['Working'],

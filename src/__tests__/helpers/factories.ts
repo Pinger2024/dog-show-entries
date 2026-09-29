@@ -203,7 +203,7 @@ export async function makeDog(opts: Partial<typeof dogs.$inferInsert> & { ownerI
 /**
  * The extra dog fields a REGIONAL (wusv) entry needs on top of makeDog's
  * defaults. Spread into makeDog for any fixture that checks out onto a
- * regional show — otherwise entryRequirementsMissing refuses it, which is
+ * regional show — otherwise entryRequirements refuses it, which is
  * correct: the exhibitor wizard refuses the same dog at the Next button.
  * Pass an explicit null over the top to build a deliberately-incomplete dog.
  */

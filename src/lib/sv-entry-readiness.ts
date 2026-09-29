@@ -47,14 +47,57 @@ export type SvPedigree = {
 export const blank = (v: string | null | undefined) => !v || !v.trim();
 
 /**
+ * The dog-record fields a competitive regional (SV/WUSV) entry needs — the ONE
+ * declaration. `svMissingRequirements` summarises them for the entry gates and
+ * the exhibitor wizard; the dog form reads `field` + `formMessage` to flag the
+ * exact input. `group` is the summary line a field belongs to (the sire's name
+ * and number are one line, the breeder's name, town and postcode another), in
+ * the order the summary lists them.
+ *
+ * Coat type decides the Standard / Long Coat class; registration number, body
+ * and microchip print on the grading card and the SV results sheet (Mandy
+ * 2026-07-07, 2026-08-24 — 15 NE Regional dogs had no registration body and
+ * the sheet's column came out blank); the SV catalogue needs the full sire,
+ * dam and breeder lines (Mandy 2026-06-26). Health and the working title are
+ * decided by the classes entered, not the dog record, and live below.
+ */
+export const SV_ENTRY_DOG_FIELDS = [
+  { field: 'coatType', group: 'coat', formMessage: 'Coat type is required for regional shows' },
+  { field: 'kcRegNumber', group: 'registrationNumber', formMessage: "Your dog's registration number is required for regional shows" },
+  { field: 'registrationBody', group: 'registrationBody', formMessage: 'The registration body (RKC, SV…) is required for regional shows' },
+  { field: 'microchipNumber', group: 'microchip', formMessage: 'The microchip number is required for regional shows' },
+  { field: 'sireName', group: 'sire', formMessage: "The sire's name is required for regional shows" },
+  { field: 'sireRegistrationNumber', group: 'sire', formMessage: "The sire's registration number is required for regional shows" },
+  { field: 'damName', group: 'dam', formMessage: "The dam's name is required for regional shows" },
+  { field: 'damRegistrationNumber', group: 'dam', formMessage: "The dam's registration number is required for regional shows" },
+  { field: 'breederName', group: 'breeder', formMessage: "The breeder's name is required for regional shows" },
+  { field: 'breederCity', group: 'breeder', formMessage: 'Breeder town/city is required for regional shows' },
+  { field: 'breederPostcode', group: 'breeder', formMessage: 'Breeder postcode is required for regional shows' },
+] as const;
+
+export type SvEntryDogField = (typeof SV_ENTRY_DOG_FIELDS)[number]['field'];
+type SvEntryGroup = (typeof SV_ENTRY_DOG_FIELDS)[number]['group'];
+
+/** The summary line each group shows in the wizard's warning and the gates. */
+const SV_GROUP_LABELS: Record<SvEntryGroup, string> = {
+  coat: 'Coat type (Standard or Long Coat)',
+  registrationNumber: 'Registration number',
+  registrationBody: 'Registration body (RKC, SV…)',
+  microchip: 'Microchip number',
+  sire: "Sire's name and registration number",
+  dam: "Dam's name and registration number",
+  breeder: 'Breeder details (name, town and postcode)',
+};
+
+/**
  * The things still missing before this dog can be entered into its SV classes,
- * as human labels for the consolidated warning.
- * - Coat type is always required for a competitive SV standard entry (we need it
- *   to put the dog in the right Standard / Long Coat class).
- * - Sire / dam (name + reg number) and the breeder line are always required for
- *   these shows — the catalogue/pedigree needs them in full (Mandy 2026-06-26).
- * - Hip / elbow / DNA are required only when entering a health-gated class
- *   (SV Yearling / Adult / Working), per SV/WUSV rules.
+ * as human labels for the consolidated warning — the SV_ENTRY_DOG_FIELDS
+ * groups with a blank field, then the health triad when the classes need it.
+ * Hip / elbow / DNA are required only when entering a health-gated class (SV
+ * Yearling / Adult / Working), per SV/WUSV rules.
+ *
+ * Callers normally reach this through `entryRequirements`
+ * (lib/entry-requirements.ts), which decides whether the SV half applies.
  */
 export function svMissingRequirements(opts: {
   coatType: string | null | undefined;
@@ -66,41 +109,37 @@ export function svMissingRequirements(opts: {
    *  "make the registration number mandatory for SV shows". Omit (undefined)
    *  to skip the check for back-compat. */
   ownRegistrationNumber?: string | null;
-  /** Registration body (RKC / SV / IKC…) — required for regional entry, same
-   *  undefined-skips contract as ownRegistrationNumber. Mandy 2026-08-24: 15
-   *  dogs reached the NE Regional with it unset and the SV results
-   *  spreadsheet's Reg body column came out blank. Deliberately NOT required
-   *  when first registering a dog — only at regional entry. */
+  /** Registration body (RKC / SV / IKC…) — same undefined-skips contract.
+   *  Deliberately NOT required when first registering a dog in general —
+   *  only for a regional entry (and the dog form's regional mode). */
   registrationBody?: string | null;
-  /** Microchip — required for regional entry (prints on the grading card and
-   *  the catalogue's entry line; GSDL CAS lookups key on reg + chip). Same
-   *  undefined-skips contract. */
+  /** Microchip — prints on the grading card and the catalogue's entry line;
+   *  GSDL CAS lookups key on reg + chip. Same undefined-skips contract. */
   microchipNumber?: string | null;
 }): string[] {
-  const missing: string[] = [];
-  if (!opts.coatType) missing.push('Coat type (Standard or Long Coat)');
-  if (opts.ownRegistrationNumber !== undefined && blank(opts.ownRegistrationNumber)) {
-    missing.push('Registration number');
-  }
-  if (opts.registrationBody !== undefined && blank(opts.registrationBody)) {
-    missing.push('Registration body (RKC, SV…)');
-  }
-  if (opts.microchipNumber !== undefined && blank(opts.microchipNumber)) {
-    missing.push('Microchip number');
-  }
+  const values: Partial<Record<SvEntryDogField, string | null | undefined>> = {
+    coatType: opts.coatType,
+    kcRegNumber: opts.ownRegistrationNumber,
+    registrationBody: opts.registrationBody,
+    microchipNumber: opts.microchipNumber,
+    ...(opts.pedigree ?? {}),
+  };
+  // Which fields this caller asked about: coat type always; the three
+  // identity fields when passed (undefined skips); the pedigree lines when a
+  // pedigree was given at all.
+  const checked = (field: SvEntryDogField): boolean => {
+    if (field === 'coatType') return true;
+    if (field === 'kcRegNumber') return opts.ownRegistrationNumber !== undefined;
+    if (field === 'registrationBody') return opts.registrationBody !== undefined;
+    if (field === 'microchipNumber') return opts.microchipNumber !== undefined;
+    return opts.pedigree != null;
+  };
 
-  const p = opts.pedigree;
-  if (p) {
-    if (blank(p.sireName) || blank(p.sireRegistrationNumber)) {
-      missing.push("Sire's name and registration number");
-    }
-    if (blank(p.damName) || blank(p.damRegistrationNumber)) {
-      missing.push("Dam's name and registration number");
-    }
-    if (blank(p.breederName) || blank(p.breederCity) || blank(p.breederPostcode)) {
-      missing.push('Breeder details (name, town and postcode)');
-    }
+  const groups: SvEntryGroup[] = [];
+  for (const f of SV_ENTRY_DOG_FIELDS) {
+    if (checked(f.field) && blank(values[f.field]) && !groups.includes(f.group)) groups.push(f.group);
   }
+  const missing: string[] = groups.map((g) => SV_GROUP_LABELS[g]);
 
   if (opts.healthRequired) {
     const isEmpty = (v: string | null | undefined) => !v || v === 'not_required';
@@ -108,30 +147,6 @@ export function svMissingRequirements(opts: {
     if (isEmpty(opts.profile?.elbowGrade)) missing.push('Elbow score');
     if (!opts.profile?.dna) missing.push('DNA recording');
   }
-  return missing;
-}
-
-/** The dog's baseline pedigree fields every catalogue (not just SV) needs. */
-export type BaselinePedigree = {
-  sireName?: string | null;
-  damName?: string | null;
-  breederName?: string | null;
-  colour?: string | null;
-} | null | undefined;
-
-/**
- * The baseline pedigree fields still missing before this dog can be entered
- * into ANY show — sire, dam, breeder and colour all print in the catalogue,
- * regardless of whether the show is SV/WUSV. The SV-specific gate above is
- * stricter (it also wants registration numbers and breeder town/postcode)
- * and stays unchanged; this is the floor every entry must clear.
- */
-export function pedigreeMissingForEntry(dog: BaselinePedigree): string[] {
-  const missing: string[] = [];
-  if (blank(dog?.sireName)) missing.push("the sire's name");
-  if (blank(dog?.damName)) missing.push("the dam's name");
-  if (blank(dog?.breederName)) missing.push("the breeder's name");
-  if (blank(dog?.colour)) missing.push('the colour');
   return missing;
 }
 

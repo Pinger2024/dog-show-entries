@@ -10,7 +10,7 @@ import { CalendarIcon, Check, ChevronsUpDown, Loader2, Plus, Trash2, Award, Sear
 import { toast } from 'sonner';
 import { trpc } from '@/lib/trpc';
 import { useBeaconAutosave } from '@/lib/use-beacon-autosave';
-import { blank } from '@/lib/sv-entry-readiness';
+import { blank, SV_ENTRY_DOG_FIELDS } from '@/lib/sv-entry-readiness';
 import { PEDIGREE_FIELDS, findClearedPedigreeFields } from '@/lib/dog-pedigree';
 import {
   addressesMatch,
@@ -744,31 +744,15 @@ export function DogForm({ mode, defaultValues, dogId, svSection, returnTo, isReg
     }
 
     if (mode === 'create') {
-      // Regional (SV/WUSV) shows need the full catalogue/pedigree set, or the
-      // entry gate blocks the entry later. This is the always-required subset
-      // of svMissingRequirements (sv-entry-readiness.ts) that maps to a single
-      // form field — sire/dam NAMES + breeder name are already required for
-      // every create above. Reuses the gate's blank() predicate; keep the two
-      // in step if the required set ever changes (Mandy 2026-07-12).
+      // Regional (SV/WUSV) shows need the full SV record, or the entry gate
+      // refuses the entry later. SV_ENTRY_DOG_FIELDS (sv-entry-readiness.ts)
+      // is the one declaration of those fields — the same list the gates and
+      // the exhibitor wizard summarise — with the message for each input.
       if (isRegional) {
-        const regionalRequired: Array<{
-          name: 'kcRegNumber' | 'registrationBody' | 'microchipNumber' | 'coatType' | 'breederCity' | 'breederPostcode' | 'sireRegistrationNumber' | 'damRegistrationNumber';
-          value: string | null | undefined;
-          message: string;
-        }> = [
-          { name: 'kcRegNumber', value: data.kcRegNumber, message: "Your dog's registration number is required for regional shows" },
-          { name: 'registrationBody', value: data.registrationBody, message: 'The registration body (RKC, SV…) is required for regional shows' },
-          { name: 'microchipNumber', value: data.microchipNumber, message: 'The microchip number is required for regional shows' },
-          { name: 'coatType', value: data.coatType, message: 'Coat type is required for regional shows' },
-          { name: 'breederCity', value: data.breederCity, message: 'Breeder town/city is required for regional shows' },
-          { name: 'breederPostcode', value: data.breederPostcode, message: 'Breeder postcode is required for regional shows' },
-          { name: 'sireRegistrationNumber', value: data.sireRegistrationNumber, message: "The sire's registration number is required for regional shows" },
-          { name: 'damRegistrationNumber', value: data.damRegistrationNumber, message: "The dam's registration number is required for regional shows" },
-        ];
         let regionalMissing = false;
-        for (const f of regionalRequired) {
-          if (blank(f.value)) {
-            form.setError(f.name, { type: 'manual', message: f.message });
+        for (const f of SV_ENTRY_DOG_FIELDS) {
+          if (blank(data[f.field])) {
+            form.setError(f.field, { type: 'manual', message: f.formMessage });
             regionalMissing = true;
           }
         }

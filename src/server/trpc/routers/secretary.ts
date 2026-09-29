@@ -15,7 +15,7 @@ import { getBaseUrl } from '@/server/lib/utils';
 import { ACHIEVEMENT_TYPES } from '@/lib/placements';
 import { findClearedPedigreeFields, pedigreeClearMessage } from '@/lib/dog-pedigree';
 import { findDogRegistrationClash, dogRegistrationClashMessage } from '@/lib/dog-registration-clash';
-import { entryRequirementsMissing } from '@/lib/entry-requirements';
+import { entryRequirements } from '@/lib/entry-requirements';
 import { computeOrderFees, type FeeContext } from '@/lib/fee-calc';
 import { computeRegionalOrderFees, regionalClassFlatFee } from '@/lib/regional-fee-calc';
 import { countPriorRegionalPayingDogs } from '@/server/services/regional-pricing';
@@ -3595,18 +3595,19 @@ export const secretaryRouter = createTRPCRouter({
       // exhibitor path excludes them (it `continue`s on zero classes) — they
       // are not competing, so competition eligibility does not apply. The
       // baseline pedigree still counts: NFC dogs print in the catalogue too.
-      const svProfileForCheck =
-        show.showRuleset === 'wusv' && !input.isNfc
-          ? await ctx.db.query.dogSvProfile.findFirst({ where: eq(dogSvProfile.dogId, dog.id) })
-          : null;
-      const requirementWarnings = entryRequirementsMissing({
+      const svProfileForCheck = await ctx.db.query.dogSvProfile.findFirst({
+        where: eq(dogSvProfile.dogId, dog.id),
+      });
+      const requirementWarnings = entryRequirements({
         dog,
         svProfile: svProfileForCheck,
-        showRuleset: input.isNfc ? null : show.showRuleset,
+        showRuleset: show.showRuleset,
+        entryType: 'standard',
+        isNfc: input.isNfc,
         classNames: selectedClasses
           .map((sc) => sc.classDefinition?.name)
           .filter((n): n is string => !!n),
-      });
+      }).all;
 
       // Reject if this dog is already entered in any of the selected classes on
       // this show. The online checkout enforces this (orders.ts), but the manual

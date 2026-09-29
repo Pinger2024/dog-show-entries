@@ -34,8 +34,7 @@ import {
   calculatePlatformFee,
 } from '@/server/services/stripe';
 import { executeStripeRefund } from '@/server/services/stripe-refunds';
-import { entryRequirementsMissing, entryBlockedMessage } from '@/lib/entry-requirements';
-import { pedigreeMissingForEntry } from '@/lib/sv-entry-readiness';
+import { entryRequirements, pedigreeRequirementsMissing, entryBlockedMessage } from '@/lib/entry-requirements';
 import { hasJudgingConflict } from '@/lib/judge-exhibitor-conflict';
 import { getCompetitionAgeError, isOldEnoughForNfc, nfcMinAgeMessage } from '@/lib/date-utils';
 import { svCoatDisplayName } from '@/lib/class-labels';
@@ -78,12 +77,7 @@ export const entriesRouter = createTRPCRouter({
       // the catalogue-completeness reason for this check applies just the
       // same (unlike the SV/WUSV health-and-coat gate above, which is about
       // competition eligibility and rightly skips NFC).
-      const entryPedigreeMissing = pedigreeMissingForEntry({
-        sireName: dog.sireName,
-        damName: dog.damName,
-        breederName: dog.breederName,
-        colour: dog.colour,
-      });
+      const entryPedigreeMissing = pedigreeRequirementsMissing(dog);
       if (entryPedigreeMissing.length > 0) {
         const dogName = dog.registeredName ?? 'This dog';
         throw new TRPCError({
@@ -312,14 +306,16 @@ export const entriesRouter = createTRPCRouter({
       // a registration number + microchip; Junior class and above need the
       // hip/elbow/DNA triad; Working class also needs a working title.
       // Single source of truth shared with the exhibitor checkout path.
-      if (show.showRuleset === 'wusv') {
+      {
         const svProfile = await ctx.db.query.dogSvProfile.findFirst({
           where: eq(dogSvProfile.dogId, dog.id),
         });
-        const missing = entryRequirementsMissing({
+        const { sv: missing } = entryRequirements({
           dog,
           svProfile,
           showRuleset: show.showRuleset,
+          entryType: 'standard',
+          isNfc: input.isNfc,
           classNames: selectedClasses
             .map((sc) => sc.classDefinition?.name)
             .filter((n): n is string => !!n),
@@ -682,14 +678,16 @@ export const entriesRouter = createTRPCRouter({
       const itemsWithWarnings = items.map((entry) => ({
         ...entry,
         requirementWarnings: entry.dog
-          ? entryRequirementsMissing({
+          ? entryRequirements({
               dog: entry.dog,
               svProfile: entry.dog.svProfile,
-              showRuleset: entry.isNfc ? null : show?.showRuleset,
+              showRuleset: show?.showRuleset,
+              entryType: entry.entryType,
+              isNfc: entry.isNfc,
               classNames: entry.entryClasses
                 .map((ec) => ec.showClass?.classDefinition?.name)
                 .filter((n): n is string => !!n),
-            })
+            }).all
           : [],
       }));
 

@@ -38,8 +38,8 @@ import {
 import { differenceInMonths, format, parseISO } from 'date-fns';
 import { toast } from 'sonner';
 import { isWithinAgeRange, getAgeEligibilityDetail, handlerAgeYearsOnDate, formatCurrency, isAgeRestrictedClass, isOldEnoughForNfc, NFC_MIN_AGE_WEEKS } from '@/lib/date-utils';
-import { svAgeClassAllowed, svMissingRequirements, hasWorkingTitle, pedigreeMissingForEntry } from '@/lib/sv-entry-readiness';
-import { SV_HEALTH_FROM_CLASSES } from '@/lib/sv-entry-validation';
+import { svAgeClassAllowed, hasWorkingTitle } from '@/lib/sv-entry-readiness';
+import { entryRequirements } from '@/lib/entry-requirements';
 import { displayShowTypeLabel } from '@/lib/show-types';
 import { svCoatDisplayName, specialAwardClassFee, isSpecialAwardClass } from '@/lib/class-labels';
 import { trpc } from '@/lib/trpc/client';
@@ -1554,79 +1554,39 @@ export default function EnterShowPage() {
           return !eligibleForSelectedAgeClass;
         })();
 
-        // SV/WUSV health gate: for Yearling/Adult/Working the dog must have
-        // hip + elbow + DNA on file (Junior does NOT — Amanda 2026-07-18).
-        // Server enforces this in entries.create and orders.checkout; we surface
-        // it here so the exhibitor doesn't reach the cart Review step before
-        // being told. Shares SV_HEALTH_FROM_CLASSES with the server so the two
-        // can't drift (they did — Junior was wrongly required server-side).
-        const selectedSvHealthClasses = (showClasses ?? []).filter(
-          (sc) =>
-            selectedClassIds.includes(sc.id) &&
-            sc.classDefinition &&
-            SV_HEALTH_FROM_CLASSES.has(sc.classDefinition.name),
-        );
-        const svHealthRequired =
-          show?.showRuleset === 'wusv' &&
-          cart.activeEntry?.entryType === 'standard' &&
-          selectedSvHealthClasses.length > 0;
-        // One consolidated SV readiness check (Mandy 2026-06-26): coat type +
-        // health gathered into a SINGLE list, surfaced as one warning that
-        // blocks the entry until everything for the dog's age/class is complete
-        // — no more separate warnings the exhibitor has to scroll between.
+        // What this entry still needs — lib/entry-requirements.ts decides, the
+        // same function checkout, entries.create and the secretary's manual
+        // entry call, so the wizard can never let through what the server
+        // refuses or refuse what it accepts. The wizard only chooses how to
+        // SHOW it: the SV lines on one consolidated warning that blocks the
+        // entry (Mandy 2026-06-26), and the catalogue pedigree the SV lines
+        // don't already cover on its own card (on a regional entry that
+        // leaves only the colour; on every other show it is the whole
+        // pedigree, NFC dogs included — they print in the catalogue too).
         const svStandard =
           show?.showRuleset === 'wusv' && cart.activeEntry?.entryType === 'standard';
-        const svMissing =
-          svStandard && !isNfc
-            ? svMissingRequirements({
-                coatType: selectedDog?.coatType,
-                healthRequired: svHealthRequired,
-                profile: selectedDogSvProfile,
-                ownRegistrationNumber: selectedDog?.kcRegNumber,
-                registrationBody: selectedDog?.registrationBody,
-                microchipNumber: selectedDog?.microchipNumber,
-                pedigree: selectedDog
-                  ? {
-                      sireName: selectedDog.sireName,
-                      sireRegistrationNumber: selectedDog.sireRegistrationNumber,
-                      damName: selectedDog.damName,
-                      damRegistrationNumber: selectedDog.damRegistrationNumber,
-                      breederName: selectedDog.breederName,
-                      breederCity: selectedDog.breederCity,
-                      breederPostcode: selectedDog.breederPostcode,
-                    }
-                  : undefined,
+        const requirements =
+          selectedDog && cart.activeEntry?.entryType === 'standard'
+            ? entryRequirements({
+                dog: selectedDog,
+                svProfile: selectedDogSvProfile,
+                showRuleset: show?.showRuleset,
+                entryType: 'standard',
+                isNfc,
+                classNames: (showClasses ?? [])
+                  .filter((sc) => selectedClassIds.includes(sc.id))
+                  .map((sc) => sc.classDefinition?.name)
+                  .filter((n): n is string => !!n),
               })
-            : [];
+            : null;
+        const svMissing = requirements?.sv ?? [];
+        // Working is hidden from the class picker without a working title
+        // (svAgeClassAllowed); this flag drives that picker's explanation.
         const svNoWorkingTitle =
           svStandard && !hasWorkingTitle(selectedDogSvProfile?.workingTitle);
         const svBlocked = svMissing.length > 0;
-
-        // Baseline pedigree check: sire, dam, breeder and colour all print
-        // in the catalogue, so this applies to every standard entry on
-        // every show — not just SV/WUSV — and deliberately does NOT skip
-        // NFC dogs. The SV `!isNfc` exemption above is about competition
-        // eligibility (coat type, health tests); NFC dogs still appear in
-        // the printed catalogue, so exempting them here would leave the
-        // exact catalogue hole this check exists to close.
-        const baseMissingAll =
-          cart.activeEntry?.entryType === 'standard'
-            ? pedigreeMissingForEntry({
-                sireName: selectedDog?.sireName,
-                damName: selectedDog?.damName,
-                breederName: selectedDog?.breederName,
-                colour: selectedDog?.colour,
-              })
-            : [];
-        // On an SV/WUSV standard entry the sire/dam/breeder gap is already
-        // surfaced (more strictly — it also wants registration numbers) by
-        // the SV card above; repeating it here in different words would
-        // just be more text to read. Colour isn't part of the SV check, so
-        // it still needs its own line when that card is showing.
-        const svCardShown = svStandard && !isNfc && svMissing.length > 0;
-        const baseMissing = svCardShown
-          ? baseMissingAll.filter((item) => item === 'the colour')
-          : baseMissingAll;
+        const baseMissingAll = requirements?.pedigree ?? [];
+        const baseMissing = requirements?.pedigreeNotInSv ?? [];
         const entryBlocked = svBlocked || baseMissingAll.length > 0;
 
         const dogAgeMonths =

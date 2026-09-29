@@ -49,8 +49,7 @@ import {
   type RegionalDogEntryInput,
   type RegionalFeeContext,
 } from '@/lib/regional-fee-calc';
-import { entryRequirementsMissing, entryBlockedMessage } from '@/lib/entry-requirements';
-import { pedigreeMissingForEntry } from '@/lib/sv-entry-readiness';
+import { entryRequirements, pedigreeRequirementsMissing, entryBlockedMessage } from '@/lib/entry-requirements';
 import { hasJudgingConflict } from '@/lib/judge-exhibitor-conflict';
 import { getCompetitionAgeError, isOldEnoughForNfc, nfcMinAgeMessage } from '@/lib/date-utils';
 import { isParkingSundry, PARKING_NAME_PATTERNS } from '@/lib/parking-utils';
@@ -168,12 +167,7 @@ export const ordersRouter = createTRPCRouter({
           if (entryInput.entryType !== 'standard' || !entryInput.dogId) continue;
           const dog = userDogs.find((d) => d.id === entryInput.dogId);
           if (!dog) continue;
-          const missing = pedigreeMissingForEntry({
-            sireName: dog.sireName,
-            damName: dog.damName,
-            breederName: dog.breederName,
-            colour: dog.colour,
-          });
+          const missing = pedigreeRequirementsMissing(dog);
           if (missing.length > 0) {
             const dogName = dog.registeredName ?? 'This dog';
             throw new TRPCError({
@@ -256,7 +250,7 @@ export const ordersRouter = createTRPCRouter({
           }
 
           // Regional entry requirements (Amanda 2026-05-28). Now via
-          // entryRequirementsMissing, the ONE declaration — which adds the six
+          // entryRequirements, the ONE declaration — which adds the six
           // fields that used to be demanded only by this wizard's Next button
           // and by nothing on the server: coat type, registration body,
           // breeder town and postcode, and the sire's and dam's registration
@@ -264,27 +258,27 @@ export const ordersRouter = createTRPCRouter({
           // because the wizard already stopped them; this closes the
           // direct-API hole and the secretary path (2026-09-11).
           //
-          // NFC entries never reach here — zero classes `continue` above —
-          // and the baseline pedigree has already been checked and thrown on,
-          // so it can never appear in this list twice.
-          if (show.showRuleset === 'wusv') {
-            const svProfile = await ctx.db.query.dogSvProfile.findFirst({
-              where: eq(dogSvProfile.dogId, dog.id),
+          // Whether this half applies (regional show, competitive entry) is
+          // entryRequirements' decision, not this loop's. The baseline pedigree
+          // was already checked and thrown on above, before any payment intent.
+          const svProfile = await ctx.db.query.dogSvProfile.findFirst({
+            where: eq(dogSvProfile.dogId, dog.id),
+          });
+          const { sv: missing } = entryRequirements({
+            dog,
+            svProfile,
+            showRuleset: show.showRuleset,
+            entryType: entryInput.entryType,
+            isNfc: entryInput.isNfc,
+            classNames: entryClasses
+              .map((sc) => sc.classDefinition?.name)
+              .filter((n): n is string => !!n),
+          });
+          if (missing.length > 0) {
+            throw new TRPCError({
+              code: 'BAD_REQUEST',
+              message: entryBlockedMessage(dog.registeredName, missing),
             });
-            const missing = entryRequirementsMissing({
-              dog,
-              svProfile,
-              showRuleset: show.showRuleset,
-              classNames: entryClasses
-                .map((sc) => sc.classDefinition?.name)
-                .filter((n): n is string => !!n),
-            });
-            if (missing.length > 0) {
-              throw new TRPCError({
-                code: 'BAD_REQUEST',
-                message: entryBlockedMessage(dog.registeredName, missing),
-              });
-            }
           }
         }
 

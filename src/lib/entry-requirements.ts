@@ -34,12 +34,13 @@
  */
 import {
   svMissingRequirements,
-  pedigreeMissingForEntry,
   hasWorkingTitle,
+  blank,
+  SV_ENTRY_DOG_FIELDS,
   type SvHealthProfile,
-  type SvPedigree,
 } from './sv-entry-readiness';
 import { SV_HEALTH_FROM_CLASSES } from './sv-entry-validation';
+import { PEDIGREE_FIELDS } from './dog-pedigree';
 
 export type EntryRequirementDog = {
   registeredName?: string | null;
@@ -61,68 +62,88 @@ export type EntryRequirementProfile = SvHealthProfile & {
   workingTitle?: string | null;
 };
 
+export type EntryRequirements = {
+  /** Catalogue pedigree gaps (sire, dam, breeder, colour) — every standard
+   *  entry on every show, NFC included: NFC dogs still print. */
+  pedigree: string[];
+  /** SV/WUSV gaps — only a competitive (non-NFC) standard entry on a regional
+   *  show. Includes the sire, dam and breeder lines in their stricter SV form. */
+  sv: string[];
+  /** The pedigree gaps the SV list does not already cover, so nothing is said
+   *  twice: on a regional entry the SV lines cover sire, dam and breeder, and
+   *  only the colour is left. Equals `pedigree` whenever `sv` doesn't apply. */
+  pedigreeNotInSv: string[];
+  /** Everything, each gap once — what the manual entry warns about and the
+   *  entries list shows as "Still needed". */
+  all: string[];
+};
+
+/** The catalogue pedigree gaps alone — every show, every standard entry. */
+export function pedigreeRequirementsMissing(dog: EntryRequirementDog): string[] {
+  return PEDIGREE_FIELDS.filter((f) => blank(dog[f.key])).map((f) => f.label);
+}
+
 /**
- * Everything this dog is missing before it may be entered into these classes.
- * Empty array means it is ready.
+ * What this entry is missing before it may be entered into these classes —
+ * the ONE place that decides which rules apply to which entry. Callers choose
+ * only what to DO about it (refuse, warn, or show it on a card).
  *
- * `showRuleset` gates the SV/WUSV half — a standard RKC show needs only the
- * baseline pedigree the catalogue prints.
+ *   - A Junior Handler entry has no dog: nothing applies.
+ *   - Every standard entry needs the catalogue pedigree.
+ *   - A competitive standard entry on a regional (wusv) show also needs the
+ *     SV fields (SV_ENTRY_DOG_FIELDS), the health triad from SV Yearling up,
+ *     and a working title for the Working class. NFC is not competing and is
+ *     exempt from that half.
  */
-export function entryRequirementsMissing(opts: {
+export function entryRequirements(opts: {
   dog: EntryRequirementDog;
   svProfile?: EntryRequirementProfile | null;
   /** Raw class-definition names being entered. */
   classNames: string[];
   showRuleset?: string | null;
-}): string[] {
-  const { dog, svProfile, classNames, showRuleset } = opts;
+  entryType: string;
+  isNfc: boolean;
+}): EntryRequirements {
+  const { dog, svProfile, classNames, showRuleset, entryType, isNfc } = opts;
+  if (entryType !== 'standard') return { pedigree: [], sv: [], pedigreeNotInSv: [], all: [] };
 
-  // Every show: sire, dam, breeder and colour all print in the catalogue.
-  const missing = [...pedigreeMissingForEntry(dog)];
+  const pedigree = pedigreeRequirementsMissing(dog);
+  const svApplies = showRuleset === 'wusv' && !isNfc;
+  if (!svApplies) return { pedigree, sv: [], pedigreeNotInSv: pedigree, all: pedigree };
 
-  if (showRuleset !== 'wusv') return missing;
-
-  // Health is demanded from the Yearling class up — the same rule
-  // svEntryMissingRequirements applied via SV_HEALTH_FROM_CLASSES, expressed
-  // once here and handed to svMissingRequirements as `healthRequired`.
-  const healthRequired = classNames.some((n) => SV_HEALTH_FROM_CLASSES.has(n));
-
-  const pedigree: SvPedigree = {
-    sireName: dog.sireName,
-    sireRegistrationNumber: dog.sireRegistrationNumber,
-    damName: dog.damName,
-    damRegistrationNumber: dog.damRegistrationNumber,
-    breederName: dog.breederName,
-    breederCity: dog.breederCity,
-    breederPostcode: dog.breederPostcode,
-  };
-
-  missing.push(
-    ...svMissingRequirements({
-      coatType: dog.coatType,
-      healthRequired,
-      profile: svProfile ?? {},
-      pedigree,
-      ownRegistrationNumber: dog.kcRegNumber ?? '',
-      registrationBody: dog.registrationBody ?? '',
-      microchipNumber: dog.microchipNumber ?? '',
-    })
-  );
+  const sv = svMissingRequirements({
+    coatType: dog.coatType,
+    // Health is demanded from the Yearling class up.
+    healthRequired: classNames.some((n) => SV_HEALTH_FROM_CLASSES.has(n)),
+    profile: svProfile ?? {},
+    pedigree: {
+      sireName: dog.sireName,
+      sireRegistrationNumber: dog.sireRegistrationNumber,
+      damName: dog.damName,
+      damRegistrationNumber: dog.damRegistrationNumber,
+      breederName: dog.breederName,
+      breederCity: dog.breederCity,
+      breederPostcode: dog.breederPostcode,
+    },
+    ownRegistrationNumber: dog.kcRegNumber ?? '',
+    registrationBody: dog.registrationBody ?? '',
+    microchipNumber: dog.microchipNumber ?? '',
+  });
 
   // The Working class wants a working title on top. `hasWorkingTitle` rejects
   // BH / AD / WB — recorded qualifications, but not working ones — so a dog
   // holding only those is told it cannot enter Working rather than being
   // quietly admitted (Mandy 2026-08-19).
   if (classNames.includes('Working') && !hasWorkingTitle(svProfile?.workingTitle)) {
-    missing.push('Working title');
+    sv.push('Working title');
   }
 
-  // svMissingRequirements and pedigreeMissingForEntry overlap on the sire and
-  // dam (one wants the name, the other the name AND registration number), so
-  // the same dog can produce two lines about one field. De-duplicate on the
-  // exact text; the SV wording is the more specific of the two and both are
-  // kept only when they genuinely differ.
-  return [...new Set(missing)];
+  // A pedigree field the SV declaration also checks is already on an SV line.
+  const svFields = new Set<string>(SV_ENTRY_DOG_FIELDS.map((f) => f.field));
+  const pedigreeNotInSv = PEDIGREE_FIELDS.filter((f) => blank(dog[f.key]) && !svFields.has(f.key)).map(
+    (f) => f.label,
+  );
+  return { pedigree, sv, pedigreeNotInSv, all: [...sv, ...pedigreeNotInSv] };
 }
 
 /** The refusal shown to an exhibitor. */
