@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { isVisibleToViewer } from '@/lib/result-visibility';
 import { SHOW_COLUMNS_FOR_PUBLIC_INCLUDE } from '../public-show-fields';
 import { TRPCError } from '@trpc/server';
-import { and, eq, ne, inArray, isNull, isNotNull, or, asc, desc, sql } from 'drizzle-orm';
+import { and, eq, inArray, isNull, isNotNull, or, asc, desc, sql } from 'drizzle-orm';
 import { protectedProcedure, publicProcedure } from '../procedures';
 import { createTRPCRouter } from '../init';
 import { dogs, dogOwners, dogTitles, dogPhotos, users, entries, entryClasses, showClasses, shows, results, classDefinitions, achievements, judgeAssignments, judges, dogSvProfile } from '@/server/db/schema';
@@ -16,6 +16,7 @@ import { dogAccessCondition, dogRowGrantsAccess, userMayActOnDog } from '@/serve
 import { findClearedPedigreeFields, pedigreeClearMessage } from '@/lib/dog-pedigree';
 import { getLimitedShowEligibility } from '@/server/services/limited-show-eligibility';
 import { isShowChampion, DOG_TITLE_TYPES } from '@/lib/dog-champion-status';
+import { findDogRegistrationClash, dogRegistrationClashMessage } from '@/lib/dog-registration-clash';
 
 /**
  * Recommend the best class for a dog based on age eligibility first,
@@ -515,53 +516,56 @@ export const dogsRouter = createTRPCRouter({
       // If this owner previously removed (soft-deleted) a dog with the same RKC
       // registration number, restore that row instead of inserting — the unique
       // kcRegNumber constraint would otherwise throw a raw 500 and the dog could
-      // never be re-added (bug hunt #23). A clash with an ACTIVE dog (or another
-      // owner's record) returns a friendly error rather than a 500.
+      // never be re-added (bug hunt #23). Any other clash — a live duplicate on
+      // this account, or any dog (live or removed) on another account — is
+      // explained by lib/dog-registration-clash.ts, the one place this rule is
+      // written.
       if (dogData.kcRegNumber) {
-        const clash = await ctx.db.query.dogs.findFirst({
-          where: eq(dogs.kcRegNumber, dogData.kcRegNumber),
+        const clash = await findDogRegistrationClash(ctx.db, {
+          kcRegNumber: dogData.kcRegNumber,
+          currentUserId: ctx.session.user.id,
         });
-        if (clash) {
-          if (clash.deletedAt && clash.ownerId === ctx.session.user.id) {
-            const [restored] = await ctx.db
-              .update(dogs)
-              .set({
-                ...dogData,
-                kcRegNumber: dogData.kcRegNumber,
-                sireName: dogData.sireName ?? null,
-                damName: dogData.damName ?? null,
-                breederName: dogData.breederName ?? null,
-                colour: dogData.colour ?? null,
-                deletedAt: null,
-                ownerId: ctx.session.user.id,
-              })
-              .where(eq(dogs.id, clash.id))
-              .returning();
-            await ctx.db.delete(dogOwners).where(eq(dogOwners.dogId, clash.id));
-            await ctx.db.insert(dogOwners).values(
-              owners.map((o, i) => ({
-                dogId: clash.id,
-                userId: i === 0 ? ctx.session.user.id : null,
-                ownerTitle: o.ownerTitle || null,
-                ownerName: o.ownerName,
-                ownerAddress: o.ownerAddress,
-                ownerEmail: o.ownerEmail,
-                ownerPhone: o.ownerPhone ?? null,
-                isPrimary: o.isPrimary || i === 0,
-                sortOrder: i,
-              }))
+        if (clash.kind === 'own-deleted') {
+          const [restored] = await ctx.db
+            .update(dogs)
+            .set({
+              ...dogData,
+              kcRegNumber: dogData.kcRegNumber,
+              sireName: dogData.sireName ?? null,
+              damName: dogData.damName ?? null,
+              breederName: dogData.breederName ?? null,
+              colour: dogData.colour ?? null,
+              deletedAt: null,
+              ownerId: ctx.session.user.id,
+            })
+            .where(eq(dogs.id, clash.dog.id))
+            .returning();
+          await ctx.db.delete(dogOwners).where(eq(dogOwners.dogId, clash.dog.id));
+          await ctx.db.insert(dogOwners).values(
+            owners.map((o, i) => ({
+              dogId: clash.dog.id,
+              userId: i === 0 ? ctx.session.user.id : null,
+              ownerTitle: o.ownerTitle || null,
+              ownerName: o.ownerName,
+              ownerAddress: o.ownerAddress,
+              ownerEmail: o.ownerEmail,
+              ownerPhone: o.ownerPhone ?? null,
+              isPrimary: o.isPrimary || i === 0,
+              sortOrder: i,
+            }))
+          );
+          if (titles && titles.length > 0) {
+            await ctx.db.delete(dogTitles).where(eq(dogTitles.dogId, clash.dog.id));
+            await ctx.db.insert(dogTitles).values(
+              titles.map((title) => ({ dogId: clash.dog.id, title }))
             );
-            if (titles && titles.length > 0) {
-              await ctx.db.delete(dogTitles).where(eq(dogTitles.dogId, clash.id));
-              await ctx.db.insert(dogTitles).values(
-                titles.map((title) => ({ dogId: clash.id, title }))
-              );
-            }
-            return restored!;
           }
+          return restored!;
+        }
+        if (clash.kind !== 'none') {
           throw new TRPCError({
             code: 'BAD_REQUEST',
-            message: 'A dog with this Royal Kennel Club registration number is already registered.',
+            message: dogRegistrationClashMessage(clash, 'owner'),
           });
         }
       }
@@ -693,20 +697,21 @@ export const dogsRouter = createTRPCRouter({
       // client verbatim — query text, every parameter, the lot — and the dog
       // form puts it straight on screen. Rebecca Landgren added the same dog
       // three times, then got a wall of SQL containing her own details when she
-      // tried to fix it (Mandy 2026-08-22). Catch it here and say what's wrong.
+      // tried to fix it (Mandy 2026-08-22). Catch it here and say what's wrong
+      // — lib/dog-registration-clash.ts, the one place this rule is written,
+      // also covers the case Rebecca's fix missed: the clash can be a dog on
+      // someone ELSE'S account, which must never be named to this caller
+      // (Belinda Webb, Michael 2026-09-11).
       if (kcRegNumber !== undefined && kcRegNumber) {
-        const clash = await ctx.db.query.dogs.findFirst({
-          where: and(eq(dogs.kcRegNumber, kcRegNumber), ne(dogs.id, id)),
-          columns: { id: true, registeredName: true, deletedAt: true },
+        const clash = await findDogRegistrationClash(ctx.db, {
+          kcRegNumber,
+          excludeDogId: id,
+          currentUserId: ctx.session.user.id,
         });
-        if (clash) {
-          // The overwhelmingly likely cause is the same dog entered twice, so
-          // say that rather than implying someone else has stolen the number.
+        if (clash.kind !== 'none') {
           throw new TRPCError({
             code: 'BAD_REQUEST',
-            message: clash.deletedAt
-              ? `That registration number belongs to "${clash.registeredName}", a dog that was removed. Please contact the show secretary to have it freed up.`
-              : `That registration number is already on "${clash.registeredName}". If that's this dog added twice, edit that record instead — or remove the duplicate first.`,
+            message: dogRegistrationClashMessage(clash, 'owner'),
           });
         }
       }
