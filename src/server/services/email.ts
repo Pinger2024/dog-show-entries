@@ -1,3 +1,4 @@
+import { publicOrgColumns } from '@/server/trpc/public-org-columns';
 import { Resend } from 'resend';
 import { escapeHtml } from '@/lib/html-escape';
 import { db } from '@/server/db';
@@ -336,7 +337,7 @@ export async function sendExtrasAddedEmail(
     where: eq(orders.id, orderId),
     with: {
       exhibitor: true,
-      show: { with: { organisation: true } },
+      show: { with: { organisation: { columns: publicOrgColumns } } },
     },
   });
 

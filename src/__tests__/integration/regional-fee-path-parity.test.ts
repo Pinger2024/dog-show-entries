@@ -265,7 +265,7 @@ describe('regional scale spans separate orders', () => {
       entries: [{ entryType: 'standard', dogId: d3.id, classIds: [classA.id], isNfc: false }],
     });
     expect(abandoned.totalAmount).toBe(1600); // priced as the 3rd dog at checkout time
-    // Left unsettled — do NOT call settleOrder.
+    // Left unsettled — do NOT call settleOrderLikeWebhook.
 
     // The fee preview must NOT count the abandoned 3rd dog as "already entered".
     const priorCount = await caller.entries.regionalPriorDogCount({ showId: show.id });
@@ -348,14 +348,14 @@ describe('regional edit — a later basket never re-prices an earlier one', () =
       ],
     });
     expect(first.totalAmount).toBe(4000);
-    await settleOrder(first.orderId);
+    await settleOrderLikeWebhook(first.orderId);
 
     const later = await caller.orders.checkout({
       showId: show.id,
       entries: [{ entryType: 'standard', dogId: d3.id, classIds: [classA.id], isNfc: false }],
     });
     expect(later.totalAmount).toBe(1600);
-    await settleOrder(later.orderId);
+    await settleOrderLikeWebhook(later.orderId);
 
     const firstDogs = await testDb.query.entries.findMany({ where: eq(entries.orderId, first.orderId) });
     const edited = await caller.entries.update({ id: firstDogs[0]!.id, classIds: [classB.id] });

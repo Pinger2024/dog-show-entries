@@ -31,6 +31,7 @@ const ENFORCEMENT_FILES = [
   join(SRC, 'server', 'trpc', 'routers', 'entries.ts'),
   join(SRC, 'server', 'services', 'entry-change-pricing.ts'),
   join(SRC, 'server', 'services', 'order-extras-pricing.ts'),
+  join(SRC, 'lib', 'entry-edit-rules.ts'),
 ];
 
 const WINDOW_CHECK = /show\.status\s*(!==|===)\s*['"]entries_open['"]/;
@@ -67,9 +68,14 @@ describe('entryWindowOpen — one owner', () => {
     const pricing = readFileSync(join(SRC, 'server', 'services', 'entry-change-pricing.ts'), 'utf8');
     const pricingExtras = readFileSync(join(SRC, 'server', 'services', 'order-extras-pricing.ts'), 'utf8');
 
+    const editRules = readFileSync(join(SRC, 'lib', 'entry-edit-rules.ts'), 'utf8');
+
     expect(orders).toMatch(/entryWindowOpen\(/);
     expect(entriesRouter).toMatch(/entryWindowOpen\(/);
-    expect(pricing).toMatch(/entryWindowOpen\(/);
+    // A class change is gated by entryClassChangeBlock (paid entry + window),
+    // whose show half IS entryWindowOpen.
+    expect(pricing).toMatch(/entryClassChangeBlock\(/);
+    expect(editRules).toMatch(/entryWindowOpen\(/);
     expect(pricingExtras).toMatch(/entryWindowOpen\(/);
   });
 });
