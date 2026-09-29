@@ -497,8 +497,16 @@ export function FrontMatterContent({ show, compact }: FrontMatterProps & { compa
           heading's own marginTop instead. */}
       <ShowInformationContent show={show} sectionGap={SECTION_GAP} />
 
+      {/* No minPresenceAhead on this wrapper. It used to carry 140pt as a
+          stand-in for "band + first judge", but minPresenceAhead demands
+          that much of the NEXT section follow the whole block — so a judges
+          list that fitted completely was still pushed to a fresh page,
+          leaving half a page blank above it (Mandy, North Eastern
+          2026-09-29). The band can't orphan without it: JudgesListContent
+          keeps the band atomic with the first judge in both of its layouts,
+          and Class Definitions (a Flow) glues its own heading. */}
       {showJudgesSection && (
-        <View style={{ marginTop: SECTION_GAP }} minPresenceAhead={140}>
+        <View style={{ marginTop: SECTION_GAP }}>
           <JudgesListContent show={show} />
         </View>
       )}
@@ -1505,11 +1513,45 @@ export function JudgesListContent({ show }: FrontMatterProps) {
     }
   }
 
+  // One breed's row: breed, judge, ring, then the judge's photo + bio.
+  // Unbreakable on its own; the first one also carries the band + header.
+  const renderBreedRow = (breed: string) => {
+    const judgeName = judges[breed];
+    const ringNo = ringNumbers[breed];
+    const bio = judgeBios[judgeName ?? ''];
+    const photoUrl = show.judgePhotos?.[judgeName ?? ''];
+    return (
+      <>
+        <View style={styles.judgesListRow}>
+          <Text style={styles.judgesListBreed}>{breed}</Text>
+          <Text style={styles.judgesListJudge}>{judgeName}</Text>
+          {hasRings && (
+            <Text style={{ fontFamily: 'Inter', fontSize: 7.5, width: 30, textAlign: 'right', color: ringNo ? C.textDark : C.textLight }}>
+              {ringNo ?? '—'}
+            </Text>
+          )}
+        </View>
+        {(bio || photoUrl) && (
+          <View style={{ flexDirection: 'row', paddingLeft: 6, paddingTop: 2, paddingBottom: 4, gap: 6 }}>
+            {photoUrl && (
+              <Image src={photoUrl} style={{ width: 36, height: 36, borderRadius: 18 }} />
+            )}
+            {bio && (
+              <Text style={{ ...styles.judgeBio, flex: 1, marginBottom: 0 }}>{bio}</Text>
+            )}
+          </View>
+        )}
+      </>
+    );
+  };
+
   return (
     <>
-      {/* Keep banner + table header atomic so the banner never sits
-          alone at the bottom of a page with the table flowing to the
-          next. */}
+      {/* Band + table header + FIRST breed row atomic, so the band never
+          sits alone at the bottom of a page with the table flowing to the
+          next — the same rule as the single-breed layout above. This is
+          what protects the band; the section wrapper in FrontMatterContent
+          no longer needs a minPresenceAhead guess to do it. */}
       <KeepTogether>
         <SectionBand title="List of Judges" />
         <View style={{ ...styles.judgesListRow, borderBottomWidth: 1.5, borderBottomColor: C.primary, marginBottom: 4 }}>
@@ -1519,37 +1561,12 @@ export function JudgesListContent({ show }: FrontMatterProps) {
             <Text style={{ fontFamily: 'Inter', fontSize: 7.5, fontWeight: 'bold', width: 30, textAlign: 'right' }}>Ring</Text>
           )}
         </View>
+        {renderBreedRow(sortedBreeds[0])}
       </KeepTogether>
 
-      {sortedBreeds.map((breed) => {
-        const judgeName = judges[breed];
-        const ringNo = ringNumbers[breed];
-        const bio = judgeBios[judgeName ?? ''];
-        const photoUrl = show.judgePhotos?.[judgeName ?? ''];
-        return (
-          <KeepTogether key={breed}>
-            <View style={styles.judgesListRow}>
-              <Text style={styles.judgesListBreed}>{breed}</Text>
-              <Text style={styles.judgesListJudge}>{judgeName}</Text>
-              {hasRings && (
-                <Text style={{ fontFamily: 'Inter', fontSize: 7.5, width: 30, textAlign: 'right', color: ringNo ? C.textDark : C.textLight }}>
-                  {ringNo ?? '—'}
-                </Text>
-              )}
-            </View>
-            {(bio || photoUrl) && (
-              <View style={{ flexDirection: 'row', paddingLeft: 6, paddingTop: 2, paddingBottom: 4, gap: 6 }}>
-                {photoUrl && (
-                  <Image src={photoUrl} style={{ width: 36, height: 36, borderRadius: 18 }} />
-                )}
-                {bio && (
-                  <Text style={{ ...styles.judgeBio, flex: 1, marginBottom: 0 }}>{bio}</Text>
-                )}
-              </View>
-            )}
-          </KeepTogether>
-        );
-      })}
+      {sortedBreeds.slice(1).map((breed) => (
+        <KeepTogether key={breed}>{renderBreedRow(breed)}</KeepTogether>
+      ))}
 
       {/* Other judges (JH, dogs/bitches-only, etc.) not in the breed
           table. Each gets a card-style row with photo + name + role +
