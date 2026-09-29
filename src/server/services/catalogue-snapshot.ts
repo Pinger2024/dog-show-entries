@@ -46,7 +46,7 @@ import { publicOrgColumns } from '@/server/trpc/public-org-columns';
 import { getPaidOrderIdsForShow } from '@/server/services/show-metrics';
 import { formatDogName, formatDogNameForCatalogue } from '@/lib/utils';
 import { appendRegistrationFlags } from '@/lib/registration-flags';
-import { fetchPdfSafeImage } from '@/lib/safe-image-fetch';
+import { fetchPdfSafeImage, withPreparedSponsorLogos } from '@/lib/safe-image-fetch';
 import { syncCatalogueNumbers } from '@/server/services/catalogue-numbering';
 import { getDockingStatementFromScheduleData } from '@/lib/rkc-compliance';
 import { buildClassLabelMap, buildCatalogueClassDefinitions, sortEntryClassesByShowClassOrder } from '@/lib/class-labels';
@@ -737,8 +737,8 @@ export function materializeCatalogueEntries(
 /**
  * Produce a render-ready COPY of `snapshot` with real image bytes wired in:
  * advert portrait/landscape orientation (prepareAdvertsForRender, which
- * rotates landscape artwork into a data: URI) and show-tier sponsor logos
- * (fetchPdfSafeImage, into `logoBuffer` — exactly the field the components
+ * rotates landscape artwork into a data: URI) and every sponsor's logo
+ * (withPreparedSponsorLogos, into `logoBuffer` — exactly the field the components
  * already read, e.g. sv-front-matter.tsx's ShowSponsorBilling). This is
  * what used to happen inside buildCatalogueSnapshot(), at enqueue time, in
  * the web process — see the file header for why that OOM'd prod. It now
@@ -765,8 +765,8 @@ export async function hydrateSnapshotForRender(snapshot: CatalogueSnapshot): Pro
       if (isLegacyBufferMarker(legacy)) {
         return { ...s, logoBuffer: fromBufferMarker(legacy) };
       }
-      const logoBuffer = s.tier === 'show' && s.logoUrl ? await fetchPdfSafeImage(s.logoUrl) : null;
-      return { ...s, logoBuffer };
+      const [prepared] = await withPreparedSponsorLogos([s]);
+      return prepared;
     }),
   );
 

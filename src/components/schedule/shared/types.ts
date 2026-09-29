@@ -141,6 +141,8 @@ export interface ScheduleSponsor {
   tier: string;
   customTitle: string | null;
   logoUrl: string | null;
+  /** Prepared logo (withPreparedSponsorLogos) — read via sponsorLogoSrc. */
+  logoBuffer?: Buffer | null;
   website: string | null;
   specialPrizes: string | null;
   classSponsorships: Array<{

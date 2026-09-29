@@ -1,4 +1,5 @@
 import { Document, Page, Text, View, Image, Link } from '@react-pdf/renderer';
+import { sponsorLogoSrc } from '@/lib/sponsor-logo';
 import { formatCurrency } from '@/lib/date-utils';
 import { lookupRkcDefinition, RKC_NFC_DEFINITION } from '@/lib/rkc-class-definitions';
 import React from 'react';
@@ -173,14 +174,14 @@ export function ShowSchedule({
 
           {/* Title sponsor logo — prominent, above the show name */}
           {(() => {
-            const titleSponsor = sponsors.find((sp) => sp.tier === 'title' && sp.logoUrl);
+            const titleSponsor = sponsors.find((sp) => sp.tier === 'title' && sponsorLogoSrc(sp));
             if (!titleSponsor) return null;
             return (
               <View style={{ alignItems: 'center', marginBottom: 4 }}>
                 <Text style={{ fontFamily: 'Inter', fontSize: 6, color: C.textLight, letterSpacing: 1, textTransform: 'uppercase', marginBottom: 3 }}>
                   {titleSponsor.customTitle ?? 'Sponsored by'}
                 </Text>
-                <Image src={titleSponsor.logoUrl!} style={{ maxWidth: 120, maxHeight: 40, objectFit: 'contain' }} />
+                <Image src={sponsorLogoSrc(titleSponsor)!} style={{ maxWidth: 120, maxHeight: 40, objectFit: 'contain' }} />
               </View>
             );
           })()}
@@ -196,13 +197,13 @@ export function ShowSchedule({
 
           {/* Show-level sponsor logos below badge */}
           {(() => {
-            const showSponsors = sponsors.filter((sp) => sp.tier === 'show' && sp.logoUrl);
+            const showSponsors = sponsors.filter((sp) => sp.tier === 'show' && sponsorLogoSrc(sp));
             if (showSponsors.length === 0) return null;
             return (
               <View style={{ flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 12, marginTop: 4, flexWrap: 'wrap' }}>
                 {showSponsors.map((sp, i) => (
                   <View key={i} style={{ alignItems: 'center' }}>
-                    <Image src={sp.logoUrl!} style={{ maxWidth: 80, maxHeight: 28, objectFit: 'contain' }} />
+                    <Image src={sponsorLogoSrc(sp)!} style={{ maxWidth: 80, maxHeight: 28, objectFit: 'contain' }} />
                     <Text style={{ fontFamily: 'Inter', fontSize: 5.5, color: C.textLight, marginTop: 1 }}>
                       {sp.customTitle ?? sp.name}
                     </Text>
@@ -678,13 +679,13 @@ export function ShowSchedule({
               {/* Tier label */}
               <Text style={{
                 fontFamily: 'Inter', fontSize: 6, fontWeight: 'bold', color: C.accent,
-                letterSpacing: 1.5, textTransform: 'uppercase', marginBottom: sp.logoUrl ? 6 : 3,
+                letterSpacing: 1.5, textTransform: 'uppercase', marginBottom: sponsorLogoSrc(sp) ? 6 : 3,
               }}>
                 {sp.customTitle ?? (sp.tier === 'title' ? 'Title Sponsor' : 'Show Sponsor')}
               </Text>
               {/* Logo — large and proud */}
-              {sp.logoUrl && (
-                <Image src={sp.logoUrl} style={{
+              {sponsorLogoSrc(sp) && (
+                <Image src={sponsorLogoSrc(sp)!} style={{
                   maxWidth: sp.tier === 'title' ? 160 : 120,
                   maxHeight: sp.tier === 'title' ? 50 : 36,
                   objectFit: 'contain',

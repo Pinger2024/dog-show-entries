@@ -101,13 +101,10 @@ export interface ShowSponsorInfo {
   logoUrl: string | null;
   website: string | null;
   customTitle: string | null;
-  /** Show-tier sponsor's logo, pre-fetched server-side through the
-   *  SSRF-guarded `fetchClubImage()` (src/lib/safe-image-fetch.ts) rather
-   *  than handed to react-pdf as a bare URL. Only populated for the tier
-   *  that renders it prominently (the "With grateful thanks" / show-
-   *  particulars billing block) — null when there's no logo, the fetch
-   *  failed, or the host was blocked; renderers must degrade to a
-   *  text-only billing block in that case, never crash. */
+  /** The sponsor's logo prepared for the PDF (withPreparedSponsorLogos:
+   *  SSRF-guarded fetch, cropped to its visible content, checked to embed),
+   *  for every tier. null when there's no logo or it couldn't be prepared —
+   *  renderers show the name alone. Read it through `sponsorLogoSrc`. */
   logoBuffer?: Buffer | null;
 }
 

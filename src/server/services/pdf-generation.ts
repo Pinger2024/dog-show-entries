@@ -12,7 +12,7 @@ import { and, eq, isNull, asc, sql } from 'drizzle-orm';
 import * as schema from '@/server/db/schema';
 import { formatLondonLongDateNoComma } from '@/lib/date-utils';
 import { renderToBuffer } from '@react-pdf/renderer';
-import { fetchClubImage } from '@/lib/safe-image-fetch';
+import { fetchClubImage, withPreparedSponsorLogos } from '@/lib/safe-image-fetch';
 import { PrizeCards } from '@/components/prize-cards/prize-cards';
 import type { PrizeCardShowInfo, PrizeCardClass } from '@/components/prize-cards/prize-cards';
 import { pickScheduleComponent, designedSchedulePageCount } from '@/components/schedule';
@@ -366,7 +366,7 @@ export async function generateSchedulePdf(showId: string): Promise<Buffer> {
     }
   }
 
-  const sponsors: ScheduleSponsor[] = showSponsors.map((ss) => ({
+  const sponsors: ScheduleSponsor[] = await withPreparedSponsorLogos(showSponsors.map((ss) => ({
     name: ss.sponsor.name,
     tier: ss.tier,
     customTitle: ss.customTitle,
@@ -374,7 +374,7 @@ export async function generateSchedulePdf(showId: string): Promise<Buffer> {
     website: ss.sponsor.website,
     specialPrizes: ss.specialPrizes,
     classSponsorships: classSponsorsByShowSponsor.get(ss.id) ?? [],
-  }));
+  })));
 
   const showInfo: ScheduleShowInfo = {
     slug: show.slug,

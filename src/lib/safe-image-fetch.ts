@@ -176,8 +176,11 @@ const MAX_LOGO_DIMENSIONS = { width: 1300, height: 460 } as const;
  * fail a secretary's document over it.
  */
 export async function fetchPdfSafeImage(rawUrl: string): Promise<Buffer | null> {
-  const raw = await fetchClubImage(rawUrl);
-  if (!raw) return null;
+  const fetched = await fetchClubImage(rawUrl);
+  if (!fetched) return null;
+  // A logo is laid out by its whole canvas, so empty space around it shrinks
+  // the logo itself — crop to what's actually drawn first.
+  const raw = await cropToVisibleContent(fetched);
 
   try {
     const { hasAlpha } = await sharp(raw).metadata();
@@ -193,4 +196,94 @@ export async function fetchPdfSafeImage(rawUrl: string): Promise<Buffer | null> 
   } catch {
     return null;
   }
+}
+
+/** How opaque a pixel must be to count as part of a logo. A faint speck —
+ *  CSJ's upload had one at 19% opacity in the corner — doesn't. */
+const VISIBLE_ALPHA = 128;
+/** On an image with no transparency, anything this close to white is paper. */
+const NEAR_WHITE = 245;
+
+/**
+ * Crop an image to its visible content, keeping a small margin.
+ *
+ * PDF renderers size a logo by its whole canvas, so a logo uploaded with
+ * empty space around it prints small — North Eastern's CSJ logo filled a
+ * 347×115 strip of a 449×384 canvas and printed about 5mm wide in the
+ * catalogue's "With grateful thanks to" box (Mandy, 29 Sept 2026). On an
+ * image with transparency "visible" means mostly opaque; on one without,
+ * it means not near-white. Returns the input unchanged when nothing is
+ * visible, when the content already fills the canvas, or on any decode
+ * error — cropping is an improvement, never a reason to lose the logo.
+ */
+export async function cropToVisibleContent(input: Buffer): Promise<Buffer> {
+  try {
+    const { data, info } = await sharp(input)
+      .rotate()
+      .ensureAlpha()
+      .raw()
+      .toBuffer({ resolveWithObject: true });
+    const { width: w, height: h } = info;
+
+    let transparent = false;
+    for (let i = 3; i < data.length; i += 4) {
+      if (data[i] < VISIBLE_ALPHA) {
+        transparent = true;
+        break;
+      }
+    }
+
+    let minX = w;
+    let minY = h;
+    let maxX = -1;
+    let maxY = -1;
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        const i = (y * w + x) * 4;
+        const visible = transparent
+          ? data[i + 3] >= VISIBLE_ALPHA
+          : !(data[i] >= NEAR_WHITE && data[i + 1] >= NEAR_WHITE && data[i + 2] >= NEAR_WHITE);
+        if (!visible) continue;
+        if (x < minX) minX = x;
+        if (x > maxX) maxX = x;
+        if (y < minY) minY = y;
+        if (y > maxY) maxY = y;
+      }
+    }
+    if (maxX < 0) return input;
+
+    const contentW = maxX - minX + 1;
+    const contentH = maxY - minY + 1;
+    if (contentW * contentH >= w * h * 0.95) return input;
+
+    const pad = Math.round(Math.max(contentW, contentH) * 0.02);
+    const left = Math.max(0, minX - pad);
+    const top = Math.max(0, minY - pad);
+    return await sharp(input)
+      .rotate()
+      .extract({
+        left,
+        top,
+        width: Math.min(w - left, contentW + 2 * pad),
+        height: Math.min(h - top, contentH + 2 * pad),
+      })
+      .toBuffer();
+  } catch {
+    return input;
+  }
+}
+
+/**
+ * Prepare every sponsor's logo for a PDF render — the one step each render
+ * path runs (the catalogue snapshot at render time, and both schedule
+ * assemblers). `logoBuffer` becomes the prepared image, or null when there is
+ * no logo or it couldn't be prepared; `sponsorLogoSrc` (sponsor-logo.ts) is
+ * how renderers read it.
+ */
+export async function withPreparedSponsorLogos<T extends { logoUrl: string | null }>(
+  sponsors: T[],
+): Promise<(T & { logoBuffer: Buffer | null })[]> {
+  return Promise.all(
+    sponsors.map(async (s) => ({ ...s, logoBuffer: s.logoUrl ? await fetchPdfSafeImage(s.logoUrl) : null })),
+  );
 }

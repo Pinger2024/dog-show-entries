@@ -17,6 +17,7 @@
  * tonal wash sitting behind the content so the document reads as one
  * continuous design from cover to last entry.
  */
+import { sponsorLogoSrc } from '@/lib/sponsor-logo';
 import { Image, Page, Text, View } from '@react-pdf/renderer';
 import { TonalWash } from '@/components/sv-pdf/cover-atoms';
 import { SV, ss, SV_FONTS } from '@/components/schedule/shared/sv-styles';
@@ -92,17 +93,16 @@ function ShowSponsorBilling({ sponsor }: { sponsor: ShowSponsorInfo }) {
       }}
       wrap={false}
     >
-      <Text style={[ss.eyebrow, { color: SV.accent, marginBottom: sponsor.logoBuffer ? 5 : 3 }]}>
+      <Text style={[ss.eyebrow, { color: SV.accent, marginBottom: sponsorLogoSrc(sponsor) ? 5 : 3 }]}>
         {sponsor.customTitle ?? 'Official show sponsor'}
       </Text>
-      {sponsor.logoBuffer ? (
-        // react-pdf resolves a raw Buffer locally (no network fetch of its
-        // own) — the `as unknown as string` cast only satisfies its
-        // (string | { data, format }) src type. Sized to the artwork's own
-        // aspect ratio via objectFit: contain, same idiom as the cover's
+      {sponsorLogoSrc(sponsor) ? (
+        // The prepared logo (sponsorLogoSrc) — a Buffer react-pdf resolves
+        // locally, with no network fetch of its own. Sized to the artwork's
+        // own aspect ratio via objectFit: contain, same idiom as the cover's
         // ClubCrestSlot.
         <Image
-          src={sponsor.logoBuffer as unknown as string}
+          src={sponsorLogoSrc(sponsor)!}
           style={{ maxWidth: 130, maxHeight: 46, objectFit: 'contain', marginBottom: 5 }}
         />
       ) : null}

@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { sponsorLogoSrc } from '@/lib/sponsor-logo';
 import { View, Text, Image } from '@react-pdf/renderer';
 import { PageFrame, Folio, KeepTogether, FitText, BalancedColumns, Flow } from '@/components/pdf-kit';
 import { estimateTextHeight } from '@/components/pdf-kit/measure';
@@ -1044,14 +1045,14 @@ export function CoverPage({ show }: FrontMatterProps) {
 
         {/* Title sponsor logo — prominent, above the show name (matching schedule) */}
         {(() => {
-          const titleSponsor = (show.showSponsors ?? []).find((sp) => sp.tier === 'title' && sp.logoUrl);
+          const titleSponsor = (show.showSponsors ?? []).find((sp) => sp.tier === 'title' && sponsorLogoSrc(sp));
           if (!titleSponsor) return null;
           return (
             <View style={{ alignItems: 'center', marginBottom: 4 }}>
               <Text style={{ fontFamily: 'Inter', fontSize: 6, color: C.textLight, letterSpacing: 1, textTransform: 'uppercase', marginBottom: 3 }}>
                 {titleSponsor.customTitle ?? 'Sponsored by'}
               </Text>
-              <Image src={titleSponsor.logoUrl!} style={{ maxWidth: 120, maxHeight: 40, objectFit: 'contain' }} />
+              <Image src={sponsorLogoSrc(titleSponsor)!} style={{ maxWidth: 120, maxHeight: 40, objectFit: 'contain' }} />
             </View>
           );
         })()}
@@ -1089,13 +1090,13 @@ export function CoverPage({ show }: FrontMatterProps) {
 
         {/* Show-level sponsor logos below badge (matching schedule) */}
         {(() => {
-          const showLevelSponsors = (show.showSponsors ?? []).filter((sp) => sp.tier === 'show' && sp.logoUrl);
+          const showLevelSponsors = (show.showSponsors ?? []).filter((sp) => sp.tier === 'show' && sponsorLogoSrc(sp));
           if (showLevelSponsors.length === 0) return null;
           return (
             <View style={{ flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 12, marginTop: 4, flexWrap: 'wrap' }}>
               {showLevelSponsors.map((sp, i) => (
                 <View key={i} style={{ alignItems: 'center' }}>
-                  <Image src={sp.logoUrl!} style={{ maxWidth: 80, maxHeight: 28, objectFit: 'contain' }} />
+                  <Image src={sponsorLogoSrc(sp)!} style={{ maxWidth: 80, maxHeight: 28, objectFit: 'contain' }} />
                   <Text style={{ fontFamily: 'Inter', fontSize: 5.5, color: C.textLight, marginTop: 1 }}>
                     {sp.customTitle ?? sp.name}
                   </Text>
@@ -1340,8 +1341,8 @@ export function ShowParticularsContent({ show }: FrontMatterProps) {
               </Text>
               {tierSponsors.map((sp, i) => (
                 <View key={i} style={{ alignItems: 'center', marginBottom: 4 }}>
-                  {sp.logoUrl && (
-                    <Image src={sp.logoUrl} style={{ width: 100, height: 50, objectFit: 'contain', marginBottom: 3 }} />
+                  {sponsorLogoSrc(sp) && (
+                    <Image src={sponsorLogoSrc(sp)!} style={{ width: 100, height: 50, objectFit: 'contain', marginBottom: 3 }} />
                   )}
                   <Text style={{ fontFamily: 'Inter', fontSize: 9, fontWeight: 'bold', color: C.textDark }}>
                     {sp.customTitle ? `${sp.customTitle}: ` : ''}{sp.name}
@@ -1355,10 +1356,15 @@ export function ShowParticularsContent({ show }: FrontMatterProps) {
               <Text style={styles.coverSectionLabel}>With grateful thanks to</Text>
               {supporterSponsors.map((sp, i) => (
                 <View key={i} style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 2 }}>
-                  {sp.logoUrl && (
-                    <Image src={sp.logoUrl} style={{ width: 30, height: 15, objectFit: 'contain', marginRight: 6 }} />
+                  {/* Was 30×15 — a supporter's logo printed about 5mm wide
+                      (Mandy, North Eastern, 29 Sept 2026). */}
+                  {sponsorLogoSrc(sp) && (
+                    <Image src={sponsorLogoSrc(sp)!} style={{ width: 64, height: 26, objectFit: 'contain', marginRight: 8 }} />
                   )}
-                  <Text style={{ fontFamily: 'Inter', fontSize: 7.5, color: C.textMedium }}>
+                  {/* flex: 1 so a long line ("CSJ - provided complimentary dog
+                      food prizes for…") wraps beside the logo instead of
+                      running off the card. */}
+                  <Text style={{ fontFamily: 'Inter', fontSize: 7.5, color: C.textMedium, flex: 1 }}>
                     {sp.name}
                   </Text>
                 </View>

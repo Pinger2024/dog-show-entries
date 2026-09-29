@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { withPreparedSponsorLogos } from '@/lib/safe-image-fetch';
 import { publicOrgColumns } from '@/server/trpc/public-org-columns';
 import { db } from '@/server/db';
 import { eq, asc } from 'drizzle-orm';
@@ -279,7 +280,7 @@ export async function GET(
   }
 
   // Build sponsors data (defensive: skip sponsors with missing sponsor record)
-  const sponsors: ScheduleSponsor[] = showSponsorData
+  const sponsors: ScheduleSponsor[] = await withPreparedSponsorLogos(showSponsorData
     .filter((ss) => ss.sponsor != null)
     .map((ss) => ({
       name: ss.sponsor.name,
@@ -294,7 +295,7 @@ export async function GET(
         trophyDonor: cs.trophyDonor,
         prizeDescription: cs.prizeDescription,
       })),
-    }));
+    })));
 
   const showInfo: ScheduleShowInfo = {
     slug: show.slug,
