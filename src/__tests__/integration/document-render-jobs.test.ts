@@ -48,6 +48,7 @@ vi.mock('@/lib/safe-image-fetch', async (importOriginal) => {
     ...actual,
     fetchClubImage: vi.fn(actual.fetchClubImage),
     fetchPdfSafeImage: vi.fn(actual.fetchPdfSafeImage),
+    withPreparedSponsorLogos: vi.fn(actual.withPreparedSponsorLogos),
   };
 });
 
@@ -81,7 +82,7 @@ import {
 import { uploadToR2 } from '@/server/services/storage';
 import { padPdfToMultiple, stripUnembeddedBase14Fonts } from '@/lib/pdf-pad';
 import { prepareAdvertsForRender } from '@/lib/advert-orientation';
-import { fetchClubImage, fetchPdfSafeImage } from '@/lib/safe-image-fetch';
+import { fetchClubImage, fetchPdfSafeImage, withPreparedSponsorLogos } from '@/lib/safe-image-fetch';
 import sharp from 'sharp';
 import crypto from 'node:crypto';
 import { PDFDocument } from 'pdf-lib';
@@ -94,6 +95,7 @@ beforeEach(() => {
   vi.mocked(prepareAdvertsForRender).mockClear();
   vi.mocked(fetchClubImage).mockClear();
   vi.mocked(fetchPdfSafeImage).mockClear();
+  vi.mocked(withPreparedSponsorLogos).mockClear();
 });
 
 function authedAs(user: { id: string; email: string; name: string | null; role: string }) {
@@ -688,11 +690,16 @@ describe('catalogue snapshot — carries image URLs, not bytes (2026-08-27)', ()
 
     const snapshot = await buildCatalogueSnapshot(testDb, show.id);
     expect(prepareAdvertsForRender).not.toHaveBeenCalled();
+    expect(withPreparedSponsorLogos).not.toHaveBeenCalled();
     expect(fetchPdfSafeImage).not.toHaveBeenCalled();
 
     await renderCatalogueFromSnapshot(snapshot, 'standard');
     expect(prepareAdvertsForRender).toHaveBeenCalledTimes(1);
-    expect(fetchPdfSafeImage).toHaveBeenCalledTimes(1); // exactly one show-tier sponsor
+    // Sponsor logos are prepared (fetched, cropped, checked) at render time —
+    // the one sponsor here, once. withPreparedSponsorLogos calls
+    // fetchPdfSafeImage inside its own module, so that's what to watch.
+    expect(withPreparedSponsorLogos).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(withPreparedSponsorLogos).mock.calls[0]![0]).toHaveLength(1);
   }, 20_000);
 
   it('renders a PDF with the same page count as before this refactor', async () => {
