@@ -205,7 +205,7 @@ already pinned by `settlement-itemisation-withdrawn.test.ts:234`.
 
 ## 4. The official SV results report reads the wrong absent flag
 
-**Status: VERIFIED** · **Cost: an absent dog is graded and ranked in a document sent to the club and judges**
+**Status: FIXED 22 Sept on branch `fix-sv-absent-and-manual-number` (`eae91bea`), not yet pushed** — per-class flag now on `SvEntryClassInput`; entry-level flag removed from the input type; guard in `sv-results.test.ts`. The two-implementations note below still stands. Was: **VERIFIED** · **Cost: an absent dog is graded and ranked in a document sent to the club and judges**
 
 `entry_classes.absent` is authoritative per class; `entries.absent` is a roll-up that is true only
 when **every** class is absent (schema comment, `schema/entry-classes.ts:18`, Mandy 2026-08-12).
@@ -249,7 +249,7 @@ one.
 
 ## 6. A dog can be given two catalogue numbers
 
-**Status: VERIFIED** · **Cost: breaks one-number-per-dog on a printed, locked catalogue**
+**Status: FIXED 22 Sept on branch `fix-sv-absent-and-manual-number`, not yet pushed** — `createManualEntry` now calls `syncCatalogueNumbers`; guard in `catalogue-numbering-lock.test.ts` fails on any hand-rolled catalogue number. Was: **VERIFIED** · **Cost: breaks one-number-per-dog on a printed, locked catalogue**
 
 `appendMissingNumbers` (`services/catalogue-numbering.ts:180`) builds a `numberByDog` map so a dog
 that already holds a number reuses it — its comment says this exists because *"buying a Special

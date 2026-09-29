@@ -124,3 +124,41 @@ describe('isPublicRoute allows every page the footer links to', () => {
     });
   }
 });
+
+/**
+ * Bug hunt 2026-09-22: the judge's results-approval link
+ * (/api/results-approval/<token>) was never on the public list, so a judge who
+ * isn't logged in to Remi — most judges — was bounced to the login page and
+ * could never approve. Guard: EVERY token-gated API route (a `[token]` segment)
+ * must be public; the token is its only credential.
+ */
+describe('every token-gated API route is public', () => {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { readdirSync, statSync } = require('fs') as typeof import('fs');
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { join, relative, sep } = require('path') as typeof import('path');
+  const API = join(__dirname, '..', 'app', 'api');
+  function walk(dir: string): string[] {
+    let out: string[] = [];
+    for (const e of readdirSync(dir)) {
+      const full = join(dir, e);
+      if (statSync(full).isDirectory()) out = out.concat(walk(full));
+      else if (e === 'route.ts') out.push(full);
+    }
+    return out;
+  }
+  const tokenRoutes = walk(API)
+    .map((f) => '/api/' + relative(API, f).split(sep).slice(0, -1).join('/'))
+    .filter((p) => p.includes('[token]'));
+
+  it('finds the token-gated routes (guard against a broken walk)', () => {
+    expect(tokenRoutes.length).toBeGreaterThanOrEqual(3);
+  });
+
+  for (const route of tokenRoutes) {
+    const concrete = route.replace('[token]', '11111111-1111-1111-1111-111111111111');
+    it(`treats ${concrete} as public (no login redirect)`, () => {
+      expect(isPublicRoute(concrete)).toBe(true);
+    });
+  }
+});

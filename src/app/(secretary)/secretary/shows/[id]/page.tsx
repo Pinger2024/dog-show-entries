@@ -22,12 +22,18 @@ import {
 import { toast } from 'sonner';
 import { trpc } from '@/lib/trpc';
 import { format } from 'date-fns';
-import { formatDateRange, poundsToPence } from '@/lib/date-utils';
 import {
-  isCloseDateWithinFloor,
+  formatDateRange,
+  poundsToPence,
+  toLondonDateTimeInput,
+  closeInputForPickedDate,
+  closeInputDate,
+  closeInputTime,
+} from '@/lib/date-utils';
+import {
+  checkCloseInput,
   latestPermissibleCloseDate,
   latestPermissibleCloseDateInputValue,
-  entryCloseFloorMessage,
   entryCloseAdjustedMessage,
 } from '@/lib/entry-close-rules';
 import { EntryCloseHint } from '@/components/shows/entry-close-hint';
@@ -456,9 +462,11 @@ function adjustCloseDateForFloor(
   newStartDate: string,
   field: 'entry close date' | 'postal close date',
 ) {
-  if (!newStartDate || !closeDate || isCloseDateWithinFloor(closeDate, newStartDate)) return;
+  if (!newStartDate) return;
+  const check = checkCloseInput(closeDate, newStartDate, field);
+  if (check.ok || check.reason !== 'too-late') return;
   const adjusted = latestPermissibleCloseDate(newStartDate);
-  setCloseDate(`${format(adjusted, 'yyyy-MM-dd')}T23:59`);
+  setCloseDate(closeInputForPickedDate(format(adjusted, 'yyyy-MM-dd')));
   toast.info(entryCloseAdjustedMessage(field, adjusted));
 }
 
@@ -514,15 +522,13 @@ function EditShowDetailsDialog({
   const [onCallVet, setOnCallVet] = useState(show.onCallVet ?? '');
   const [startDate, setStartDate] = useState(show.startDate);
   const [endDate, setEndDate] = useState(show.endDate);
+  // Close date/time boxes hold UK wall-clock 'YYYY-MM-DDTHH:mm' — never the
+  // UTC clock (2026-09-22: that moved every BST close an hour earlier per Save).
   const [entryCloseDate, setEntryCloseDate] = useState(
-    show.entryCloseDate
-      ? new Date(show.entryCloseDate).toISOString().slice(0, 16)
-      : ''
+    show.entryCloseDate ? toLondonDateTimeInput(show.entryCloseDate) : ''
   );
   const [postalCloseDate, setPostalCloseDate] = useState(
-    show.postalCloseDate
-      ? new Date(show.postalCloseDate).toISOString().slice(0, 16)
-      : ''
+    show.postalCloseDate ? toLondonDateTimeInput(show.postalCloseDate) : ''
   );
   const [kcLicenceNo, setKcLicenceNo] = useState(show.kcLicenceNo ?? '');
   const [description, setDescription] = useState(show.description ?? '');
@@ -567,12 +573,16 @@ function EditShowDetailsDialog({
     // Mandy's hard rule (2026-08-04): entries — and postal entries — must
     // close at least two weeks before the show. Same helper + message the
     // server uses, so this can never drift from what the server accepts.
-    if (entryCloseDate && startDate && !isCloseDateWithinFloor(entryCloseDate, startDate)) {
-      toast.error(entryCloseFloorMessage(startDate, 'entry close date'));
+    // checkCloseInput also hands back the exact instant to send, so the
+    // value checked is the value saved.
+    const entryClose = checkCloseInput(entryCloseDate, startDate, 'entry close date');
+    if (!entryClose.ok) {
+      toast.error(entryClose.message);
       return;
     }
-    if (postalCloseDate && startDate && !isCloseDateWithinFloor(postalCloseDate, startDate)) {
-      toast.error(entryCloseFloorMessage(startDate, 'postal close date'));
+    const postalClose = checkCloseInput(postalCloseDate, startDate, 'postal close date');
+    if (!postalClose.ok) {
+      toast.error(postalClose.message);
       return;
     }
     updateMutation.mutate({
@@ -589,12 +599,8 @@ function EditShowDetailsDialog({
       onCallVet: onCallVet || null,
       startDate,
       endDate,
-      entryCloseDate: entryCloseDate
-        ? new Date(entryCloseDate).toISOString()
-        : null,
-      postalCloseDate: postalCloseDate
-        ? new Date(postalCloseDate).toISOString()
-        : null,
+      entryCloseDate: entryClose.instant,
+      postalCloseDate: postalClose.instant,
       kcLicenceNo: kcLicenceNo || null,
       description: description || null,
       bannerImageUrl: bannerImageUrl || null,
@@ -622,16 +628,8 @@ function EditShowDetailsDialog({
     setShowScope(show.showScope);
     setStartDate(show.startDate);
     setEndDate(show.endDate);
-    setEntryCloseDate(
-      show.entryCloseDate
-        ? new Date(show.entryCloseDate).toISOString().slice(0, 16)
-        : ''
-    );
-    setPostalCloseDate(
-      show.postalCloseDate
-        ? new Date(show.postalCloseDate).toISOString().slice(0, 16)
-        : ''
-    );
+    setEntryCloseDate(show.entryCloseDate ? toLondonDateTimeInput(show.entryCloseDate) : '');
+    setPostalCloseDate(show.postalCloseDate ? toLondonDateTimeInput(show.postalCloseDate) : '');
     setKcLicenceNo(show.kcLicenceNo ?? '');
     setDescription(show.description ?? '');
     setClassSexArrangement(show.classSexArrangement ?? '');
@@ -939,14 +937,15 @@ function EditShowDetailsDialog({
                     id="edit-entry-close"
                     type="date"
                     className="flex-1"
-                    value={entryCloseDate.slice(0, 10)}
+                    value={closeInputDate(entryCloseDate)}
                     max={startDate ? latestPermissibleCloseDateInputValue(startDate) : undefined}
                     onChange={(e) => {
-                      const newClose = e.target.value
-                        ? `${e.target.value}T23:59`
-                        : '';
-                      if (newClose && startDate && !isCloseDateWithinFloor(newClose, startDate)) {
-                        toast.error(entryCloseFloorMessage(startDate, 'entry close date'));
+                      // A picked date closes at 23:59 UK time (founder rule).
+                      const newClose = e.target.value ? closeInputForPickedDate(e.target.value) : '';
+                      const check = checkCloseInput(newClose, startDate, 'entry close date');
+                      if (!check.ok) {
+                        // Still being typed (e.g. a 5-digit year): wait quietly.
+                        if (check.reason === 'too-late') toast.error(check.message);
                         return;
                       }
                       setEntryCloseDate(newClose);
@@ -956,11 +955,11 @@ function EditShowDetailsDialog({
                     aria-label="Closing time"
                     type="time"
                     className="w-28"
-                    value={entryCloseDate.length >= 16 ? entryCloseDate.slice(11, 16) : '23:59'}
+                    value={closeInputTime(entryCloseDate)}
                     disabled={!entryCloseDate}
                     onChange={(e) =>
                       entryCloseDate &&
-                      setEntryCloseDate(`${entryCloseDate.slice(0, 10)}T${e.target.value || '23:59'}`)
+                      setEntryCloseDate(closeInputForPickedDate(closeInputDate(entryCloseDate), e.target.value))
                     }
                   />
                 </div>
@@ -972,14 +971,15 @@ function EditShowDetailsDialog({
                     id="edit-postal-close"
                     type="date"
                     className="flex-1"
-                    value={postalCloseDate.slice(0, 10)}
+                    value={closeInputDate(postalCloseDate)}
                     max={startDate ? latestPermissibleCloseDateInputValue(startDate) : undefined}
                     onChange={(e) => {
-                      const newClose = e.target.value
-                        ? `${e.target.value}T23:59`
-                        : '';
-                      if (newClose && startDate && !isCloseDateWithinFloor(newClose, startDate)) {
-                        toast.error(entryCloseFloorMessage(startDate, 'postal close date'));
+                      // A picked date closes at 23:59 UK time (founder rule).
+                      const newClose = e.target.value ? closeInputForPickedDate(e.target.value) : '';
+                      const check = checkCloseInput(newClose, startDate, 'postal close date');
+                      if (!check.ok) {
+                        // Still being typed (e.g. a 5-digit year): wait quietly.
+                        if (check.reason === 'too-late') toast.error(check.message);
                         return;
                       }
                       setPostalCloseDate(newClose);
@@ -989,11 +989,11 @@ function EditShowDetailsDialog({
                     aria-label="Postal closing time"
                     type="time"
                     className="w-28"
-                    value={postalCloseDate.length >= 16 ? postalCloseDate.slice(11, 16) : '23:59'}
+                    value={closeInputTime(postalCloseDate)}
                     disabled={!postalCloseDate}
                     onChange={(e) =>
                       postalCloseDate &&
-                      setPostalCloseDate(`${postalCloseDate.slice(0, 10)}T${e.target.value || '23:59'}`)
+                      setPostalCloseDate(closeInputForPickedDate(closeInputDate(postalCloseDate), e.target.value))
                     }
                   />
                 </div>

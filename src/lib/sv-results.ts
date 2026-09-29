@@ -57,7 +57,20 @@ export interface SvResultInput {
 
 export interface SvEntryClassInput {
   showClassId: string;
+  /** `entry_classes.absent` — authoritative PER CLASS (Mandy 2026-08-12).
+   *  There is deliberately no entry-level absent flag on these inputs: the
+   *  `entries.absent` roll-up is true only when EVERY class is absent, so a
+   *  dog absent from her graded class but shown in a Special Award class
+   *  would otherwise be graded and ranked here (register §4, 2026-09-11). */
+  absent: boolean;
   result: SvResultInput | null;
+}
+
+/** One entry's standing in one show-class, with that class's absent flag. */
+export interface SvClassMember {
+  entry: SvEntryInput;
+  result: SvResultInput | null;
+  absent: boolean;
 }
 
 export interface SvOwnerInput {
@@ -91,7 +104,6 @@ export interface SvDogInput {
 
 export interface SvEntryInput {
   id: string;
-  absent: boolean;
   catalogueNumber: string | null;
   entryType: 'standard' | 'junior_handler';
   dog: SvDogInput | null;
@@ -306,10 +318,10 @@ export interface SvComputedRow {
  */
 export function computeClassMembers(
   showClass: SvShowClassInput,
-  members: { entry: SvEntryInput; result: SvResultInput | null }[],
+  members: SvClassMember[],
 ): SvComputedRow[] {
-  const present = members.filter((m) => !m.entry.absent);
-  const absent = members.filter((m) => m.entry.absent);
+  const present = members.filter((m) => !m.absent);
+  const absent = members.filter((m) => m.absent);
   const out: SvComputedRow[] = [];
 
   // Present dogs, grade by grade — rankWithinGrades is the one SV ranking.
@@ -388,13 +400,13 @@ function ageIndex(name: string | null | undefined): number {
  *  entryClasses point at the SV age class it ran in. */
 function membersByShowClass(
   entries: SvEntryInput[],
-): Map<string, { entry: SvEntryInput; result: SvResultInput | null }[]> {
-  const map = new Map<string, { entry: SvEntryInput; result: SvResultInput | null }[]>();
+): Map<string, SvClassMember[]> {
+  const map = new Map<string, SvClassMember[]>();
   for (const entry of entries) {
     if (entry.entryType !== 'standard') continue;
     for (const ec of entry.entryClasses) {
       const list = map.get(ec.showClassId) ?? [];
-      list.push({ entry, result: ec.result });
+      list.push({ entry, result: ec.result, absent: ec.absent });
       map.set(ec.showClassId, list);
     }
   }
@@ -488,11 +500,17 @@ export function buildSvResultsReport(input: SvResultsReportInput): SvResultsRepo
   }
 
   // Header counts — over the standard (non-JH) entries that ran an SV class.
+  // Absent = absent from every SV age class it ran in (SV is one class per
+  // dog, so in practice: absent from its graded class). A Special Award
+  // class the dog WAS shown in does not make it present here.
+  const svAgeClassIds = new Set(svAgeClasses.map((c) => c.id));
   const standardEntries = entries.filter(
-    (e) => e.entryType === 'standard' && e.entryClasses.some((ec) => svAgeClasses.find((c) => c.id === ec.showClassId)),
+    (e) => e.entryType === 'standard' && e.entryClasses.some((ec) => svAgeClassIds.has(ec.showClassId)),
   );
   const entered = standardEntries.length;
-  const absent = standardEntries.filter((e) => e.absent).length;
+  const absent = standardEntries.filter((e) =>
+    e.entryClasses.filter((ec) => svAgeClassIds.has(ec.showClassId)).every((ec) => ec.absent),
+  ).length;
   const present = entered - absent;
   const absenteePct = entered > 0 ? Math.round((absent / entered) * 100) : 0;
 
@@ -511,9 +529,12 @@ export function buildSvResultsReport(input: SvResultsReportInput): SvResultsRepo
   for (const jc of jhClasses) {
     const members = memberMap.get(jc.id) ?? entries
       .filter((e) => e.entryType === 'junior_handler' && e.entryClasses.some((ec) => ec.showClassId === jc.id))
-      .map((e) => ({ entry: e, result: e.entryClasses.find((ec) => ec.showClassId === jc.id)?.result ?? null }));
+      .map((e): SvClassMember => {
+        const ec = e.entryClasses.find((x) => x.showClassId === jc.id);
+        return { entry: e, result: ec?.result ?? null, absent: ec?.absent ?? false };
+      });
     const placed = members
-      .filter((m) => !m.entry.absent && m.result?.placement != null)
+      .filter((m) => !m.absent && m.result?.placement != null)
       .sort((a, b) => comparePlacing(a.result?.placement, b.result?.placement));
     if (placed.length === 0) continue;
     jhGroups.push({

@@ -15,6 +15,7 @@ import {
   CardTitle,
 } from '@/components/ui/card';
 import { SECard, Wordmark } from '@/components/show-experience/kit';
+import { safeCallbackUrl } from '@/lib/safe-redirect';
 
 function GoogleIcon({ className }: { className?: string }) {
   return (
@@ -41,7 +42,11 @@ function GoogleIcon({ className }: { className?: string }) {
 
 export function LoginForm() {
   const searchParams = useSearchParams();
-  const callbackUrl = searchParams.get('callbackUrl') ?? '/dashboard';
+  // Only a same-site path, ever — see src/lib/safe-redirect.ts. This one
+  // value feeds all three sign-in paths (password, Google, magic link).
+  const callbackUrl = safeCallbackUrl(searchParams.get('callbackUrl'), {
+    origin: typeof window !== 'undefined' ? window.location.origin : undefined,
+  });
   const verify = searchParams.get('verify');
   const resetSuccess = searchParams.get('reset') === 'success';
   const authError = searchParams.get('error');

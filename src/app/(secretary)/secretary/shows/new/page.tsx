@@ -32,11 +32,18 @@ import {
 import Link from 'next/link';
 import { format, addDays, subDays } from 'date-fns';
 import { trpc } from '@/lib/trpc';
-import { poundsToPence, formatCurrency, parseLocalDate } from '@/lib/date-utils';
 import {
-  isCloseDateWithinFloor,
+  poundsToPence,
+  formatCurrency,
+  parseLocalDate,
+  fromLondonDateTimeInput,
+  closeInputForPickedDate,
+  formatLondonDate,
+  formatCloseTimeUK,
+} from '@/lib/date-utils';
+import {
+  checkCloseInput,
   latestPermissibleCloseDate,
-  entryCloseFloorMessage,
 } from '@/lib/entry-close-rules';
 import { EntryCloseHint } from '@/components/shows/entry-close-hint';
 import { CLASS_TEMPLATES, getRelevantTemplates } from '@/lib/class-templates';
@@ -108,7 +115,7 @@ const classSexArrangements = [
 
 import { SHOW_TIMES } from '@/lib/show-times';
 
-const createShowSchema = z.object({
+export const createShowSchema = z.object({
   // Step 1 - Basic Info
   name: z.string().min(1, 'Show name is required').max(255),
   showType: z.enum([
@@ -182,24 +189,43 @@ const createShowSchema = z.object({
   // close at least 13 calendar days before the show ("two weeks give or
   // take a day"). Same helper + message the server uses, via superRefine
   // (not .refine) because the message needs the show's own date — the
-  // client can never drift from what the server accepts.
-  if (data.entryCloseDate && data.startDate && !isCloseDateWithinFloor(data.entryCloseDate, data.startDate)) {
-    ctx.addIssue({
-      code: 'custom',
-      message: entryCloseFloorMessage(data.startDate, 'entry close date'),
-      path: ['entryCloseDate'],
-    });
+  // client can never drift from what the server accepts. checkCloseInput
+  // never throws: a date that isn't complete yet (e.g. a 5-digit year) is a
+  // validation message on the field, not a crash.
+  if (data.entryCloseDate) {
+    const check = checkCloseInput(closeInputForPickedDate(data.entryCloseDate), data.startDate, 'entry close date');
+    if (!check.ok) ctx.addIssue({ code: 'custom', message: check.message, path: ['entryCloseDate'] });
   }
-  if (data.postalCloseDate && data.startDate && !isCloseDateWithinFloor(data.postalCloseDate, data.startDate)) {
-    ctx.addIssue({
-      code: 'custom',
-      message: entryCloseFloorMessage(data.startDate, 'postal close date'),
-      path: ['postalCloseDate'],
-    });
+  if (data.postalCloseDate) {
+    const check = checkCloseInput(closeInputForPickedDate(data.postalCloseDate), data.startDate, 'postal close date');
+    if (!check.ok) ctx.addIssue({ code: 'custom', message: check.message, path: ['postalCloseDate'] });
   }
 });
 
 type CreateShowValues = z.infer<typeof createShowSchema>;
+
+/**
+ * The new show's open / close instants exactly as shows.create takes them
+ * (and as the Review step shows them). The pickers hold bare dates:
+ * - entries OPEN at 00:00 UK time on the picked date;
+ * - entries — and postal entries — CLOSE at 23:59 UK time on the picked date
+ *   (founder rule, commit 44ffeaad; owner `closeInputForPickedDate`). Until
+ *   2026-09-22 this stored 00:00, closing entries at the start of the last
+ *   day the schedule advertised.
+ * UK time whatever zone the browser is in. Throws on a date that isn't
+ * real — call it before anything is written.
+ */
+export function newShowDatesPayload(values: Pick<CreateShowValues, 'entriesOpenDate' | 'entryCloseDate' | 'postalCloseDate'>) {
+  return {
+    entriesOpenDate: values.entriesOpenDate ? fromLondonDateTimeInput(values.entriesOpenDate) : undefined,
+    entryCloseDate: values.entryCloseDate
+      ? fromLondonDateTimeInput(closeInputForPickedDate(values.entryCloseDate))
+      : undefined,
+    postalCloseDate: values.postalCloseDate
+      ? fromLondonDateTimeInput(closeInputForPickedDate(values.postalCloseDate))
+      : undefined,
+  };
+}
 
 const STEPS = [
   'Basic Info',
@@ -410,6 +436,9 @@ export default function NewShowPage() {
 
   async function onSubmit(values: CreateShowValues, asDraft: boolean) {
     try {
+      // Dates first: a date that isn't real fails here, before the venue or
+      // show is written.
+      const dates = newShowDatesPayload(values);
       let venueId = values.venueId;
 
       // Create venue if needed
@@ -441,15 +470,9 @@ export default function NewShowPage() {
         venueId: venueId || undefined,
         startDate: values.startDate,
         endDate: values.endDate,
-        entriesOpenDate: values.entriesOpenDate
-          ? parseLocalDate(values.entriesOpenDate).toISOString()
-          : undefined,
-        entryCloseDate: values.entryCloseDate
-          ? parseLocalDate(values.entryCloseDate).toISOString()
-          : undefined,
-        postalCloseDate: values.postalCloseDate
-          ? parseLocalDate(values.postalCloseDate).toISOString()
-          : undefined,
+        // A picked date means 00:00 UK time on that date, whatever zone the
+        // browser is in (parseLocalDate used the browser's own midnight).
+        ...dates,
         description: values.description || undefined,
         // Single-breed: pass class definition IDs directly
         classDefinitionIds: (values.showScope !== 'general' && values.selectedClassIds.length > 0)
@@ -1902,6 +1925,14 @@ function ReviewStep({
   onEditStep: (step: number) => void;
 }) {
   const values = form.getValues();
+  // Exactly what Create will send, shown in UK time — so the close reads
+  // "16 Aug 2026 · 23:59", the moment entries really shut.
+  let reviewDates: ReturnType<typeof newShowDatesPayload> | null = null;
+  try {
+    reviewDates = newShowDatesPayload(values);
+  } catch {
+    // A date isn't complete yet; Create will say so. Nothing to preview.
+  }
   const org = organisations.find((o) => o.id === values.organisationId);
   const venue = venues.find((v) => v.id === values.venueId);
   const selectedClasses = classDefinitions.filter((cd) =>
@@ -2030,22 +2061,26 @@ function ReviewStep({
         </div>
 
         {/* Entry Dates */}
-        {(values.entriesOpenDate || values.entryCloseDate) && (
+        {(reviewDates?.entriesOpenDate || reviewDates?.entryCloseDate) && (
           <div className="rounded-lg border bg-muted/20 p-4">
             <h3 className="text-xs font-semibold uppercase tracking-widest text-muted-foreground mb-3">
               Important Dates
             </h3>
             <div className="grid grid-cols-2 gap-3 text-sm">
-              {values.entriesOpenDate && (
+              {reviewDates?.entriesOpenDate && (
                 <div>
                   <p className="text-xs text-muted-foreground">Entries Open</p>
-                  <p className="font-medium">{new Date(values.entriesOpenDate).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}</p>
+                  <p className="font-medium">{formatLondonDate(reviewDates.entriesOpenDate, { day: 'numeric', month: 'short', year: 'numeric' })}</p>
                 </div>
               )}
-              {values.entryCloseDate && (
+              {reviewDates?.entryCloseDate && (
                 <div>
                   <p className="text-xs text-muted-foreground">Entries Close</p>
-                  <p className="font-medium">{new Date(values.entryCloseDate).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}</p>
+                  <p className="font-medium">
+                    {formatLondonDate(reviewDates.entryCloseDate, { day: 'numeric', month: 'short', year: 'numeric' })}
+                    {' · '}
+                    {formatCloseTimeUK(new Date(reviewDates.entryCloseDate))}
+                  </p>
                 </div>
               )}
             </div>

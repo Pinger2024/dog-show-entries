@@ -15,12 +15,18 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { trpc } from '@/lib/trpc';
-import { penceToPoundsString, poundsToPence } from '@/lib/date-utils';
+import {
+  penceToPoundsString,
+  poundsToPence,
+  toLondonDateTimeInput,
+  closeInputForPickedDate,
+  closeInputDate,
+  closeInputTime,
+} from '@/lib/date-utils';
 import {
   MIN_DAYS_BEFORE_SHOW_START,
-  isCloseDateWithinFloor,
+  checkCloseInput,
   latestPermissibleCloseDateInputValue,
-  entryCloseFloorMessage,
 } from '@/lib/entry-close-rules';
 import { EntryCloseHint } from '@/components/shows/entry-close-hint';
 import { cn } from '@/lib/utils';
@@ -648,15 +654,13 @@ function StepDetails({
     threshold: show.multiDogThreshold != null ? String(show.multiDogThreshold) : '',
     packagePence: show.multiDogPackagePence != null ? penceToPoundsString(show.multiDogPackagePence) : '',
   });
+  // Close date/time boxes hold UK wall-clock 'YYYY-MM-DDTHH:mm' — never the
+  // UTC clock (2026-09-22: that moved every BST close an hour earlier per Save).
   const [entryCloseDate, setEntryCloseDate] = useState(
-    show.entryCloseDate
-      ? new Date(show.entryCloseDate).toISOString().slice(0, 16)
-      : '',
+    show.entryCloseDate ? toLondonDateTimeInput(show.entryCloseDate) : '',
   );
   const [postalCloseDate, setPostalCloseDate] = useState(
-    show.postalCloseDate
-      ? new Date(show.postalCloseDate).toISOString().slice(0, 16)
-      : '',
+    show.postalCloseDate ? toLondonDateTimeInput(show.postalCloseDate) : '',
   );
   const [secretaryName, setSecretaryName] = useState(show.secretaryName ?? '');
   const [secretaryEmail, setSecretaryEmail] = useState(
@@ -693,12 +697,16 @@ function StepDetails({
     // Mandy's hard rule (2026-08-04): entries — and postal entries — must
     // close at least two weeks before the show. Same helper + message the
     // server uses, so this can never drift from what the server accepts.
-    if (entryCloseDate && show.startDate && !isCloseDateWithinFloor(entryCloseDate, show.startDate)) {
-      toast.error(entryCloseFloorMessage(show.startDate, 'entry close date'));
+    // checkCloseInput also hands back the exact instant to send, so the
+    // value checked is the value saved.
+    const entryClose = checkCloseInput(entryCloseDate, show.startDate, 'entry close date');
+    if (!entryClose.ok) {
+      toast.error(entryClose.message);
       return;
     }
-    if (postalCloseDate && show.startDate && !isCloseDateWithinFloor(postalCloseDate, show.startDate)) {
-      toast.error(entryCloseFloorMessage(show.startDate, 'postal close date'));
+    const postalClose = checkCloseInput(postalCloseDate, show.startDate, 'postal close date');
+    if (!postalClose.ok) {
+      toast.error(postalClose.message);
       return;
     }
 
@@ -719,12 +727,8 @@ function StepDetails({
       regionalFeeConfig: isWusv ? regionalPayload?.config ?? undefined : undefined,
       multiDogThreshold: isWusv ? undefined : multiDog.threshold ? Number(multiDog.threshold) : null,
       multiDogPackagePence: isWusv ? undefined : multiDog.packagePence ? poundsToPence(Number(multiDog.packagePence)) : null,
-      entryCloseDate: entryCloseDate
-        ? new Date(entryCloseDate).toISOString()
-        : null,
-      postalCloseDate: postalCloseDate
-        ? new Date(postalCloseDate).toISOString()
-        : null,
+      entryCloseDate: entryClose.instant,
+      postalCloseDate: postalClose.instant,
       secretaryName: secretaryName || null,
       secretaryEmail: secretaryEmail || null,
       secretaryPhone: secretaryPhone || null,
@@ -882,15 +886,18 @@ function StepDetails({
                 id="wiz-close-date"
                 type="date"
                 className="min-h-[2.75rem] flex-1"
-                value={entryCloseDate.slice(0, 10)}
+                value={closeInputDate(entryCloseDate)}
                 max={show.startDate ? latestPermissibleCloseDateInputValue(show.startDate) : undefined}
                 onChange={(e) => {
-                  const newClose = e.target.value ? `${e.target.value}T23:59` : '';
+                  // A picked date closes at 23:59 UK time (founder rule).
+                  const newClose = e.target.value ? closeInputForPickedDate(e.target.value) : '';
                   // Mandy's hard rule (2026-08-04): same floor guard as Save
                   // (handleSave above), but on change — immediate feedback
                   // rather than a surprise on the eventual save.
-                  if (newClose && show.startDate && !isCloseDateWithinFloor(newClose, show.startDate)) {
-                    toast.error(entryCloseFloorMessage(show.startDate, 'entry close date'));
+                  const check = checkCloseInput(newClose, show.startDate, 'entry close date');
+                  if (!check.ok) {
+                    // Still being typed (e.g. a 5-digit year): wait quietly.
+                    if (check.reason === 'too-late') toast.error(check.message);
                     return;
                   }
                   setEntryCloseDate(newClose);
@@ -900,11 +907,11 @@ function StepDetails({
                 aria-label="Closing time"
                 type="time"
                 className="min-h-[2.75rem] w-28"
-                value={entryCloseDate.length >= 16 ? entryCloseDate.slice(11, 16) : '23:59'}
+                value={closeInputTime(entryCloseDate)}
                 disabled={!entryCloseDate}
                 onChange={(e) =>
                   entryCloseDate &&
-                  setEntryCloseDate(`${entryCloseDate.slice(0, 10)}T${e.target.value || '23:59'}`)
+                  setEntryCloseDate(closeInputForPickedDate(closeInputDate(entryCloseDate), e.target.value))
                 }
               />
             </div>
@@ -919,13 +926,14 @@ function StepDetails({
                   id="wiz-postal-close"
                   type="date"
                   className="min-h-[2.75rem] flex-1"
-                  value={postalCloseDate.slice(0, 10)}
+                  value={closeInputDate(postalCloseDate)}
                   max={show.startDate ? latestPermissibleCloseDateInputValue(show.startDate) : undefined}
                   onChange={(e) => {
-                    const newClose = e.target.value ? `${e.target.value}T23:59` : '';
-                    // Same floor guard as the entry close date above.
-                    if (newClose && show.startDate && !isCloseDateWithinFloor(newClose, show.startDate)) {
-                      toast.error(entryCloseFloorMessage(show.startDate, 'postal close date'));
+                    const newClose = e.target.value ? closeInputForPickedDate(e.target.value) : '';
+                    // Same guard as the entry close date above.
+                    const check = checkCloseInput(newClose, show.startDate, 'postal close date');
+                    if (!check.ok) {
+                      if (check.reason === 'too-late') toast.error(check.message);
                       return;
                     }
                     setPostalCloseDate(newClose);
@@ -935,11 +943,11 @@ function StepDetails({
                   aria-label="Postal closing time"
                   type="time"
                   className="min-h-[2.75rem] w-28"
-                  value={postalCloseDate.length >= 16 ? postalCloseDate.slice(11, 16) : '23:59'}
+                  value={closeInputTime(postalCloseDate)}
                   disabled={!postalCloseDate}
                   onChange={(e) =>
                     postalCloseDate &&
-                    setPostalCloseDate(`${postalCloseDate.slice(0, 10)}T${e.target.value || '23:59'}`)
+                    setPostalCloseDate(closeInputForPickedDate(closeInputDate(postalCloseDate), e.target.value))
                   }
                 />
               </div>

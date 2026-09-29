@@ -125,6 +125,21 @@ async function entryReadyToEdit() {
 }
 
 describe('entries.update (class edit + fee diff)', () => {
+  // Bug hunt 2026-09-22: an entry left at checkout's payment step stays
+  // 'pending' (unpaid). Edit Classes let the exhibitor add a class, pay ONLY
+  // the difference, and the webhook's single-entry branch then confirmed and
+  // numbered the whole entry — dog in the catalogue for a few pounds.
+  it('refuses to change classes on an unpaid (pending) entry', async () => {
+    const { exhibitor, entry, c1, c2 } = await entryReadyToEdit();
+    await testDb.update(entries).set({ status: 'pending' }).where(eq(entries.id, entry.id));
+    await expect(
+      createTestCaller(exhibitor).entries.update({ id: entry.id, classIds: [c1.id, c2.id] }),
+    ).rejects.toThrow(/paid/i);
+    const adj = await testDb.query.payments.findFirst({ where: eq(payments.entryId, entry.id) });
+    expect(adj).toBeUndefined();
+  });
+
+
   it('adds a class — fee goes up, returns clientSecret for additional payment', async () => {
     const { exhibitor, entry, c1, c2 } = await entryReadyToEdit();
     const caller = createTestCaller(exhibitor);

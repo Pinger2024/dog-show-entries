@@ -20,7 +20,7 @@ import {
 import { toast } from 'sonner';
 import { trpc } from '@/lib/trpc';
 import type { AchievementType } from '@/lib/placements';
-import { resolveTopAwards, buildPlacementIndex, eligibleCandidates, isPuppyOnShowDate } from '@/lib/top-awards';
+import { resolveTopAwards, buildPlacementIndex, eligibleCandidates, isPuppyOnShowDate, awardFilter } from '@/lib/top-awards';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
@@ -286,13 +286,6 @@ const BIS_AWARDS: { type: AchievementType; label: string }[] = [
   { type: 'reserve_best_veteran_in_show', label: 'Reserve Best Veteran in Show' },
   { type: 'best_long_coat_in_show', label: 'Best Long Coat in Show' },
 ];
-
-/** Returns the required sex for an award type, or null if either sex is allowed */
-function requiredSexForAward(type: AchievementType): 'dog' | 'bitch' | null {
-  if (['dog_cc', 'reserve_dog_cc', 'best_puppy_dog', 'best_long_coat_dog'].includes(type)) return 'dog';
-  if (['bitch_cc', 'reserve_bitch_cc', 'best_puppy_bitch', 'best_long_coat_bitch'].includes(type)) return 'bitch';
-  return null;
-}
 
 /** Awards that are restricted to dogs aged under 12 months on show day —
  *  Amanda 2026-05-28: only puppy class winners should appear in the
@@ -673,7 +666,7 @@ function BestOfBreedSection({
             <>
               <div className="mt-2 border-t pt-2" />
               {CHAMPIONSHIP_AWARDS.map((award) => {
-                const sexFilter = requiredSexForAward(award.type);
+                const sexFilter = awardFilter(award.type).sex;
                 const basePool = RESERVE_AWARDS.has(award.type)
                   ? reserveCandidatesByBreed.get(breedName) ?? winners
                   : winners;

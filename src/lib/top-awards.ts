@@ -148,6 +148,93 @@ export function awardFilter(type: AchievementType): AwardFilter {
   };
 }
 
+/**
+ * How many dogs may hold an award at one show — the rule that decides which
+ * previous holder a new recording replaces. ONE owner: `recordTopAward`
+ * (server/services/achievements.ts) is the only writer, and every screen that
+ * records an award goes through it.
+ *
+ *   'show'  — one holder for the whole show (Best in Show, Best Puppy in Show,
+ *             Best Veteran in Show …).
+ *   'group' — one holder per breed group (Best Veteran in Group).
+ *   'breed' — one holder per breed (Best of Breed, the CCs, Best Dog/Bitch,
+ *             Most Promising, Best Puppy Dog, Best Long Coat …). On a
+ *             single-breed show that is one holder for the show.
+ *   'dog'   — not a one-holder award at all (class and group placements,
+ *             Junior Warrant points, Stud Book): many dogs hold it at one
+ *             show; re-recording a dog replaces only that dog's own row.
+ *
+ * A total Record keyed by every AchievementType, NOT a list of "unique"
+ * types: the list this replaced (a hard-coded "unique show awards" array in
+ * secretary.recordAchievement, Mar 2026) predated configurable Best Awards, so every
+ * type added since — Best Dog/Bitch, the regional Most Promising, Best
+ * Veteran in Show, Best Baby Puppy — fell through it and a correction left
+ * two dogs holding the award (bug hunt 22 Sept 2026). Adding a type to
+ * ACHIEVEMENT_TYPES now fails the type-check until it is given a scope here.
+ */
+export type AwardHolderScope = 'show' | 'group' | 'breed' | 'dog';
+
+const AWARD_HOLDER_SCOPE: Record<AchievementType, AwardHolderScope> = {
+  // Whole-show awards.
+  best_in_show: 'show',
+  reserve_best_in_show: 'show',
+  best_puppy_in_show: 'show',
+  best_veteran_in_show: 'show',
+  reserve_best_veteran_in_show: 'show',
+  best_long_coat_in_show: 'show',
+  // Per breed group.
+  best_veteran_in_group: 'group',
+  // Per breed — the breed judge's awards.
+  best_of_breed: 'breed',
+  best_puppy_in_breed: 'breed',
+  best_veteran_in_breed: 'breed',
+  cc: 'breed',
+  reserve_cc: 'breed',
+  dog_cc: 'breed',
+  reserve_dog_cc: 'breed',
+  bitch_cc: 'breed',
+  reserve_bitch_cc: 'breed',
+  best_puppy_dog: 'breed',
+  best_puppy_bitch: 'breed',
+  best_long_coat_dog: 'breed',
+  best_long_coat_bitch: 'breed',
+  best_dog: 'breed',
+  best_bitch: 'breed',
+  reserve_best_dog: 'breed',
+  reserve_best_bitch: 'breed',
+  most_promising_young_dog: 'breed',
+  most_promising_young_bitch: 'breed',
+  best_long_coat_adult: 'breed',
+  best_long_coat_puppy: 'breed',
+  // No "in Show" in the name, and configured as a breed-club award (South
+  // Western). Per breed is the safe reading: it can never remove another
+  // breed's winner, and on a single-breed show it is one holder anyway.
+  best_baby_puppy: 'breed',
+  // Many holders per show.
+  class_placement: 'dog',
+  group_placement: 'dog',
+  junior_warrant: 'dog',
+  stud_book: 'dog',
+};
+
+/**
+ * The scope an award's holder is unique within, AT THIS SHOW. On a
+ * single-breed show every one-holder award (breed or group scope) is one
+ * holder for the whole show — every dog is the same breed, and the secretary
+ * and steward pickers treat it that way (one row per award). On a group show
+ * the breed-group scope is the whole show.
+ */
+export function awardHolderScope(
+  type: AchievementType,
+  showScope: 'single_breed' | 'group' | 'general',
+): AwardHolderScope {
+  const scope = AWARD_HOLDER_SCOPE[type];
+  if (scope === 'dog') return 'dog';
+  if (showScope === 'single_breed') return 'show';
+  if (showScope === 'group' && scope === 'group') return 'show';
+  return scope;
+}
+
 /** Which Judge's Book page a Best Award prints on — split from one combined
  *  sign-off page into three, each placed where that decision is actually
  *  made (Mandy 2026-08-10, re-requested 2026-08-18 for two shows about to

@@ -1,6 +1,8 @@
 import { z } from 'zod';
 import { loadSvResultsData } from '@/server/services/sv-results-data';
 import { findPlacedWithoutGrade } from '@/lib/sv-results';
+import { dogSearchOwnerColumns } from '../owner-lookup-columns';
+import { roleAfterGrant, type UserRole } from '@/lib/roles';
 import { TRPCError } from '@trpc/server';
 import { and, eq, sql, isNull, isNotNull, inArray, asc, desc, ilike } from 'drizzle-orm';
 import { secretaryProcedure, publicProcedure } from '../procedures';
@@ -69,7 +71,7 @@ import {
 } from '@/lib/default-checklist';
 import { getStripe } from '@/server/services/stripe';
 import { executeStripeRefund } from '@/server/services/stripe-refunds';
-import { deriveTopAwardJudge } from '@/server/services/derive-award-judge';
+import { recordTopAward, removeTopAwardHolder } from '@/server/services/achievements';
 import { penceToPoundsString } from '@/lib/date-utils';
 import { Resend } from 'resend';
 import { searchKcJudges, fetchKcJudgeProfile } from '@/server/services/kc-judges';
@@ -2483,11 +2485,13 @@ export const secretaryRouter = createTRPCRouter({
         });
       }
 
-      // Update user role to steward if they're an exhibitor
-      if (user.role === 'exhibitor') {
+      // Grant steward (never lowers a role — src/lib/roles.ts). A judge-
+      // labelled user is raised to steward so the steward pages open for them.
+      const stewardRole = roleAfterGrant(user.role as UserRole, 'steward');
+      if (stewardRole !== user.role) {
         await ctx.db
           .update(users)
-          .set({ role: 'steward' })
+          .set({ role: stewardRole })
           .where(eq(users.id, user.id));
       }
 
@@ -3379,7 +3383,8 @@ export const secretaryRouter = createTRPCRouter({
         ),
         with: {
           breed: { with: { group: true } },
-          owners: { orderBy: [asc(dogOwners.sortOrder)], limit: 1 },
+          // Name + email only — never an owner's address or phone (owner-lookup-columns.ts).
+          owners: { columns: dogSearchOwnerColumns, orderBy: [asc(dogOwners.sortOrder)], limit: 1 },
           titles: true,
         },
         limit: input.limit,
@@ -3630,34 +3635,6 @@ export const secretaryRouter = createTRPCRouter({
         })
         .returning();
 
-      // Catalogue number for this late entry. While numbers are still
-      // PROVISIONAL (the show hasn't been locked for printing), we leave the
-      // number null here and re-sort the whole show after the classes are
-      // attached, so the new entry slots into its class. Once the secretary has
-      // LOCKED numbers for printing, append at max+1 so the printed catalogue's
-      // existing numbers never shift.
-      const showForNumbering = await ctx.db.query.shows.findFirst({
-        where: eq(shows.id, input.showId),
-        columns: { catalogueNumbersLockedAt: true },
-      });
-      const numbersLocked = Boolean(showForNumbering?.catalogueNumbersLockedAt);
-      let nextCatalogueNumber: string | null = null;
-      if (numbersLocked) {
-        const allNumbered = await ctx.db.query.entries.findMany({
-          where: and(
-            eq(entries.showId, input.showId),
-            eq(entries.status, 'confirmed'),
-            isNotNull(entries.catalogueNumber),
-          ),
-          columns: { catalogueNumber: true },
-        });
-        const highest = allNumbered.reduce((max, e) => {
-          const n = Number(e.catalogueNumber);
-          return Number.isFinite(n) && n > max ? n : max;
-        }, 0);
-        nextCatalogueNumber = String(highest + 1);
-      }
-
       // Create entry — auto-confirmed for secretary entries
       const [entry] = await ctx.db
         .insert(entries)
@@ -3673,7 +3650,8 @@ export const secretaryRouter = createTRPCRouter({
           totalFee: classFee,
           orderId: order!.id,
           status: 'confirmed',
-          catalogueNumber: nextCatalogueNumber,
+          // Numbered below by syncCatalogueNumbers once the classes exist.
+          catalogueNumber: null,
         })
         .returning();
 
@@ -3686,12 +3664,13 @@ export const secretaryRouter = createTRPCRouter({
         }))
       );
 
-      // Provisional numbers re-sort the whole show now that this entry's classes
-      // exist, so it lands in its class (and Junior Handlers / NFC stay grouped
-      // at the end) rather than tacked on. Locked shows keep the append above.
-      if (!numbersLocked) {
-        await resortCatalogueNumbers(ctx.db, input.showId);
-      }
+      // Catalogue number, via the one numbering owner now that the classes
+      // exist. Provisional numbers re-sort the whole show so the entry lands in
+      // its class (JH / NFC stay grouped at the end). LOCKED numbers append at
+      // max+1 without shifting the printed catalogue — and a dog that already
+      // holds a number keeps it, so a late class never gives it a second one
+      // (register §6: this path used to compute highest+1 itself, dog-blind).
+      await syncCatalogueNumbers(ctx.db, input.showId);
 
       // Create sundry item records
       if (selectedSundryItems.length > 0) {
@@ -7125,7 +7104,10 @@ export const secretaryRouter = createTRPCRouter({
       });
     }),
 
-  /** Record a best award / achievement (secretary-scoped) */
+  /** Record a best award / achievement (secretary-scoped). The secretary may
+   *  correct an award after Publish Results (no lock check here, unlike the
+   *  steward); `recordTopAward` owns the entry check, the sex rule, which
+   *  previous holder is replaced, and publishing a post-publish correction. */
   recordAchievement: secretaryProcedure
     .input(
       z.object({
@@ -7137,79 +7119,7 @@ export const secretaryRouter = createTRPCRouter({
     )
     .mutation(async ({ ctx, input }) => {
       await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId, { callerIsAdmin: ctx.callerIsAdmin });
-
-      // Verify the dog is entered in this show
-      const dogEntry = await ctx.db.query.entries.findFirst({
-        where: and(
-          eq(entries.showId, input.showId),
-          eq(entries.dogId, input.dogId),
-          eq(entries.status, 'confirmed'),
-          isNull(entries.deletedAt)
-        ),
-        columns: { id: true },
-      });
-      if (!dogEntry) {
-        throw new TRPCError({
-          code: 'BAD_REQUEST',
-          message: 'This dog is not entered in this show',
-        });
-      }
-
-      // Validate sex matches award type
-      const DOG_ONLY_AWARDS = ['dog_cc', 'reserve_dog_cc', 'best_puppy_dog', 'best_long_coat_dog'];
-      const BITCH_ONLY_AWARDS = ['bitch_cc', 'reserve_bitch_cc', 'best_puppy_bitch', 'best_long_coat_bitch'];
-
-      if (DOG_ONLY_AWARDS.includes(input.type) || BITCH_ONLY_AWARDS.includes(input.type)) {
-        const dog = await ctx.db.query.dogs.findFirst({
-          where: eq(dogs.id, input.dogId),
-          columns: { sex: true },
-        });
-        const requiredSex = DOG_ONLY_AWARDS.includes(input.type) ? 'dog' : 'bitch';
-        if (dog?.sex !== requiredSex) {
-          throw new TRPCError({
-            code: 'BAD_REQUEST',
-            message: `This award is for ${requiredSex === 'dog' ? 'dogs' : 'bitches'} only`,
-          });
-        }
-      }
-
-      // Remove any existing same-type award for this show (not dog-specific — e.g. only one BIS)
-      // For show-level awards: only one dog can hold it
-      const UNIQUE_SHOW_AWARDS = [
-        'best_in_show', 'reserve_best_in_show', 'best_puppy_in_show', 'best_long_coat_in_show',
-        'best_of_breed', 'best_puppy_in_breed', 'best_veteran_in_breed',
-        'dog_cc', 'reserve_dog_cc', 'bitch_cc', 'reserve_bitch_cc',
-        'best_puppy_dog', 'best_puppy_bitch', 'best_long_coat_dog', 'best_long_coat_bitch',
-        'cc', 'reserve_cc',
-      ];
-
-      if (UNIQUE_SHOW_AWARDS.includes(input.type)) {
-        await ctx.db
-          .delete(achievements)
-          .where(
-            and(
-              eq(achievements.showId, input.showId),
-              eq(achievements.type, input.type)
-            )
-          );
-      }
-
-      // Capture the judge (derived from the show's breed-level judge
-      // assignments) so a CC credits the right judge toward the Champion
-      // "3 different judges" rule (Mandy 2026-07-09).
-      const judgeId = await deriveTopAwardJudge(ctx.db, input.showId, input.type);
-      const [achievement] = await ctx.db
-        .insert(achievements)
-        .values({
-          showId: input.showId,
-          dogId: input.dogId,
-          type: input.type,
-          date: input.date,
-          judgeId,
-        })
-        .returning();
-
-      return achievement!;
+      return recordTopAward(ctx.db, input);
     }),
 
   /** Remove a best award / achievement (secretary-scoped) */
@@ -7222,16 +7132,7 @@ export const secretaryRouter = createTRPCRouter({
     )
     .mutation(async ({ ctx, input }) => {
       await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId, { callerIsAdmin: ctx.callerIsAdmin });
-
-      await ctx.db
-        .delete(achievements)
-        .where(
-          and(
-            eq(achievements.id, input.achievementId),
-            eq(achievements.showId, input.showId)
-          )
-        );
-
+      await removeTopAwardHolder(ctx.db, { showId: input.showId, achievementId: input.achievementId });
       return { removed: true };
     }),
 

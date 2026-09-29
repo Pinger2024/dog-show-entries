@@ -23,6 +23,7 @@ import {
   makeClassDef,
   makeDog,
   makeSecretaryWithOrg,
+  settleOrderLikeWebhook,
 } from '../helpers/factories';
 
 const TIERS = [
@@ -80,6 +81,7 @@ describe('regional edit — the tier scale is honoured, no bogus top-up', () => 
 
     // Swap the £16 dog onto another class of the same raw fee. Its scale position
     // is unchanged, so the fee must stay £16 and NO payment may be demanded.
+    await settleOrderLikeWebhook(checkout.orderId); // a paid entry — only those can change classes
     const edited = await createTestCaller(exhibitor).entries.update({ id: thirdDog.id, classIds: [classB.id] });
     expect(edited.requiresPayment).toBe(false);
     expect(edited.feeDiff).toBe(0);
@@ -107,6 +109,7 @@ describe('regional edit — the tier scale is honoured, no bogus top-up', () => 
     const memberThird = rows.find((r) => r.totalFee === 1100)!;
     expect(memberThird).toBeTruthy();
 
+    await settleOrderLikeWebhook(checkout.orderId); // a paid entry — only those can change classes
     const edited = await createTestCaller(exhibitor).entries.update({ id: memberThird.id, classIds: [classB.id] });
     expect(edited.requiresPayment).toBe(false);
     expect(edited.newFee).toBe(1100); // member 3rd rate held — not £16 standard, not £20 raw
@@ -124,6 +127,7 @@ describe('regional edit — the tier scale is honoured, no bogus top-up', () => 
     expect(checkout.totalAmount).toBe(2000);
     const entry = await testDb.query.entries.findFirst({ where: eq(entries.orderId, checkout.orderId) });
 
+    await settleOrderLikeWebhook(checkout.orderId); // a paid entry — only those can change classes
     const edited = await createTestCaller(exhibitor).entries.update({ id: entry!.id, classIds: [classB.id] });
     expect(edited.newFee).toBe(2000); // still the 1st-dog price, not double-charged
     expect(edited.feeDiff).toBe(0);
@@ -141,17 +145,6 @@ describe('regional edit — the tier scale is honoured, no bogus top-up', () => 
  * dogs keyed one at a time at £20 each).
  */
 
-/**
- * Settle an order the way Stripe's webhook does. Needed because `orders.checkout`
- * clears an exhibitor's abandoned UNPAID order for the show when they start a new
- * one — so an unpaid first basket is not "dogs already entered", it is a dropped
- * basket. Only a paid entry holds its place on the scale.
- */
-async function settleOrder(orderId: string) {
-  await testDb.update(orders).set({ status: 'paid' }).where(eq(orders.id, orderId));
-  await testDb.update(entries).set({ status: 'confirmed' }).where(eq(entries.orderId, orderId));
-}
-
 describe('regional scale spans separate orders', () => {
   it('prices a 3rd dog entered in a LATER order as the 3rd dog', async () => {
     const { breed, show, classA } = await regionalShow();
@@ -167,7 +160,7 @@ describe('regional scale spans separate orders', () => {
       ],
     });
     expect(first.totalAmount).toBe(4000); // £20 + £20
-    await settleOrder(first.orderId);
+    await settleOrderLikeWebhook(first.orderId);
 
     // A week later — separate basket, same show.
     const second = await caller.orders.checkout({
@@ -192,7 +185,7 @@ describe('regional scale spans separate orders', () => {
         entryType: 'standard' as const, dogId: d.id, classIds: [classA.id], isNfc: false,
       })),
     });
-    await settleOrder(seed.orderId);
+    await settleOrderLikeWebhook(seed.orderId);
     const later = await caller.orders.checkout({
       showId: show.id,
       entries: [{ entryType: 'standard', dogId: dogList[3]!.id, classIds: [classA.id], isNfc: false }],
@@ -213,7 +206,7 @@ describe('regional scale spans separate orders', () => {
         { entryType: 'standard', dogId: d2.id, classIds: [classA.id], isNfc: false },
       ],
     });
-    await settleOrder(first.orderId);
+    await settleOrderLikeWebhook(first.orderId);
     // Cancel one of the two — the next dog is now their 2nd, not their 3rd.
     const seeded = await testDb.query.entries.findMany({ where: eq(entries.orderId, first.orderId) });
     await testDb.update(entries).set({ status: 'cancelled' }).where(eq(entries.id, seeded[0]!.id));
@@ -237,7 +230,7 @@ describe('regional scale spans separate orders', () => {
         { entryType: 'standard', dogId: d2.id, classIds: [classA.id], isNfc: false },
       ],
     });
-    await settleOrder(seed.orderId);
+    await settleOrderLikeWebhook(seed.orderId);
 
     const manual = await createTestCaller(secretaryUser).secretary.createManualEntry({
       showId: show.id,
@@ -262,7 +255,7 @@ describe('regional scale spans separate orders', () => {
         { entryType: 'standard', dogId: d2.id, classIds: [classA.id], isNfc: false },
       ],
     });
-    await settleOrder(first.orderId);
+    await settleOrderLikeWebhook(first.orderId);
 
     // A 3rd dog is entered but the basket is abandoned — never settled. Its
     // order is left sitting at 'pending_payment', exactly as it would be if

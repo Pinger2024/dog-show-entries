@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { SHOW_COLUMNS_FOR_PUBLIC_INCLUDE } from '../public-show-fields';
 import { TRPCError } from '@trpc/server';
 import { and, or, eq, isNull, inArray, notInArray, asc, desc, sql } from 'drizzle-orm';
 import { differenceInWeeks } from 'date-fns';
@@ -403,6 +404,7 @@ export const entriesRouter = createTRPCRouter({
         where,
         with: {
           show: {
+            columns: SHOW_COLUMNS_FOR_PUBLIC_INCLUDE,
             with: {
               organisation: { columns: publicOrgColumns },
               venue: true,
@@ -491,6 +493,7 @@ export const entriesRouter = createTRPCRouter({
         where: and(eq(entries.id, input.id), isNull(entries.deletedAt)),
         with: {
           show: {
+            columns: SHOW_COLUMNS_FOR_PUBLIC_INCLUDE,
             with: {
               organisation: { columns: publicOrgColumns },
               venue: true,

@@ -1,4 +1,5 @@
 import { Resend } from 'resend';
+import { escapeHtml } from '@/lib/html-escape';
 import { db } from '@/server/db';
 import { and, eq, inArray } from 'drizzle-orm';
 import { orders, entries, memberships, users, printOrders, showClasses, sundryItems } from '@/server/db/schema';
@@ -1333,16 +1334,9 @@ export async function sendRefundFailedAlertEmail(params: {
   // body — escape them (an exhibitor named "<img src=x onerror=…>" must
   // render as text in the founders' inboxes, not as markup). The subject
   // line is plain text and needs no escaping.
-  const esc = (s: string) =>
-    s
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;')
-      .replace(/'/g, '&#39;');
-  const safeExhibitor = esc(exhibitorName);
-  const safeShow = esc(showName);
-  const safePaymentIntent = esc(paymentIntentId);
+  const safeExhibitor = escapeHtml(exhibitorName);
+  const safeShow = escapeHtml(showName);
+  const safePaymentIntent = escapeHtml(paymentIntentId);
 
   const html = `
 <!DOCTYPE html>

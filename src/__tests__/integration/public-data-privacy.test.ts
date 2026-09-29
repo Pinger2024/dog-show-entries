@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { eq } from 'drizzle-orm';
-import { results } from '@/server/db/schema';
+import { dogOwners, judgeAssignments, results } from '@/server/db/schema';
 import { testDb } from '../helpers/db';
 import { createTestCaller } from '../helpers/context';
 import {
@@ -13,6 +13,9 @@ import {
   makeEntryClass,
   makeShowClass,
   makeResult,
+  makeJudge,
+  makeJudgeAssignment,
+  makeSecretaryWithOrg,
   dateStr,
 } from '../helpers/factories';
 
@@ -202,5 +205,155 @@ describe('public dog profile pre-judging and publication gates', () => {
 
     timeline = await anon().timeline.getForDog({ dogId: dog.id, limit: 20 });
     expect(timeline.items.filter((i) => i.itemType === 'show_result')).toHaveLength(1);
+  });
+});
+
+/**
+ * Bug hunt 2026-09-22: shows.getById is public and joined judge_assignments
+ * and judges with no column scoping, so every visitor received the judge's
+ * results-approval token (the only credential /api/results-approval/<token>
+ * checks — enough to read unpublished placings and approve them as the
+ * judge) and the judge's personal email and phone.
+ */
+describe('public show payloads never include judge approval tokens or judge contact details', () => {
+  async function showWithPendingApproval() {
+    const { user: secretary, org } = await makeSecretaryWithOrg();
+    const show = await makeShow({ organisationId: org.id, status: 'in_progress' });
+    const judge = await makeJudge({ contactEmail: 'judge.private@example.com', contactPhone: '07700 900123' });
+    const ja = await makeJudgeAssignment({ showId: show.id, judgeId: judge.id });
+    const token = '11111111-2222-4333-8444-555555555555';
+    await testDb
+      .update(judgeAssignments)
+      .set({ approvalToken: token, approvalStatus: 'pending', approvalSentAt: new Date(), approvalNote: 'private note' })
+      .where(eq(judgeAssignments.id, ja.id));
+    return { secretary, show, judge, token };
+  }
+
+  it('anonymous visitors get the judge name but no token, approval state or contact details', async () => {
+    const { show, judge, token } = await showWithPendingApproval();
+    const result = await anon().shows.getById({ id: show.id });
+
+    expect(JSON.stringify(result)).not.toContain(token);
+    expect(JSON.stringify(result)).not.toContain('judge.private@example.com');
+    expect(JSON.stringify(result)).not.toContain('07700 900123');
+    const ja = result.judgeAssignments[0] as Record<string, unknown>;
+    expect((ja.judge as Record<string, unknown>).name).toBe(judge.name);
+    expect(ja.approvalToken ?? null).toBeNull();
+    expect(ja.approvalStatus ?? null).toBeNull();
+    expect(ja.approvalNote ?? null).toBeNull();
+  });
+
+  it('a logged-in exhibitor outside the club gets the same public view', async () => {
+    const { show, token } = await showWithPendingApproval();
+    const exhibitor = await makeUser({ role: 'exhibitor' });
+    const result = await createTestCaller(exhibitor).shows.getById({ id: show.id });
+    expect(JSON.stringify(result)).not.toContain(token);
+    expect(JSON.stringify(result)).not.toContain('judge.private@example.com');
+  });
+
+  it("the club's own secretary still sees judge contact details (judge section needs them)", async () => {
+    const { secretary, show } = await showWithPendingApproval();
+    const result = await createTestCaller(secretary).shows.getById({ id: show.id });
+    expect(result.judgeAssignments[0].judge.contactEmail).toBe('judge.private@example.com');
+  });
+});
+
+/**
+ * Bug hunt 2026-09-22: guarantors' HOME ADDRESSES (entered for the RKC
+ * licence, never printed on the schedule or catalogue) rode along in every
+ * public show payload inside scheduleData — shows.list, shows.getById — and in
+ * exhibitor payloads that embed the whole show row.
+ */
+describe('guarantor home addresses never leave club scope', () => {
+  const ADDRESS = '12 Private Lane, Hometown HT1 2AB';
+  async function showWithGuarantors() {
+    const { user: secretary, org } = await makeSecretaryWithOrg();
+    const show = await makeShow({
+      organisationId: org.id,
+      status: 'entries_open',
+      scheduleData: { guarantors: [{ name: 'Jane Guarantor', address: ADDRESS }], catering: 'Tea and cake' },
+    });
+    return { secretary, org, show };
+  }
+
+  it('shows.getById (anonymous) keeps the schedule details but drops guarantor addresses', async () => {
+    const { show } = await showWithGuarantors();
+    const result = await anon().shows.getById({ id: show.id });
+    expect(JSON.stringify(result)).not.toContain(ADDRESS);
+    expect(result.scheduleData?.catering).toBe('Tea and cake');
+  });
+
+  it('shows.list never carries guarantor addresses', async () => {
+    await showWithGuarantors();
+    const { items } = await anon().shows.list({ limit: 50, cursor: 0 });
+    expect(JSON.stringify(items)).not.toContain(ADDRESS);
+  });
+
+  it("an exhibitor's own entries and orders don't carry them either", async () => {
+    const { show } = await showWithGuarantors();
+    const exhibitor = await makeUser({ role: 'exhibitor' });
+    const dog = await makeDog({ ownerId: exhibitor.id });
+    await makeEntry({ showId: show.id, dogId: dog.id, exhibitorId: exhibitor.id, status: 'confirmed' });
+    const caller = createTestCaller(exhibitor);
+    expect(JSON.stringify(await caller.entries.list({}))).not.toContain(ADDRESS);
+    expect(JSON.stringify(await caller.dashboard.getSummary())).not.toContain(ADDRESS);
+  });
+
+  it("the club's own secretary still gets the addresses (schedule settings form needs them)", async () => {
+    const { secretary, show } = await showWithGuarantors();
+    const result = await createTestCaller(secretary).shows.getById({ id: show.id });
+    expect(result.scheduleData?.guarantors?.[0]?.address).toBe(ADDRESS);
+  });
+});
+
+/**
+ * Bug hunt 2026-09-22: secretary.searchDogs searches every dog on Remi (any
+ * self-registered secretary can call it) and returned each dog's owner row in
+ * full — home address and phone included. The Add Entry dialog only uses the
+ * owner's name and email.
+ */
+describe("secretary dog search doesn't hand out owners' addresses or phones", () => {
+  it('returns owner name and email only', async () => {
+    const { user: secretary } = await makeSecretaryWithOrg();
+    const stranger = await makeUser({ role: 'exhibitor' });
+    const dog = await makeDog({ ownerId: stranger.id, registeredName: 'Zyxwvut Searchable Rex' });
+    await testDb.insert(dogOwners).values({
+      dogId: dog.id, ownerName: 'Olive Owner', ownerEmail: 'olive@example.com',
+      ownerAddress: '7 Secret Street, Nowhere NW1 1AA', ownerPhone: '07700 900777',
+      isPrimary: true, sortOrder: 0,
+    });
+    const found = await createTestCaller(secretary).secretary.searchDogs({ query: 'Zyxwvut Searchable' });
+    expect(found).toHaveLength(1);
+    const json = JSON.stringify(found);
+    expect(json).not.toContain('7 Secret Street');
+    expect(json).not.toContain('07700 900777');
+    expect(found[0].owners[0]).toMatchObject({ ownerName: 'Olive Owner', ownerEmail: 'olive@example.com' });
+  });
+});
+
+/**
+ * Bug hunt 2026-09-22: dogs.getShowResults (any logged-in user, any dog id —
+ * dog ids are public on /dog/<id>) returned every placing, special award and
+ * critique for the dog with no publication gate, so a rival could read show-
+ * day results before the secretary published them.
+ */
+describe('dogs.getShowResults respects publication', () => {
+  it("hides a rival dog's unpublished placings; the owner still sees them", async () => {
+    const owner = await makeUser({ role: 'exhibitor' });
+    const rival = await makeUser({ role: 'exhibitor' });
+    const breed = await makeBreed();
+    const dog = await makeDog({ ownerId: owner.id, breedId: breed.id });
+    const org = await makeOrg();
+    const show = await makeShow({ organisationId: org.id, status: 'in_progress', startDate: pastDate(0), endDate: pastDate(0) });
+    const showClass = await makeShowClass({ showId: show.id, breedId: breed.id });
+    const entry = await makeEntry({ showId: show.id, dogId: dog.id, exhibitorId: owner.id, status: 'confirmed' });
+    const ec = await makeEntryClass({ entryId: entry.id, showClassId: showClass.id });
+    const result = await makeResult({ entryClassId: ec.id, placement: 1 });
+
+    expect(await createTestCaller(rival).dogs.getShowResults({ dogId: dog.id })).toHaveLength(0);
+    expect(await createTestCaller(owner).dogs.getShowResults({ dogId: dog.id })).toHaveLength(1);
+
+    await testDb.update(results).set({ publishedAt: new Date() }).where(eq(results.id, result.id));
+    expect(await createTestCaller(rival).dogs.getShowResults({ dogId: dog.id })).toHaveLength(1);
   });
 });

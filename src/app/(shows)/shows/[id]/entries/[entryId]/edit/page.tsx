@@ -28,6 +28,7 @@ import { PaymentForm } from '@/app/(shows)/shows/[id]/enter/payment-form';
 import { cn } from '@/lib/utils';
 import { SE_H } from '@/components/show-experience/tokens';
 import { toast } from 'sonner';
+import { entryClassChangeBlock, ENTRY_CLASS_CHANGE_MESSAGES } from '@/lib/entry-edit-rules';
 
 export default function EditEntryPage({
   params,
@@ -136,6 +137,21 @@ export default function EditEntryPage({
     return (
       <div className="container mx-auto py-8 text-center">
         <p className="text-muted-foreground">Entry not found.</p>
+      </div>
+    );
+  }
+
+  // Same rule as the server (src/lib/entry-edit-rules.ts): only a paid entry
+  // on a show still taking entries. Say so plainly rather than offer a form
+  // the server will refuse.
+  const changeBlock = entryClassChangeBlock(entry, entry.show);
+  if (changeBlock && !clientSecret) {
+    return (
+      <div className="container mx-auto max-w-3xl px-4 py-8 text-center">
+        <p className="text-muted-foreground">{ENTRY_CLASS_CHANGE_MESSAGES[changeBlock]}</p>
+        <Button className="mt-4 min-h-[2.75rem]" variant="outline" onClick={() => router.push(`/entries/${entryId}`)}>
+          Back to your entry
+        </Button>
       </div>
     );
   }

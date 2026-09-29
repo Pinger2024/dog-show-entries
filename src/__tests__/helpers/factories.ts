@@ -535,3 +535,17 @@ export async function makeSecretaryWithOrgAndBreed() {
   ]);
   return { user, org, breed };
 }
+
+/**
+ * Settle a checkout order the way Stripe's payment_intent.succeeded webhook
+ * does: order 'paid', its entries 'confirmed', its payment rows 'succeeded'.
+ * `orders.checkout` leaves everything unpaid/pending until the webhook runs,
+ * and an unpaid entry can't have its classes changed (src/lib/entry-edit-rules.ts)
+ * nor hold a place on the regional scale — so any test that edits or counts a
+ * checkout entry settles it first.
+ */
+export async function settleOrderLikeWebhook(orderId: string) {
+  await testDb.update(orders).set({ status: 'paid' }).where(eq(orders.id, orderId));
+  await testDb.update(entries).set({ status: 'confirmed' }).where(eq(entries.orderId, orderId));
+  await testDb.update(payments).set({ status: 'succeeded' }).where(eq(payments.orderId, orderId));
+}

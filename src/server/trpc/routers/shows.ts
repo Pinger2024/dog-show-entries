@@ -29,6 +29,8 @@ import {
 } from '@/server/db/schema';
 import { verifyShowAccess } from '../verify-show-access';
 import { publicOrgColumns } from '../public-org-columns';
+import { redactJudgeAssignmentForPublic } from '../public-judge-fields';
+import { toPublicScheduleData } from '../public-show-fields';
 import { isUuid, generateShowSlug } from '@/lib/slugify';
 import { hasUserPurchasedCatalogue, CATALOGUE_AVAILABLE_STATUSES, CATALOGUE_NAME_PATTERN } from '@/lib/catalogue-utils';
 import { isShowDayReached } from '@/lib/date-utils';
@@ -248,7 +250,8 @@ export const showsRouter = createTRPCRouter({
       const total = Number(countResult[0]?.count ?? 0);
 
       return {
-        items,
+        // Guarantor home addresses never leave club scope (public-show-fields.ts).
+        items: items.map((item) => ({ ...item, scheduleData: toPublicScheduleData(item.scheduleData) })),
         total,
         nextCursor:
           input.cursor + input.limit < total
@@ -335,7 +338,21 @@ export const showsRouter = createTRPCRouter({
         );
       const hasPublishedResults = (publishedCount[0]?.n ?? 0) > 0;
 
-      return { ...show, hasPublishedResults };
+      // Non-members get judge rows without the approval token, approval state
+      // or the judge's personal contact details (see public-judge-fields.ts).
+      const judgeAssignmentsView = isPrivileged
+        ? show.judgeAssignments
+        : show.judgeAssignments.map(redactJudgeAssignmentForPublic);
+
+      // …and no guarantor home addresses (public-show-fields.ts).
+      const scheduleDataView = isPrivileged ? show.scheduleData : toPublicScheduleData(show.scheduleData);
+
+      return {
+        ...show,
+        scheduleData: scheduleDataView,
+        judgeAssignments: judgeAssignmentsView,
+        hasPublishedResults,
+      };
     }),
 
   getClasses: publicProcedure

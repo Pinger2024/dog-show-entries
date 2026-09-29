@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { escapeHtml } from '@/lib/html-escape';
 import { Webhook } from 'svix';
 import { Resend } from 'resend';
 import { db } from '@/server/db';
@@ -140,9 +141,8 @@ export async function POST(request: NextRequest) {
     const notifyEmail = process.env.FEEDBACK_NOTIFY_EMAIL;
     if (isNewFeedback && notifyEmail) {
       // Escape HTML to prevent XSS via malicious email sender names/subjects
-      const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-      const displaySender = fromName ? `${esc(fromName)} &lt;${esc(fromEmail)}&gt;` : esc(fromEmail);
-      const preview = textBody ? esc(textBody.slice(0, 500)) : '(No text body)';
+      const displaySender = fromName ? `${escapeHtml(fromName)} &lt;${escapeHtml(fromEmail)}&gt;` : escapeHtml(fromEmail);
+      const preview = textBody ? escapeHtml(textBody.slice(0, 500)) : '(No text body)';
       resend.emails
         .send({
           from: process.env.EMAIL_FROM ?? 'Remi <noreply@remishowmanager.co.uk>',
