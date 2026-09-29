@@ -1664,17 +1664,36 @@ export function JudgesListPage({ show }: FrontMatterProps) {
 export function ClassDefinitionsContent({ show, sectionGap = 0 }: FrontMatterProps & { sectionGap?: number }) {
   const defs = show.classDefinitions ?? [];
   if (defs.length === 0) return null;
-  // A single Flow block: heading = the section band, body = every
-  // definition. Flow keeps the heading glued to the START of the body
-  // (never orphaned alone at a page foot) WITHOUT forcing the whole list
-  // atomic — historically the "Definitions of Classes" block was one big
-  // wrap={false} unit (see FrontMatterContent), so a list just slightly
-  // too tall for the current page moved WHOLESALE onto a fresh page
-  // (Mandy 2026-07-20: "a 16-definition list spilled one item onto a
-  // near-blank page" — the hand-tuned fix was to tighten spacing so it
-  // fit, which doesn't generalise to a longer list). Now the list can
-  // split at a definition boundary like any other flowing content, and a
-  // list too long for even a fresh page paginates instead of overflowing.
+
+  const definitionItems = defs.map((def) => (
+    <KeepTogether key={def.name}>
+      <Text style={styles.classDefName}>{def.name}</Text>
+      {def.description && (
+        <Text style={styles.classDefDescription}>{def.description}</Text>
+      )}
+    </KeepTogether>
+  ));
+
+  // A list that fits on one page is never split (Mandy, North Eastern
+  // 2026-09-29: "start the definition of classes on the new page so it all
+  // fits on one page"). It stays where it is if there's room, otherwise it
+  // starts a fresh page whole.
+  if (estimateClassDefinitionsHeight(defs, sectionGap) <= FRONT_MATTER_PAGE_USABLE_HEIGHT) {
+    return (
+      <KeepTogether style={sectionGap ? { marginTop: sectionGap } : undefined}>
+        <SectionBand title="Definitions of Classes" />
+        {definitionItems}
+      </KeepTogether>
+    );
+  }
+
+  // Too long for any single page: a Flow block, heading = the section band,
+  // body = every definition. Flow keeps the heading glued to the START of
+  // the body (never orphaned alone at a page foot) and lets the list split
+  // at a definition boundary, so it paginates instead of overflowing. (A
+  // single wrap={false} unit this tall would run off the page — Mandy
+  // 2026-07-20 saw a 16-definition list spill one item onto a near-blank
+  // page under the old all-atomic layout.)
   return (
     <Flow
       blocks={[
@@ -1683,22 +1702,37 @@ export function ClassDefinitionsContent({ show, sectionGap = 0 }: FrontMatterPro
           heading: <SectionBand title="Definitions of Classes" />,
           headingStyle: sectionGap ? { marginTop: sectionGap } : undefined,
           keepWithHeadingHeight: 60,
-          body: (
-            <>
-              {defs.map((def) => (
-                <KeepTogether key={def.name}>
-                  <Text style={styles.classDefName}>{def.name}</Text>
-                  {def.description && (
-                    <Text style={styles.classDefDescription}>{def.description}</Text>
-                  )}
-                </KeepTogether>
-              ))}
-            </>
-          ),
+          body: <>{definitionItems}</>,
         },
       ]}
     />
   );
+}
+
+/**
+ * Conservative height (points) of the whole Definitions of Classes section:
+ * the band plus every name + description, from the real styles. Errs HIGH —
+ * an underestimate would make a too-tall list unbreakable and run it off
+ * the page, while an overestimate only lets a list that would have fitted
+ * flow as it always has.
+ */
+function estimateClassDefinitionsHeight(
+  defs: { name: string; description: string | null }[],
+  sectionGap: number,
+): number {
+  const width = 375; // frontMatterPage content width, A5 minus 22pt each side
+  // styles.sectionBand: 9pt padding top + bottom, 11pt HankenGrotesk text,
+  // 12pt margin below; plus the section gap above it (its -20pt bleed
+  // ignored, so this over-counts by 20).
+  const band = sectionGap + 9 * 2 + 11 * 1.3 + 12;
+  const items = defs.reduce((sum, def) => {
+    const name = 2 + estimateTextHeight(def.name, { width, family: 'Inter', weight: 'bold', size: 7.5, lineHeight: 1.3 }) + 1;
+    const description = def.description
+      ? estimateTextHeight(def.description, { width, family: 'Inter', size: 6.5, lineHeight: 1.3 }) + 2
+      : 0;
+    return sum + name + description;
+  }, 0);
+  return (band + items) * 1.1;
 }
 
 /** Standalone Class Definitions page — delegates to ClassDefinitionsContent. */

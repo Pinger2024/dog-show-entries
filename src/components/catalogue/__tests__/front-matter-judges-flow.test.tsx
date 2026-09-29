@@ -54,7 +54,15 @@ const BIO =
 
 const CLASS_NAMES = ['Veteran', 'Minor Puppy', 'Puppy', 'Junior', 'Yearling', 'Post Graduate', 'Limit', 'Open'];
 
-function show(welcomeLines: number): CatalogueShowInfo {
+/** Class names for a synthetic show — the real eight, then numbered extras
+ *  ("Extra Class 09"…) for lists longer than a page. */
+function classNames(count: number): string[] {
+  return Array.from({ length: count }, (_, i) =>
+    CLASS_NAMES[i] ?? `Extra Class ${String(i + 1).padStart(2, '0')}`,
+  );
+}
+
+function show(welcomeLines: number, classCount = CLASS_NAMES.length): CatalogueShowInfo {
   return {
     name: 'Test GSD Championship Show 2030',
     showType: 'championship',
@@ -70,21 +78,26 @@ function show(welcomeLines: number): CatalogueShowInfo {
     additionalNotes: 'Your support through sponsorship and donations is greatly appreciated.',
     judgesByBreedName: { 'German Shepherd Dog': 'Judge Testperson' },
     judgeBios: { 'Judge Testperson': BIO },
-    classDefinitions: CLASS_NAMES.map((name) => ({
+    classDefinitions: classNames(classCount).map((name) => ({
       name,
       description: `For dogs eligible for ${name} under the Royal Kennel Club's regulations for this class at the Show.`,
     })),
   };
 }
 
-async function render(welcomeLines: number) {
+async function render(welcomeLines: number, classCount?: number) {
   const buf = await renderToBuffer(
     <Document>
-      <FrontMatterPage show={show(welcomeLines)} />
+      <FrontMatterPage show={show(welcomeLines, classCount)} />
     </Document>,
   );
   return linesByPage(buf);
 }
+
+const fold = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, '');
+/** Pages holding the name line of every class definition. */
+const definitionPages = (lines: { page: number; text: string }[], count: number) =>
+  classNames(count).map((name) => lines.find((l) => l.text === fold(name))?.page);
 
 describe('front matter — List of Judges flows into the space it fits', () => {
   it('keeps a judges list that fits on the same page as Additional Notes', async () => {
@@ -110,4 +123,33 @@ describe('front matter — List of Judges flows into the space it fits', () => {
       expect({ welcome, band }).toEqual({ welcome, band: firstJudge });
     }
   }, 120_000);
+});
+
+/**
+ * Mandy, North Eastern 2026-09-29: "start the definition of classes on the
+ * new page so it all fits on one page". A list that fits on one page is
+ * never split — it stays put if there's room, otherwise it starts a fresh
+ * page whole. Only a list longer than any page flows across pages.
+ */
+describe('front matter — Definitions of Classes is never split when it fits on one page', () => {
+  it('keeps a page-sized list whole wherever it starts', async () => {
+    // 16 definitions (North Eastern's count). Walk the start point down the
+    // page so the list begins at every position relative to the page foot.
+    for (let welcome = 0; welcome <= 60; welcome += 2) {
+      const lines = await render(welcome, 16);
+      const band = pageOf(lines, 'definitionsofclasses');
+      const pages = definitionPages(lines, 16);
+      expect({ welcome, pages }).toEqual({ welcome, pages: pages.map(() => band) });
+    }
+  }, 120_000);
+
+  it('still flows a list too long for one page, losing nothing off the foot', async () => {
+    const lines = await render(0, 70);
+    const band = pageOf(lines, 'definitionsofclasses');
+    const pages = definitionPages(lines, 70);
+    expect(pages.every((p) => p !== undefined)).toBe(true); // every definition printed
+    expect(Math.max(...(pages as number[]))).toBeGreaterThan(band!); // it split
+    // Nothing drawn below the page's bottom padding (A5 595pt − 30pt).
+    expect(Math.max(...lines.map((l) => l.yMin))).toBeLessThan(595 - 30);
+  }, 60_000);
 });
