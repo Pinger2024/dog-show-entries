@@ -21,12 +21,22 @@ describe('entryClassChangeBlock — only a paid entry on an open show', () => {
 describe('entry class-change rule — one owner guard', () => {
   const read = (p: string) => readFileSync(join(__dirname, '..', p), 'utf8');
   it('entries.update, the entry page button and the edit page all call the owner', () => {
-    expect(read('server/trpc/routers/entries.ts')).toMatch(/entryClassChangeBlock\(entry, entry\.show\)/);
+    // entries.update and previewUpdate both price through priceEntryClassChange,
+    // which is where the gate runs — so neither can skip it.
+    expect(read('server/services/entry-change-pricing.ts')).toMatch(/entryClassChangeBlock\(entry, entry\.show\)/);
+    expect(read('server/trpc/routers/entries.ts')).toMatch(/priceEntryClassChange\(ctx\.db/);
     expect(read('app/(dashboard)/entries/[id]/page.tsx')).toMatch(/canChangeEntryClasses\(entry, entry\.show\)/);
     expect(read('app/(shows)/shows/[id]/entries/[entryId]/edit/page.tsx')).toMatch(/entryClassChangeBlock\(entry, entry\.show\)/);
   });
   it("no page or router allows a 'pending' entry into Edit Classes by hand", () => {
-    expect(read('app/(dashboard)/entries/[id]/page.tsx')).not.toMatch(/status === 'pending'\) && entry\.show\.status === 'entries_open'/);
-    expect(read('server/trpc/routers/entries.ts')).not.toMatch(/Only confirmed or pending entries can be modified/);
+    expect(read('app/(dashboard)/entries/[id]/page.tsx')).not.toMatch(/status === 'pending'\)\s*&&/);
+    for (const f of ['server/trpc/routers/entries.ts', 'server/services/entry-change-pricing.ts']) {
+      expect(read(f)).not.toMatch(/Only confirmed or pending entries can be modified/);
+    }
+  });
+  it("the show half of the rule is entryWindowOpen's — status AND close date — not a second copy", () => {
+    const rules = read('lib/entry-edit-rules.ts');
+    expect(rules).toMatch(/entryWindowOpen\(show\)/);
+    expect(rules).not.toMatch(/show\.status !== 'entries_open'/);
   });
 });

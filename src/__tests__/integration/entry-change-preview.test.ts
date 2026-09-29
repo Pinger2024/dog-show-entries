@@ -26,6 +26,7 @@ import {
   makeClassDef,
   makeDog,
   makeSecretaryWithOrg,
+  settleOrderLikeWebhook,
 } from '../helpers/factories';
 
 const FIRST = 2000; // £20
@@ -90,6 +91,7 @@ describe('entries.previewUpdate — one owner with entries.update', () => {
       showId: show.id,
       entries: [{ entryType: 'standard', dogId: dog.id, classIds: [classA!.id], isNfc: false }],
     });
+    await settleOrderLikeWebhook(checkout.orderId); // only a paid entry can change classes
     const entry = await testDb.query.entries.findFirst({ where: eq(entries.orderId, checkout.orderId) });
 
     const preview = await createTestCaller(exhibitor).entries.previewUpdate({
@@ -115,6 +117,7 @@ describe('entries.previewUpdate — one owner with entries.update', () => {
       showId: show.id,
       entries: [{ entryType: 'standard', dogId: upDog.id, classIds: [classA!.id], isNfc: false }],
     });
+    await settleOrderLikeWebhook(upCheckout.orderId); // only a paid entry can change classes
     const upEntry = await testDb.query.entries.findFirst({ where: eq(entries.orderId, upCheckout.orderId) });
 
     const upPreview = await createTestCaller(exhibitor).entries.previewUpdate({
@@ -136,6 +139,7 @@ describe('entries.previewUpdate — one owner with entries.update', () => {
       showId: show.id,
       entries: [{ entryType: 'standard', dogId: downDog.id, classIds: [classA!.id, classB!.id, classC!.id], isNfc: false }],
     });
+    await settleOrderLikeWebhook(downCheckout.orderId); // only a paid entry can change classes
     const downEntry = await testDb.query.entries.findFirst({ where: eq(entries.orderId, downCheckout.orderId) });
 
     const downPreview = await createTestCaller(exhibitor).entries.previewUpdate({
@@ -166,6 +170,7 @@ describe('entries.previewUpdate — one owner with entries.update', () => {
       showId: show.id,
       entries: dogs.map((d) => ({ entryType: 'standard' as const, dogId: d.id, classIds: [classA!.id], isNfc: false })),
     });
+    await settleOrderLikeWebhook(checkout.orderId); // only a paid entry can change classes
     const rows = await testDb.query.entries.findMany({ where: eq(entries.orderId, checkout.orderId) });
     const thirdDog = rows.find((r) => r.totalFee === 1600)!;
 
@@ -190,6 +195,7 @@ describe('entries.previewUpdate — one owner with entries.update', () => {
       showId: show.id,
       entries: [{ entryType: 'standard', dogId: dog.id, classIds: [classA!.id], isNfc: false }],
     });
+    await settleOrderLikeWebhook(checkout.orderId); // only a paid entry can change classes
     const entry = await testDb.query.entries.findFirst({ where: eq(entries.orderId, checkout.orderId) });
     const beforeEntry = await testDb.query.entries.findFirst({ where: eq(entries.id, entry!.id) });
     const beforeClasses = await testDb.query.entryClasses.findMany({ where: eq(entryClasses.entryId, entry!.id) });
@@ -217,6 +223,7 @@ describe('entries.previewUpdate — one owner with entries.update', () => {
       showId: show.id,
       entries: [{ entryType: 'standard', dogId: dog.id, classIds: [classA!.id], isNfc: false }],
     });
+    await settleOrderLikeWebhook(checkout.orderId); // only a paid entry can change classes
     const entry = await testDb.query.entries.findFirst({ where: eq(entries.orderId, checkout.orderId) });
 
     await expect(
@@ -252,6 +259,7 @@ describe('entries.previewUpdate — one owner with entries.update', () => {
       showId: show.id,
       entries: [{ entryType: 'standard', dogId: dog.id, classIds: [classA!.id], isNfc: false }],
     });
+    await settleOrderLikeWebhook(checkout.orderId); // only a paid entry can change classes
     const entry = await testDb.query.entries.findFirst({ where: eq(entries.orderId, checkout.orderId) });
 
     // Deadline has now passed, but nothing has flipped the stored status —
