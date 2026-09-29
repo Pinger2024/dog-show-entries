@@ -149,7 +149,7 @@ export async function POST(request: NextRequest) {
           to: notifyEmail,
           subject: `New feedback from ${fromName ?? fromEmail}`,
           html: `<p><strong>From:</strong> ${displaySender}</p>
-<p><strong>Subject:</strong> ${esc(data.subject || '(No subject)')}</p>
+<p><strong>Subject:</strong> ${escapeHtml(data.subject || '(No subject)')}</p>
 <hr>
 <p>${preview}</p>
 <hr>

@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { isVisibleToViewer } from '@/lib/result-visibility';
 import { SHOW_COLUMNS_FOR_PUBLIC_INCLUDE } from '../public-show-fields';
 import { TRPCError } from '@trpc/server';
-import { and, eq, inArray, isNull, isNotNull, or, asc, desc, sql } from 'drizzle-orm';
+import { and, eq, inArray, isNull, isNotNull, or, asc, desc, sql, ne } from 'drizzle-orm';
 import { protectedProcedure, publicProcedure } from '../procedures';
 import { createTRPCRouter } from '../init';
 import { dogs, dogOwners, dogTitles, dogPhotos, users, entries, entryClasses, showClasses, shows, results, classDefinitions, achievements, judgeAssignments, judges, dogSvProfile } from '@/server/db/schema';

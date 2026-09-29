@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { eq } from 'drizzle-orm';
 import { feedback } from '@/server/db/schema';
 import { testDb } from '../helpers/db';
+import { resendMocks } from '../helpers/resend-mocks';
 
 // Mock svix's Webhook class so the route's signature verification is bypassed.
 // `verify` returns whatever payload the test injects.
@@ -214,5 +215,38 @@ describe('POST /api/webhooks/resend', () => {
       });
       expect(row).toBeDefined();
     });
+  });
+
+  // Live 29 Sept 10:05–(fix): the XSS fix (fe392f50) swapped the route's local
+  // `esc` for the shared escapeHtml but missed the Subject line, so building
+  // the "new feedback" notification threw `esc is not defined` — the feedback
+  // row was stored, the webhook answered 500, and Resend's redelivery found the
+  // row already there and skipped the notification. No existing test set
+  // FEEDBACK_NOTIFY_EMAIL, so the notification path never ran.
+  it('notifies once for new feedback, with every sender-supplied value escaped', async () => {
+    process.env.FEEDBACK_NOTIFY_EMAIL = 'founders@example.com';
+    resendMocks.send.mockClear();
+    try {
+      svixPayload = {
+        type: 'email.received',
+        data: {
+          email_id: 'em_test_notify_escape',
+          from: 'Eve <script>x</script> <eve@example.com>',
+          to: ['feedback@inbound.remishowmanager.co.uk'],
+          subject: 'Hello <img src=x onerror=alert(1)>',
+          text: 'Body with <b>tags</b>',
+          html: '<p>Body</p>',
+          created_at: new Date().toISOString(),
+        },
+      };
+      const res = await resendWebhookPOST(svixRequest() as never);
+      expect(res.status).toBe(200);
+      expect(resendMocks.send).toHaveBeenCalledTimes(1);
+      const html = String(resendMocks.send.mock.calls[0]![0].html);
+      expect(html).toContain('&lt;img src=x onerror=alert(1)&gt;');
+      expect(html).not.toMatch(/<img|<script|<b>/);
+    } finally {
+      delete process.env.FEEDBACK_NOTIFY_EMAIL;
+    }
   });
 });
