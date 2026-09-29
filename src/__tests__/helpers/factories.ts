@@ -200,6 +200,22 @@ export async function makeDog(opts: Partial<typeof dogs.$inferInsert> & { ownerI
   return row;
 }
 
+/**
+ * The extra dog fields a REGIONAL (wusv) entry needs on top of makeDog's
+ * defaults. Spread into makeDog for any fixture that checks out onto a
+ * regional show — otherwise entryRequirementsMissing refuses it, which is
+ * correct: the exhibitor wizard refuses the same dog at the Next button.
+ * Pass an explicit null over the top to build a deliberately-incomplete dog.
+ */
+export const svReadyDogFields = {
+  registrationBody: 'kc' as const,
+  coatType: 'stock' as const,
+  breederCity: 'Perth',
+  breederPostcode: 'PH1 1AA',
+  sireRegistrationNumber: 'AT00843504',
+  damRegistrationNumber: 'AV02742901',
+};
+
 export async function makeEntry(opts: {
   showId: string;
   dogId: string;

@@ -15,6 +15,7 @@ import { getBaseUrl } from '@/server/lib/utils';
 import { ACHIEVEMENT_TYPES } from '@/lib/placements';
 import { findClearedPedigreeFields, pedigreeClearMessage } from '@/lib/dog-pedigree';
 import { findDogRegistrationClash, dogRegistrationClashMessage } from '@/lib/dog-registration-clash';
+import { entryRequirementsMissing } from '@/lib/entry-requirements';
 import { computeOrderFees, type FeeContext } from '@/lib/fee-calc';
 import { computeRegionalOrderFees, regionalClassFlatFee } from '@/lib/regional-fee-calc';
 import { countPriorRegionalPayingDogs } from '@/server/services/regional-pricing';
@@ -65,6 +66,7 @@ import {
   showDiscountGroups,
   showDonations,
   catalogueNumberAsc,
+  dogSvProfile,
 } from '@/server/db/schema';
 import {
   DEFAULT_CHECKLIST_ITEMS,
@@ -3581,6 +3583,31 @@ export const secretaryRouter = createTRPCRouter({
         });
       }
 
+      // What this dog is missing for this show. The secretary is WARNED and
+      // may save anyway — unlike the exhibitor paths, which refuse (Michael
+      // 2026-09-11, "a warning for now"). A postal entry is in her hand and
+      // often already paid for, so refusing it strands her; but the blanks
+      // print in the catalogue, so she must be told and must be able to find
+      // them again. Same declaration both paths read:
+      // lib/entry-requirements.ts.
+      //
+      // NFC entries are excluded from the regional half exactly as the
+      // exhibitor path excludes them (it `continue`s on zero classes) — they
+      // are not competing, so competition eligibility does not apply. The
+      // baseline pedigree still counts: NFC dogs print in the catalogue too.
+      const svProfileForCheck =
+        show.showRuleset === 'wusv' && !input.isNfc
+          ? await ctx.db.query.dogSvProfile.findFirst({ where: eq(dogSvProfile.dogId, dog.id) })
+          : null;
+      const requirementWarnings = entryRequirementsMissing({
+        dog,
+        svProfile: svProfileForCheck,
+        showRuleset: input.isNfc ? null : show.showRuleset,
+        classNames: selectedClasses
+          .map((sc) => sc.classDefinition?.name)
+          .filter((n): n is string => !!n),
+      });
+
       // Reject if this dog is already entered in any of the selected classes on
       // this show. The online checkout enforces this (orders.ts), but the manual
       // path didn't — so a secretary could record the same dog in the same class
@@ -3733,7 +3760,9 @@ export const secretaryRouter = createTRPCRouter({
         reason: `Entry created by secretary (${input.paymentMethod} payment)`,
       });
 
-      return entry!;
+      // The warnings ride back with the entry so the secretary sees WHY it is
+      // incomplete at the moment she saves it, not later in a report.
+      return { ...entry!, requirementWarnings };
     }),
 
   // ─── Show Requirements Checklist ───────────────────────

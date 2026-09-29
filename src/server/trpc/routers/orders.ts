@@ -49,7 +49,7 @@ import {
   type RegionalDogEntryInput,
   type RegionalFeeContext,
 } from '@/lib/regional-fee-calc';
-import { svEntryMissingRequirements, svEntryBlockedMessage } from '@/lib/sv-entry-validation';
+import { entryRequirementsMissing, entryBlockedMessage } from '@/lib/entry-requirements';
 import { pedigreeMissingForEntry } from '@/lib/sv-entry-readiness';
 import { hasJudgingConflict } from '@/lib/judge-exhibitor-conflict';
 import { getCompetitionAgeError, isOldEnoughForNfc, nfcMinAgeMessage } from '@/lib/date-utils';
@@ -255,17 +255,26 @@ export const ordersRouter = createTRPCRouter({
             }
           }
 
-          // SV regional entry requirements — must run on the checkout path
-          // too (the exhibitor cart path; the entries.create gate only
-          // catches the secretary single-dog flow). Single source of truth:
-          // svEntryMissingRequirements (Amanda 2026-05-28).
+          // Regional entry requirements (Amanda 2026-05-28). Now via
+          // entryRequirementsMissing, the ONE declaration — which adds the six
+          // fields that used to be demanded only by this wizard's Next button
+          // and by nothing on the server: coat type, registration body,
+          // breeder town and postcode, and the sire's and dam's registration
+          // numbers. No exhibitor loses an entry they could previously make,
+          // because the wizard already stopped them; this closes the
+          // direct-API hole and the secretary path (2026-09-11).
+          //
+          // NFC entries never reach here — zero classes `continue` above —
+          // and the baseline pedigree has already been checked and thrown on,
+          // so it can never appear in this list twice.
           if (show.showRuleset === 'wusv') {
             const svProfile = await ctx.db.query.dogSvProfile.findFirst({
               where: eq(dogSvProfile.dogId, dog.id),
             });
-            const missing = svEntryMissingRequirements({
+            const missing = entryRequirementsMissing({
               dog,
               svProfile,
+              showRuleset: show.showRuleset,
               classNames: entryClasses
                 .map((sc) => sc.classDefinition?.name)
                 .filter((n): n is string => !!n),
@@ -273,7 +282,7 @@ export const ordersRouter = createTRPCRouter({
             if (missing.length > 0) {
               throw new TRPCError({
                 code: 'BAD_REQUEST',
-                message: svEntryBlockedMessage(dog.registeredName, missing),
+                message: entryBlockedMessage(dog.registeredName, missing),
               });
             }
           }

@@ -22,6 +22,7 @@ import {
   makeShowClass,
   makeClassDef,
   makeDog,
+  svReadyDogFields,
   makeSecretaryWithOrg,
   settleOrderLikeWebhook,
 } from '../helpers/factories';
@@ -61,7 +62,7 @@ async function regionalShow() {
 }
 
 const regionalDog = (ownerId: string, breedId: string, i: number) =>
-  makeDog({ ownerId, breedId, kcRegNumber: `SZ200${i}`, microchipNumber: `98120000000${i}` });
+  makeDog({ ...svReadyDogFields, ownerId, breedId, kcRegNumber: `SZ200${i}`, microchipNumber: `98120000000${i}` });
 
 describe('regional edit — the tier scale is honoured, no bogus top-up', () => {
   it('editing a 3rd-dog class swap keeps its £16 fee and charges nothing', async () => {
