@@ -37,7 +37,7 @@ vi.mock('@/lib/auth', () => ({
 import { db } from '@/server/db';
 import { cleanDb } from './helpers/db';
 import { loadShowFixture } from './helpers/show-fixture';
-import { renderAllDocuments } from './golden/lib/render-documents';
+import { renderScheduleDocument } from './golden/lib/render-documents';
 import type { ShowFixture } from '../../scripts/lib/export-show-fixture-core';
 
 function pdfToText(buffer: Buffer): string {
@@ -58,9 +58,7 @@ describe('schedule dates are Europe/London, not process-local (TZ=UTC repro)', (
     const fixture = JSON.parse(readFileSync(fixturePath, 'utf8')) as ShowFixture;
     const { showId } = await loadShowFixture(db, fixture);
 
-    const rendered = await renderAllDocuments(showId, fixture);
-    const schedule = rendered.find((d) => d.name === 'schedule');
-    if (!schedule) throw new Error('schedule document was not rendered');
+    const schedule = await renderScheduleDocument(showId);
 
     const text = pdfToText(schedule.buffer);
 

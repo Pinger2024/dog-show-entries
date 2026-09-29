@@ -245,6 +245,27 @@ export function documentNamesForFixture(fixture: ShowFixture): string[] {
   return names;
 }
 
+/** The schedule, rendered exactly as renderAllDocuments renders it. */
+async function renderScheduleAs(secretary: SessionUser, showId: string): Promise<RenderedDocument> {
+  authAs(secretary);
+  return renderTracked('schedule', async () =>
+    bufferFromPdfResponse(
+      await scheduleGET(req(`http://localhost/api/schedule/${showId}`), params({ showId })),
+      'schedule',
+    ),
+  );
+}
+
+/**
+ * Just the schedule — for a test that asserts on the schedule alone. Rendering
+ * every document to read one (schedule-timezone.test.ts did) took 12–15s on CI
+ * against a 15s limit and timed out main's CI on 29 Sept 2026.
+ */
+export async function renderScheduleDocument(showId: string): Promise<RenderedDocument> {
+  const { secretary } = await ensureOperators(showId);
+  return renderScheduleAs(secretary, showId);
+}
+
 export async function renderAllDocuments(showId: string, fixture: ShowFixture): Promise<RenderedDocument[]> {
   const { secretary, admin, showRuleset } = await ensureOperators(showId);
   const out: RenderedDocument[] = [];
@@ -258,15 +279,7 @@ export async function renderAllDocuments(showId: string, fixture: ShowFixture): 
 
   // ── Schedule — public for a non-draft show, but authing anyway costs
   //    nothing and matches what a secretary's browser actually sends. ──────
-  authAs(secretary);
-  out.push(
-    await renderTracked('schedule', async () =>
-      bufferFromPdfResponse(
-        await scheduleGET(req(`http://localhost/api/schedule/${showId}`), params({ showId })),
-        'schedule',
-      ),
-    ),
-  );
+  out.push(await renderScheduleAs(secretary, showId));
 
   authAs(secretary);
   out.push(
