@@ -49,6 +49,11 @@ function pdfToText(buffer: Buffer): string {
 
 describe('schedule dates are Europe/London, not process-local (TZ=UTC repro)', () => {
   beforeAll(async () => {
+    // Set again here, not only at the top of the file: test files share one
+    // process (singleFork), and london-datetime-input.test.ts switches TZ at
+    // runtime and restores whatever it found — so whether this file saw UTC
+    // depended on the order files ran in (failed locally 29 Sept 2026).
+    process.env.TZ = 'UTC';
     expect(new Date().getTimezoneOffset()).toBe(0); // sanity: really running as UTC
     await cleanDb();
   });
