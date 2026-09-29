@@ -99,6 +99,49 @@ describe('catalogue numbering — grouping + provisional/locked', () => {
     const reopened = await testDb.query.shows.findFirst({ where: eq(shows.id, show.id) });
     expect(reopened?.catalogueNumbersLockedAt).toBeNull();
   });
+
+  /**
+   * Midland Regional, 2026-09-29: the catalogue and grading cards went to print
+   * while the show was still unlocked, with a withdrawal's gap in the numbers.
+   * Pressing Lock re-sorted first — it would have closed the gap and moved every
+   * later dog off the number printed on its card. Lock means "these are the
+   * numbers I'm printing": it freezes them as they stand and only fills blanks.
+   */
+  it('locking freezes the numbers exactly as they stand — a withdrawal gap is kept, not closed', async () => {
+    const { user, org } = await makeSecretaryWithOrg();
+    const show = await makeShow({ organisationId: org.id, status: 'entries_closed' });
+    const caller = createTestCaller(user);
+    const def = await makeClassDef({ type: 'age', name: 'Open' });
+    const showClass = await makeShowClass({ showId: show.id, classDefinitionId: def.id });
+
+    const add = async () => {
+      const dog = await makeDog({ ownerId: user.id });
+      const [e] = await testDb
+        .insert(entries)
+        .values({ showId: show.id, dogId: dog.id, exhibitorId: user.id, status: 'confirmed', totalFee: 500 })
+        .returning();
+      await makeEntryClass({ entryId: e.id, showClassId: showClass.id });
+      return e;
+    };
+    const first = await add();
+    const second = await add();
+    const third = await add();
+    await resortCatalogueNumbers(testDb, show.id);
+    expect([await catNum(first.id), await catNum(second.id), await catNum(third.id)]).toEqual(['1', '2', '3']);
+
+    // The catalogue is printed as 1, 2, 3; then number 2 withdraws.
+    await testDb.update(entries).set({ status: 'withdrawn' }).where(eq(entries.id, second.id));
+    // ...and a confirmed entry that was never numbered is still waiting for one.
+    const unnumbered = await add();
+
+    await caller.secretary.lockCatalogueNumbers({ showId: show.id });
+
+    expect(await catNum(first.id)).toBe('1');
+    expect(await catNum(third.id)).toBe('3'); // NOT closed up to 2
+    expect(await catNum(unnumbered.id)).toBe('4'); // blank filled at max+1
+    const locked = await testDb.query.shows.findFirst({ where: eq(shows.id, show.id) });
+    expect(locked?.catalogueNumbersLockedAt).toBeTruthy();
+  });
 });
 
 /**

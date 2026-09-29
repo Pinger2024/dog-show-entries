@@ -794,8 +794,11 @@ export const secretaryRouter = createTRPCRouter({
     .input(z.object({ showId: z.string().uuid() }))
     .mutation(async ({ ctx, input }) => {
       await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId, { callerIsAdmin: ctx.callerIsAdmin });
-      // Make sure numbers exist + are in order before we freeze them.
-      await syncCatalogueNumbers(ctx.db, input.showId);
+      // Freeze the numbers exactly as they stand — fill blanks only, never
+      // re-sort. Lock is often pressed AFTER printing (Midland, 2026-09-29: the
+      // catalogue and grading cards were printed with a withdrawal's gap in
+      // them); a re-sort here would move every later dog off its printed number.
+      await syncCatalogueNumbers(ctx.db, input.showId, { allowResort: false });
       await ctx.db
         .update(shows)
         .set({ catalogueNumbersLockedAt: new Date(), updatedAt: new Date() })
