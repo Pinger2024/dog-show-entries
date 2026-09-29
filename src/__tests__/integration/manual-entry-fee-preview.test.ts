@@ -16,7 +16,9 @@ import { eq } from 'drizzle-orm';
 import { entries, orders } from '@/server/db/schema';
 import { testDb } from '../helpers/db';
 import { createTestCaller } from '../helpers/context';
-import { makeUser, makeBreed, makeShow, makeShowClass, makeClassDef, makeDog, makeSecretaryWithOrg } from '../helpers/factories';
+import { makeUser, makeBreed, makeShow, makeShowClass, makeClassDef, makeDog, makeSecretaryWithOrg,
+  svReadyDogFields,
+} from '../helpers/factories';
 
 async function settleOrder(orderId: string) {
   await testDb.update(orders).set({ status: 'paid' }).where(eq(orders.id, orderId));
@@ -109,7 +111,7 @@ describe('manual entry — the dialog shows the fee Remi records', () => {
     const cls = await makeShowClass({ showId: show.id, classDefinitionId: def.id, breedId: breed.id, entryFee: 2000 });
     const exhibitor = await makeUser({ role: 'exhibitor' });
     const dogs = await Promise.all([1, 2, 3].map((i) =>
-      makeDog({ ownerId: exhibitor.id, breedId: breed.id, kcRegNumber: `SZ300${i}`, microchipNumber: `98130000000${i}` }),
+      makeDog({ ownerId: exhibitor.id, breedId: breed.id, kcRegNumber: `SZ300${i}`, microchipNumber: `98130000000${i}`, ...svReadyDogFields }),
     ));
     const first = await createTestCaller(exhibitor).orders.checkout({
       showId: show.id,

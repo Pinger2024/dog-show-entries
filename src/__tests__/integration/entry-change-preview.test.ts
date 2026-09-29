@@ -27,6 +27,7 @@ import {
   makeDog,
   makeSecretaryWithOrg,
   settleOrderLikeWebhook,
+  svReadyDogFields,
 } from '../helpers/factories';
 
 const FIRST = 2000; // £20
@@ -76,7 +77,7 @@ async function setupRegionalShow() {
 }
 
 const regionalDog = (ownerId: string, breedId: string, i: number) =>
-  makeDog({ ownerId, breedId, kcRegNumber: `SZ300${i}`, microchipNumber: `98130000000${i}` });
+  makeDog({ ownerId, breedId, kcRegNumber: `SZ300${i}`, microchipNumber: `98130000000${i}`, ...svReadyDogFields });
 
 describe('entries.previewUpdate — one owner with entries.update', () => {
   it('(a) RKC: 1 class → +2 classes previews first + 2x subsequent (2000), not the raw sum (4000)', async () => {
