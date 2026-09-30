@@ -12,38 +12,50 @@ export const showTypeLabels: Record<string, string> = {
  *  belong to a different show hierarchy (Regional → National →
  *  Sieger). Amanda 2026-05-24: render the badge as "Regional" instead
  *  of "Championship" whenever the show is on the WUSV ruleset. */
+const REGIONAL_TYPE_LABEL = 'Regional';
+
 export function displayShowTypeLabel(
   showType: string,
   showRuleset?: string | null,
 ): string {
-  if (showRuleset === 'wusv') return 'Regional';
+  if (showRuleset === 'wusv') return REGIONAL_TYPE_LABEL;
   return showTypeLabels[showType] ?? showType;
 }
 
-/** Generic show names auto-generated from the show type alone
- *  (e.g. when the secretary leaves the Show Name field blank and we
- *  fall back to the type label). If one of these exact strings is
- *  the show's title, it's worth prefixing the host club's name in
- *  listings so secretaries can tell two "Open Show"s apart. */
+/** Generic show names made of the show type alone — "Open Show",
+ *  "Championship Show", and "Regional Show" (Midland's 2026 regional is
+ *  called exactly that). Compared ignoring capitals and spacing. */
 const GENERIC_SHOW_TITLES = new Set(
-  Object.values(showTypeLabels).map((label) => `${label} Show`),
+  [...Object.values(showTypeLabels), REGIONAL_TYPE_LABEL].map((label) => `${label} Show`.toLowerCase()),
 );
 
-/** Title to display for a show in a listing / badge / banner.
- *  Custom user-entered names render as-is; generic type-only names
- *  get the host organisation's name prepended. */
+/** Does this name only say what TYPE of show it is, not whose? A trailing
+ *  year doesn't change that ("Regional Show 2026"). */
+export function isGenericShowName(name: string): boolean {
+  const bare = name.trim().replace(/\s+/g, ' ').replace(/ \d{4}$/, '').toLowerCase();
+  return GENERIC_SHOW_TITLES.has(bare);
+}
+
+/** Title to display for a show in a listing / badge / banner, and on the
+ *  judge's half of a grading card. Custom names render as-is; a generic
+ *  type-only name gets the host club's name in front, so two "Open Show"s
+ *  can be told apart. Mandy, 30 Sept 2026, on the grading card: "where they
+ *  have only stated regional show as the show name, the club name is added to
+ *  the front of that". */
 export function displayShowTitle(
   name: string,
   organisationName?: string | null,
 ): string {
   if (!organisationName) return name;
-  if (!GENERIC_SHOW_TITLES.has(name.trim())) return name;
+  if (!isGenericShowName(name)) return name;
   return `${organisationName} ${name}`;
 }
 
 /**
  * The club's name together with the show's name, never repeating words —
- * for documents that must say whose show it is (the grading cards). Mandy,
+ * for the heading of a grading card, which must say whose show it is (the
+ * judge's Show line on the same card uses `displayShowTitle`: Mandy found the
+ * full name "a bit wordy" there, 30 Sept pm). Mandy,
  * 30 Sept 2026: Midland's show is just "Regional Show", so print the club too,
  * "but not duplicate the name so if midlands Gsd group added midlands to the
  * show name I wouldn't want it showing as midlands Gsd group and midlands

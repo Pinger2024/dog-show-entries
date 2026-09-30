@@ -66,7 +66,9 @@ describe('grading card — the longest names stay on the card, whole', () => {
     const pdf = Buffer.from(
       await renderToBuffer(
         React.createElement(GradingCardsReport, {
-          info: { showName: LONGEST_SHOW, showDate: '06/12/2026' },
+          // A club may type a long show name too, so the judge's Show line
+          // is stressed with the same words as the heading.
+          info: { showName: LONGEST_SHOW, showLine: LONGEST_SHOW, showDate: '06/12/2026' },
           entries: [entry],
         }) as React.ReactElement<DocumentProps>,
       ),

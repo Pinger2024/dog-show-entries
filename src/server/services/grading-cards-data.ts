@@ -9,7 +9,7 @@
  * (mirrors the absentee-catalogue query shape in report-queries.ts). Junior
  * Handling entries have no dog and are excluded naturally.
  */
-import { showNameWithClub } from '@/lib/show-types';
+import { displayShowTitle, showNameWithClub } from '@/lib/show-types';
 import { and, eq, inArray, isNull } from 'drizzle-orm';
 import type { Database } from '@/server/db';
 import * as schema from '@/server/db/schema';
@@ -199,8 +199,12 @@ export async function loadGradingCardsData(
 
   return {
     info: {
-      // Club + show name without repeats (Mandy, 30 Sept 2026) — showNameWithClub.
+      // Heading: club + show name without repeats (Mandy, 30 Sept 2026).
       showName: showNameWithClub(show.name, show.organisation?.name),
+      // Judge's Show line: the show's own name, the club in front only for a
+      // bare "Regional Show" — the full name was "a bit wordy" there (Mandy,
+      // 30 Sept pm).
+      showLine: displayShowTitle(show.name, show.organisation?.name),
       showDate: safeDate(show.startDate),
     },
     entries: gradingEntries,

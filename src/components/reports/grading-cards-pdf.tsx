@@ -177,7 +177,10 @@ export interface GradingCardEntry {
 }
 
 export interface GradingCardsInfo {
+  /** Heading on the details half — club and show (showNameWithClub). */
   showName: string;
+  /** The judge's Show line — the show's own name (displayShowTitle). */
+  showLine: string;
   showDate: string;
 }
 
@@ -200,7 +203,7 @@ function InsidePage({ info, entry }: { info: GradingCardsInfo; entry: GradingCar
       </View>
       <View style={[s.panel, s.panelFold]}>
         <GrowRow label="Judge" value={entry.judgeName} />
-        <GrowRow label="Show" value={info.showName} />
+        <GrowRow label="Show" value={info.showLine} />
         <GrowRow label="Date" value={info.showDate} />
         <GrowRow label="Sex" value={entry.sex} />
         <GrowRow label="Coat" value={entry.coat} />
