@@ -57,15 +57,33 @@ function detectAwardMentions(text: string): string[] {
 // insensitive fallback (registered names in the DB have case variants and
 // trailing spaces; a judge's transcription can reorder nothing but we
 // normalise defensively anyway).
+//
+// Judges write a dog's name the way people say it, not the way it's
+// registered (Hugh De Zutter, South Western 2026: half his 50 came up amber).
+// These are the SAME dog, so they match exactly:
+//   - an import tag or award in brackets — "BENZES VOM AMUR (IMP DEU)", "(VW)"
+//   - apostrophes — "Wakematt's Luco" / "WAKEMATTS LUCO"
+//   - "v" / "von" for "vom" — "Billie v Huhnegrab"
+//   - titles in front — "Ch", "Int Ch.", "IR CH Multi International CH"
+// A misspelling ("Kleenhugel" / "KLEEHUEGEL") is still amber: the secretary
+// confirms it by eye.
+const NAME_TITLE_TOKENS = new Set(['ch', 'sh', 'int', 'ir', 'multi', 'international', 'champion']);
+const NAME_VOM_TOKENS = new Set(['v', 'vom', 'von']);
+
 function normalizeName(name: string): string {
-  return name
+  const tokens = name
     .toLowerCase()
+    .replace(/\([^()]*\)/g, ' ')
+    .replace(/['’‘`]/g, '')
     .replace(/[^a-z0-9\s]/gi, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((t) => (NAME_VOM_TOKENS.has(t) ? 'vom' : t));
+  while (tokens.length > 1 && NAME_TITLE_TOKENS.has(tokens[0]!)) tokens.shift();
+  return tokens.join(' ');
 }
 
-function namesMatch(a: string, b: string): boolean {
+export function namesMatch(a: string, b: string): boolean {
   const na = normalizeName(a);
   const nb = normalizeName(b);
   if (!na || !nb) return false;

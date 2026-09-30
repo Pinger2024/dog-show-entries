@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'fs';
 import { join } from 'path';
 import { parseCritiqueDocument, type ClassListEntry, type ParsedBlock } from '@/lib/critique-parse';
-import { matchCritiqueBlocks, type ResultsGraphShowClass, type ResultsGraphEntry } from '@/lib/critique-match';
+import { matchCritiqueBlocks, namesMatch, type ResultsGraphShowClass, type ResultsGraphEntry } from '@/lib/critique-match';
 
 const FIXTURE_TEXT = readFileSync(
   join(__dirname, 'fixtures', 'judge-critiques-sample.txt'),
@@ -245,5 +245,29 @@ describe('matchCritiqueBlocks — overview and unmatched blocks pass through unm
     const overview = blocks.find((b) => b.kind === 'overview')!;
     expect(overview.confidence).toBe('unmatched');
     expect(overview.matchedEntryClassId).toBeNull();
+  });
+});
+
+// Hugh De Zutter's South Western 2026 critiques (Mandy, 30 Sept): every dog
+// landed on the right placing, but 25 of 50 came up amber because the judge
+// writes a name the way people say it, not the way it's registered. Formatting
+// is not a different dog; a misspelling still is (the secretary confirms it).
+describe('namesMatch — the same dog written the way judges write it', () => {
+  it.each([
+    ['Benzes vom Amur', 'BENZES VOM AMUR (IMP DEU)'], // import tag
+    ["Wakematt's Luco", 'WAKEMATTS LUCO'], // apostrophe
+    ['Billie v Huhnegrab', 'BILLIE VOM HUHNEGRAB (IMP DEU)'], // v for vom
+    ['Ch Blerio Bezique at Mascani', 'Blerio Bezique at Mascani'], // title
+    ["Int Ch. Clynalwin's Nukon", "IR CH Multi International CH CLYNALWIN'S NUKON (VW)"], // titles + award
+  ])('"%s" is "%s"', (judge, registered) => {
+    expect(namesMatch(judge, registered)).toBe(true);
+  });
+
+  it.each([
+    ['Kleenhugel Kasey', 'KLEEHUEGEL KASEY'], // a misspelling — confirm by eye
+    ['Marlish Jamira', 'MARLISH JAMIRAH'],
+    ['Sadira Xenna', 'SADIRA XORROW'], // a different dog
+  ])('"%s" is NOT taken as "%s"', (judge, registered) => {
+    expect(namesMatch(judge, registered)).toBe(false);
   });
 });
