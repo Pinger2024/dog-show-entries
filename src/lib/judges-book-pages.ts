@@ -36,7 +36,7 @@
  *     page renders only when this filtered list is non-empty — a show
  *     with nothing but sexed awards now has NO back page.
  *
- * `classes` does NOT need to already be in Dog → Bitch → Special → Junior
+ * `classes` does NOT need to already be in Mixed → Dog → Bitch → Special → Junior
  * Handling running order — this buckets it itself via the shared
  * `sectionClasses` helper (class-labels.ts), the SAME bucketing the
  * catalogue, schedule and Prize Cards routes use. The judges-book route
@@ -46,7 +46,7 @@
  * into line with every other document (the Prize Cards route's own comment
  * already assumed the Judge's Book matched this order).
  */
-import { sectionClasses, type ClassSectionKey } from './class-labels';
+import { sectionClasses, CLASS_RUNNING_ORDER } from './class-labels';
 import { bestAwardSection } from './top-awards';
 import type { JudgesBookClass } from '@/app/api/judges-book/[showId]/route';
 
@@ -69,8 +69,6 @@ export type JudgesBookPage =
 // bitch-side awards are configured, the loop still reaches the 'bitch' key
 // (with zero classes to emit) and places that awards page there — right
 // after the dog section, exactly where the bitch section would have sat.
-const SECTION_ORDER: ClassSectionKey[] = ['dog', 'bitch', 'special', 'jh', 'other'];
-
 export function buildJudgesBookPages(
   classes: JudgesBookClass[],
   bestAwards: string[],
@@ -91,8 +89,11 @@ export function buildJudgesBookPages(
   }));
   const classesByKey = new Map(sections.map((sec) => [sec.key, sec.classes]));
 
+  // Every slot of the shared running order (Mixed → Dog → Bitch → Special →
+  // JH), even an empty one — the Dog and Bitch awards pages anchor to their
+  // slot whether or not the show has classes of that sex.
   const pages: JudgesBookPage[] = [];
-  for (const key of SECTION_ORDER) {
+  for (const key of CLASS_RUNNING_ORDER) {
     for (const cls of classesByKey.get(key) ?? []) {
       pages.push({ kind: 'class', class: cls });
     }

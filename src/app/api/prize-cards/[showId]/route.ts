@@ -39,7 +39,7 @@ const LARGE_PDF_BYTES = 10 * 1024 * 1024;
  * resolveJudgeForClass (Special Award Classes and Junior Handling must NOT
  * inherit the breed judge — see judge-resolution.ts). Classes are queried
  * in sortOrder/classNumber order (same as the Judge's Book) and rebucketed
- * Dog → Bitch → Special Awards → Junior Handling via the shared
+ * Mixed → Dog → Bitch → Special Awards → Junior Handling via the shared
  * `sectionClasses` helper (class-labels.ts) — the SAME running order every
  * other document uses, not invented here. buildPrizeCardPages
  * (src/lib/prize-card-pages.ts) turns those ordered per-class records into
@@ -95,7 +95,7 @@ export async function GET(
     }),
   ]);
 
-  // Class running order — Dog → Bitch → Special Awards → Junior Handling,
+  // Class running order — Mixed → Dog → Bitch → Special Awards → Junior Handling,
   // the SAME shared bucketing every other document (Judge's Book, catalogue,
   // schedule) uses. Do not invent a different order here.
   const showClasses = sectionClasses(showClassesRaw, (sc) => sc).flatMap((section) => section.classes);

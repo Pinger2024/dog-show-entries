@@ -20,7 +20,7 @@ import type { JudgesBookClass } from '@/app/api/judges-book/[showId]/route';
 //     more full-list duplication of the dog/bitch pages.
 //
 // buildJudgesBookPages does NOT bucket via `!isJh` or trust the classes'
-// input order — it re-buckets Dog → Bitch → Special → JH → catch-all via
+// input order — it re-buckets Mixed → Dog → Bitch → Special → JH via
 // the shared `sectionClasses` helper, so these tests also stand in for the
 // route's known hazard: raw show_classes.sortOrder can interleave Special
 // Award / Junior Handling classes between the dog and bitch blocks.

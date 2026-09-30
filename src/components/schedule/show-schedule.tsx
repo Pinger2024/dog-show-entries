@@ -120,14 +120,13 @@ export function ShowSchedule({
     return c.sex == null ? `${base} Dog or Bitch` : base;
   };
 
-  // Bucketing (Dog / Bitch / Special Awards / Junior Handling, plus a
-  // catch-all for anything else) is the shared `sectionClasses` (lib/
-  // class-labels.ts), which runs the real `isSpecialAwardClass`/
-  // `isJuniorHandler` predicates instead of a local `classType === 'special'`
-  // name check. This function only decides bucketing — which classes are
-  // Dog/Bitch/Special/JH/other — not layout: this page picks its own render
-  // order (Mixed at the top, Special before Junior Handling — see below)
-  // by looking sections up by key.
+  // Bucketing (Mixed / Dog / Bitch / Special Awards / Junior Handling) is the
+  // shared `sectionClasses` (lib/class-labels.ts), which runs the real
+  // `isSpecialAwardClass`/`isJuniorHandler` predicates instead of a local
+  // `classType === 'special'` name check. This page's two-column layout
+  // (Dogs | Bitches side by side) looks sections up by key, keeping the
+  // running order sectionClasses owns: Mixed at the top, Special before
+  // Junior Handling.
   const scheduleClassToClassLike = (c: ScheduleClass) => ({
     sex: c.sex,
     classDefinition: { type: c.classType, name: c.className },
@@ -137,10 +136,9 @@ export function ShowSchedule({
     bucketedClasses.find((b) => b.key === key)?.classes ?? [];
   const dogClasses = classesFor('dog');
   const bitchClasses = classesFor('bitch');
-  // Mixed non-JH, non-SAC classes (Veteran, etc.) render at the TOP of the
-  // Classification page so class 1 is visible first — this is the sectioning
-  // catch-all bucket, not an unrecognised-shape safety net.
-  const mixedTopClasses = classesFor('other');
+  // Mixed classes (Veteran, etc. — dogs and bitches together) render at the
+  // TOP of the Classification page so class 1 is visible first.
+  const mixedTopClasses = classesFor('mixed');
   const sacClasses = classesFor('special');
   const mixedBottomClasses = classesFor('jh');
   const sacJudges = judges.filter((j) => j.role === 'Special Awards Classes');

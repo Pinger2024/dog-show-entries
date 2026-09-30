@@ -306,7 +306,14 @@ export function specialAwardClassFee(cls: ClassFeeInput): number | null {
   return isSpecialAwardClass(cls) ? cls.entryFee : null;
 }
 
-export type ClassSectionKey = 'dog' | 'bitch' | 'special' | 'jh' | 'other';
+export type ClassSectionKey = 'mixed' | 'dog' | 'bitch' | 'special' | 'jh';
+
+/** The running order of a show's sections — Mandy, 2026-07-28: Mixed → Dog →
+ *  Bitch → Special Awards → Junior Handling. The ONLY copy: `sectionClasses`
+ *  returns its sections in this order, and a document that must visit every
+ *  slot even when a section is empty (the Judge's Book anchors its Dog and
+ *  Bitch awards pages there) walks this list. */
+export const CLASS_RUNNING_ORDER: readonly ClassSectionKey[] = ['mixed', 'dog', 'bitch', 'special', 'jh'];
 
 export interface ClassSection<T> {
   key: ClassSectionKey;
@@ -329,13 +336,18 @@ export type SectionableClass = ClassKindInput & { sex?: string | null };
  * bucketing. That's the defect this removes: one bucketing decision, driven
  * by the real predicates, reused by every consumer.
  *
- * This function decides BUCKETING, not layout — it returns each section's
- * classes keyed by `key`, and a consumer that needs its own section order or
- * an extra leading/trailing bucket (e.g. a "Mixed" section ahead of Dog) can
- * look sections up by key (`sections.find(s => s.key === 'jh')`) and lay
- * them out however its document requires, same as it would with any other
- * shared data. Only the bucketing predicates are meant to be one rule
- * everywhere.
+ * It also owns the RUNNING ORDER: sections come back in the order the day
+ * runs, and every document lays them out in the order it is given — never a
+ * local order list. Mandy, asked directly (2026-07-28): Mixed → Dog → Bitch
+ * → Special Awards → Junior Handling. That order was once written in four
+ * places (this function, the Standard catalogue, the Judge's Book, the
+ * Schedule) and they disagreed: North Eastern 2026's Veteran — a mixed
+ * class, class 1, judged first — printed LAST in the Standard and Steward's
+ * catalogues and the Judge's Book (Mandy, 30 Sept 2026).
+ *
+ * `mixed` is any class for dogs AND bitches together (sex=null) that is not a
+ * Special Award or Junior Handling class — Veteran, AV classes, and the like.
+ * Every class lands in exactly one section, so nothing is ever dropped.
  *
  * TRAP this exists to avoid: Special Award classes are `sex: null` AND
  * unnumbered; Junior Handling is `sex: null` AND numbered. Never bucket on
@@ -353,24 +365,22 @@ export type SectionableClass = ClassKindInput & { sex?: string | null };
  * predicates need — callers whose items already carry a nested
  * `classDefinition: {type, name}` and `sex` can pass the identity function.
  *
- * Returns only the sections that have classes, in the fixed order
- * Dog → Bitch → Special Awards → Junior Handling → catch-all ("other") —
- * Special Awards before Junior Handling is the show secretary's judging-day
- * convention (Special Awards run in the lunch break ahead of the Junior
- * Handling classes). The catch-all guarantees a class of an unrecognised
- * shape is surfaced somewhere rather than silently dropped, without ever
- * being confused for a real Dog/Bitch class.
+ * Returns only the sections that have classes, in the running order
+ * Mixed → Dog → Bitch → Special Awards → Junior Handling — Special Awards
+ * before Junior Handling is the show secretary's judging-day convention
+ * (Special Awards run in the lunch break ahead of the Junior Handling
+ * classes).
  */
 export function sectionClasses<T>(
   classes: T[],
   toClassLike: (item: T) => SectionableClass,
 ): ClassSection<T>[] {
   const buckets: Record<ClassSectionKey, T[]> = {
+    mixed: [],
     dog: [],
     bitch: [],
     special: [],
     jh: [],
-    other: [],
   };
 
   for (const item of classes) {
@@ -384,12 +394,11 @@ export function sectionClasses<T>(
     } else if (like.sex === 'bitch') {
       buckets.bitch.push(item);
     } else {
-      buckets.other.push(item);
+      buckets.mixed.push(item);
     }
   }
 
-  const order: ClassSectionKey[] = ['dog', 'bitch', 'special', 'jh', 'other'];
-  return order
+  return CLASS_RUNNING_ORDER
     .filter((key) => buckets[key].length > 0)
     .map((key) => ({ key, classes: buckets[key] }));
 }

@@ -31,7 +31,9 @@ const jh = (id: string): TestClass => ({
   sex: null,
   classDefinition: { type: 'junior_handler', name: 'Junior Handling' },
 });
-const mystery = (id: string): TestClass => ({ id, sex: null });
+// A class for dogs AND bitches together that is neither Special Award nor
+// Junior Handling — Veteran, AV classes. Its own 'mixed' section.
+const mixed = (id: string): TestClass => ({ id, sex: null });
 
 describe('sectionClasses', () => {
   it('never lands a Special Award class in Dog, even though both can be sex=null-adjacent', () => {
@@ -50,26 +52,27 @@ describe('sectionClasses', () => {
     expect(jhSection.classes.map((c) => c.id)).toEqual(['2']);
   });
 
-  it('never buckets on sex=null-ness alone — SAC, JH, and an unrecognised sex=null class all resolve differently', () => {
-    const sections = sectionClasses([sac('1'), jh('2'), mystery('3')], identity);
-    expect(sections.map((s) => s.key)).toEqual(['special', 'jh', 'other']);
+  it('never buckets on sex=null-ness alone — SAC, JH, and a mixed sex=null class all resolve differently', () => {
+    const sections = sectionClasses([sac('1'), jh('2'), mixed('3')], identity);
+    expect(sections.map((s) => s.key)).toEqual(['mixed', 'special', 'jh']);
   });
 
-  it('lands an unrecognised shape in the catch-all rather than disappearing', () => {
-    const sections = sectionClasses([mystery('1')], identity);
+  it('lands a mixed class in its own section rather than disappearing or joining Dogs', () => {
+    const sections = sectionClasses([mixed('1')], identity);
     expect(sections).toHaveLength(1);
-    expect(sections[0]!.key).toBe('other');
+    expect(sections[0]!.key).toBe('mixed');
     expect(sections[0]!.classes.map((c) => c.id)).toEqual(['1']);
   });
 
-  it('returns sections in the fixed order Dog → Bitch → Special → JH → catch-all', () => {
+  it('returns sections in the running order Mixed → Dog → Bitch → Special → JH', () => {
     // Deliberately passed out of order to prove the function orders the
-    // OUTPUT, not just preserves input order.
+    // OUTPUT, not just preserves input order. Mixed first: Mandy 2026-07-28,
+    // and North Eastern 2026's Veteran (class 1) printing last (30 Sept).
     const sections = sectionClasses(
-      [jh('jh1'), mystery('other1'), sac('sac1'), bitch('b1'), dog('d1')],
+      [jh('jh1'), mixed('mixed1'), sac('sac1'), bitch('b1'), dog('d1')],
       identity,
     );
-    expect(sections.map((s) => s.key)).toEqual(['dog', 'bitch', 'special', 'jh', 'other']);
+    expect(sections.map((s) => s.key)).toEqual(['mixed', 'dog', 'bitch', 'special', 'jh']);
   });
 
   it('places Special Awards before Junior Handling — the secretary confirmed this is the correct running order', () => {

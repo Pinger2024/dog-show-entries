@@ -73,15 +73,15 @@ describe('steward book — classes with no entries', () => {
     expect(sections.map((s) => s.key)).toEqual(['special']);
   });
 
-  it('routes a genuinely unrecognised sexless class to its own catch-all, never Dogs', () => {
-    // Was: fell through to the Dogs bucket by elimination (the "true
-    // catch-all" was Dogs itself) — sectionClasses (lib/class-labels.ts)
-    // now gives the catch-all its own section, key='other', so an
-    // unrecognised class can never be mistaken for a real Dog class.
+  it('routes a mixed (sexless) class to its own Mixed Classes section, never Dogs', () => {
+    // Was: fell through to the Dogs bucket by elimination — then, from
+    // 28 July, to a catch-all printed LAST as "Other Classes" (North
+    // Eastern's Veteran, 30 Sept). sectionClasses (lib/class-labels.ts) now
+    // gives mixed classes their own first section, key='mixed'.
     const sections = buildJudgingSections([
-      cls({ className: 'Mystery Class', sex: null, classLabel: undefined, entries: [dog] }),
+      cls({ className: 'AV Mixed Class', sex: null, classLabel: undefined, entries: [dog] }),
     ]);
-    expect(sections.map((s) => s.key)).toEqual(['other']);
-    expect(sections.find((s) => s.key === 'other')!.classes[0]!.className).toBe('Mystery Class');
+    expect(sections.map((s) => s.key)).toEqual(['mixed']);
+    expect(sections.find((s) => s.key === 'mixed')!.classes[0]!.className).toBe('AV Mixed Class');
   });
 });

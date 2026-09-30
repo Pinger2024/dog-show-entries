@@ -8,7 +8,7 @@ import {
   displayEntryName,
 } from './catalogue-utils';
 import type { ClassGroup } from './catalogue-utils';
-import { sectionClasses, classNameAbbreviation, sexLetter } from '@/lib/class-labels';
+import { sectionClasses, classNameAbbreviation, sexLetter, type ClassSectionKey } from '@/lib/class-labels';
 
 interface Props {
   show: CatalogueShowInfo;
@@ -352,7 +352,7 @@ const s = StyleSheet.create({
 });
 
 type Section = {
-  key: 'dog' | 'bitch' | 'special' | 'jh' | 'other';
+  key: ClassSectionKey;
   label: string;
   classes: ClassGroup[];
   /** Named judge for competitions that have their own, apart from the breed
@@ -362,12 +362,12 @@ type Section = {
   judge?: string | null;
 };
 
-const SECTION_LABELS: Record<Exclude<Section['key'], never>, string> = {
+const SECTION_LABELS: Record<ClassSectionKey, string> = {
+  mixed: 'Mixed Classes',
   dog: 'Dogs',
   bitch: 'Bitches',
   special: 'Special Awards Classes',
   jh: 'Junior Handling',
-  other: 'Other Classes',
 };
 
 /** Adapts a `ClassGroup` to the minimal shape `sectionClasses` needs. */
@@ -377,9 +377,11 @@ const classGroupToClassLike = (g: ClassGroup) => ({
 });
 
 /**
- * Split a show's classes into the steward book's sections: Dogs, Bitches,
- * Special Awards Classes, Junior Handling — plus a final catch-all so a
- * class of an unrecognised shape is never silently dropped.
+ * Split a show's classes into the steward book's sections, in the running
+ * order `sectionClasses` owns: Mixed Classes (Veteran etc. — dogs and
+ * bitches together, judged first), Dogs, Bitches, Special Awards Classes,
+ * Junior Handling. Mandy, North Eastern 2026: the mixed Veteran (class 1)
+ * used to print LAST, under "Other Classes", after every bitch class.
  *
  * Classes with NO entries are kept. Mandy 2026-07-27: "steward book, can we
  * include classes with no entries ie baby puppy". A steward works down the
@@ -438,29 +440,35 @@ export interface ChallengeRegisterSection {
  * that order on paper with a box to write in each winner's catalogue
  * number as the class is judged.
  *
- * Reuses `buildJudgingSections` and keeps ONLY the dog/bitch sections —
- * Special Award Classes and Junior Handling don't compete in the breed
- * challenge, and `sectionClasses` has already bucketed them out (never
- * re-derive with a name regex or sex null-ness, see the trap documented on
- * `sectionClasses` itself). Classes with zero entries are kept — the
- * steward simply leaves the box blank — same reasoning as the body page
- * (`buildJudgingSections`'s own doc comment). A section with no classes is
- * omitted so a dogs-only show prints only "Dogs".
+ * Reuses `buildJudgingSections`. Mixed classes (Veteran etc. — dogs and
+ * bitches together) LEAD BOTH lists: the best veteran dog can challenge for
+ * Best Dog and the best veteran bitch for Best Bitch, so each list needs its
+ * own line for them, first, as they are judged first (Mandy, 30 Sept 2026:
+ * "yes veteran should be on there"). Special Award Classes and Junior
+ * Handling don't compete in the breed challenge, and `sectionClasses` has
+ * already bucketed them out (never re-derive with a name regex or sex
+ * null-ness, see the trap documented on `sectionClasses` itself). Classes
+ * with zero entries are kept — the steward simply leaves the box blank —
+ * same reasoning as the body page (`buildJudgingSections`'s own doc
+ * comment). A sex with neither its own classes nor a mixed class is omitted,
+ * so a dogs-only show prints only "Dogs".
  *
  * Exported for testing — pure data, no PDF tree involved.
  */
 export function buildChallengeRegister(allClasses: ClassGroup[]): ChallengeRegisterSection[] {
-  return buildJudgingSections(allClasses)
-    .filter((section): section is Section & { key: 'dog' | 'bitch' } =>
-      section.key === 'dog' || section.key === 'bitch',
-    )
-    .map((section) => ({
-      key: section.key,
-      label: section.label,
-      rows: section.classes.map((c) => ({
+  const sections = buildJudgingSections(allClasses);
+  const classesOf = (key: ClassSectionKey) => sections.find((s) => s.key === key)?.classes ?? [];
+  const mixed = classesOf('mixed');
+  return (['dog', 'bitch'] as const)
+    .map((sex) => ({ sex, classes: [...mixed, ...classesOf(sex)] }))
+    .filter(({ classes }) => classes.length > 0)
+    .map(({ sex, classes }) => ({
+      key: sex,
+      label: SECTION_LABELS[sex],
+      rows: classes.map((c) => ({
         classNumber: c.classNumber ?? null,
         classLabel: c.classLabel ?? null,
-        abbreviation: classNameAbbreviation(c.className, section.key),
+        abbreviation: classNameAbbreviation(c.className, sex),
         className: c.className,
       })),
     }));

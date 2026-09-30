@@ -35,7 +35,7 @@ export type JudgesBookClass = {
   isJh: boolean;
   /** Raw show_classes.classDefinition.type ('age' | 'special' |
    *  'junior_handler' | 'sv_age' | …) — carried through so the renderer can
-   *  bucket classes Dog → Bitch → Special Awards → Junior Handling via the
+   *  bucket classes Mixed → Dog → Bitch → Special Awards → Junior Handling via the
    *  shared `sectionClasses` helper (class-labels.ts), the SAME bucketing
    *  every other document uses. Previously this route trusted raw
    *  show_classes.sortOrder, which let Special Award / Junior Handling

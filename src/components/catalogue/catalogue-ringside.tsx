@@ -16,7 +16,7 @@ import {
   formatPedigreeSireDam,
 } from './catalogue-utils';
 import type { ClassGroup } from './catalogue-utils';
-import { sectionClasses } from '@/lib/class-labels';
+import { sectionClasses, type ClassSectionKey } from '@/lib/class-labels';
 import {
   CoverPage,
   FrontMatterContent,
@@ -255,7 +255,7 @@ const s = StyleSheet.create({
 });
 
 type Section = {
-  key: 'dog' | 'bitch' | 'jh' | 'special' | 'other';
+  key: ClassSectionKey;
   label: string;
   classes: ClassGroup[];
   /** Named beneath the section band for the Special Awards / Junior Handling
@@ -268,6 +268,42 @@ const classGroupToClassLike = (g: ClassGroup) => ({
   sex: g.sex,
   classDefinition: { type: g.classDefinitionType, name: g.className },
 });
+
+const RINGSIDE_SECTION_LABELS: Record<ClassSectionKey, string> = {
+  mixed: 'Mixed Classes',
+  dog: 'Dog',
+  bitch: 'Bitch',
+  special: 'Special Awards Classes',
+  jh: 'Junior Handling',
+};
+
+/**
+ * The Standard catalogue's sections, in the running order `sectionClasses`
+ * owns (Mixed → Dog → Bitch → Special Awards → Junior Handling) — never a
+ * local order. Special Awards and Junior Handling carry their own judge,
+ * named beneath the band (Mandy 2026-07-20), sourced from the "role — name"
+ * display list with the same parse as the by-class catalogue.
+ *
+ * Exported for testing — pure data, no PDF tree involved.
+ */
+export function buildRingsideSections(allClasses: ClassGroup[], judgeDisplayList: string[]): Section[] {
+  const LABEL_SEP = ' — ';
+  const judgeForRole = (test: RegExp): string | null => {
+    for (const label of judgeDisplayList) {
+      const i = label.indexOf(LABEL_SEP);
+      if (i < 0) continue;
+      if (test.test(label.slice(0, i))) return label.slice(i + LABEL_SEP.length);
+    }
+    return null;
+  };
+  return sectionClasses(allClasses, classGroupToClassLike).map((section) => ({
+    key: section.key,
+    label: RINGSIDE_SECTION_LABELS[section.key],
+    classes: section.classes,
+    ...(section.key === 'special' ? { judge: judgeForRole(/special award/i) } : {}),
+    ...(section.key === 'jh' ? { judge: judgeForRole(/junior handl/i) } : {}),
+  }));
+}
 
 // ── Exhibitor Index ────────────────────────────────────────────
 // Full exhibitor details: name, address, then each dog with
@@ -475,43 +511,7 @@ export function CatalogueRingside({ show, entries, compact }: Props) {
     }
   }
 
-  // Split into sections: Dogs, Bitches, Special Award Classes, Junior Handling
-  // (plus a catch-all so a class of an unrecognised shape is never dropped).
-  // Special Award classes and Junior Handling each become their OWN section at
-  // the end of judging (after the breed classes), each with its judge named —
-  // matching the by-class catalogue (Mandy 2026-07-20). Bucketing itself is the
-  // shared `sectionClasses` (lib/class-labels.ts) so this can't drift from the
-  // Stewards' Catalogue, which uses the same predicate-driven bucketing.
-  const bucketed = sectionClasses(allClasses, classGroupToClassLike);
-  const classesFor = (key: (typeof bucketed)[number]['key']) =>
-    bucketed.find((b) => b.key === key)?.classes ?? [];
-  const dogClasses = classesFor('dog');
-  const bitchClasses = classesFor('bitch');
-  const specialClasses = classesFor('special');
-  const jhClasses = classesFor('jh');
-  const otherClasses = classesFor('other');
-
-  // Each competition's judge, sourced from the "role — name" display list (same
-  // parse as the by-class catalogue so the two can't drift).
-  const LABEL_SEP = ' — ';
-  const judgeForRole = (test: RegExp): string | null => {
-    for (const label of show.judgeDisplayList ?? []) {
-      const i = label.indexOf(LABEL_SEP);
-      if (i < 0) continue;
-      if (test.test(label.slice(0, i))) return label.slice(i + LABEL_SEP.length);
-    }
-    return null;
-  };
-
-  const sections: Section[] = [];
-  if (dogClasses.length > 0) sections.push({ key: 'dog', label: 'Dog', classes: dogClasses });
-  if (bitchClasses.length > 0) sections.push({ key: 'bitch', label: 'Bitch', classes: bitchClasses });
-  if (specialClasses.length > 0) sections.push({ key: 'special', label: 'Special Awards Classes', classes: specialClasses, judge: judgeForRole(/special award/i) });
-  if (jhClasses.length > 0) sections.push({ key: 'jh', label: 'Junior Handling', classes: jhClasses, judge: judgeForRole(/junior handl/i) });
-  // Safety net only — every real class is Dog/Bitch/Special/JH, so this never
-  // renders in practice. It exists so a class of an unrecognised shape is
-  // surfaced rather than silently dropped (see `sectionClasses`).
-  if (otherClasses.length > 0) sections.push({ key: 'other', label: 'Other Classes', classes: otherClasses });
+  const sections = buildRingsideSections(allClasses, show.judgeDisplayList ?? []);
 
   // Best Awards now render via the shared BestsWriteInPage (same as the
   // By-Class catalogue), so the old inline split-by-sex computation has been
