@@ -111,7 +111,9 @@ describe('section order — one owner guard', () => {
   const ROOT = join(__dirname, '..', '..', '..');
   const grep = (pattern: string) => {
     try {
-      return execFileSync('git', ['grep', '-n', '-E', pattern, '--', 'src', ':!src/**/__tests__/**'], { cwd: ROOT })
+      // `glob` magic so `**` also matches no folders (src/__tests__/…); the
+      // plain `:!src/**/__tests__/**` let src/__tests__ through on CI.
+      return execFileSync('git', ['grep', '-n', '-E', pattern, '--', 'src', ':(exclude,glob)src/**/__tests__/**'], { cwd: ROOT })
         .toString()
         .trim()
         .split('\n')
@@ -124,7 +126,9 @@ describe('section order — one owner guard', () => {
   it('no document keeps its own list of section keys in order', () => {
     // The order is sectionClasses' return order. A second list — like the
     // Judge's Book's old SECTION_ORDER — is how Veteran ended up last.
-    expect(grep(`\\[\\s*'(mixed|other|dog)',\\s*'(dog|bitch)',`).filter((l) => !l.startsWith('src/lib/class-labels.ts:'))).toEqual([]);
+    // [[:space:]], not \s: macOS git grep has no \s, so this guard passed
+    // locally without looking while Linux CI caught the class manager.
+    expect(grep(`\\[[[:space:]]*'(mixed|other|dog)',[[:space:]]*'(dog|bitch)',`).filter((l) => !l.startsWith('src/lib/class-labels.ts:'))).toEqual([]);
     expect(grep('SECTION_ORDER')).toEqual([]);
     // …nor pushes its sections one by one in an order of its own (the
     // Standard catalogue's old if/push list, which put the mixed class last).
