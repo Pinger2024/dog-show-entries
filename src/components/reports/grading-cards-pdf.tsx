@@ -105,14 +105,19 @@ const s = StyleSheet.create({
   // Inside — grading panel
   grow: {
     flexDirection: 'row',
-    alignItems: 'baseline',
+    // Label level with the FIRST line of a value that wraps.
+    alignItems: 'flex-start',
     marginBottom: 7,
     borderBottomWidth: 1,
     borderBottomColor: '#eee',
     paddingBottom: 5,
   },
-  growLabel: { width: 58, fontSize: 10, fontWeight: 700, color: '#333333' },
-  growValue: { fontSize: 10, fontWeight: 700, color: C.ink },
+  // The value takes the rest of the row and WRAPS: the show name now carries
+  // the club's name too (Mandy, 30 Sept 2026), and an unwrapped value ran off
+  // the card and squeezed the label ("Midland Regional GSD Group Mock SV
+  // Catalogue S…"). The label never shrinks.
+  growLabel: { width: 58, flexShrink: 0, fontSize: 10, fontWeight: 700, color: '#333333' },
+  growValue: { flex: 1, fontSize: 10, fontWeight: 700, color: C.ink },
   gradeHead: { fontWeight: 700, fontSize: 10.5, marginTop: 9, marginBottom: 5 },
   gradeHint: { fontWeight: 400, color: '#999999', fontSize: 9 },
   gradeRow: { flexDirection: 'row', paddingVertical: 3.5 },

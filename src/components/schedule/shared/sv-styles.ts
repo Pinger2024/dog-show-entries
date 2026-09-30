@@ -9,7 +9,7 @@
  * registrations. Visual feel is preserved: serif headlines, sans body,
  * letter-spaced eyebrows, oxblood accent.
  */
-import { StyleSheet, Font } from '@react-pdf/renderer';
+import { StyleSheet } from '@react-pdf/renderer';
 // Side-effect: registers Libre Baskerville + Inter + Times via the existing
 // schedule font setup. Imported for the side-effect only.
 import './styles';
@@ -19,10 +19,8 @@ import './styles';
 // see src/lib/pdf-fonts.ts for the fuller story (it is NOT safe in the
 // RKC catalogue/schedule/Judge's Book, which don't use it).
 import '@/lib/pdf-fonts';
+import '@/lib/pdf-hyphenation';
 
-// Hyphenation off — the design relies on rags rather than mid-word breaks
-// for headlines, and turning it off prevents accidental "Reg-ional" splits.
-Font.registerHyphenationCallback((word) => [word]);
 
 // ── Sieger palette ─────────────────────────────────────────────────────────
 export const SV = {

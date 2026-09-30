@@ -18,6 +18,7 @@ import { formatLondonLongDate, formatLondonShortDate } from '@/lib/date-utils';
 // inline here) — see src/lib/pdf-fonts.ts for why duplicate registration
 // of the same family from multiple modules is unsafe.
 import '@/lib/pdf-fonts';
+import '@/lib/pdf-hyphenation';
 
 // ── Font Registration ──────────────────────────────────────────────────────────
 const fontsDir = path.join(process.cwd(), 'public', 'fonts');
@@ -47,7 +48,6 @@ Font.register({
   ],
 });
 
-Font.registerHyphenationCallback((word) => [word]);
 
 // ── Colour Palette ─────────────────────────────────────────────────────────────
 

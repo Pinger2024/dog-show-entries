@@ -1,6 +1,7 @@
 import { Document, Page, Text, View, StyleSheet, Font } from '@react-pdf/renderer';
 import path from 'node:path';
 import { formatLondonLongDate } from '@/lib/date-utils';
+import '@/lib/pdf-hyphenation';
 
 // Self-contained registration (mirrors judge-contract-pdf.tsx) rather than
 // importing the shared src/lib/pdf-fonts.ts module — this document is
@@ -17,7 +18,6 @@ Font.register({
     { src: path.join(fontsDir, 'times-new-roman-italic.ttf'), fontStyle: 'italic' },
   ],
 });
-Font.registerHyphenationCallback((word) => [word]);
 
 export type ParkingPassPdfData = {
   showName: string;

@@ -1,6 +1,7 @@
 import { Document, Page, Text, View, StyleSheet, Font } from '@react-pdf/renderer';
 import path from 'node:path';
 import { formatCurrency, formatLondonLongDate, formatLondonShortDate } from '@/lib/date-utils';
+import '@/lib/pdf-hyphenation';
 
 const fontsDir = path.join(process.cwd(), 'public', 'fonts');
 Font.register({
@@ -11,7 +12,6 @@ Font.register({
     { src: path.join(fontsDir, 'times-new-roman-italic.ttf'), fontStyle: 'italic' },
   ],
 });
-Font.registerHyphenationCallback((word) => [word]);
 
 const SHOW_TYPE_LABELS: Record<string, string> = {
   companion: 'Companion Show',

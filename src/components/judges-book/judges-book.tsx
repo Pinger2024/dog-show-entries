@@ -9,6 +9,7 @@ import { formatLondonShortDate } from '@/lib/date-utils';
 // inline here) — see src/lib/pdf-fonts.ts for why duplicate registration of
 // the same family from multiple modules is unsafe.
 import '@/lib/pdf-fonts';
+import '@/lib/pdf-hyphenation';
 
 const fontsDir = path.join(process.cwd(), 'public', 'fonts');
 Font.register({
@@ -24,7 +25,6 @@ Font.register({
 // name). The per-class working pages (critique write-in areas, placement
 // columns) stay on Times untouched — those are the print-proofed judging
 // document, not the display cover.
-Font.registerHyphenationCallback((word) => [word]);
 
 const SHOW_TYPE_LABELS: Record<string, string> = {
   companion: 'Companion Show',

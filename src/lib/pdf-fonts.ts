@@ -37,6 +37,8 @@
 import path from 'path';
 import { Font } from '@react-pdf/renderer';
 import { HANKEN_GROTESK_FACES } from '@/lib/hanken-faces';
+// Every PDF that loads the shared fonts also gets "never split a word".
+import '@/lib/pdf-hyphenation';
 
 const fontsDir = path.join(process.cwd(), 'public', 'fonts');
 

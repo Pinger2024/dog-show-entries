@@ -5,6 +5,7 @@ import { StyleSheet, Font } from '@react-pdf/renderer';
 // inline here) — see src/lib/pdf-fonts.ts for why duplicate registration
 // of the same family from multiple modules is unsafe.
 import '@/lib/pdf-fonts';
+import '@/lib/pdf-hyphenation';
 
 // ── Font Registration ───────────────────────────────────────────
 // Register the same fonts as the schedule for visual consistency
@@ -46,8 +47,6 @@ Font.register({
   ],
 });
 
-// Disable word hyphenation for dog names and pedigree text
-Font.registerHyphenationCallback((word) => [word]);
 
 // Secretaries write welcome notes / awards lists WITH emoji (they display
 // fine on the public show page, which is HTML) — but none of the embedded

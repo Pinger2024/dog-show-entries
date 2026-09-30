@@ -1,6 +1,7 @@
 import { Document, Page, Text, View, StyleSheet, Font, Image } from '@react-pdf/renderer';
 import path from 'path';
 import { formatLondonLongDate } from '@/lib/date-utils';
+import '@/lib/pdf-hyphenation';
 
 // Register Times New Roman
 const fontsDir = path.join(process.cwd(), 'public', 'fonts');
@@ -12,7 +13,6 @@ Font.register({
     { src: path.join(fontsDir, 'times-new-roman-italic.ttf'), fontStyle: 'italic' },
   ],
 });
-Font.registerHyphenationCallback((word) => [word]);
 
 export interface PrizeCardShowInfo {
   name: string;

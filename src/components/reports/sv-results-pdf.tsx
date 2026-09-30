@@ -2,6 +2,7 @@ import path from 'path';
 import { readFileSync } from 'fs';
 import { Document, Page, View, Text, Image, StyleSheet, Font } from '@react-pdf/renderer';
 import type { SvResultsReportData } from '@/lib/sv-results';
+import '@/lib/pdf-hyphenation';
 
 /**
  * SV / WUSV graded RESULTS report (Mandy 2026-06-27 — the GSDL British Regional
@@ -24,7 +25,6 @@ Font.register({
     { src: path.join(fontsDir, 'inter-semibold.ttf'), fontWeight: 'bold', fontStyle: 'italic' },
   ],
 });
-Font.registerHyphenationCallback((word) => [word]);
 
 const remiLogo: string | null = (() => {
   try {

@@ -2,6 +2,7 @@ import { Document, Page, Text, View, StyleSheet, Font } from '@react-pdf/rendere
 import path from 'path';
 import { formatLondonShortDate } from '@/lib/date-utils';
 import { sexLetter } from '@/lib/class-labels';
+import '@/lib/pdf-hyphenation';
 
 const fontsDir = path.join(process.cwd(), 'public', 'fonts');
 Font.register({
@@ -12,7 +13,6 @@ Font.register({
     { src: path.join(fontsDir, 'times-new-roman-italic.ttf'), fontStyle: 'italic' },
   ],
 });
-Font.registerHyphenationCallback((word) => [word]);
 
 export interface RingBoardShowInfo {
   name: string;

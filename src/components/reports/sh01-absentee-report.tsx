@@ -2,6 +2,7 @@ import { Document, Page, View, Text, Image, StyleSheet, Font } from '@react-pdf/
 import { readFileSync } from 'fs';
 import path from 'path';
 import type { Sh01BreedRow } from '@/lib/sh01-absentee';
+import '@/lib/pdf-hyphenation';
 
 /**
  * The official RKC SH01 "Single Breed/Sub Group Championship Absentee Report",
@@ -29,7 +30,6 @@ Font.register({
     { src: path.join(fontsDir, 'inter-semibold.ttf'), fontWeight: 'bold' },
   ],
 });
-Font.registerHyphenationCallback((word) => [word]);
 
 const kcLogo: string | null = (() => {
   try {

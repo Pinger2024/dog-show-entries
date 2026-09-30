@@ -2,6 +2,7 @@ import { Document, Page, Text, View, Image, StyleSheet, Font } from '@react-pdf/
 import path from 'path';
 import type { PrizeCardPage } from '@/lib/prize-card-pages';
 import { formatLondonLongDate } from '@/lib/date-utils';
+import '@/lib/pdf-hyphenation';
 
 /**
  * Prize Card COMPOSITE — the official template design. Unlike the plain
@@ -54,7 +55,6 @@ Font.register({
     { src: path.join(fontsDir, 'times-new-roman-italic.ttf'), fontStyle: 'italic' },
   ],
 });
-Font.registerHyphenationCallback((word) => [word]);
 
 export interface CompositeShowInfo {
   clubName: string;

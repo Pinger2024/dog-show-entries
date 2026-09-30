@@ -59,6 +59,7 @@ import { Font } from '@react-pdf/renderer';
 // NOT a dynamic `require()`/`import()`, which esbuild/tsx treat as making
 // the whole module CommonJS and mangles its named exports.
 import '@/lib/pdf-fonts';
+import '@/lib/pdf-hyphenation';
 
 const fontsDir = path.join(process.cwd(), 'public', 'fonts');
 
@@ -122,8 +123,6 @@ export function registerPdfKitFonts(): void {
     ],
   });
 
-  // Dog names and pedigree text should never hyphenate mid-word.
-  Font.registerHyphenationCallback((word) => [word]);
 }
 
 /**
