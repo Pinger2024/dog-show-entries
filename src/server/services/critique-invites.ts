@@ -54,7 +54,12 @@ export async function inviteJudgeForCritiques(
 ) {
   const [judge, showRow] = await Promise.all([
     db.query.judges.findFirst({ where: eq(judges.id, input.judgeId), columns: { id: true, name: true } }),
-    db.query.shows.findFirst({ where: eq(shows.id, input.showId), columns: { id: true, name: true, startDate: true } }),
+    db.query.shows.findFirst({
+      where: eq(shows.id, input.showId),
+      columns: { id: true, name: true, startDate: true },
+      // The club's NAME only — never the whole organisation row.
+      with: { organisation: { columns: { name: true } } },
+    }),
   ]);
   if (!judge) throw new TRPCError({ code: 'NOT_FOUND', message: 'Judge not found' });
   if (!showRow) throw new TRPCError({ code: 'NOT_FOUND', message: 'Show not found' });
@@ -103,6 +108,7 @@ export async function inviteJudgeForCritiques(
       showName: showRow.name,
       showDate: showRow.startDate,
       link,
+      clubName: showRow.organisation?.name,
     });
   } catch (err) {
     console.error(`[critiques] Failed to send invite email to ${input.email}:`, err);
@@ -219,7 +225,10 @@ export async function runCritiqueReminders(db: Database, today: string) {
     ),
     with: {
       judge: { columns: { name: true } },
-      show: { columns: { id: true, name: true, startDate: true, status: true, showRuleset: true, showType: true } },
+      show: {
+        columns: { id: true, name: true, startDate: true, status: true, showRuleset: true, showType: true },
+        with: { organisation: { columns: { name: true } } },
+      },
     },
   });
 
@@ -246,6 +255,7 @@ export async function runCritiqueReminders(db: Database, today: string) {
         showName: doc.show.name,
         showDate: doc.show.startDate,
         link: critiqueLink(doc.uploadToken),
+        clubName: doc.show.organisation?.name,
       });
       summary.reminded++;
     } catch (err) {

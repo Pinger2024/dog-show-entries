@@ -1093,6 +1093,7 @@ function critiqueLinkEmailHtml(params: {
   showName: string;
   showDate: string;
   link: string;
+  clubName?: string | null;
   reminder: boolean;
 }) {
   const judgeName = escapeHtml(params.judgeName);
@@ -1129,7 +1130,7 @@ function critiqueLinkEmailHtml(params: {
         </p>
       </div>
     </div>
-    ${emailFooter(params.showName.replace(/\s+/g, ' '))}
+    ${emailFooter(params.clubName ? escapeHtml(params.clubName) : null)}
   </div>
 </body>
 </html>`;
@@ -1141,6 +1142,8 @@ export async function sendCritiqueInviteEmail(params: {
   showName: string;
   showDate: string;
   link: string;
+  /** The host club — "Sent by Remi on behalf of …". */
+  clubName?: string | null;
 }) {
   const { email, showName } = params;
   const result = await resend.emails.send({
@@ -1165,6 +1168,8 @@ export async function sendCritiqueReminderEmail(params: {
   showName: string;
   showDate: string;
   link: string;
+  /** The host club — "Sent by Remi on behalf of …". */
+  clubName?: string | null;
 }) {
   const { email, showName } = params;
   const result = await resend.emails.send({
@@ -1205,7 +1210,7 @@ export async function sendCritiqueAutoInviteNoticeEmail(params: {
     : '';
   const noEmailPara = params.noEmail.length
     ? `<p style="font-size: 15px; color: ${BRAND.ink}; line-height: 1.6;">
-          Remi has no email address for ${list(params.noEmail)}, so nothing has gone to them. Please open the Critiques page and send the link yourself — you can copy it into a text or WhatsApp message.
+          Remi has no email address for ${list(params.noEmail)}, so nothing has gone to them. Please open the Critiques page and press Invite next to their name to send it yourself.
         </p>`
     : '';
   const html = `
