@@ -390,7 +390,7 @@ export default function DocumentsPage() {
               label="Catalogue — By Class"
               description="Entries grouped by class number"
             >
-              <CatalogueJobButton icon={<List className="size-4" />} label="View" showId={showId} format="by-class" />
+              <CatalogueJobButton icon={<List className="size-4" />} label="View" showId={showId} format="by-class" lockReminder />
             </DocRow>
             {documentRowVisible('grading-cards', docCtx) && (
               <DocRow
@@ -408,7 +408,7 @@ export default function DocumentsPage() {
                 label="Catalogue — Standard"
                 description="RKC-format catalogue grouped by breed and sex"
               >
-                <CatalogueJobButton icon={<BookOpen className="size-4" />} label="View" showId={showId} format="standard" />
+                <CatalogueJobButton icon={<BookOpen className="size-4" />} label="View" showId={showId} format="standard" lockReminder />
               </DocRow>
             )}
             {documentRowVisible('catalogue-steward', docCtx) && (
@@ -417,7 +417,7 @@ export default function DocumentsPage() {
                 label="Catalogue — Steward"
                 description="Condensed two-column format with write-in placements — minimises print cost"
               >
-                <CatalogueJobButton icon={<Gavel className="size-4" />} label="View" showId={showId} format="judging" />
+                <CatalogueJobButton icon={<Gavel className="size-4" />} label="View" showId={showId} format="judging" lockReminder />
               </DocRow>
             )}
           </DocSection>

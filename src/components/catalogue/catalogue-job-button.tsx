@@ -1,10 +1,19 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { Loader2, RotateCcw } from 'lucide-react';
+import { Loader2, Lock, RotateCcw } from 'lucide-react';
 import { toast } from 'sonner';
 import { trpc } from '@/lib/trpc';
 import { Button } from '@/components/ui/button';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import { shouldRemindToLock } from '@/lib/catalogue-lock-reminder';
 
 type Phase = 'idle' | 'preparing' | 'ready' | 'failed';
 
@@ -78,6 +87,7 @@ export function CatalogueJobButton({
   readyLabel = 'Ready — Open',
   variant = 'outline',
   className,
+  lockReminder = false,
 }: {
   showId: string;
   format: 'standard' | 'by-class' | 'judging' | 'absentees' | 'marked' | 'judge-copy';
@@ -87,6 +97,11 @@ export function CatalogueJobButton({
   readyLabel?: string;
   variant?: 'outline' | 'default' | 'ghost';
   className?: string;
+  /** Secretary print catalogues only: once entries have closed and the
+   *  numbers are still unlocked, ask "Lock the numbers now?" before opening —
+   *  a reminder, never a block (Mandy, 30 Sept 2026). Never on the public
+   *  online catalogue. */
+  lockReminder?: boolean;
 }) {
   const [phase, setPhase] = useState<Phase>('idle');
   const [error, setError] = useState<string | null>(null);
@@ -102,6 +117,31 @@ export function CatalogueJobButton({
 
   const utils = trpc.useUtils();
   const requestJob = trpc.documentJobs.request.useMutation();
+  const [askLock, setAskLock] = useState(false);
+  const lockState = trpc.secretary.getCatalogueLockState.useQuery({ showId }, { enabled: lockReminder });
+  const lockNumbers = trpc.secretary.lockCatalogueNumbers.useMutation();
+
+  function press() {
+    if (lockReminder && lockState.data && shouldRemindToLock(lockState.data)) {
+      setAskLock(true);
+      return;
+    }
+    void start();
+  }
+
+  async function lockThenOpen() {
+    try {
+      await lockNumbers.mutateAsync({ showId });
+      toast.success('Catalogue numbers locked for printing');
+      void utils.secretary.getCatalogueLockState.invalidate({ showId });
+      void utils.secretary.getCatalogueData.invalidate({ showId });
+    } catch (err) {
+      // Never block printing: say so, and open anyway.
+      toast.error(`Couldn't lock the numbers — ${(err as Error).message}. Opening the catalogue anyway.`);
+    }
+    setAskLock(false);
+    void start();
+  }
 
   useEffect(() => {
     mountedRef.current = true;
@@ -234,9 +274,40 @@ export function CatalogueJobButton({
   }
 
   return (
-    <Button variant={variant} className={`min-h-[2.75rem] ${className ?? ''}`} onClick={() => void start()}>
-      {icon}
-      {label}
-    </Button>
+    <>
+      <Button variant={variant} className={`min-h-[2.75rem] ${className ?? ''}`} onClick={press}>
+        {icon}
+        {label}
+      </Button>
+      {lockReminder && (
+        <Dialog open={askLock} onOpenChange={setAskLock}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Printing this catalogue?</DialogTitle>
+              <DialogDescription>
+                Lock the catalogue numbers first, so they stay exactly as printed — even if someone
+                withdraws or a late entry is added. You can still just open it without locking.
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter className="gap-2 sm:gap-0">
+              <Button
+                variant="outline"
+                className="min-h-[2.75rem]"
+                onClick={() => {
+                  setAskLock(false);
+                  void start();
+                }}
+              >
+                Just open
+              </Button>
+              <Button className="min-h-[2.75rem]" disabled={lockNumbers.isPending} onClick={() => void lockThenOpen()}>
+                {lockNumbers.isPending ? <Loader2 className="size-4 animate-spin" /> : <Lock className="size-4" />}
+                Lock numbers and open
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
+    </>
   );
 }

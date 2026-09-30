@@ -80,6 +80,7 @@ import { Resend } from 'resend';
 import { searchKcJudges, fetchKcJudgeProfile } from '@/server/services/kc-judges';
 import { syncCatalogueNumbers, resortCatalogueNumbers, renumberAfterRemoval } from '@/server/services/catalogue-numbering';
 import { resolveEntryMembership } from '@/server/services/entry-membership';
+import { entryWindowOpen } from '@/lib/show-status';
 import { scheduleCatalogueRefresh } from '@/server/services/catalogue-jobs';
 import { generateJudgeContractPdf } from '@/server/services/judge-contract-pdf';
 import { normaliseOfficers } from '@/components/schedule/shared/officers';
@@ -796,6 +797,21 @@ export const secretaryRouter = createTRPCRouter({
 
   // Lock catalogue numbers for printing. After this, late entries append at the
   // end instead of re-sorting, so a printed catalogue's numbers never shift.
+  /** For the print catalogues' "Lock the numbers now?" reminder
+   *  (lib/catalogue-lock-reminder.ts): have entries closed — the entry-window
+   *  rule — and are the numbers locked? */
+  getCatalogueLockState: secretaryProcedure
+    .input(z.object({ showId: z.string().uuid() }))
+    .query(async ({ ctx, input }) => {
+      await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId, { callerIsAdmin: ctx.callerIsAdmin });
+      const show = await ctx.db.query.shows.findFirst({
+        where: eq(shows.id, input.showId),
+        columns: { status: true, entryCloseDate: true, catalogueNumbersLockedAt: true },
+      });
+      if (!show) throw new TRPCError({ code: 'NOT_FOUND', message: 'Show not found' });
+      return { entriesClosed: !entryWindowOpen(show), locked: show.catalogueNumbersLockedAt != null };
+    }),
+
   lockCatalogueNumbers: secretaryProcedure
     .input(z.object({ showId: z.string().uuid() }))
     .mutation(async ({ ctx, input }) => {
