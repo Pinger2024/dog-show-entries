@@ -393,3 +393,33 @@ pattern in the codebase for holding a rule that genuinely cannot live in one fun
 that fails the suite when a second copy appears.
 </content>
 </invoke>
+
+## Addendum 30 Sept 2026 — class SECTION order, found by the section-order guard
+
+`sectionClasses` (lib/class-labels.ts) owns bucketing classes into Mixed → Dog → Bitch → Special
+Awards → Junior Handling. The guard in `mixed-class-order.test.ts` used `\s`, which macOS git grep
+lacks, so it passed locally without matching while Linux CI failed main from b6a24840. Fixed
+(`[[:space:]]`); it caught the class manager, now on the owner (`_lib/class-manager-groups.ts`).
+A sweep of every sex check in src found these copies still standing:
+
+- **`secretary.resortShowClasses`** (secretary.ts ~2406) — WRITES sortOrder + class numbers in
+  Dog → Bitch → sex-less-last order, contradicting `autoAssignClassNumbers` (~2256, sex-less first)
+  in the same file. No screen calls it today (the class manager defines the mutation, never fires
+  it). Highest impact if anything ever does: it would renumber a mixed Veteran to the end.
+- **Sponsors page** (sponsors/page.tsx ~1894) — Dog / Bitch / "Other Classes", mixed + SAC + JH
+  lumped, last.
+- **Public schedule page** (shows/[id]/schedule/page.tsx ~99) — per breed Dog / Bitch / "Open to
+  Dog & Bitch" last (SAC already pulled out through sectionClasses).
+- **Catalogue by Breed PDF** (catalogue-by-breed.tsx ~68, ~250) — `['dog','unknown','bitch']`: the
+  sex-less block prints BETWEEN dogs and bitches. Printed.
+- **Class breakdown** (lib/class-breakdown.ts ~166 → financial page) — Dogs, Bitches, JH, Mixed;
+  Special Awards fall into Mixed.
+- **Screen vs documents:** the class manager orders its sections by each show's STORED sortOrder
+  (and section drag rewrites it), while every document uses the fixed running order. A show whose
+  stored order is untidy (demo Winterfest: JH stored between the dog classes) shows JH between Dog
+  and Bitch on screen but last in print. Numbering (`autoAssignClassNumbers`) is a third notion.
+  Needs a decision: should single-breed sections be draggable at all?
+
+Borderline: catalogue-marked.tsx buckets by sex but re-orders by class number (mixed class 1 still
+first). Already on the owner: show-schedule, catalogue-judging/ringside/by-class, prize cards,
+judges-book pages.
