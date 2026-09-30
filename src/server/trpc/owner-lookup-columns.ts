@@ -7,9 +7,14 @@
  * Bug hunt 2026-09-22: secretary.searchDogs searches every dog on Remi (and
  * anyone can register a club and become a secretary) but returned the owner
  * row in full, so a few searches could harvest exhibitors' addresses and
- * phone numbers across the platform. Whether the search should be scoped more
- * tightly (e.g. to dogs already entered with this club) is an open question
- * for Mandy; this only stops the over-return.
+ * phone numbers across the platform. This stops the over-return.
+ *
+ * Scope decided by Mandy (30 Sept 2026): "if you are just searching for a dog
+ * already entered in the entries tab it should just search dogs entered but if
+ * your adding an entry you need to be able to search for all dogs on remi".
+ * So this search — used only by the Add Entry dialog — stays platform-wide;
+ * the entries tab's own search box filters the show's entries and never
+ * calls it.
  */
 export const dogSearchOwnerColumns = {
   id: true,
