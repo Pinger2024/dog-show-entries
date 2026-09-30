@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { loadSvResultsData } from '@/server/services/sv-results-data';
+import { loadSvMeasurementSheet } from '@/server/services/sv-measurement';
 import { findPlacedWithoutGrade } from '@/lib/sv-results';
 import { dogSearchOwnerColumns } from '../owner-lookup-columns';
 import { roleAfterGrant, type UserRole } from '@/lib/roles';
@@ -6909,6 +6910,17 @@ export const secretaryRouter = createTRPCRouter({
       }
 
       return { unpublished: true, classId: input.showClassId };
+    }),
+
+  /** Every dog to measure at a regional, class by class — the secretary's
+   *  Height and depth page (Mandy, 30 Sept 2026: "can be afterwards"). She
+   *  needn't be a steward. Saving goes through steward.recordSvMeasurement,
+   *  whose rules (services/sv-measurement.ts) admit her. */
+  getSvMeasurements: secretaryProcedure
+    .input(z.object({ showId: z.string().uuid() }))
+    .query(async ({ ctx, input }) => {
+      await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId, { callerIsAdmin: ctx.callerIsAdmin });
+      return loadSvMeasurementSheet(ctx.db, input.showId);
     }),
 
   getResultsPublicationStatus: secretaryProcedure

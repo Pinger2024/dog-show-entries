@@ -28,6 +28,7 @@ import {
 import { toast } from 'sonner';
 import { trpc } from '@/lib/trpc';
 import { svGradeGapsWarning } from '@/lib/sv-results';
+import { svMeasurementGapsNote, svMeasurementProgress } from '@/lib/sv-measurement';
 import { Button } from '@/components/ui/button';
 import {
   Card,
@@ -226,6 +227,10 @@ export default function DocumentsPage() {
     { showId },
     { enabled: stats?.showRuleset === 'wusv' },
   );
+  const { data: svMeasurements } = trpc.secretary.getSvMeasurements.useQuery(
+    { showId },
+    { enabled: stats?.showRuleset === 'wusv' },
+  );
 
   const resultsFinalised = Boolean(catalogueData?.show?.resultsPublishedAt);
   // SV / WUSV regional shows get the graded results report + spreadsheet the
@@ -238,6 +243,11 @@ export default function DocumentsPage() {
   // the NE Regional's no. 11 went to the League like that (5 Sept 2026). Say
   // which dogs before the secretary sends anything. Never blocks a download.
   const svGradeGapNote = svGradeGapsWarning(svGradeGaps ?? []);
+  // Height and depth go on the spreadsheet only (Mandy, 30 Sept 2026) — say
+  // how many dogs are still missing them and where to add them.
+  const svMeasurementNote = svMeasurements
+    ? svMeasurementGapsNote(svMeasurementProgress(svMeasurements.classes.flatMap((c) => c.entries)))
+    : undefined;
 
   // Distinct judges (by id) so a multi-judge show can offer a separate Judge's
   // Book per judge — e.g. the breed judge's book and the Junior Handling
@@ -620,7 +630,7 @@ export default function DocumentsPage() {
                 icon={<FileSpreadsheet className="size-4" />}
                 label="SV Results Spreadsheet"
                 description="One row per dog with full pedigree, grading and placing — the SV records format for the regional group"
-                note={svGradeGapNote}
+                note={[svGradeGapNote, svMeasurementNote].filter(Boolean).join(' ') || undefined}
               >
                 {downloadingKey === 'sv-results-xlsx' ? (
                   <Button disabled className="min-h-[2.75rem]">

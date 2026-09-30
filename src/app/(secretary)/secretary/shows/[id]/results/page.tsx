@@ -16,6 +16,7 @@ import {
   Globe,
   Loader2,
   Lock,
+  Ruler,
   Unlock,
   XCircle,
 } from 'lucide-react';
@@ -895,6 +896,16 @@ export default function SecretaryResultsPage() {
               Record Results
             </Link>
           </Button>
+          {/* Regional shows: the secretary types every dog's height and
+              depth on one page — she needn't be a steward (Mandy, 30 Sept 2026). */}
+          {showData?.showRuleset === 'wusv' && (
+            <Button variant="outline" size="sm" className="min-h-[2.75rem]" asChild>
+              <Link href={`/secretary/shows/${showId}/results/height-and-depth`}>
+                <Ruler className="size-3.5" />
+                Height and depth
+              </Link>
+            </Button>
+          )}
           <Button variant="outline" size="sm" className="min-h-[2.75rem]" asChild>
             <Link href={`/shows/${showId}/results`}>
               <ExternalLink className="size-3.5" />

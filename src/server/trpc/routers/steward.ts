@@ -31,8 +31,8 @@ import { sendJudgeApprovalRequestEmail } from '@/server/services/email';
 import { isLiveEntry } from '@/lib/entry-counts';
 import { classResultsPublishState } from '@/lib/class-results-publish-state';
 import { recordTopAward, removeTopAwardHolder } from '@/server/services/achievements';
-import { recordSvMeasurement, svMeasurementShow } from '@/server/services/sv-measurement';
-import { formatSvMeasurement } from '@/lib/sv-measurement';
+import { recordSvMeasurement } from '@/server/services/sv-measurement';
+import { formatSvMeasurement, svMeasurementBlock } from '@/lib/sv-measurement';
 
 /** Resolve a show slug or UUID to a UUID */
 async function resolveShowId(db: Database, idOrSlug: string): Promise<string> {
@@ -459,6 +459,14 @@ export const stewardRouter = createTRPCRouter({
               // for the input boxes (lib/sv-measurement.ts).
               svHeightCm: formatSvMeasurement(ec.entry.svHeightCm),
               svDepthCm: formatSvMeasurement(ec.entry.svDepthCm),
+              // Does this dog get height and depth boxes? The save's own rule.
+              svMeasurable:
+                svMeasurementBlock({
+                  showRuleset: show?.showRuleset,
+                  className: showClass.classDefinition?.name,
+                  absent: ec.absent,
+                  entry: ec.entry,
+                }) === null,
               result: ec.result
                 ? {
                     id: ec.result.id,
@@ -476,9 +484,9 @@ export const stewardRouter = createTRPCRouter({
 
   // ── Record / update a result ───────────────────────────
   /** SV height + chest depth for a dog from Junior upwards — the steward on
-   *  the day or the secretary afterwards (Mandy, 30 Sept 2026). Rules live in
-   *  services/sv-measurement.ts; this only checks the caller may record for
-   *  this show. */
+   *  the day or the secretary afterwards (Mandy, 30 Sept 2026). Who may, which
+   *  dogs and what values: all in services/sv-measurement.ts. Both the steward
+   *  class page and the secretary's Height and depth page save through here. */
   recordSvMeasurement: stewardProcedure
     .input(
       z.object({
@@ -487,20 +495,9 @@ export const stewardRouter = createTRPCRouter({
         depthCm: z.number().nullable(),
       })
     )
-    .mutation(async ({ ctx, input }) => {
-      const show = await svMeasurementShow(ctx.db, input.entryClassId);
-      const allowed = await callerIsPrivilegedForShow(
-        ctx.db,
-        ctx.session.user.id,
-        ctx.session.user.role,
-        show.id,
-        show.organisationId,
-      );
-      if (!allowed) {
-        throw new TRPCError({ code: 'FORBIDDEN', message: 'You can only record measurements for your own shows' });
-      }
-      return recordSvMeasurement(ctx.db, input);
-    }),
+    .mutation(async ({ ctx, input }) =>
+      recordSvMeasurement(ctx.db, { userId: ctx.session.user.id, role: ctx.session.user.role }, input),
+    ),
 
   recordResult: stewardProcedure
     .input(
