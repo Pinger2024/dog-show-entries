@@ -6,7 +6,6 @@ import { publicProcedure, secretaryProcedure } from '../procedures';
 import { verifyShowAccess } from '../verify-show-access';
 import {
   critiqueDocuments,
-  judges,
   judgeAssignments,
   results,
   shows,
@@ -18,7 +17,10 @@ import {
   type AssignableEntryClass,
 } from '@/server/services/critique-results-graph';
 import { publishGateStatus } from '@/lib/critique-publish-gate';
-import { sendCritiqueInviteEmail, sendCritiqueSubmittedEmail, APP_URL } from '@/server/services/email';
+import { sendCritiqueSubmittedEmail, APP_URL } from '@/server/services/email';
+import { breedJudgesForShow, inviteJudgeForCritiques, showHasCritiqueLink } from '@/server/services/critique-invites';
+import { critiqueReminderDate, upcomingAutoInviteDate } from '@/lib/critique-schedule';
+import { londonCalendarDateStr } from '@/lib/date-utils';
 
 // Mirrors CritiqueParsedBlock (src/server/db/schema/critique-documents.ts) —
 // the client round-trips the exact shape it received from getByToken /
@@ -280,10 +282,22 @@ export const critiquesRouter = createTRPCRouter({
         if (a.judge && !judgeById.has(a.judge.id)) judgeById.set(a.judge.id, a.judge);
       }
 
-      const docs = await ctx.db.query.critiqueDocuments.findMany({
-        where: eq(critiqueDocuments.showId, input.showId),
-      });
+      const [docs, show, breedJudges] = await Promise.all([
+        ctx.db.query.critiqueDocuments.findMany({
+          where: eq(critiqueDocuments.showId, input.showId),
+        }),
+        ctx.db.query.shows.findFirst({
+          where: eq(shows.id, input.showId),
+          columns: { endDate: true, status: true, showRuleset: true, showType: true, critiqueAutoInvitesAt: true },
+        }),
+        breedJudgesForShow(ctx.db, input.showId),
+      ]);
       const docByJudge = new Map(docs.map((d) => [d.judgeId, d]));
+      const breedJudgeIds = new Set(breedJudges.map((j) => j.id));
+      // What Remi will send by itself (Mandy, 30 Sept 2026) — shown on the
+      // page so nobody sends it twice. Dates: lib/critique-schedule.ts.
+      const autoSends =
+        !!show && show.status !== 'cancelled' && showHasCritiqueLink(show) && !show.critiqueAutoInvitesAt;
 
       return Array.from(judgeById.values()).map((judge) => {
         const doc = docByJudge.get(judge.id);
@@ -291,6 +305,16 @@ export const critiquesRouter = createTRPCRouter({
           judgeId: judge.id,
           judgeName: judge.name,
           contactEmail: judge.contactEmail,
+          // Breed judges without a link yet: the day Remi sends it.
+          autoInviteOn:
+            !doc && autoSends && breedJudgeIds.has(judge.id) && judge.contactEmail
+              ? upcomingAutoInviteDate(show!.endDate)
+              : null,
+          // Invited, nothing back yet: the day of the one reminder.
+          reminderOn:
+            doc && doc.status === 'invited' && doc.invitedAt && !doc.reminderSentAt
+              ? critiqueReminderDate(londonCalendarDateStr(doc.invitedAt))
+              : null,
           document: doc
             ? {
                 status: doc.status,
@@ -311,71 +335,8 @@ export const critiquesRouter = createTRPCRouter({
     .input(z.object({ showId: z.string().uuid(), judgeId: z.string().uuid(), email: z.string().email() }))
     .mutation(async ({ ctx, input }) => {
       await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId, { callerIsAdmin: ctx.callerIsAdmin });
-
-      const [judge, showRow] = await Promise.all([
-        ctx.db.query.judges.findFirst({ where: eq(judges.id, input.judgeId), columns: { id: true, name: true } }),
-        ctx.db.query.shows.findFirst({
-          where: eq(shows.id, input.showId),
-          columns: { id: true, name: true, startDate: true },
-        }),
-      ]);
-      if (!judge) throw new TRPCError({ code: 'NOT_FOUND', message: 'Judge not found' });
-      if (!showRow) throw new TRPCError({ code: 'NOT_FOUND', message: 'Show not found' });
-
-      const existing = await ctx.db.query.critiqueDocuments.findFirst({
-        where: and(eq(critiqueDocuments.showId, input.showId), eq(critiqueDocuments.judgeId, input.judgeId)),
-        columns: { status: true },
-      });
-      if (existing?.status === 'published') {
-        throw new TRPCError({
-          code: 'BAD_REQUEST',
-          message: 'These critiques are already published — unpublish first if you need to send a new invite.',
-        });
-      }
-
-      const uploadToken = crypto.randomUUID();
-
-      // Persist BEFORE sending the email — if the email fails, the secretary
-      // still has a real link to copy and send another way (WhatsApp etc.).
-      const [doc] = await ctx.db
-        .insert(critiqueDocuments)
-        .values({
-          showId: input.showId,
-          judgeId: input.judgeId,
-          uploadToken,
-          status: 'invited',
-          invitedEmail: input.email,
-          invitedAt: new Date(),
-        })
-        .onConflictDoUpdate({
-          target: [critiqueDocuments.showId, critiqueDocuments.judgeId],
-          set: {
-            uploadToken,
-            status: 'invited',
-            invitedEmail: input.email,
-            invitedAt: new Date(),
-            submittedAt: null,
-          },
-        })
-        .returning();
-
-      const link = `${APP_URL}/critiques/${uploadToken}`;
-
-      let emailSent = true;
-      try {
-        await sendCritiqueInviteEmail({
-          judgeName: judge.name,
-          email: input.email,
-          showName: showRow.name,
-          showDate: showRow.startDate,
-          link,
-        });
-      } catch (err) {
-        console.error(`[critiques] Failed to send invite email to ${input.email}:`, err);
-        emailSent = false;
-      }
-
-      return { ...doc!, link, emailSent };
+      // ONE owner with the automatic two-weeks-after send — services/critique-invites.ts.
+      return inviteJudgeForCritiques(ctx.db, input);
     }),
 
   getForSecretary: secretaryProcedure

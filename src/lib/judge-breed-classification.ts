@@ -32,6 +32,17 @@ export interface JudgeBreedAndClassification {
   classifications: string[];
 }
 
+/**
+ * Does this assignment put the judge over BREED classes — not Junior Handling
+ * (no breed, no sex) and not the Special Awards Classes? ONE owner: the labels
+ * below branch on it, and so does the critique link Remi sends by itself
+ * ("Breed only", Mandy, 30 Sept 2026 — services/critique-invites.ts).
+ */
+export function isBreedClassAssignment(a: JudgeAssignmentForClassification): boolean {
+  if (a.isSpecialAwardsClassesJudge === true) return false;
+  return a.breed != null || a.sex !== null;
+}
+
 export function buildJudgeBreedAndClassification(
   assignments: JudgeAssignmentForClassification[],
   showBreedNames: string[],
@@ -61,6 +72,12 @@ export function buildJudgeBreedAndClassification(
       for (const b of showBreedNames) breeds.add(b);
       continue;
     }
+    if (!isBreedClassAssignment(a)) {
+      hasJh = true;
+      continue;
+    }
+    // A breed-class assignment on a multi-breed show with no breed of its own
+    // has nothing to name, so it adds no line (as before).
     const effectiveBreed =
       a.breed?.name ??
       (a.sex !== null && singleBreedFallback ? singleBreedFallback : null);
@@ -69,8 +86,6 @@ export function buildJudgeBreedAndClassification(
       const set = breedSexes.get(effectiveBreed) ?? new Set();
       set.add(a.sex === 'dog' ? 'dog' : a.sex === 'bitch' ? 'bitch' : 'both');
       breedSexes.set(effectiveBreed, set);
-    } else if (a.sex === null) {
-      hasJh = true;
     }
   }
 

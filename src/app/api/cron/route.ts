@@ -9,6 +9,7 @@ import { sendCatalogueReadyEmail, sendParkingPassEmail } from '@/server/services
 import { CATALOGUE_NAME_PATTERN } from '@/lib/catalogue-utils';
 import { PARKING_NAME_PATTERNS } from '@/lib/parking-utils';
 import { todayInLondon, londonDateOffset } from '@/lib/date-utils';
+import { runCritiqueAutoInvites, runCritiqueReminders } from '@/server/services/critique-invites';
 
 /** Wall-clock hour:minute in Europe/London — used to gate the catalogue-ready
  *  email to "morning of the show, on or after 8:30 am". The cron ticks hourly
@@ -248,6 +249,21 @@ export async function GET(request: Request) {
     }
   }
 
+  // Judges' critique links, sent by Remi itself (Mandy, 30 Sept 2026): two
+  // weeks after the show to the breed judges, one reminder four weeks after
+  // the link if nothing has come back. Same 8:30am floor as the emails above;
+  // both claim before sending, so an hourly re-run never sends twice.
+  let critiqueInvites: Awaited<ReturnType<typeof runCritiqueAutoInvites>> | null = null;
+  let critiqueReminders: Awaited<ReturnType<typeof runCritiqueReminders>> | null = null;
+  if (isAfter830London) {
+    try {
+      critiqueInvites = await runCritiqueAutoInvites(db, todayStr);
+      critiqueReminders = await runCritiqueReminders(db, todayStr);
+    } catch (err) {
+      console.error('[cron] critique links failed:', err);
+    }
+  }
+
   return NextResponse.json({
     ok: true,
     closed: closedShows.length,
@@ -265,6 +281,8 @@ export async function GET(request: Request) {
     catalogueEmailErrors,
     parkingPassEmailsSent,
     parkingPassEmailErrors,
+    critiqueInvites,
+    critiqueReminders,
     checkedAt: now.toISOString(),
   });
 }

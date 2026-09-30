@@ -68,6 +68,8 @@ export const critiqueDocuments = pgTable(
     status: critiqueDocStatusEnum('status').notNull().default('invited'),
     invitedEmail: text('invited_email'),
     invitedAt: timestamp('invited_at', { withTimezone: true }),
+    // The one reminder, four weeks after the link (Mandy, 30 Sept 2026).
+    reminderSentAt: timestamp('reminder_sent_at', { withTimezone: true }),
     // Original .docx kept in R2 for provenance.
     originalFilename: text('original_filename'),
     storageKey: text('storage_key'),

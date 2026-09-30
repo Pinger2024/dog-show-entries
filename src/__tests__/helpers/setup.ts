@@ -111,6 +111,9 @@ vi.mock('@/server/services/email', async (importOriginal) => {
     sendPrintOrderDispatchEmail: vi.fn(async () => undefined),
     sendJudgeApprovalRequestEmail: vi.fn(async () => undefined),
     sendRefundFailedAlertEmail: vi.fn(async () => undefined),
+    sendCritiqueInviteEmail: vi.fn(async () => undefined),
+    sendCritiqueReminderEmail: vi.fn(async () => undefined),
+    sendCritiqueAutoInviteNoticeEmail: vi.fn(async () => undefined),
   };
 });
 

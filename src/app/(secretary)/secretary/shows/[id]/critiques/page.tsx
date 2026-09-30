@@ -18,6 +18,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { CritiqueSecretaryReview } from './_components/critique-secretary-review';
+import { formatLondonShortDate } from '@/lib/date-utils';
 
 type DocStatus = 'invited' | 'submitted' | 'published' | null;
 
@@ -121,6 +122,19 @@ export default function SecretaryCritiquesPage() {
                 {j.document?.submittedAt && (
                   <p className="text-xs text-muted-foreground">
                     Sent {new Date(j.document.submittedAt).toLocaleDateString('en-GB')}
+                  </p>
+                )}
+                {/* What Remi sends by itself (Mandy, 30 Sept 2026) — so nobody
+                    sends it twice. Dates come from lib/critique-schedule.ts. */}
+                {j.autoInviteOn && (
+                  <p className="text-sm text-muted-foreground">
+                    Remi will email the link on {formatLondonShortDate(j.autoInviteOn)}, or press Invite to send it now.
+                  </p>
+                )}
+                {j.document?.status === 'invited' && j.document.invitedAt && (
+                  <p className="text-sm text-muted-foreground">
+                    Link sent {formatLondonShortDate(j.document.invitedAt)}.
+                    {j.reminderOn && ` If nothing comes back, Remi will send a reminder on ${formatLondonShortDate(j.reminderOn)}.`}
                   </p>
                 )}
               </div>
