@@ -2,6 +2,7 @@ import {
   boolean,
   index,
   integer,
+  numeric,
   pgTable,
   text,
   timestamp,
@@ -39,6 +40,11 @@ export const entries = pgTable(
       .defaultNow()
       .notNull(),
     catalogueNumber: text('catalogue_number'),
+    /** SV regionals: height and chest depth in cm (one decimal), measured for
+     *  every dog from Junior upwards — recorded by the steward or secretary on
+     *  the day or afterwards (Mandy, 30 Sept 2026). See lib/sv-measurement.ts. */
+    svHeightCm: numeric('sv_height_cm', { precision: 4, scale: 1 }),
+    svDepthCm: numeric('sv_depth_cm', { precision: 4, scale: 1 }),
     catalogueRequested: boolean('catalogue_requested').notNull().default(false),
     /** RKC F(1).11.b.(6) / (8) — exhibitors have the right to have their name
      *  and address withheld from the catalogue. When true, catalogue rendering

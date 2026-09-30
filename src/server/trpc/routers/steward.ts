@@ -31,6 +31,8 @@ import { sendJudgeApprovalRequestEmail } from '@/server/services/email';
 import { isLiveEntry } from '@/lib/entry-counts';
 import { classResultsPublishState } from '@/lib/class-results-publish-state';
 import { recordTopAward, removeTopAwardHolder } from '@/server/services/achievements';
+import { recordSvMeasurement, svMeasurementShow } from '@/server/services/sv-measurement';
+import { formatSvMeasurement } from '@/lib/sv-measurement';
 
 /** Resolve a show slug or UUID to a UUID */
 async function resolveShowId(db: Database, idOrSlug: string): Promise<string> {
@@ -453,6 +455,10 @@ export const stewardRouter = createTRPCRouter({
               // Per-class attendance (Mandy 2026-08-12) — this entry_class
               // row's own flag, not the whole-entry roll-up.
               absent: ec.absent,
+              // SV height / chest depth (cm), Junior upwards — formatted
+              // for the input boxes (lib/sv-measurement.ts).
+              svHeightCm: formatSvMeasurement(ec.entry.svHeightCm),
+              svDepthCm: formatSvMeasurement(ec.entry.svDepthCm),
               result: ec.result
                 ? {
                     id: ec.result.id,
@@ -469,6 +475,33 @@ export const stewardRouter = createTRPCRouter({
     }),
 
   // ── Record / update a result ───────────────────────────
+  /** SV height + chest depth for a dog from Junior upwards — the steward on
+   *  the day or the secretary afterwards (Mandy, 30 Sept 2026). Rules live in
+   *  services/sv-measurement.ts; this only checks the caller may record for
+   *  this show. */
+  recordSvMeasurement: stewardProcedure
+    .input(
+      z.object({
+        entryClassId: z.string().uuid(),
+        heightCm: z.number().nullable(),
+        depthCm: z.number().nullable(),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      const show = await svMeasurementShow(ctx.db, input.entryClassId);
+      const allowed = await callerIsPrivilegedForShow(
+        ctx.db,
+        ctx.session.user.id,
+        ctx.session.user.role,
+        show.id,
+        show.organisationId,
+      );
+      if (!allowed) {
+        throw new TRPCError({ code: 'FORBIDDEN', message: 'You can only record measurements for your own shows' });
+      }
+      return recordSvMeasurement(ctx.db, input);
+    }),
+
   recordResult: stewardProcedure
     .input(
       z.object({

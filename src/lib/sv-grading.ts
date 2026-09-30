@@ -63,11 +63,29 @@ export type SvGradeCode = 'vp' | 'p' | 'wv' | 'v' | 'sg' | 'g' | 'a' | 'm' | 'u'
  *
  * Keyed on the class-definition name (with or without the "SV " prefix).
  */
+/** SV age classes by band — the one list the grade rule and the
+ *  height/depth rule both read. */
+const SV_UNDER_TWELVE_CLASSES = ['Baby Puppy', 'Minor Puppy', 'Puppy'];
+const SV_TWELVE_PLUS_CLASSES = ['Junior', 'Yearling', 'Adult', 'Working'];
+
+const svAgeClassName = (className: string | null | undefined) => (className ?? '').replace(/^SV\s+/, '').trim();
+
+/**
+ * Is this an SV class whose dogs are measured for height and chest depth?
+ * Mandy, 30 Sept 2026: "every dog from junior upwards gets measured" — the
+ * 12-months-and-over band (Junior, Yearling, Adult, Working), both coats.
+ * The League's "Results for SV" sheet carries the measurements from the
+ * 12-18 months (Junior) class onwards.
+ */
+export function isSvMeasuredClass(className: string | null | undefined): boolean {
+  return SV_TWELVE_PLUS_CLASSES.includes(svAgeClassName(className));
+}
+
 export function allowedSvGradesForClass(
   className: string | null | undefined,
 ): { value: SvGradeCode; label: string }[] {
-  const name = (className ?? '').replace(/^SV\s+/, '').trim();
-  const underTwelve = name === 'Baby Puppy' || name === 'Minor Puppy' || name === 'Puppy';
+  const name = svAgeClassName(className);
+  const underTwelve = SV_UNDER_TWELVE_CLASSES.includes(name);
   const isWorking = name === 'Working';
 
   let codes: SvGradeCode[];

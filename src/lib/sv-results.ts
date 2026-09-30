@@ -31,6 +31,7 @@
  *   - Grade tiers, best-of awards and the age bands all match the SV rulebook.
  */
 
+import { formatSvMeasurement } from './sv-measurement';
 import {
   SV_AGE_ORDER,
   svDisplayAge,
@@ -105,6 +106,10 @@ export interface SvDogInput {
 export interface SvEntryInput {
   id: string;
   catalogueNumber: string | null;
+  /** Height / chest depth in cm (Junior upwards) — lib/sv-measurement.ts.
+   *  Postgres numeric arrives as a string. */
+  svHeightCm?: number | string | null;
+  svDepthCm?: number | string | null;
   entryType: 'standard' | 'junior_handler';
   dog: SvDogInput | null;
   juniorHandler: { handlerName: string; dateOfBirth: string } | null;
@@ -633,6 +638,9 @@ export interface SvXlsxRow {
   ownerCountry: string;
   grading: string;
   placing: number | string;
+  /** cm, "" when not measured — formatSvMeasurement. */
+  height: string;
+  depth: string;
 }
 
 /** Display form of a registration body enum value. */
@@ -730,8 +738,10 @@ function primaryOwner(owners: SvOwnerInput[]): SvOwnerInput | null {
  * it used to run in plain ring-number order, which scrambles the placings
  * inside a class.
  *
- * Columns Remi doesn't store granularly (affix splits, height/depth) are left
- * blank — the data Remi holds always lands in the right column.
+ * Height and Depth come from the steward's / secretary's measurements
+ * (Junior upwards — lib/sv-measurement.ts), blank when not measured. Columns
+ * Remi doesn't store granularly (affix splits) are left blank — the data Remi
+ * holds always lands in the right column.
  */
 export function buildSvResultsXlsxRows(
   input: SvResultsReportInput,
@@ -783,6 +793,8 @@ export function buildSvResultsXlsxRows(
         ownerCountry: owner ? 'UK' : '',
         grading: r.gradeDisplay,
         placing: r.placementNumber ?? '',
+        height: formatSvMeasurement(r.entry.svHeightCm),
+        depth: formatSvMeasurement(r.entry.svDepthCm),
       });
     }
   }

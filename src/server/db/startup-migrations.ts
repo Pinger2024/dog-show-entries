@@ -272,5 +272,13 @@ export async function runStartupMigrations() {
     ALTER TYPE entry_audit_action ADD VALUE IF NOT EXISTS 'extras_added';
   `);
 
+  // ── 2026-09-30: SV height and chest depth per entry (Mandy) — every dog
+  // from Junior upwards at a regional; onto the League's Results for SV sheet. ──
+  await db.execute(sql`
+    ALTER TABLE entries
+      ADD COLUMN IF NOT EXISTS sv_height_cm NUMERIC(4,1),
+      ADD COLUMN IF NOT EXISTS sv_depth_cm NUMERIC(4,1);
+  `);
+
   console.log(`[startup-migrations] done in ${Date.now() - started}ms`);
 }

@@ -10,8 +10,9 @@ import ExcelJS from 'exceljs';
 import { SV_XLSX_COLUMNS, type SvXlsxRow } from './sv-results';
 
 /** Flatten a typed row into the exact 34-cell order of SV_XLSX_COLUMNS.
- *  Columns Remi doesn't store granularly (affix splits, height, depth) stay
- *  blank — every value Remi holds lands in its correct column. */
+ *  Height and Depth are numbers (cm) when measured, blank otherwise. Columns
+ *  Remi doesn't store granularly (affix splits) stay blank — every value Remi
+ *  holds lands in its correct column. */
 function rowToCells(r: SvXlsxRow): (string | number)[] {
   return [
     r.venue,
@@ -46,8 +47,8 @@ function rowToCells(r: SvXlsxRow): (string | number)[] {
     r.ownerCountry,
     r.grading,
     r.placing,
-    '', // Height
-    '', // Depth
+    r.height === '' ? '' : Number(r.height), // Height (cm)
+    r.depth === '' ? '' : Number(r.depth), // Depth (cm)
   ];
 }
 

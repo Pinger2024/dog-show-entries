@@ -22,7 +22,9 @@ import {
 import { toast } from 'sonner';
 import { trpc } from '@/lib/trpc';
 import { SPECIAL_AWARDS, comparePlacing } from '@/lib/placements';
-import { allowedSvGradesForClass, isPlacedWithoutSvGrade } from '@/lib/sv-grading';
+import { allowedSvGradesForClass, isPlacedWithoutSvGrade, isSvMeasuredClass } from '@/lib/sv-grading';
+import { parseSvMeasurement, svMeasurementProblem, formatSvMeasurement } from '@/lib/sv-measurement';
+import { Input } from '@/components/ui/input';
 import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -102,6 +104,17 @@ export default function StewardClassResultsPage({
       utils.steward.getClassEntries.invalidate({ showClassId: classId });
       utils.steward.getShowClasses.invalidate({ showId });
       utils.steward.getResultsSummary.invalidate({ showId });
+    },
+    onError: (error) => {
+      toast.error(error.message);
+    },
+  });
+
+  // SV height / chest depth (Mandy, 30 Sept 2026) — steward on the day or
+  // secretary afterwards, so it stays usable once results are locked.
+  const recordSvMeasurement = trpc.steward.recordSvMeasurement.useMutation({
+    onSuccess: () => {
+      utils.steward.getClassEntries.invalidate({ showClassId: classId });
     },
     onError: (error) => {
       toast.error(error.message);
@@ -804,6 +817,18 @@ export default function StewardClassResultsPage({
         </div>
       )}
 
+      {/* SV height and chest depth — Junior upwards (Mandy, 30 Sept 2026).
+          Outside the results area above so it stays usable after results are
+          published and locked: the secretary often adds them afterwards. */}
+      {isWusv && isSvMeasuredClass(showClass.classDefinition?.name) && (
+        <SvMeasurementsCard
+          entries={entries.filter((e) => !e.absent && !e.isJuniorHandler)}
+          onSave={(entryClassId, heightCm, depthCm) =>
+            recordSvMeasurement.mutate({ entryClassId, heightCm, depthCm })
+          }
+        />
+      )}
+
       {/* Previous / Next class navigation */}
       <div className="mt-8 flex items-center justify-between gap-2 sm:gap-4">
         {prevClass ? (
@@ -1022,3 +1047,98 @@ function CategoryCard({
     </div>
   );
 }
+
+type MeasurementEntry = {
+  entryClassId: string;
+  catalogueNumber: string | null;
+  dogName: string;
+  svHeightCm: string;
+  svDepthCm: string;
+};
+
+/** Height and chest depth for every dog present in an SV class from Junior
+ *  upwards, in centimetres — saved as soon as the steward moves on from a box
+ *  (Mandy, 30 Sept 2026). They go onto the League's Results for SV sheet. */
+function SvMeasurementsCard({
+  entries,
+  onSave,
+}: {
+  entries: MeasurementEntry[];
+  onSave: (entryClassId: string, heightCm: number | null, depthCm: number | null) => void;
+}) {
+  if (entries.length === 0) return null;
+  return (
+    <div className="mt-6 overflow-hidden rounded-xl border bg-card">
+      <div className="bg-green-800 px-4 py-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-white">
+        Height and depth (cm)
+      </div>
+      <p className="px-4 pt-3 text-xs text-muted-foreground">
+        Every dog from Junior upwards is measured. Fill these in on the day or afterwards — each one saves
+        as soon as you move to the next box.
+      </p>
+      <div className="divide-y">
+        {entries.map((e) => (
+          <MeasurementRow key={e.entryClassId} entry={e} onSave={onSave} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function MeasurementRow({
+  entry,
+  onSave,
+}: {
+  entry: MeasurementEntry;
+  onSave: (entryClassId: string, heightCm: number | null, depthCm: number | null) => void;
+}) {
+  const [height, setHeight] = useState(entry.svHeightCm);
+  const [depth, setDepth] = useState(entry.svDepthCm);
+  const [problem, setProblem] = useState<string | null>(null);
+
+  function save() {
+    const h = parseSvMeasurement(height);
+    const d = parseSvMeasurement(depth);
+    const issue = svMeasurementProblem('height', h) ?? svMeasurementProblem('depth', d);
+    setProblem(issue);
+    if (issue) return;
+    // Nothing changed since the last save — don't write.
+    if (formatSvMeasurement(h) === entry.svHeightCm && formatSvMeasurement(d) === entry.svDepthCm) return;
+    onSave(entry.entryClassId, h, d);
+  }
+
+  return (
+    <div className="px-4 py-3">
+      <div className="flex flex-wrap items-center gap-3">
+        <div className="min-w-0 flex-1 basis-40">
+          <p className="text-xs font-semibold text-muted-foreground">#{entry.catalogueNumber ?? '—'}</p>
+          <p className="truncate text-sm font-semibold">{entry.dogName}</p>
+        </div>
+        <label className="flex items-center gap-1.5 text-sm">
+          Height
+          <Input
+            inputMode="decimal"
+            className="h-11 w-20 text-base"
+            value={height}
+            onChange={(ev) => setHeight(ev.target.value)}
+            onBlur={save}
+            aria-label={`Height in cm for #${entry.catalogueNumber ?? ''}`}
+          />
+        </label>
+        <label className="flex items-center gap-1.5 text-sm">
+          Depth
+          <Input
+            inputMode="decimal"
+            className="h-11 w-20 text-base"
+            value={depth}
+            onChange={(ev) => setDepth(ev.target.value)}
+            onBlur={save}
+            aria-label={`Depth in cm for #${entry.catalogueNumber ?? ''}`}
+          />
+        </label>
+      </div>
+      {problem && <p className="mt-1 text-sm text-destructive">{problem}</p>}
+    </div>
+  );
+}
+

@@ -80,6 +80,8 @@ export async function loadSvResultsData(
     .map((e) => ({
       id: e.id,
       catalogueNumber: e.catalogueNumber ?? null,
+      svHeightCm: e.svHeightCm ?? null,
+      svDepthCm: e.svDepthCm ?? null,
       entryType: e.entryType,
       dog: e.dog
         ? {
