@@ -62,7 +62,44 @@ function isNoiseLine(line: string): boolean {
 // Now the ordinal may be followed by a comma OR simply a space. Deliberately no
 // looser than that: the separator must still be present, so ordinary prose
 // starting with a number ("2 year old male...") cannot be read as a placement.
-const PLACEMENT_RE = /^(\d+)(?:st|nd|rd|th)(?:,\s*|\s+)(.+)$/;
+// A full stop straight after the ordinal is fine too — "1st. Elliott's, …"
+// (Hugh De Zutter, South Western 2026: the email layout).
+const PLACEMENT_RE = /^(\d+)(?:st|nd|rd|th)\.?(?:,\s*|\s+)(.+)$/;
+
+// ── The email layout (Hugh De Zutter, South Western 2026 — Mandy pasted it and
+// "it has merged them all into one or 2 dogs"): one line per dog, the date of
+// birth and breeding on it —
+//   1st. Elliott's, Ellroost Iconic, bn. 28.6.25, by Tornado … ex Ch Drayvore …
+//   Talbot's, Mayasan Italia, bn 22.8.25, by …      (a class's only dog: no "1st")
+//   Wilson's Int Ch. Clynalwin's Nukon. Bn. 16.3.16 by …   (no comma after owner)
+// "bn" followed by a digit is the anchor; prose never reads "bn 12.3.24". ──
+const BORN_RE = /\bbn\.?\s*\d/i;
+
+/** "OWNERS, DOG NAME, bn DATE, by SIRE ex DAM" → the parts. Owners are
+ *  everything before the LAST comma ("Bibby, Cox, Summerhill and Dicon's,
+ *  Fluffy Cox von Shotaan"); with no comma, a possessive first word is the
+ *  owner ("Hensley's Willow at Zuberg"), otherwise it's all dog. */
+function splitEmailLayoutLine(line: string): { ownersRaw: string; dogRaw: string; pedigreeRaw: string | null } {
+  const born = BORN_RE.exec(line)!;
+  const before = line.slice(0, born.index).replace(/[\s,.;]+$/, '').trim();
+  const after = line.slice(born.index);
+  const breeding = /^bn\.?[\s\d.,]*?(?:\bby\s+)(.+)$/i.exec(after);
+  const pedigreeRaw = breeding ? breeding[1].replace(/[\s.]+$/, '').trim() || null : null;
+
+  const lastComma = before.lastIndexOf(',');
+  if (lastComma !== -1) {
+    return { ownersRaw: before.slice(0, lastComma).trim(), dogRaw: before.slice(lastComma + 1).trim(), pedigreeRaw };
+  }
+  const possessive = /^(\S+(?:'s|s'|’s|s’))\s+(.+)$/.exec(before);
+  if (possessive) return { ownersRaw: possessive[1], dogRaw: possessive[2].trim(), pedigreeRaw };
+  if (/(?:'s|s'|’s|s’)$/.test(before)) return { ownersRaw: before, dogRaw: '', pedigreeRaw };
+  return { ownersRaw: '', dogRaw: before, pedigreeRaw };
+}
+
+// The Challenge Certificate lines a judge writes between the dog and bitch
+// halves ("Dog Challenge Certificate, Ch Sadira Xorrow.") — their own block,
+// never the tail of the last dog's critique.
+const CERTIFICATE_LINE_RE = /^(?:reserve\s+)?(?:dog\s+|bitch\s+)?(?:challenge\s+certificate|r?\.?c\.?c\.?)\s*[,:–-]/i;
 
 // A pedigree written INLINE inside the placement line rather than on its own
 // line beneath it — "DOG NAME (Sire vom X x Dam vom Y) then the critique...".
@@ -91,7 +128,7 @@ function splitOwnersAndDog(rest: string): { ownersRaw: string; dogRaw: string } 
   // whole segment as the DOG, not as owners — a placement that names only an
   // owner and no dog is of no use to anyone, whereas "1st ROSEBUD EDIE" is the
   // common shape once owners are omitted (BAGSD 2026).
-  if (lastIndex === -1) return { ownersRaw: '', dogRaw: rest.trim() };
+  if (lastIndex === -1) return { ownersRaw: '', dogRaw: rest.trim().replace(/[.,]+$/, '').trim() };
   return {
     ownersRaw: rest.slice(0, lastIndex).trim(),
     dogRaw: rest.slice(lastIndex + lastLen).trim(),
@@ -165,6 +202,22 @@ function normalizeHeaderText(s: string): string {
     .trim();
 }
 
+// Class headings that carry the entry count — "Puppy Bitch. 7 entered, 5
+// absent.", "Junior Dog. 2 entries." — are the heading without it.
+function stripEntryCount(line: string): string {
+  return line.replace(/[.,:;]?\s*\(?\d+\s*(?:entered|entries|entry)\b.*$/i, '');
+}
+
+// Misspellings judges really write, mapped word by word ("Vetran Dog").
+const HEADER_TYPOS: Record<string, string> = { vetran: 'veteran', veteren: 'veteran', vetern: 'veteran' };
+
+function headerKey(line: string): string {
+  return normalizeHeaderText(stripEntryCount(line))
+    .split(' ')
+    .map((w) => HEADER_TYPOS[w] ?? w)
+    .join(' ');
+}
+
 function buildHeaderLookup(classList: ClassListEntry[]): Map<string, ClassListEntry> {
   const lookup = new Map<string, ClassListEntry>();
   for (const entry of classList) {
@@ -193,8 +246,15 @@ function lookupHeader(
   lookup: Map<string, ClassListEntry>,
   line: string,
 ): ClassListEntry | undefined {
-  const norm = normalizeHeaderText(line);
+  const norm = headerKey(line);
   return lookup.get(norm) ?? lookup.get(norm.replace(/^(?:class\s+)?\d{1,3}\s+/, ''));
+}
+
+/** Does the heading say which sex? ("Open Bitch" yes, "Special Long Coat Open" no) */
+function headerNamesSex(line: string): 'dog' | 'bitch' | null {
+  const m = /\b(dogs?|bitch(?:es)?)$/.exec(headerKey(line));
+  if (!m) return null;
+  return m[1].startsWith('dog') ? 'dog' : 'bitch';
 }
 
 // A header-like line resembles a class header by SHAPE (short, Title Case,
@@ -237,6 +297,11 @@ export function parseCritiqueDocument(
 
   const isAnyHeaderLine = (line: string) =>
     lookupHeader(headerLookup, line) !== undefined || looksLikeHeaderShaped(line);
+  const endsProse = (line: string) =>
+    isAnyHeaderLine(line) || PLACEMENT_RE.test(line) || CERTIFICATE_LINE_RE.test(line);
+  // A heading that doesn't say Dog or Bitch ("Special Long Coat Open.") is
+  // the class of the half it sits in — the sex of the last heading that did.
+  const bySex = new Map(classList.map((e) => [`${normalizeHeaderText(e.className)}|${e.sex}`, e]));
 
   const blocks: ParsedBlock[] = [];
   let i = 0;
@@ -257,14 +322,26 @@ export function parseCritiqueDocument(
 
   let currentShowClassId: string | null = null;
   let currentClassNameRaw: string | null = null;
+  let currentSex: 'dog' | 'bitch' | null = null;
+  let placementsInClass = 0;
 
   while (i < content.length) {
     const line = content[i];
     const matched = lookupHeader(headerLookup, line);
 
     if (matched) {
-      currentShowClassId = matched.showClassId;
+      const namedSex = headerNamesSex(line);
+      if (namedSex) currentSex = namedSex;
+      const inHalf = !namedSex && currentSex ? bySex.get(`${normalizeHeaderText(matched.className)}|${currentSex}`) : undefined;
+      currentShowClassId = (inHalf ?? matched).showClassId;
       currentClassNameRaw = line;
+      placementsInClass = 0;
+      i++;
+      continue;
+    }
+
+    if (CERTIFICATE_LINE_RE.test(line)) {
+      blocks.push(emptyBlock('unmatched', { critiqueText: line }));
       i++;
       continue;
     }
@@ -282,24 +359,33 @@ export function parseCritiqueDocument(
     }
 
     const pm = PLACEMENT_RE.exec(line);
-    if (pm) {
-      const position = parseInt(pm[1], 10);
+    // A class's only dog, written with no placing — the first dog line
+    // (it carries a date of birth) under a heading is the winner.
+    const impliedWinner = !pm && currentShowClassId !== null && placementsInClass === 0 && BORN_RE.test(line);
+    if (pm || impliedWinner) {
+      const position = pm ? parseInt(pm[1], 10) : 1;
+      placementsInClass++;
 
       // The remainder may carry the breeding and the critique inline —
       // "DOG (Sire x Dam) 8 year old female, ..." — or be just the dog, with
       // the breeding on the next line and the prose below that. Peel off an
       // inline pedigree first so it never ends up inside the dog's name.
-      let remainder = pm[2];
+      let remainder = pm ? pm[2] : line;
       let pedigreeRaw: string | null = null;
       let inlineProse = '';
+      let ownersRaw: string;
+      let dogRaw: string;
       const inline = INLINE_PEDIGREE_RE.exec(remainder);
-      if (inline) {
-        remainder = inline[1].trim();
-        pedigreeRaw = inline[2].trim();
-        inlineProse = inline[3].trim();
+      if (BORN_RE.test(remainder) && !inline) {
+        ({ ownersRaw, dogRaw, pedigreeRaw } = splitEmailLayoutLine(remainder));
+      } else {
+        if (inline) {
+          remainder = inline[1].trim();
+          pedigreeRaw = inline[2].trim();
+          inlineProse = inline[3].trim();
+        }
+        ({ ownersRaw, dogRaw } = splitOwnersAndDog(remainder));
       }
-
-      const { ownersRaw, dogRaw } = splitOwnersAndDog(remainder);
       i++;
 
       // Breeding on its own line beneath, the original layout. Only consulted
@@ -317,7 +403,7 @@ export function parseCritiqueDocument(
       // Prose that ran on after the inline pedigree comes first, then any
       // further lines beneath, so both layouts produce one critique.
       const proseLines: string[] = inlineProse ? [inlineProse] : [];
-      while (i < content.length && !isAnyHeaderLine(content[i]) && !PLACEMENT_RE.test(content[i])) {
+      while (i < content.length && !endsProse(content[i])) {
         proseLines.push(content[i]);
         i++;
       }
