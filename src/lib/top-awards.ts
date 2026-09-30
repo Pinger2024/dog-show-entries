@@ -117,13 +117,35 @@ export type AwardFilter = {
    *  (buildPlacementIndex excludes baby puppies from `inPuppyClass`), so
    *  Best Baby Puppy and Best Puppy in Show never share a candidate pool. */
   babyPuppy: boolean;
+  /** Restrict to dogs that WON (1st) a Most Promising class — Minor Puppy,
+   *  Puppy or Junior, either coat. See `isMostPromisingClass`. */
+  youngClassWinner: boolean;
 };
+
+/**
+ * The classes whose winners go forward for the regional Most Promising
+ * Dog / Bitch — Mandy, 30 Sept 2026: "the winners from minor, puppy and junior
+ * including the long coat classes". Baby Puppy is not in the pool. The ONE
+ * list: the award engine (`buildPlacementIndex` → `wonYoungClass`) and the
+ * steward screen both read it.
+ */
+export const MOST_PROMISING_CLASS_NAMES: readonly string[] = ['Minor Puppy', 'Puppy', 'Junior'];
+
+/** Is this class one whose winner can be Most Promising? SV class names may
+ *  carry an "SV " prefix; the coat (1a Long / 1b Short) is not in the name, so
+ *  both coats of each age class qualify. */
+export function isMostPromisingClass(className: string): boolean {
+  const name = className.replace(/^SV\s+/i, '').trim().toLowerCase();
+  return MOST_PROMISING_CLASS_NAMES.some((n) => n.toLowerCase() === name);
+}
 
 const DOG_AWARDS: ReadonlySet<AchievementType> = new Set([
   'best_dog', 'reserve_best_dog', 'dog_cc', 'reserve_dog_cc', 'best_puppy_dog', 'best_long_coat_dog',
+  'most_promising_young_dog',
 ]);
 const BITCH_AWARDS: ReadonlySet<AchievementType> = new Set([
   'best_bitch', 'reserve_best_bitch', 'bitch_cc', 'reserve_bitch_cc', 'best_puppy_bitch', 'best_long_coat_bitch',
+  'most_promising_young_bitch',
 ]);
 const PUPPY_AWARDS: ReadonlySet<AchievementType> = new Set([
   'best_puppy_in_breed', 'best_puppy_in_show', 'best_puppy_dog', 'best_puppy_bitch', 'best_long_coat_puppy',
@@ -137,6 +159,9 @@ const LONG_COAT_AWARDS: ReadonlySet<AchievementType> = new Set([
 const BABY_PUPPY_AWARDS: ReadonlySet<AchievementType> = new Set([
   'best_baby_puppy',
 ]);
+const MOST_PROMISING_AWARDS: ReadonlySet<AchievementType> = new Set([
+  'most_promising_young_dog', 'most_promising_young_bitch',
+]);
 
 export function awardFilter(type: AchievementType): AwardFilter {
   return {
@@ -145,6 +170,7 @@ export function awardFilter(type: AchievementType): AwardFilter {
     veteran: VETERAN_AWARDS.has(type),
     longCoat: LONG_COAT_AWARDS.has(type),
     babyPuppy: BABY_PUPPY_AWARDS.has(type),
+    youngClassWinner: MOST_PROMISING_AWARDS.has(type),
   };
 }
 
@@ -364,6 +390,8 @@ export type PlacementIndex = {
    *  `inPuppyClass` (see the className check below), so Best Baby Puppy and
    *  Best Puppy in Show never share a candidate pool. */
   inBabyPuppyClass: Set<string>;
+  /** dogIds that WON (1st) a Most Promising class — `isMostPromisingClass`. */
+  wonYoungClass: Set<string>;
 };
 
 /**
@@ -401,7 +429,9 @@ export function buildPlacementIndex(classes: IndexClass[], showDate?: string): P
   const inPuppyClass = new Set<string>();
   const inVeteranClass = new Set<string>();
   const inBabyPuppyClass = new Set<string>();
+  const wonYoungClass = new Set<string>();
   for (const cls of classes) {
+    const isYoungClass = isMostPromisingClass(cls.className);
     const n = cls.className.toLowerCase();
     const isBabyPuppy = n.includes('puppy') && n.includes('baby');
     const isPuppyClassName = n.includes('puppy') && !isBabyPuppy;
@@ -415,6 +445,7 @@ export function buildPlacementIndex(classes: IndexClass[], showDate?: string): P
       if (isPuppy) inPuppyClass.add(r.dogId);
       if (isVeteran) inVeteranClass.add(r.dogId);
       if (isBabyPuppy) inBabyPuppyClass.add(r.dogId);
+      if (isYoungClass && r.placement === 1) wonYoungClass.add(r.dogId);
       if (r.placement != null) {
         let arr = placements.get(r.dogId);
         if (!arr) {
@@ -425,7 +456,7 @@ export function buildPlacementIndex(classes: IndexClass[], showDate?: string): P
       }
     }
   }
-  return { placements, inPuppyClass, inVeteranClass, inBabyPuppyClass };
+  return { placements, inPuppyClass, inVeteranClass, inBabyPuppyClass, wonYoungClass };
 }
 
 /** Reserve awards keep the beaten dogs (the reserve is itself a runner-up), so
@@ -475,6 +506,7 @@ export function eligibleCandidates<T extends { dogId: string; sex: string | null
   if (award.filter.puppy) pool = pool.filter((d) => index.inPuppyClass.has(d.dogId));
   if (award.filter.veteran) pool = pool.filter((d) => index.inVeteranClass.has(d.dogId));
   if (award.filter.babyPuppy) pool = pool.filter((d) => index.inBabyPuppyClass.has(d.dogId));
+  if (award.filter.youngClassWinner) pool = pool.filter((d) => index.wonYoungClass.has(d.dogId));
   if (isReserveAward(award.type)) return pool;
   const poolIds = pool.map((d) => d.dogId);
   return pool.filter((d) => !beatenByRival(d.dogId, poolIds, index.placements));

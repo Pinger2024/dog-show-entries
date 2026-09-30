@@ -82,7 +82,7 @@ describe('awardNameToType', () => {
 
 describe('awardFilter', () => {
   it('derives sex / puppy / veteran / long-coat bands', () => {
-    expect(awardFilter('best_dog')).toEqual({ sex: 'dog', puppy: false, veteran: false, longCoat: false, babyPuppy: false });
+    expect(awardFilter('best_dog')).toEqual({ sex: 'dog', puppy: false, veteran: false, longCoat: false, babyPuppy: false, youngClassWinner: false });
     expect(awardFilter('best_bitch').sex).toBe('bitch');
     expect(awardFilter('reserve_best_dog').sex).toBe('dog');
     expect(awardFilter('best_puppy_dog')).toMatchObject({ sex: 'dog', puppy: true });

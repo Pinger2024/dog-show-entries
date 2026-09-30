@@ -20,7 +20,7 @@ import {
 import { toast } from 'sonner';
 import { trpc } from '@/lib/trpc';
 import type { AchievementType } from '@/lib/placements';
-import { resolveTopAwards, buildPlacementIndex, eligibleCandidates, isPuppyOnShowDate, awardFilter } from '@/lib/top-awards';
+import { resolveTopAwards, buildPlacementIndex, eligibleCandidates, isPuppyOnShowDate, awardFilter, isMostPromisingClass } from '@/lib/top-awards';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
@@ -451,11 +451,11 @@ function BestOfBreedSection({
 
   // ── SV / WUSV regional top awards (Amanda 2026-05-28) ──────────────
   // Regionals have NO Best of Breed / CCs / BIS — only four awards:
-  // Most Promising Young Dog/Bitch (from the young-class winners — Minor
-  // Puppy, Puppy, Junior; Baby Puppy is NOT in the Most Promising pool)
-  // and Best Dog/Bitch (from the Yearling, Adult, Working winners).
+  // Most Promising Young Dog/Bitch (from the young-class winners — the
+  // shared `isMostPromisingClass`: Minor Puppy, Puppy, Junior, both coats;
+  // Baby Puppy is NOT in the pool) and Best Dog/Bitch (from the Yearling,
+  // Adult, Working winners).
   if (isWusv) {
-    const SV_YOUNG = new Set(['Minor Puppy', 'Puppy', 'Junior']);
     const SV_ADULT = new Set(['Yearling', 'Adult', 'Working']);
     const stripSv = (n: string) => n.replace(/^SV\s+/, '').trim();
     const young: CandidateDog[] = [];
@@ -478,7 +478,7 @@ function BestOfBreedSection({
             catalogueNumber: w.catalogueNumber,
           };
           const age = stripSv(cls.className);
-          if (SV_YOUNG.has(age)) addUnique(young, cand);
+          if (isMostPromisingClass(cls.className)) addUnique(young, cand);
           else if (SV_ADULT.has(age)) addUnique(adult, cand);
         }
       }
