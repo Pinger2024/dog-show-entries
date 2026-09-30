@@ -26,6 +26,7 @@ import { formatCurrency, penceToPoundsString, poundsToPence } from '@/lib/date-u
 import { cn } from '@/lib/utils';
 import { CLASS_TEMPLATES, getRelevantTemplates } from '@/lib/class-templates';
 import { svCoatDisplayName } from '@/lib/class-labels';
+import { buildClassManagerGroups } from '../_lib/class-manager-groups';
 import { missingChampionshipClasses } from '@/lib/championship-class-requirements';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
@@ -185,103 +186,10 @@ export function ClassManager({ showId, showType, showScope, showRuleset, classes
     }));
   }, [classes, optimisticOrder]);
 
-  const { isMultiBreed, grouped, breedGroupHeaders } = useMemo(() => {
-    const distinctBreeds = new Set(effectiveClasses.filter((c) => c.breed).map((c) => c.breed!.name));
-    const multiBreed = distinctBreeds.size >= 3;
-
-    type GroupEntry = { key: string; label: string; classes: typeof effectiveClasses };
-    const groups: GroupEntry[] = [];
-
-    // Maps group index → breed group header to insert before that section
-    const breedGroupHeaders = new Map<number, { name: string; breedCount: number }>();
-
-    if (multiBreed) {
-      const breedMap = new Map<string, { groupSort: number; groupName: string; classes: typeof effectiveClasses }>();
-      const varietyClasses: typeof effectiveClasses = [];
-      for (const sc of effectiveClasses) {
-        if (!sc.breed) {
-          varietyClasses.push(sc);
-          continue;
-        }
-        const breedName = sc.breed.name;
-        const entry = breedMap.get(breedName) ?? {
-          groupSort: sc.breed.group?.sortOrder ?? 999,
-          groupName: sc.breed.group?.name ?? 'Other',
-          classes: [],
-        };
-        entry.classes.push(sc);
-        breedMap.set(breedName, entry);
-      }
-
-      const sortedBreeds = [...breedMap.entries()].sort((a, b) => {
-        if (a[1].groupSort !== b[1].groupSort) return a[1].groupSort - b[1].groupSort;
-        return a[0].localeCompare(b[0]);
-      });
-
-      const sexRank = (s: string | null) => s === 'dog' ? 0 : s === 'bitch' ? 1 : 2;
-      let lastGroupName = '';
-      for (const [breedName, { groupName, classes: breedClasses }] of sortedBreeds) {
-        // Track group header positions
-        if (groupName !== lastGroupName) {
-          const breedsInGroup = sortedBreeds.filter(([, b]) => b.groupName === groupName).length;
-          breedGroupHeaders.set(groups.length, { name: groupName, breedCount: breedsInGroup });
-          lastGroupName = groupName;
-        }
-        const sorted = [...breedClasses].sort((a, b) => {
-          const ra = sexRank(a.sex), rb = sexRank(b.sex);
-          if (ra !== rb) return ra - rb;
-          return a.sortOrder - b.sortOrder;
-        });
-        groups.push({ key: `breed-${breedName}`, label: breedName, classes: sorted });
-      }
-
-      // Variety & special classes (no breed) at the end, in their own section
-      if (varietyClasses.length > 0) {
-        const sorted = [...varietyClasses].sort((a, b) => a.sortOrder - b.sortOrder);
-        groups.push({ key: 'variety', label: 'Variety & Special Classes', classes: sorted });
-      }
-    } else {
-      // Group by sex only (no sub-grouping by type) so classes display
-      // in their correct sortOrder — this avoids Veteran (type: 'age')
-      // appearing before achievement classes.
-      const sexOrder = ['dog', 'bitch', null] as const;
-
-      for (const sex of sexOrder) {
-        const sexClasses = effectiveClasses.filter((sc) =>
-          sex === null ? !sc.sex : sc.sex === sex
-        );
-        if (sexClasses.length === 0) continue;
-
-        // For sexless classes, label them "Junior Handling" if that's what they all are
-        const allJuniorHandling = sex === null && sexClasses.every(
-          (sc) => sc.classDefinition?.type === 'junior_handler'
-        );
-        const sexLabel = sex === 'dog'
-          ? 'Dog Classes'
-          : sex === 'bitch'
-            ? 'Bitch Classes'
-            : allJuniorHandling
-              ? 'Junior Handling'
-              : 'Any Sex Classes';
-        const sorted = [...sexClasses].sort((a, b) => a.sortOrder - b.sortOrder);
-        groups.push({
-          key: `${sex}`,
-          label: sexLabel,
-          classes: sorted,
-        });
-      }
-    }
-
-    // Sort groups by the minimum sortOrder of their classes so that
-    // section-level reordering (which updates sortOrder) is respected.
-    groups.sort((a, b) => {
-      const minA = Math.min(...a.classes.map((c) => c.sortOrder));
-      const minB = Math.min(...b.classes.map((c) => c.sortOrder));
-      return minA - minB;
-    });
-
-    return { isMultiBreed: multiBreed, grouped: groups, breedGroupHeaders };
-  }, [effectiveClasses]);
+  const { isMultiBreed, grouped, breedGroupHeaders } = useMemo(
+    () => buildClassManagerGroups(effectiveClasses),
+    [effectiveClasses],
+  );
 
   // Collapse all sections except the first one on initial load
   useEffect(() => {

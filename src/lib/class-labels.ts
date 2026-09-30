@@ -320,6 +320,17 @@ export interface ClassSection<T> {
   classes: T[];
 }
 
+/** Section headings on the secretary's SCREENS (class manager, sponsors). The
+ *  printed catalogues keep their own print-proofed wording ("Dogs", "Mixed
+ *  Classes"…) — a different job, not a second copy of the order. */
+export const CLASS_SECTION_SCREEN_TITLES: Record<ClassSectionKey, string> = {
+  mixed: 'Mixed Classes',
+  dog: 'Dog Classes',
+  bitch: 'Bitch Classes',
+  special: 'Special Award Classes',
+  jh: 'Junior Handling',
+};
+
 /** Minimal shape `sectionClasses` needs from each item's adapter — the same
  *  loose {@link ClassKindInput} the predicates accept, plus `sex` for the
  *  Dog/Bitch fallback. */
