@@ -29,6 +29,7 @@ import { toast } from 'sonner';
 import { trpc } from '@/lib/trpc';
 import { svGradeGapsWarning } from '@/lib/sv-results';
 import { svMeasurementGapsNote, svMeasurementProgress } from '@/lib/sv-measurement';
+import { derivePhase } from '../_lib/phase-utils';
 import { Button } from '@/components/ui/button';
 import {
   Card,
@@ -246,7 +247,9 @@ export default function DocumentsPage() {
   // Height and depth go on the spreadsheet only (Mandy, 30 Sept 2026) — say
   // how many dogs are still missing them and where to add them.
   const svMeasurementNote = svMeasurements
-    ? svMeasurementGapsNote(svMeasurementProgress(svMeasurements.classes.flatMap((c) => c.entries)))
+    ? svMeasurementGapsNote(svMeasurementProgress(svMeasurements.classes.flatMap((c) => c.entries)), {
+        showStarted: ['show_day', 'post_show'].includes(derivePhase(show?.status ?? '')),
+      })
     : undefined;
 
   // Distinct judges (by id) so a multi-judge show can offer a separate Judge's

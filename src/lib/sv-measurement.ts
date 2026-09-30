@@ -89,8 +89,14 @@ export function svMeasurementProgress(rows: { svHeightCm: string; svDepthCm: str
 }
 
 /** The documents page's reminder on the SV Results Spreadsheet, or undefined
- *  when every dog is measured. Never blocks a download. */
-export function svMeasurementGapsNote({ measured, total }: { measured: number; total: number }): string | undefined {
+ *  when every dog is measured — or when the show hasn't started yet: before
+ *  show day every dog is unmeasured and there's nothing the secretary can do
+ *  about it. Never blocks a download. */
+export function svMeasurementGapsNote(
+  { measured, total }: { measured: number; total: number },
+  { showStarted }: { showStarted: boolean },
+): string | undefined {
+  if (!showStarted) return undefined;
   const missing = total - measured;
   if (missing <= 0) return undefined;
   return (
