@@ -11,6 +11,8 @@ import { createTRPCRouter } from '../init';
 import { countPriorRegionalPayingDogs } from '@/server/services/regional-pricing';
 import { priceEntryClassChange } from '@/server/services/entry-change-pricing';
 import { entryWindowOpen } from '@/lib/show-status';
+import { entryWithdrawBlock, ENTRY_WITHDRAW_MESSAGES } from '@/lib/entry-edit-rules';
+import { renumberAfterRemoval } from '@/server/services/catalogue-numbering';
 import { priorPackageStanding } from '@/server/services/package-pricing';
 import { verifyShowAccess } from '../verify-show-access';
 import { publicOrgColumns } from '../public-org-columns';
@@ -722,11 +724,13 @@ export const entriesRouter = createTRPCRouter({
         });
       }
 
-      if (entry.status === 'withdrawn' || entry.status === 'cancelled') {
-        throw new TRPCError({
-          code: 'BAD_REQUEST',
-          message: 'Entry is already withdrawn or cancelled',
-        });
+      const show = await ctx.db.query.shows.findFirst({
+        where: eq(shows.id, entry.showId),
+        columns: { status: true, entryCloseDate: true },
+      });
+      const block = show ? entryWithdrawBlock(entry, show) : 'entries_closed';
+      if (block) {
+        throw new TRPCError({ code: 'BAD_REQUEST', message: ENTRY_WITHDRAW_MESSAGES[block] });
       }
 
       const [updated] = await ctx.db
@@ -741,6 +745,9 @@ export const entriesRouter = createTRPCRouter({
         action: 'withdrawn',
         userId: ctx.session.user.id,
       });
+
+      // Close the gap so the catalogue runs in order (Mandy, 30 Sept 2026).
+      await renumberAfterRemoval(ctx.db, entry.showId);
 
       return updated!;
     }),

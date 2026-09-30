@@ -38,3 +38,40 @@ export const ENTRY_CLASS_CHANGE_MESSAGES: Record<EntryClassChangeBlock, string> 
   not_paid: 'Only a paid entry can have its classes changed. Please finish paying for this entry first.',
   show_not_open: 'Show is no longer accepting entry changes',
 };
+
+/**
+ * One owner for "can the exhibitor withdraw this entry".
+ *
+ * Mandy, 30 Sept 2026: "withdrawals should only be made up to closing not
+ * afterwards". Up to and including the closing day the exhibitor may withdraw
+ * (and the catalogue re-numbers so it runs in order — entries.withdraw); once
+ * entries close the catalogue goes to print, so a dog that doesn't come is
+ * marked ABSENT on the day instead of vanishing from the printed lists, the
+ * absentee list and SH01. Found on North Eastern and Midland, both closed and
+ * printed, where the Withdraw button was still offered.
+ *
+ * "Up to closing" is entryWindowOpen's call — the same rule that decides
+ * whether the show still accepts entries — so the two can never disagree.
+ *
+ * Used by entries.withdraw and the Withdraw button on the entry page.
+ */
+export type EntryWithdrawBlock = 'already_withdrawn' | 'entries_closed';
+
+export function entryWithdrawBlock(
+  entry: { status: string },
+  show: ShowWindow,
+): EntryWithdrawBlock | null {
+  if (entry.status === 'withdrawn' || entry.status === 'cancelled') return 'already_withdrawn';
+  if (!entryWindowOpen(show)) return 'entries_closed';
+  return null;
+}
+
+export function canWithdrawEntry(entry: { status: string }, show: ShowWindow): boolean {
+  return entryWithdrawBlock(entry, show) === null;
+}
+
+export const ENTRY_WITHDRAW_MESSAGES: Record<EntryWithdrawBlock, string> = {
+  already_withdrawn: 'Entry is already withdrawn or cancelled',
+  entries_closed:
+    'Entries have closed for this show, so the entry can no longer be withdrawn. If your dog can’t come, please let the show secretary know.',
+};

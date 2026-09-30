@@ -78,7 +78,7 @@ import { recordTopAward, removeTopAwardHolder } from '@/server/services/achievem
 import { penceToPoundsString } from '@/lib/date-utils';
 import { Resend } from 'resend';
 import { searchKcJudges, fetchKcJudgeProfile } from '@/server/services/kc-judges';
-import { syncCatalogueNumbers, resortCatalogueNumbers } from '@/server/services/catalogue-numbering';
+import { syncCatalogueNumbers, resortCatalogueNumbers, renumberAfterRemoval } from '@/server/services/catalogue-numbering';
 import { scheduleCatalogueRefresh } from '@/server/services/catalogue-jobs';
 import { generateJudgeContractPdf } from '@/server/services/judge-contract-pdf';
 import { normaliseOfficers } from '@/components/schedule/shared/officers';
@@ -3267,7 +3267,7 @@ export const secretaryRouter = createTRPCRouter({
       });
 
       // Cancel every live entry on this order — exhibitor has pulled out
-      await ctx.db
+      const cancelled = await ctx.db
         .update(entries)
         .set({ status: 'cancelled' })
         .where(
@@ -3275,7 +3275,11 @@ export const secretaryRouter = createTRPCRouter({
             eq(entries.orderId, input.orderId),
             inArray(entries.status, ['pending', 'confirmed'])
           )
-        );
+        )
+        .returning({ showId: entries.showId });
+      for (const showId of new Set(cancelled.map((c) => c.showId))) {
+        await renumberAfterRemoval(ctx.db, showId);
+      }
 
       return { refunded: true, amount: result.amount };
     }),
@@ -3361,6 +3365,7 @@ export const secretaryRouter = createTRPCRouter({
           .update(entries)
           .set({ status: 'cancelled' })
           .where(eq(entries.id, input.entryId));
+        await renumberAfterRemoval(ctx.db, entry.showId);
       }
 
       return {

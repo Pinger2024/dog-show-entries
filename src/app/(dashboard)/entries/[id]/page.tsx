@@ -38,7 +38,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog';
-import { canChangeEntryClasses } from '@/lib/entry-edit-rules';
+import { canChangeEntryClasses, canWithdrawEntry, entryWithdrawBlock, ENTRY_WITHDRAW_MESSAGES } from '@/lib/entry-edit-rules';
 
 const statusConfig: Record<
   string,
@@ -302,7 +302,7 @@ export default function EntryDetailPage() {
             </Link>
           </Button>
         )}
-        {entry.status !== 'withdrawn' && entry.status !== 'cancelled' && (
+        {canWithdrawEntry(entry, entry.show) && (
           <Dialog open={withdrawOpen} onOpenChange={setWithdrawOpen}>
             <DialogTrigger asChild>
               <Button variant="destructive" size="default" className="w-full sm:w-auto min-h-[2.75rem]">
@@ -349,6 +349,11 @@ export default function EntryDetailPage() {
           </Dialog>
         )}
       </div>
+      {/* After close the Withdraw button goes (Mandy, 30 Sept 2026) — say why,
+          and what to do instead, rather than leave a gap where it was. */}
+      {entryWithdrawBlock(entry, entry.show) === 'entries_closed' && (
+        <p className="text-sm text-muted-foreground">{ENTRY_WITHDRAW_MESSAGES.entries_closed}</p>
+      )}
     </div>
   );
 }

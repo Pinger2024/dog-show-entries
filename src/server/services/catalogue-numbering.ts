@@ -28,6 +28,7 @@
 import { and, asc, eq, isNull } from 'drizzle-orm';
 import type { db as dbType } from '@/server/db';
 import * as schema from '@/server/db/schema';
+import { entryWindowOpen } from '@/lib/show-status';
 
 type Db = NonNullable<typeof dbType>;
 
@@ -244,3 +245,23 @@ export async function syncCatalogueNumbers(
   if (!locked && allowResort) return resortCatalogueNumbers(db, showId);
   return appendMissingNumbers(db, showId);
 }
+
+/**
+ * Call after an entry leaves the catalogue — withdrawn by the exhibitor, or
+ * cancelled by a secretary's refund. Mandy, 30 Sept 2026: "any withdrawals
+ * prior to or on entries closing should reassign numbers so they run in
+ * order". While entries are open (entryWindowOpen — the same window that
+ * decides whether the show takes entries) the numbers are provisional, so the
+ * gap closes. Once entries close the catalogue is heading to print: nothing
+ * moves, and a gap is left rather than renumbering a printed catalogue
+ * (Midland 2026, printed before Lock — every dog after a late withdrawal would
+ * have shifted away from its printed grading card).
+ */
+export async function renumberAfterRemoval(db: Db, showId: string): Promise<void> {
+  const show = await db.query.shows.findFirst({
+    where: eq(schema.shows.id, showId),
+    columns: { status: true, entryCloseDate: true },
+  });
+  if (show && entryWindowOpen(show)) await syncCatalogueNumbers(db, showId);
+}
+

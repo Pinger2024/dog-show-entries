@@ -22,7 +22,7 @@ import { entries } from '@/server/db/schema';
 import { testDb } from '../helpers/db';
 import { createTestCaller } from '../helpers/context';
 import { makeUser, makeOrg, makeBreed, makeShow, makeShowClass, makeDog, makeEntry, makeEntryClass } from '../helpers/factories';
-import { syncCatalogueNumbers } from '@/server/services/catalogue-numbering';
+import { syncCatalogueNumbers, renumberAfterRemoval } from '@/server/services/catalogue-numbering';
 
 async function showWithEntries(show: { status: 'entries_open' | 'entries_closed'; entryCloseDate?: Date }, count = 3) {
   const [org, breed] = await Promise.all([makeOrg(), makeBreed()]);
@@ -81,5 +81,30 @@ describe('exhibitor withdrawals stop when entries close', () => {
     // The condition guarding the Withdraw dialog is on the line that opens it.
     const guardLine = page.slice(page.lastIndexOf('\n', page.lastIndexOf('{', dialogAt)), dialogAt);
     expect(guardLine).toMatch(/canWithdrawEntry\(/);
+  });
+
+  it('any removal while entries are open closes the gap; once closed, nothing moves', async () => {
+    // Mandy: "any withdrawals prior to or on entries closing should reassign
+    // numbers so they run in order". The secretary's refund-and-cancel paths
+    // remove entries too, so they share one function with entries.withdraw.
+    const open = await showWithEntries({ status: 'entries_open' });
+    await testDb.update(entries).set({ status: 'cancelled' }).where(eq(entries.id, open.made[0]!.entryId));
+    await renumberAfterRemoval(testDb, open.show.id);
+    expect(await numberOf(open.made[1]!.entryId)).toBe('1');
+    expect(await numberOf(open.made[2]!.entryId)).toBe('2');
+
+    const closed = await showWithEntries({ status: 'entries_closed', entryCloseDate: new Date('2020-01-01T23:59:00Z') });
+    await testDb.update(entries).set({ status: 'cancelled' }).where(eq(entries.id, closed.made[0]!.entryId));
+    await renumberAfterRemoval(testDb, closed.show.id);
+    expect(await numberOf(closed.made[1]!.entryId)).toBe('2');
+    expect(await numberOf(closed.made[2]!.entryId)).toBe('3');
+  });
+
+  it('every path that takes an entry out of the catalogue calls renumberAfterRemoval', () => {
+    const src = (f: string) => readFileSync(join(process.cwd(), 'src', 'server', 'trpc', 'routers', f), 'utf8');
+    const between = (text: string, from: string, to: string) => text.slice(text.indexOf(from), text.indexOf(to, text.indexOf(from) + from.length));
+    expect(between(src('entries.ts'), '  withdraw: protectedProcedure', '\n  update: ')).toMatch(/renumberAfterRemoval\(/);
+    expect(between(src('secretary.ts'), '  refundOrder:', '  issueRefund:')).toMatch(/renumberAfterRemoval\(/);
+    expect(between(src('secretary.ts'), '  issueRefund:', "\n  // ")).toMatch(/renumberAfterRemoval\(/);
   });
 });
