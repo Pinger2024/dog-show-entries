@@ -83,7 +83,9 @@ function MeasurementRow({ entry, onSave }: { entry: SvMeasurementCardEntry; onSa
   return (
     <div className="px-4 py-3">
       <div className="flex flex-wrap items-center gap-3">
-        <div className="min-w-0 flex-1 basis-40">
+        {/* Phone: the dog on its own line, Height and Depth side by side
+            under it. Wider screens: all on one line. */}
+        <div className="w-full min-w-0 sm:w-auto sm:flex-1 sm:basis-40">
           <p className="text-xs font-semibold text-muted-foreground">#{entry.catalogueNumber ?? '—'}</p>
           <p className="truncate text-sm font-semibold">{entry.dogName}</p>
         </div>
