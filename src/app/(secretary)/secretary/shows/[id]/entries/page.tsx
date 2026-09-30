@@ -1,5 +1,6 @@
 'use client';
 
+import { regionalMembershipOptions } from '@/lib/regional-fee-calc';
 import { useState, useMemo } from 'react';
 import {
   ArrowLeftRight,
@@ -532,6 +533,7 @@ export default function EntriesPage() {
           <AddEntryDialog
             showId={showId}
             showDate={showData?.startDate ?? null}
+            regionalFeeConfig={showData?.showRuleset === 'wusv' ? showData.regionalFeeConfig ?? null : null}
             onClose={() => setShowAddEntry(false)}
           />
         )}
@@ -713,10 +715,13 @@ function EditDogDialog({
 function AddEntryDialog({
   showId,
   showDate,
+  regionalFeeConfig,
   onClose,
 }: {
   showId: string;
   showDate: string | null;
+  /** Regional (SV) shows only — its membership options for the member choice. */
+  regionalFeeConfig: Parameters<typeof regionalMembershipOptions>[0];
   onClose: () => void;
 }) {
   const [step, setStep] = useState<'search' | 'register' | 'classes'>('search');
@@ -731,6 +736,23 @@ function AddEntryDialog({
   const [selectedClassIds, setSelectedClassIds] = useState<string[]>([]);
   const [paymentMethod, setPaymentMethod] = useState<string>('bank_transfer');
   const [isNfc, setIsNfc] = useState(false);
+  // Member choice (Mandy, 30 Sept 2026: "yes add member now") — the same
+  // options an exhibitor sees online: the show's RKC discount groups ("dg:<id>")
+  // or a regional show's memberships ("rm:<label>"). Priced on the server by
+  // resolveEntryMembership, the same owner online checkout uses.
+  const [memberChoice, setMemberChoice] = useState('none');
+  const [membershipNumber, setMembershipNumber] = useState('');
+  const { data: discountGroups } = trpc.shows.getDiscountGroups.useQuery({ showId });
+  const regionalOptions = regionalFeeConfig ? regionalMembershipOptions(regionalFeeConfig) : [];
+  const memberOptions = [
+    ...(discountGroups ?? []).map((dg) => ({ value: `dg:${dg.id}`, label: dg.label })),
+    ...regionalOptions.map((m) => ({ value: `rm:${m.label}`, label: m.label })),
+  ];
+  const membershipInput = {
+    discountGroupId: memberChoice.startsWith('dg:') ? memberChoice.slice(3) : undefined,
+    regionalMembership: memberChoice.startsWith('rm:') ? memberChoice.slice(3) : undefined,
+  };
+  const chosenRegional = regionalOptions.find((m) => m.label === membershipInput.regionalMembership);
   const [sundryQuantities, setSundryQuantities] = useState<Record<string, number>>({});
 
   // Register dog form
@@ -771,7 +793,7 @@ function AddEntryDialog({
   // entered. Never add up class fees here (28 Sept 2026: that showed one figure
   // while Remi recorded another).
   const { data: feePreview, isFetching: feePreviewLoading } = trpc.secretary.previewManualEntryFee.useQuery(
-    { showId, classIds: selectedClassIds, exhibitorEmail, isNfc },
+    { showId, classIds: selectedClassIds, exhibitorEmail, isNfc, ...membershipInput },
     { enabled: step === 'classes' && selectedClassIds.length > 0 },
   );
 
@@ -1068,6 +1090,34 @@ function AddEntryDialog({
               <Label htmlFor="nfc-check" className="text-sm">Not for Competition (NFC)</Label>
             </div>
 
+            {/* Member choice — only when the show offers a membership */}
+            {memberOptions.length > 0 && (
+              <div className="space-y-1">
+                <Label className="text-sm font-medium">Is the exhibitor a member?</Label>
+                <Select value={memberChoice} onValueChange={setMemberChoice}>
+                  <SelectTrigger className="min-h-[2.75rem]">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">Not a member</SelectItem>
+                    {memberOptions.map((o) => (
+                      <SelectItem key={o.value} value={o.value}>
+                        {o.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {chosenRegional?.requiresNumber && (
+                  <Input
+                    className="min-h-[2.75rem]"
+                    placeholder="Membership number (if you have it)"
+                    value={membershipNumber}
+                    onChange={(e) => setMembershipNumber(e.target.value)}
+                  />
+                )}
+              </div>
+            )}
+
             {/* Class selection */}
             <div className="space-y-1">
               <label className="text-sm font-medium">Classes</label>
@@ -1230,6 +1280,8 @@ function AddEntryDialog({
                     classIds: selectedClassIds,
                     exhibitorEmail,
                     isNfc,
+                    ...membershipInput,
+                    regionalMembershipNumber: chosenRegional ? membershipNumber.trim() || undefined : undefined,
                     paymentMethod: paymentMethod as 'postal' | 'cash' | 'bank_transfer' | 'online',
                     sundryItems: sundryItems.length > 0 ? sundryItems : undefined,
                   });

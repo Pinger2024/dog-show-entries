@@ -79,6 +79,7 @@ import { penceToPoundsString } from '@/lib/date-utils';
 import { Resend } from 'resend';
 import { searchKcJudges, fetchKcJudgeProfile } from '@/server/services/kc-judges';
 import { syncCatalogueNumbers, resortCatalogueNumbers, renumberAfterRemoval } from '@/server/services/catalogue-numbering';
+import { resolveEntryMembership } from '@/server/services/entry-membership';
 import { scheduleCatalogueRefresh } from '@/server/services/catalogue-jobs';
 import { generateJudgeContractPdf } from '@/server/services/judge-contract-pdf';
 import { normaliseOfficers } from '@/components/schedule/shared/officers';
@@ -3493,6 +3494,11 @@ export const secretaryRouter = createTRPCRouter({
         classIds: z.array(z.string().uuid()).min(1),
         exhibitorEmail: z.string().optional(),
         isNfc: z.boolean().default(false),
+        /** The Add Entry dialog's member choice (Mandy, 30 Sept 2026) — an RKC
+         *  discount group or a regional membership, priced by
+         *  resolveEntryMembership exactly as online checkout does. */
+        discountGroupId: z.string().uuid().optional(),
+        regionalMembership: z.string().max(120).optional(),
       }),
     )
     .query(async ({ ctx, input }) => {
@@ -3510,11 +3516,13 @@ export const secretaryRouter = createTRPCRouter({
       const exhibitorId = z.string().email().safeParse(email).success
         ? await manualEntryExhibitorId(ctx.db, email, ctx.session.user.id)
         : null;
+      const membership = await resolveEntryMembership(ctx.db, show, input);
       const { classFee } = await priceManualEntry(ctx.db, {
         show,
         exhibitorId,
         selectedClasses,
         isNfc: input.isNfc,
+        membership,
       });
       return { entryFee: classFee };
     }),
@@ -3534,6 +3542,12 @@ export const secretaryRouter = createTRPCRouter({
         cnaf: z.boolean().default(false),
         atcNumber: z.string().max(32).optional(),
         paymentMethod: z.enum(['postal', 'cash', 'bank_transfer', 'online']).default('bank_transfer'),
+        /** The Add Entry dialog's member choice (Mandy, 30 Sept 2026) — an RKC
+         *  discount group or a regional membership, priced by
+         *  resolveEntryMembership exactly as online checkout does. */
+        discountGroupId: z.string().uuid().optional(),
+        regionalMembership: z.string().max(120).optional(),
+        regionalMembershipNumber: z.string().max(120).optional(),
         sundryItems: z
           .array(z.object({ sundryItemId: z.string().uuid(), quantity: z.number().int().min(1) }))
           .optional(),
@@ -3673,11 +3687,13 @@ export const secretaryRouter = createTRPCRouter({
       // ONE owner for what a manual entry costs — the same function the "Add
       // entry" dialog previews with (secretary.previewManualEntryFee), so the
       // figure the secretary sees is the figure Remi records.
+      const membership = await resolveEntryMembership(ctx.db, show, input);
       const { classFee, perClassFees } = await priceManualEntry(ctx.db, {
         show,
         exhibitorId,
         selectedClasses,
         isNfc: input.isNfc,
+        membership,
       });
       const sundryFee = selectedSundryItems.reduce((sum, s) => sum + s.priceInPence * s.quantity, 0);
       const totalAmount = classFee + sundryFee;
@@ -3690,6 +3706,14 @@ export const secretaryRouter = createTRPCRouter({
           exhibitorId,
           status: 'paid',
           totalAmount,
+          // Same fields checkout records, so the financial pages show who was
+          // priced as a member.
+          discountGroupId: membership.discountGroupId,
+          regionalMembership: membership.regionalLabel,
+          regionalMembershipNumber:
+            membership.regionalLabel && input.regionalMembershipNumber?.trim()
+              ? input.regionalMembershipNumber.trim()
+              : null,
         })
         .returning();
 

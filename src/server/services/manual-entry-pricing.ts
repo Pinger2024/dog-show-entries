@@ -18,6 +18,7 @@ import { computeRegionalOrderFees, regionalClassFlatFee } from '@/lib/regional-f
 import { specialAwardClassFee } from '@/lib/class-labels';
 import { countPriorRegionalPayingDogs } from './regional-pricing';
 import { priorPackageStanding } from './package-pricing';
+import { NO_MEMBERSHIP, type ResolvedMembership } from './entry-membership';
 
 export type ManualEntryClass = {
   entryFee: number;
@@ -32,9 +33,13 @@ export async function priceManualEntry(
     /** The dog's classes, in the order they will be stored. */
     selectedClasses: ManualEntryClass[];
     isNfc: boolean;
+    /** The member choice on the Add Entry dialog — resolveEntryMembership,
+     *  the same owner online checkout uses. */
+    membership?: ResolvedMembership;
   },
 ): Promise<{ classFee: number; perClassFees: number[] | null }> {
   const { show, exhibitorId, selectedClasses } = params;
+  const membership = params.membership ?? NO_MEMBERSHIP;
   // Price through the SAME fee engine the online checkout uses, so a
   // postal/cash entry costs exactly what the identical dog + classes would
   // cost online: first-class fee + subsequent-class fee per extra class.
@@ -51,7 +56,7 @@ export async function priceManualEntry(
     juniorHandlerFeePence: show.juniorHandlerFee,
     multiDogThreshold: show.multiDogThreshold,
     multiDogPackagePence: show.multiDogPackagePence,
-    discountGroup: null,
+    discountGroup: membership.discountGroup,
     // The exhibitor's dogs already at this show count toward the multi-dog
     // package, same as checkout (Mandy 2026-09-28). ONE owner:
     // priorPackageStanding.
@@ -65,12 +70,10 @@ export async function priceManualEntry(
   // price with no multi-dog scale at all (found on the NE Regional: four
   // dogs keyed in one at a time, £20 each, when the scale says £20/£20/£16/£0).
   //
-  // Manual entries price at the show's STANDARD tiers — there is no member
-  // tick on this form, and Mandy 2026-09-16 decided not to add one: "if they
-  // only want to charge the lesser amount they can, but they will need to
-  // reconcile their fees against the account". A secretary who wants to give
-  // a postal member the member rate adjusts it themselves. Do not add a
-  // membership control here without asking her again.
+  // Membership: the Add Entry dialog's member choice, priced exactly as the
+  // same choice online (Mandy, 30 Sept 2026: "yes add member now" — reversing
+  // her 16 Sept decision after Ann Robinson's North Eastern entry was keyed at
+  // the non-member rate).
   const regionalCfg =
     show.showRuleset === 'wusv' ? show.regionalFeeConfig : null;
   // A manual entry is always one dog in one class — there is no junior-handler
@@ -92,8 +95,8 @@ export async function priceManualEntry(
           },
         ],
         {
-          tiers: regionalCfg.tiers,
-          isMember: false,
+          tiers: membership.regionalTiers ?? regionalCfg.tiers,
+          isMember: membership.regionalIsMember,
           firstTimeExhibitor: false,
           firstTimeFeePence: regionalCfg.firstTimeFeePence ?? 0,
           juniorHandlerFeePence: show.juniorHandlerFee ?? 0,

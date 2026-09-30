@@ -178,6 +178,25 @@ export type RegionalFeeDisplay = {
  * Shared by the schedule PDF and the public show page so the printed fees and
  * the till can't disagree.
  */
+/** The membership a regional show offers when its fee config lists none — the
+ *  schema's documented default (RegionalFeeConfig.memberships). */
+export const DEFAULT_REGIONAL_MEMBERSHIPS: { label: string; requiresNumber?: boolean; tiers?: RegionalFeeTier[] }[] = [
+  { label: 'BRG/League member', requiresNumber: true },
+];
+
+/**
+ * The membership options a regional show offers — its own list, or the single
+ * BRG/League membership when it has none. ONE owner (30 Sept 2026): the enter
+ * page, orders.checkout, resolveEntryMembership and the secretary's Add Entry
+ * dialog all read it — the enter page and checkout each used to carry their
+ * own copy of the BRG/League default.
+ */
+export function regionalMembershipOptions<T extends { label: string; requiresNumber?: boolean; tiers?: RegionalFeeTier[] }>(
+  config: { memberships?: T[] } | null | undefined,
+): (T | (typeof DEFAULT_REGIONAL_MEMBERSHIPS)[number])[] {
+  return config?.memberships ?? DEFAULT_REGIONAL_MEMBERSHIPS;
+}
+
 export function buildRegionalFeeDisplay(config: {
   tiers: RegionalFeeTier[];
   memberships?: { label: string; tiers?: RegionalFeeTier[] }[];
@@ -185,6 +204,9 @@ export function buildRegionalFeeDisplay(config: {
   type Level = { label: string; tiers: RegionalFeeTier[]; member: boolean };
   const hasConfigMember = config.tiers.some((t) => t.memberPence !== t.standardPence);
   const levels: Level[] = [{ label: 'Non-member', tiers: config.tiers, member: false }];
+  // The printed fee table labels the default (unconfigured) membership simply
+  // "Member" — deliberately left as it prints today; the options an exhibitor
+  // or secretary actually picks from are regionalMembershipOptions.
   const explicit = config.memberships ?? [];
   if (explicit.length) {
     for (const m of explicit) {

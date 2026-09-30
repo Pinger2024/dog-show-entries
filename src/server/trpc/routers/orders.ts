@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { dogAlreadyOnRegional } from '@/server/services/regional-entry';
+import { resolveEntryMembership } from '@/server/services/entry-membership';
 import { SHOW_COLUMNS_FOR_PUBLIC_INCLUDE } from '../public-show-fields';
 import { TRPCError } from '@trpc/server';
 import { and, eq, isNull, inArray, desc, sql, asc, ilike, or } from 'drizzle-orm';
@@ -31,7 +32,6 @@ import {
   judgeAssignments,
   judges,
   users,
-  showDiscountGroups,
   dogSvProfile,
 } from '@/server/db/schema';
 import {
@@ -549,27 +549,13 @@ export const ordersRouter = createTRPCRouter({
         }
       }
 
-      // Resolve declared discount group (if any) so the fee service can
-      // apply member rates and the member multi-dog package.
-      let discountGroupConfig: FeeContext['discountGroup'] = null;
-      if (input.discountGroupId) {
-        const dg = await ctx.db.query.showDiscountGroups.findFirst({
-          where: and(
-            eq(showDiscountGroups.id, input.discountGroupId),
-            eq(showDiscountGroups.showId, input.showId),
-          ),
-        });
-        if (!dg) {
-          throw new TRPCError({
-            code: 'BAD_REQUEST',
-            message: 'Discount group not valid for this show',
-          });
-        }
-        discountGroupConfig = {
-          firstEntryFeePence: dg.firstEntryFeePence,
-          multiDogPackagePence: dg.multiDogPackagePence,
-        };
-      }
+      // What the declared membership means — an RKC discount group (member
+      // rates + member multi-dog package) or a regional membership. ONE owner,
+      // shared with the secretary's Add Entry: resolveEntryMembership.
+      const membership = await resolveEntryMembership(ctx.db, show, {
+        discountGroupId: input.discountGroupId,
+        regionalMembership: input.regionalMembership,
+      });
 
       const feeCtx: FeeContext = {
         firstEntryFeePence: show.firstEntryFee,
@@ -578,7 +564,7 @@ export const ordersRouter = createTRPCRouter({
         juniorHandlerFeePence: show.juniorHandlerFee,
         multiDogThreshold: show.multiDogThreshold,
         multiDogPackagePence: show.multiDogPackagePence,
-        discountGroup: discountGroupConfig,
+        discountGroup: membership.discountGroup,
       };
 
       // Regional (SV/WUSV) shows price on a tiered per-DISTINCT-DOG scale with a
@@ -588,27 +574,11 @@ export const ordersRouter = createTRPCRouter({
       const regionalCfg =
         show.showRuleset === 'wusv' ? show.regionalFeeConfig : null;
       const isRegional = regionalCfg != null;
-      const membershipOptions = regionalCfg?.memberships ?? [
-        { label: 'BRG/League member', requiresNumber: true },
-      ];
 
-      // Resolve the declared membership against the show's configured options.
-      // A membership with its own tier schedule prices on that schedule (a
-      // club's own member rates); a plain membership switches the shared tiers
-      // to their member column. Self-declared — never validated (on trust).
-      let regionalMembershipLabel: string | null = null;
-      if (isRegional && input.regionalMembership) {
-        const declared = membershipOptions.find(
-          (m) => m.label === input.regionalMembership,
-        );
-        if (!declared) {
-          throw new TRPCError({
-            code: 'BAD_REQUEST',
-            message: 'Unknown membership option for this show',
-          });
-        }
-        regionalMembershipLabel = declared.label;
-      }
+      // The declared regional membership (resolveEntryMembership above): its
+      // own schedule if it has one, else the member column. Self-declared — on
+      // trust.
+      const regionalMembershipLabel = membership.regionalLabel;
       const regionalFirstTime =
         isRegional &&
         input.regionalFirstTimeExhibitor &&
@@ -620,15 +590,12 @@ export const ordersRouter = createTRPCRouter({
       let perEntryBreakdown: { fee: number; perClassFees: number[] }[] | null = null;
 
       if (isRegional) {
-        const declared = regionalMembershipLabel
-          ? membershipOptions.find((m) => m.label === regionalMembershipLabel)
-          : undefined;
         // Dogs this exhibitor already has at this show count towards the scale —
         // the discount is per exhibitor per show, not per basket (Mandy
         // 2026-09-16). ONE owner: countPriorRegionalPayingDogs.
         const regionalCtx: RegionalFeeContext = {
-          tiers: declared?.tiers ?? regionalCfg.tiers,
-          isMember: !!declared && !declared.tiers,
+          tiers: membership.regionalTiers ?? regionalCfg.tiers,
+          isMember: membership.regionalIsMember,
           firstTimeExhibitor: regionalFirstTime,
           firstTimeFeePence: regionalCfg.firstTimeFeePence ?? 0,
           juniorHandlerFeePence: show.juniorHandlerFee ?? 0,
@@ -757,7 +724,7 @@ export const ordersRouter = createTRPCRouter({
           donationAffix:
             donationPence > 0 ? input.donationAffix?.trim() || null : null,
           referralSource: input.referralSource?.toLowerCase() ?? null,
-          discountGroupId: input.discountGroupId ?? null,
+          discountGroupId: membership.discountGroupId,
           regionalMembership: regionalMembershipLabel,
           regionalMembershipNumber:
             regionalMembershipLabel && input.regionalMembershipNumber

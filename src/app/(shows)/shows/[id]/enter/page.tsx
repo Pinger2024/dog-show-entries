@@ -53,6 +53,7 @@ import {
   type RegionalDogEntryInput,
   type RegionalFeeContext,
   type RegionalFeeTier,
+  regionalMembershipOptions,
 } from '@/lib/regional-fee-calc';
 import { Button } from '@/components/ui/button';
 import {
@@ -469,9 +470,8 @@ export default function EnterShowPage() {
   // config yet, which fall back to the standard fee model.
   const regionalCfg =
     show?.showRuleset === 'wusv' ? show.regionalFeeConfig ?? null : null;
-  const regionalMemberships = regionalCfg?.memberships ?? [
-    { label: 'BRG/League member', requiresNumber: true },
-  ];
+  // ONE owner for the options (and the BRG/League default): lib/regional-fee-calc.
+  const regionalMemberships = regionalMembershipOptions(regionalCfg);
   // The class-select total shows the FULL price; membership / first-time
   // discounts are chosen on the Review step. Flag it so the exhibitor isn't
   // startled by a higher number here (Amanda 2026-07-18).
