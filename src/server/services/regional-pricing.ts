@@ -19,6 +19,7 @@
  * Already-paid entries are never re-priced — this only affects the dogs being
  * priced now.
  */
+import { LEFT_SHOW_STATUSES } from '@/lib/entry-counts';
 import { and, eq, isNull, ne, or, notInArray, inArray, count, sql, type SQL } from 'drizzle-orm';
 import type { db as Database } from '@/server/db';
 import { entries, orders } from '@/server/db/schema';
@@ -80,7 +81,7 @@ export function heldPlaceConditions(params: {
     isNull(entries.deletedAt),
     // 'cancelled' and 'withdrawn' dogs are not at the show, so they must not
     // push the next dog down the scale. 'transferred' (moved class) still is.
-    notInArray(entries.status, ['cancelled', 'withdrawn']),
+    notInArray(entries.status, [...LEFT_SHOW_STATUSES]),
     ne(entries.entryType, 'junior_handler'),
     // Only a SETTLED order holds the dog's place — see the doc comment above.
     // No order at all (secretary-created entries, order_id NULL) still counts.

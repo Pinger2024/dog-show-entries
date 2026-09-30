@@ -32,3 +32,12 @@ export function isLiveEntry(
   if (!entry) return false;
   return entry.status === 'confirmed' && !entry.deletedAt;
 }
+
+/**
+ * Entry statuses meaning the dog has LEFT the show — withdrawn by the
+ * exhibitor, or cancelled (a refund). 'transferred' is not here: the dog moved
+ * class, it did not leave. The one list for "is this dog still at the show",
+ * read by the regional once-per-dog rule (`dogAlreadyOnRegional`) and the
+ * multi-dog pricing's held places (`heldPlaceConditions`).
+ */
+export const LEFT_SHOW_STATUSES = ['cancelled', 'withdrawn'] as const;

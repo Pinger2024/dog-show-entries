@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { dogAlreadyOnRegional } from '@/server/services/regional-entry';
 import { SHOW_COLUMNS_FOR_PUBLIC_INCLUDE } from '../public-show-fields';
 import { TRPCError } from '@trpc/server';
 import { and, eq, isNull, inArray, desc, sql, asc, ilike, or } from 'drizzle-orm';
@@ -447,15 +448,7 @@ export const ordersRouter = createTRPCRouter({
             }
             seenDogIds.add(entryInput.dogId);
 
-            const dupOnShow = await ctx.db.query.entries.findFirst({
-              where: and(
-                eq(entries.dogId, entryInput.dogId),
-                eq(entries.showId, input.showId),
-                isNull(entries.deletedAt),
-              ),
-              columns: { id: true, status: true },
-            });
-            if (dupOnShow) {
+            if (await dogAlreadyOnRegional(ctx.db, entryInput.dogId, input.showId)) {
               const dog = await ctx.db.query.dogs.findFirst({
                 where: eq(dogs.id, entryInput.dogId),
                 columns: { registeredName: true },

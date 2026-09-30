@@ -13,6 +13,7 @@ import { priceEntryClassChange } from '@/server/services/entry-change-pricing';
 import { entryWindowOpen } from '@/lib/show-status';
 import { entryWithdrawBlock, ENTRY_WITHDRAW_MESSAGES } from '@/lib/entry-edit-rules';
 import { renumberAfterRemoval } from '@/server/services/catalogue-numbering';
+import { dogAlreadyOnRegional } from '@/server/services/regional-entry';
 import { priorPackageStanding } from '@/server/services/package-pricing';
 import { verifyShowAccess } from '../verify-show-access';
 import { publicOrgColumns } from '../public-org-columns';
@@ -208,15 +209,7 @@ export const entriesRouter = createTRPCRouter({
             message: 'At a regional show, a dog can only be entered in one class. Please pick a single class.',
           });
         }
-        const dupOnShow = await ctx.db.query.entries.findFirst({
-          where: and(
-            eq(entries.dogId, input.dogId),
-            eq(entries.showId, input.showId),
-            isNull(entries.deletedAt),
-          ),
-          columns: { id: true },
-        });
-        if (dupOnShow) {
+        if (await dogAlreadyOnRegional(ctx.db, input.dogId, input.showId)) {
           const dogName = dog.registeredName ?? 'This dog';
           throw new TRPCError({
             code: 'BAD_REQUEST',
