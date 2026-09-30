@@ -84,6 +84,36 @@ describe('GET /api/reports/[showId]/grading-cards', () => {
     expect(body.error).toBe('Grading cards are only available for regional (WUSV) shows.');
   });
 
+  it('a regional with nothing to print says so — never a blank page (Mandy, demo, 30 Sept 2026)', async () => {
+    // Mandy opened Grading Cards on a show whose dogs had no paid entry and got
+    // a blank screen: zero cards → a PDF with no pages. The viewer shows the
+    // response in a frame, and a frame shows a plain page on every phone.
+    const { user, org, breed } = await makeSecretaryWithOrgAndBreed();
+    const exhibitor = await makeUser({ role: 'exhibitor' });
+    const show = await makeShow({
+      organisationId: org.id,
+      showRuleset: 'wusv',
+      showScope: 'single_breed',
+      breedId: breed.id,
+      status: 'entries_open',
+    });
+    const workingDef = await makeClassDef({ name: 'SV Working', type: 'sv_age' });
+    const showClass = await makeShowClass({ showId: show.id, classDefinitionId: workingDef.id, breedId: breed.id });
+    const dog = await makeDog({ ownerId: exhibitor.id, breedId: breed.id, registeredName: 'Unpaid Dog' });
+    // An order that was started but never paid — not a card.
+    const order = await makeOrder({ showId: show.id, exhibitorId: exhibitor.id, status: 'pending_payment' });
+    const e = await entry({ showId: show.id, exhibitorId: exhibitor.id, dogId: dog.id, orderId: order.id, catalogueNumber: '1' });
+    await entryClass(e.id, showClass.id);
+
+    authedAs(user);
+    const res = await reportsGET(req(show.id), reportParams(show.id, 'grading-cards'));
+    expect(res.status).toBe(200);
+    expect(res.headers.get('content-type')).toMatch(/^text\/html/);
+    const body = await res.text();
+    expect(body).toMatch(/No grading cards yet/);
+    expect(body).toMatch(/paid/);
+  });
+
   it('renders a real 2-page-per-dog PDF for a wusv show with 2 dogs', async () => {
     const { user, org, breed } = await makeSecretaryWithOrgAndBreed();
     const exhibitor = await makeUser({ role: 'exhibitor' });
