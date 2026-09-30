@@ -9,6 +9,7 @@
  * (mirrors the absentee-catalogue query shape in report-queries.ts). Junior
  * Handling entries have no dog and are excluded naturally.
  */
+import { showNameWithClub } from '@/lib/show-types';
 import { and, eq, inArray, isNull } from 'drizzle-orm';
 import type { Database } from '@/server/db';
 import * as schema from '@/server/db/schema';
@@ -49,6 +50,8 @@ export async function loadGradingCardsData(
 ): Promise<GradingCardsLoad | null> {
   const show = await db.query.shows.findFirst({
     where: eq(schema.shows.id, showId),
+    // The club's NAME only — never the whole organisation row (bank details).
+    with: { organisation: { columns: { name: true } } },
   });
   if (!show) return null;
 
@@ -196,7 +199,8 @@ export async function loadGradingCardsData(
 
   return {
     info: {
-      showName: show.name,
+      // Club + show name without repeats (Mandy, 30 Sept 2026) — showNameWithClub.
+      showName: showNameWithClub(show.name, show.organisation?.name),
       showDate: safeDate(show.startDate),
     },
     entries: gradingEntries,

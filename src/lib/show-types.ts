@@ -40,3 +40,36 @@ export function displayShowTitle(
   if (!GENERIC_SHOW_TITLES.has(name.trim())) return name;
   return `${organisationName} ${name}`;
 }
+
+/**
+ * The club's name together with the show's name, never repeating words —
+ * for documents that must say whose show it is (the grading cards). Mandy,
+ * 30 Sept 2026: Midland's show is just "Regional Show", so print the club too,
+ * "but not duplicate the name so if midlands Gsd group added midlands to the
+ * show name I wouldn't want it showing as midlands Gsd group and midlands
+ * regional show". She approved:
+ *   "Midlands Region GSD Group" + "Regional Show" → "Midlands Region GSD Group Regional Show"
+ *   "North East GSD Regional Group" + the same    → "North East GSD Regional Group"
+ *   "Midlands GSD Group" + "Midlands Regional Show" → "Midlands GSD Group Regional Show"
+ *
+ * A show name that already holds the whole club name prints as it is.
+ * Otherwise the show name's LEADING words that already appear in the club
+ * name are dropped (only leading ones — "Festival of Champions" keeps its
+ * "of"), and the rest follows the club name.
+ *
+ * Listings use `displayShowTitle` instead (club only in front of a generic
+ * type-only name) — a different job, not a second copy of this.
+ */
+export function showNameWithClub(showName: string, clubName: string | null | undefined): string {
+  const show = showName.trim();
+  const club = (clubName ?? '').trim();
+  if (!club) return show;
+  const norm = (t: string) => t.toLowerCase().replace(/\s+/g, ' ');
+  if (norm(show).includes(norm(club))) return show;
+  const clubWords = new Set(norm(club).split(' '));
+  const words = show.split(/\s+/);
+  let i = 0;
+  while (i < words.length && clubWords.has(words[i]!.toLowerCase())) i++;
+  const rest = words.slice(i).join(' ');
+  return rest ? `${club} ${rest}` : club;
+}
