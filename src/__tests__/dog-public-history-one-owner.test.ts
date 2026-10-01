@@ -23,6 +23,11 @@ import { scanFiles, PROJECT_ROOT } from './helpers/static-scan';
  *  - timeline.getForDog             — published result (the right one)
  *  - timeline.getFeed, pro.getChampionshipProgress — any result, published or not
  *
+ * shows.getShowDogPhotos (public, no page used it since June) handed out the
+ * entered dogs' names and photos from the morning of the show; Mandy, 1 Oct:
+ * "I'd rather that strip was only displayed after judging" — removed, so
+ * shows.ts no longer reads a dog's entries at all.
+ *
  * The owner is lib/public-dog-history.ts. Any file that reads a dog's entries
  * must go through it, or be listed in NOT_A_DOG_HISTORY_VIEW with the reason
  * no outsider ever sees what it reads.
@@ -36,8 +41,6 @@ const NOT_A_DOG_HISTORY_VIEW: Record<string, string> = {
   'src/server/trpc/routers/dashboard.ts': "the signed-in user's own dogs",
   'src/server/trpc/routers/secretary.ts': "the show's secretary",
   'src/server/trpc/routers/admin-dashboard.ts': 'admin only',
-  'src/server/trpc/routers/shows.ts':
-    "show page photo strip of entered dogs — Mandy's own show-morning rule (28 May 2026), a show view not a dog's history",
   'src/server/services/achievements.ts': 'records a top award on show day (steward/secretary write path)',
   'src/server/services/show-metrics.ts': "a show's money",
   'src/server/services/regional-entry.ts': 'entry rule: one regional entry per dog',

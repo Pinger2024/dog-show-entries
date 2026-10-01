@@ -115,14 +115,3 @@ describe('show-day exhibits lock — steward.getClassEntries', () => {
     expect(data.entries.length).toBe(1);
   });
 });
-
-describe('show-day exhibits lock — shows.getShowDogPhotos', () => {
-  it('returns no dog photos on the public feed before show day', async () => {
-    const { show } = await buildShowWithEntry({ startDate: SOON });
-    const caller = createTestCaller(null);
-
-    const photos = await caller.shows.getShowDogPhotos({ showId: show.id });
-
-    expect(photos).toEqual([]);
-  });
-});

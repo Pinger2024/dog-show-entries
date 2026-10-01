@@ -18,9 +18,6 @@ import {
   entryClasses,
   results,
   showSponsors,
-  dogs,
-  breeds,
-  dogPhotos,
   classDefinitions,
   orders,
   orderSundryItems,
@@ -1092,45 +1089,6 @@ export const showsRouter = createTRPCRouter({
           CATALOGUE_AVAILABLE_STATUSES.has(show.status) &&
           isShowDayReached(show.startDate),
       };
-    }),
-
-  getShowDogPhotos: publicProcedure
-    .input(z.object({ showId: z.string().uuid() }))
-    .query(async ({ ctx, input }) => {
-      // Exhibit identities (dog names + breeds) are hidden from the public
-      // until the morning of the show — same fairness rule as the steward
-      // entry list (Amanda 2026-05-28).
-      const show = await ctx.db.query.shows.findFirst({
-        where: eq(shows.id, input.showId),
-        columns: { startDate: true },
-      });
-      if (!show || !isShowDayReached(show.startDate)) {
-        return [];
-      }
-
-      const photos = await ctx.db
-        .select({
-          dogId: dogs.id,
-          photoUrl: dogPhotos.url,
-          dogName: dogs.registeredName,
-          breedName: breeds.name,
-        })
-        .from(dogPhotos)
-        .innerJoin(dogs, eq(dogPhotos.dogId, dogs.id))
-        .innerJoin(entries, eq(entries.dogId, dogs.id))
-        .innerJoin(breeds, eq(dogs.breedId, breeds.id))
-        .where(
-          and(
-            eq(entries.showId, input.showId),
-            eq(entries.status, 'confirmed'),
-            isNull(entries.deletedAt),
-            eq(dogPhotos.isPrimary, true)
-          )
-        )
-        .orderBy(sql`random()`)
-        .limit(24);
-
-      return photos;
     }),
 
   getMyCataloguePurchases: protectedProcedure
