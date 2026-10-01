@@ -55,6 +55,7 @@ describe('public dog history — upcoming entries', () => {
       shows: 1,
       firsts: 1,
       specialAwards: 1,
+      critiques: 0,
     });
   });
 

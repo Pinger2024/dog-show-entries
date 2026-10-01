@@ -70,7 +70,9 @@ function detectAwardMentions(text: string): string[] {
 const NAME_TITLE_TOKENS = new Set(['ch', 'sh', 'int', 'ir', 'multi', 'international', 'champion']);
 const NAME_VOM_TOKENS = new Set(['v', 'vom', 'von']);
 
-function normalizeName(name: string): string {
+// Also the Find a Dog search's notion of a name (services/public-dog-summary.ts),
+// so "wakematts luco" or "billie v huhnegrab" finds the dog it would match here.
+export function normalizeName(name: string): string {
   const tokens = name
     .toLowerCase()
     .replace(/\([^()]*\)/g, ' ')

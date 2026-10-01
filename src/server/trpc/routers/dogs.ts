@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { isVisibleToViewer } from '@/lib/result-visibility';
 import { publicDogHistory, visibleResult } from '@/lib/public-dog-history';
+import { searchDogsWithPublicHistory } from '@/server/services/public-dog-summary';
 import { SHOW_COLUMNS_FOR_PUBLIC_INCLUDE } from '../public-show-fields';
 import { TRPCError } from '@trpc/server';
 import { and, eq, inArray, isNull, isNotNull, or, asc, desc, sql, ne } from 'drizzle-orm';
@@ -196,6 +197,13 @@ export const dogAutosaveFieldsSchema = z.object({
 });
 
 export const dogsRouter = createTRPCRouter({
+  // ── Find a Dog (public search) ──────────────────────────
+  // Only dogs the public may already see a show for — never one known only
+  // from an upcoming entry (services/public-dog-summary.ts).
+  searchPublic: publicProcedure
+    .input(z.object({ query: z.string().trim().min(2).max(100) }))
+    .query(({ ctx, input }) => searchDogsWithPublicHistory(ctx.db, input.query)),
+
   // ── Public dog profile ──────────────────────────────────
   getPublicProfile: publicProcedure
     .input(z.object({ id: z.string().uuid() }))

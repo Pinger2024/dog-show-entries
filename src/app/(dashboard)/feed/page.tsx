@@ -63,13 +63,14 @@ export default function FeedPage() {
                   <div className="mx-auto max-w-sm space-y-2 text-left">
                     <p className="text-xs font-medium text-muted-foreground">How to discover dogs:</p>
                     <div className="space-y-1.5 text-xs text-muted-foreground">
-                      <p>1. Browse a <Link href="/shows" className="font-medium text-primary hover:underline">show&apos;s results page</Link> to see placed dogs</p>
-                      <p>2. Tap any dog&apos;s name to view their profile</p>
+                      <p>1. Look a dog up on <Link href="/dog" className="font-medium text-primary hover:underline">Find a Dog</Link>, or browse a <Link href="/shows" className="font-medium text-primary hover:underline">show&apos;s results page</Link></p>
+                      <p>2. Tap the dog&apos;s name to view their profile</p>
                       <p>3. Hit <strong className="text-foreground">Follow</strong> to add them to your feed</p>
                     </div>
                   </div>
                   <div className="flex flex-wrap gap-2 justify-center">
-                    <Link href="/shows"><Button size="sm">Browse Shows</Button></Link>
+                    <Link href="/dog"><Button size="sm">Find a Dog</Button></Link>
+                    <Link href="/shows"><Button variant="outline" size="sm">Browse Shows</Button></Link>
                     <Link href="/dogs"><Button variant="outline" size="sm">My Dogs</Button></Link>
                   </div>
                 </div>

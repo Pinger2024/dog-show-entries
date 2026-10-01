@@ -250,7 +250,7 @@ describe("a dog's upcoming entries and unpublished placings stay private everywh
 
   it('the link preview and share image count only the show she has been judged at', async () => {
     const { dog } = await rosebudShape();
-    expect(await getPublicDogSummary(testDb, dog.id)).toEqual({ shows: 1, firsts: 1, specialAwards: 1 });
+    expect(await getPublicDogSummary(testDb, dog.id)).toEqual({ shows: 1, firsts: 1, specialAwards: 1, critiques: 0 });
   });
 
   it('the sitemap leaves out a dog whose only entries are upcoming', async () => {

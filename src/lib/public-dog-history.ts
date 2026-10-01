@@ -99,26 +99,31 @@ export function hasPublicHistory(entries: HistoryEntryLike[], today?: string): b
 }
 
 /**
- * The headline numbers anyone may see — the link preview's "N shows entered"
- * and the share image's "N Shows · N × 1st · N Awards".
+ * The headline numbers anyone may see — the link preview's "N shows entered",
+ * the share image's "N Shows · N × 1st · N Awards", and Find a Dog's
+ * "Shown at N Remi shows · N judge's critiques".
  */
 export function publicHistoryCounts(
   entries: Array<{
     show: HistoryShowLike;
     entryClasses: Array<{
-      result: (ResultLike & { placement: number | null; specialAward: string | null }) | null;
+      result:
+        | (ResultLike & { placement: number | null; specialAward: string | null; critiqueText?: string | null })
+        | null;
     }>;
   }>,
   today?: string,
-): { shows: number; firsts: number; specialAwards: number } {
+): { shows: number; firsts: number; specialAwards: number; critiques: number } {
   const visible = publicDogHistory(entries, { viewerIsOwner: false, today });
   let firsts = 0;
   let specialAwards = 0;
+  let critiques = 0;
   for (const entry of visible) {
     for (const ec of entry.entryClasses) {
       if (ec.result?.placement === 1) firsts++;
       if (ec.result?.specialAward) specialAwards++;
+      if (ec.result?.critiqueText?.trim()) critiques++;
     }
   }
-  return { shows: visible.length, firsts, specialAwards };
+  return { shows: visible.length, firsts, specialAwards, critiques };
 }

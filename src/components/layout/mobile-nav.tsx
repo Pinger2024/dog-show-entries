@@ -51,6 +51,14 @@ export function MobileNav({ user, isSecretary, isSteward }: MobileNavProps) {
             Find a Show
           </Link>
           <Link
+            href="/dog"
+            onClick={() => setOpen(false)}
+            className="flex items-center gap-3 rounded-lg px-3 py-3 text-[0.9375rem] font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+          >
+            <Dog className="size-5" />
+            Find a Dog
+          </Link>
+          <Link
             href="/features"
             onClick={() => setOpen(false)}
             className="flex items-center gap-3 rounded-lg px-3 py-3 text-[0.9375rem] font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"

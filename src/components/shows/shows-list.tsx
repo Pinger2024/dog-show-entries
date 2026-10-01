@@ -23,6 +23,7 @@ import {
 } from 'lucide-react';
 import { trpc } from '@/lib/trpc/client';
 import { Input } from '@/components/ui/input';
+import { useDebounce } from '@/hooks/use-debounce';
 import { EmptyState } from '@/components/ui/empty-state';
 import {
   Select,
@@ -33,17 +34,6 @@ import {
 } from '@/components/ui/select';
 import { Chip, Pulse, SEButton, SECard, SecLabel } from '@/components/show-experience/kit';
 import { SE_H } from '@/components/show-experience/tokens';
-
-/* ─── Debounce hook ────────────────────────────────── */
-
-function useDebounce<T>(value: T, delayMs: number): T {
-  const [debounced, setDebounced] = useState(value);
-  useEffect(() => {
-    const timer = setTimeout(() => setDebounced(value), delayMs);
-    return () => clearTimeout(timer);
-  }, [value, delayMs]);
-  return debounced;
-}
 
 /* ─── Types ────────────────────────────────────────── */
 
