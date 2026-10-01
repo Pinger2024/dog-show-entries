@@ -205,3 +205,59 @@ describe('reconcileSettlement — supersede refuses on mismatch too (RED TEST 3)
     expect(oldRefetched.supersededById).toBeNull();
   });
 });
+
+/**
+ * North Eastern GSD Club Championship 2026 (Mandy, 1 Oct): "Does not reconcile
+ * — difference £18.00. Cannot issue". The figures were right; the Stripe
+ * cross-check was wrong. Jackie Billson's Junior entry was withdrawn and its
+ * £18 refunded, booking fee kept — the order stays 'paid', the entry is
+ * cancelled, so the statement rightly leaves it out. The check took Stripe's
+ * gross and subtracted only the statement's own "Refunds to exhibitors" line,
+ * which never sees a refund whose entry is already off the statement — so the
+ * £18 looked uncollected. It must subtract the refunds Stripe actually made.
+ */
+describe('reconcileSettlement — a refund whose entry is off the statement (North Eastern, Oct 2026)', () => {
+  it('reconciles: a withdrawn, refunded entry on a still-paid order, and a partial refund on a kept entry', async () => {
+    const breed = await makeBreed();
+    const exhibitor = await makeUser({ role: 'exhibitor' });
+    const org = await makeOrg({ name: 'Test North Eastern Club' });
+    const show = await makeShow({ organisationId: org.id, breedId: breed.id });
+    const dog = await makeDog({ ownerId: exhibitor.id, breedId: breed.id });
+
+    // An ordinary paid entry.
+    const kept = await seedOrder({ showId: show.id, exhibitorId: exhibitor.id, amount: 1800, platformFeePence: 118 });
+    await seedPayment({ orderId: kept.id, amount: 1918, feePence: 49 });
+    await testDb.insert(entries).values({
+      showId: show.id, dogId: dog!.id, exhibitorId: exhibitor.id, orderId: kept.id, status: 'confirmed', totalFee: 1800,
+    });
+
+    // Billson shape: paid £19.18, withdrew, £18 refunded against the entry
+    // (secretary.issueRefund — the refund row names the entry, which it
+    // cancels), £1.18 booking fee kept.
+    const billson = await seedOrder({ showId: show.id, exhibitorId: exhibitor.id, amount: 1800, platformFeePence: 118 });
+    await seedPayment({ orderId: billson.id, amount: 1918, feePence: 49, status: 'partially_refunded', refundAmount: 1800 });
+    const [billsonEntry] = await testDb.insert(entries).values({
+      showId: show.id, dogId: dog!.id, exhibitorId: exhibitor.id, orderId: billson.id, status: 'cancelled', totalFee: 1800,
+    }).returning();
+    await testDb.insert(payments).values({
+      orderId: billson.id, entryId: billsonEntry!.id, stripePaymentId: `re_${randomUUID()}`,
+      amount: 1800, status: 'refunded', type: 'refund', feePence: 0,
+    });
+
+    // Paluka Bali shape: entry kept, £2 refunded.
+    const partial = await seedOrder({ showId: show.id, exhibitorId: exhibitor.id, amount: 1800, platformFeePence: 118 });
+    await seedPayment({ orderId: partial.id, amount: 1918, feePence: 49, status: 'partially_refunded', refundAmount: 200 });
+    await seedPayment({ orderId: partial.id, amount: 200, feePence: 0, type: 'refund', status: 'refunded' });
+    await testDb.insert(entries).values({
+      showId: show.id, dogId: dog!.id, exhibitorId: exhibitor.id, orderId: partial.id, status: 'confirmed', totalFee: 1800,
+    });
+
+    const result = await reconcileSettlement(testDb, show.id);
+    expect(result.deltaPence).toBe(0);
+    expect(result.cardFeeDeltaPence).toBe(0);
+    expect(result.stripeDeltaPence).toBe(0);
+    expect(result.ok).toBe(true);
+    // The club gets the two kept entries less the £2 refund — never the £18.
+    expect(result.itemisedPence).toBe(1800 + 1800 - 200);
+  });
+});

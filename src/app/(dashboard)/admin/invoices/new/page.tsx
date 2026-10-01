@@ -175,10 +175,7 @@ function NewInvoiceFlow() {
                   ) : (
                     <span className="flex items-start gap-2">
                       <AlertTriangle className="mt-0.5 size-4 shrink-0" />
-                      {preview.reconciliation.missingFeeCount > 0
-                        ? `${preview.reconciliation.missingFeeCount} card payment${preview.reconciliation.missingFeeCount === 1 ? '' : 's'} still have no captured Stripe fee.`
-                        : `Does not reconcile with show metrics — difference ${formatCurrency(Math.abs(preview.reconciliation.deltaPence || preview.reconciliation.cardFeeDeltaPence || preview.reconciliation.stripeDeltaPence))}.`}{' '}
-                      Cannot issue until this is resolved.
+                      {preview.reconciliationMessage} Cannot issue until this is resolved.
                     </span>
                   )}
                 </div>

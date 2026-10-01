@@ -118,6 +118,9 @@ async function computeSettlementFigures(
     organisation: showRow.organisation,
     settlement,
     reconciliation,
+    // The plain-words reason, from the ONE place that explains a mismatch
+    // (the issue refusal uses it too) — the page shows this, never its own.
+    reconciliationMessage: reconciliation.ok ? null : describeReconciliationMismatch(reconciliation),
     freeEntriesCount,
     // Additive — rides along so the UI could later show "fees refreshed
     // just now"; undefined when the pre-check found nothing to heal.

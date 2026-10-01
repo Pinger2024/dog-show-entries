@@ -23,9 +23,15 @@ import { computeSettlementItemisation, type SettlementItemisation } from './sett
  *     `payments.fee_pence` on the paid orders' *initial* payments only (the
  *     existing query has no `type` filter at all).
  *  3. What Stripe actually captured — `payments.amount` on the paid orders'
- *     initial payments, less Remi's platform fee and the itemisation's own
- *     refund line — vs `viaRemi.totalPence` again, this time validated
- *     against the RAW charge amounts rather than our entry/sundry bookkeeping.
+ *     initial payments, less Remi's platform fee and the refunds Stripe
+ *     actually made on those orders (`payments` of type 'refund') — vs
+ *     `viaRemi.totalPence` again, this time validated against the RAW charge
+ *     and refund amounts rather than our entry/sundry bookkeeping.
+ *     (It used to subtract the itemisation's own "Refunds to exhibitors" line,
+ *     which never sees a refund whose entry is already off the statement — a
+ *     withdrawn entry on a still-paid order. North Eastern Championship 2026,
+ *     1 Oct: Jackie Billson's refunded £18 Junior entry made a correct
+ *     statement read "difference £18.00 — cannot issue".)
  *
  * One known, EXPLAINED difference between (1)'s two sides is carved out
  * rather than flagged as a bug: `computeShowMetrics` has no concept of an
@@ -65,7 +71,9 @@ export type SettlementReconciliation = {
   stripePlatformFeePence: number;
   /** Magnitude of the itemisation's own "Refunds to exhibitors" viaRemi line. */
   refundedItemisedPence: number;
-  /** stripeGrossPence - stripePlatformFeePence - refundedItemisedPence. */
+  /** sum(payments.amount) of type 'refund' on the same paid, online orders — what Stripe gave back. */
+  stripeRefundedPence: number;
+  /** stripeGrossPence - stripePlatformFeePence - stripeRefundedPence. */
   stripeCollectedPence: number;
   stripeDeltaPence: number;
   /** Paid, online, initial payments still missing captured fee_pence after the heal — must be zero to issue. */
@@ -132,7 +140,14 @@ export async function reconcileSettlement(
     .filter((l) => l.label === 'Refunds to exhibitors')
     .reduce((sum, l) => sum + Math.abs(l.amountPence), 0);
 
-  const stripeCollectedPence = stripeGrossPence - stripePlatformFeePence - refundedItemisedPence;
+  const [refundRow] = await db
+    .select({ total: sql<number>`COALESCE(SUM(${payments.amount}), 0)::int` })
+    .from(payments)
+    .innerJoin(orders, eq(payments.orderId, orders.id))
+    .where(and(paidOnlineOrders, eq(payments.type, 'refund')));
+  const stripeRefundedPence = refundRow?.total ?? 0;
+
+  const stripeCollectedPence = stripeGrossPence - stripePlatformFeePence - stripeRefundedPence;
   const stripeDeltaPence = itemisedPence - stripeCollectedPence;
 
   const [missingRow] = await db
@@ -166,6 +181,7 @@ export async function reconcileSettlement(
     stripeGrossPence,
     stripePlatformFeePence,
     refundedItemisedPence,
+    stripeRefundedPence,
     stripeCollectedPence,
     stripeDeltaPence,
     missingFeeCount,
@@ -192,7 +208,7 @@ export function describeReconciliationMismatch(r: SettlementReconciliation): str
   }
   if (r.stripeDeltaPence !== 0) {
     parts.push(
-      `Stripe's captured gross, less platform fee and refunds (${money(r.stripeCollectedPence)}), does not match ` +
+      `What Stripe collected, less Remi's booking fee and the refunds Stripe made (${money(r.stripeCollectedPence)}), does not match ` +
         `Money collected by Remi (${money(r.itemisedPence)}) — difference ${money(r.stripeDeltaPence)}.`,
     );
   }
