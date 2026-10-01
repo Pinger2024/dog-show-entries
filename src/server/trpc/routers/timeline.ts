@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { isVisibleToViewer } from '@/lib/result-visibility';
+import { publicDogHistory } from '@/lib/public-dog-history';
 import { SHOW_COLUMNS_FOR_PUBLIC_INCLUDE } from '../public-show-fields';
 import { TRPCError } from '@trpc/server';
 import { and, eq, desc, isNull, inArray, lt } from 'drizzle-orm';
@@ -71,13 +71,13 @@ export const timelineRouter = createTRPCRouter({
         },
       });
 
-      // Only include entries with at least one PUBLISHED result. This is a
-      // public surface: keyed-in-but-unreleased results must not appear
-      // before the secretary publishes them — same gate as getLiveResults.
-      const showResults = dogEntries
-        .filter((e) =>
-          e.entryClasses.some((ec) => isVisibleToViewer(ec.result, false))
-        )
+      // A public surface: only what anyone may see of the dog's record
+      // (lib/public-dog-history.ts — never an upcoming entry, never an
+      // unpublished placing). This is a RESULTS feed, so it then keeps only
+      // the classes that have a result to show.
+      const showResults = publicDogHistory(dogEntries, { viewerIsOwner: false })
+        .map((entry) => ({ ...entry, entryClasses: entry.entryClasses.filter((ec) => ec.result) }))
+        .filter((entry) => entry.entryClasses.length > 0)
         .map((entry) => ({
           itemType: 'show_result' as const,
           id: `result-${entry.id}`,
@@ -89,16 +89,14 @@ export const timelineRouter = createTRPCRouter({
             date: entry.show.startDate,
             showType: entry.show.showType,
           },
-          classes: entry.entryClasses
-            .filter((ec) => isVisibleToViewer(ec.result, false))
-            .map((ec) => ({
-              className: ec.showClass.classDefinition.name,
-              classNumber: ec.showClass.classNumber,
-              placement: ec.result?.placement ?? null,
-              placementStatus: ec.result?.placementStatus ?? null,
-              specialAward: ec.result?.specialAward ?? null,
-              critiqueText: ec.result?.critiqueText ?? null,
-            })),
+          classes: entry.entryClasses.map((ec) => ({
+            className: ec.showClass.classDefinition.name,
+            classNumber: ec.showClass.classNumber,
+            placement: ec.result?.placement ?? null,
+            placementStatus: ec.result?.placementStatus ?? null,
+            specialAward: ec.result?.specialAward ?? null,
+            critiqueText: ec.result?.critiqueText ?? null,
+          })),
         }));
 
       // 3. Merge and sort
@@ -325,8 +323,15 @@ export const timelineRouter = createTRPCRouter({
         dogPhotoMap.set(photo.dogId, photo.url);
       }
 
+      // Followed dogs: only what anyone may see (lib/public-dog-history.ts —
+      // never an unpublished placing). The caller's own dogs: everything,
+      // as soon as it's keyed in. A results feed, so only classes with a result.
       const showResults = dogEntries
-        .filter((e) => e.entryClasses.some((ec) => ec.result))
+        .flatMap((entry) =>
+          publicDogHistory([entry], { viewerIsOwner: !!entry.dogId && ownDogIds.has(entry.dogId) }),
+        )
+        .map((entry) => ({ ...entry, entryClasses: entry.entryClasses.filter((ec) => ec.result) }))
+        .filter((entry) => entry.entryClasses.length > 0)
         .map((entry) => ({
           itemType: 'show_result' as const,
           id: `result-${entry.id}`,
@@ -344,14 +349,12 @@ export const timelineRouter = createTRPCRouter({
             date: entry.show.startDate,
             showType: entry.show.showType,
           },
-          classes: entry.entryClasses
-            .filter((ec) => ec.result)
-            .map((ec) => ({
-              className: ec.showClass.classDefinition.name,
-              classNumber: ec.showClass.classNumber,
-              placement: ec.result?.placement ?? null,
-              specialAward: ec.result?.specialAward ?? null,
-            })),
+          classes: entry.entryClasses.map((ec) => ({
+            className: ec.showClass.classDefinition.name,
+            classNumber: ec.showClass.classNumber,
+            placement: ec.result?.placement ?? null,
+            specialAward: ec.result?.specialAward ?? null,
+          })),
         }));
 
       const filteredResults = input.cursor

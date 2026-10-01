@@ -2,6 +2,8 @@ import { describe, it, expect } from 'vitest';
 import { eq } from 'drizzle-orm';
 import { dogOwners, judgeAssignments, results } from '@/server/db/schema';
 import { testDb } from '../helpers/db';
+import { getPublicDogSummary, listDogsWithPublicHistory } from '@/server/services/public-dog-summary';
+import { todayInLondon } from '@/lib/date-utils';
 import { createTestCaller } from '../helpers/context';
 import {
   makeUser,
@@ -156,11 +158,12 @@ describe('public dog profile pre-judging and publication gates', () => {
     const entryClass = await makeEntryClass({ entryId: entry.id, showClassId: showClass.id });
     const result = await makeResult({ entryClassId: entryClass.id, placement: 1 });
 
-    // Keyed in but not yet published: the show appears (it's in the past)
-    // but the placement does not.
+    // Keyed in but not yet published: nothing about the class shows. (Until
+    // 1 Oct 2026 the show appeared with the class "unplaced" — a winner
+    // looked like a loser until the secretary pressed publish. Mandy's rule:
+    // a show appears once the dog has been judged there and it's published.)
     let publicView = await anon().dogs.getPublicProfile({ id: dog.id });
-    expect(publicView.showHistory).toHaveLength(1);
-    expect(publicView.showHistory[0]!.classes[0]!.placement).toBeNull();
+    expect(publicView.showHistory).toHaveLength(0);
     expect(publicView.stats.firsts).toBe(0);
 
     // Publish, and the placement becomes visible.
@@ -205,6 +208,145 @@ describe('public dog profile pre-judging and publication gates', () => {
 
     timeline = await anon().timeline.getForDog({ dogId: dog.id, limit: 20 });
     expect(timeline.items.filter((i) => i.itemType === 'show_result')).toHaveLength(1);
+  });
+});
+
+/**
+ * Mandy, 1 Oct 2026: "we should never show a dog and what its upcoming shows
+ * are, only shows that are in the past, have been judged". Rosebud Edie of
+ * Hundark's page showed her four past shows, but her link preview said
+ * "6 shows entered" and her share image "6 Shows" — her Midlands and North
+ * Eastern entries were in the count. Every public view of a dog now goes
+ * through lib/public-dog-history.ts.
+ */
+describe("a dog's upcoming entries and unpublished placings stay private everywhere", () => {
+  /** A dog judged at one past show (published 1st) and entered at two upcoming ones. */
+  async function rosebudShape() {
+    const owner = await makeUser({ role: 'exhibitor' });
+    const breed = await makeBreed();
+    const dog = await makeDog({ ownerId: owner.id, breedId: breed.id });
+    const org = await makeOrg();
+
+    const past = await makeShow({ organisationId: org.id, status: 'completed', startDate: pastDate(50), endDate: pastDate(50) });
+    const pastClass = await makeShowClass({ showId: past.id, breedId: breed.id });
+    const pastEntry = await makeEntry({ showId: past.id, dogId: dog.id, exhibitorId: owner.id, status: 'confirmed' });
+    const pastEc = await makeEntryClass({ entryId: pastEntry.id, showClassId: pastClass.id });
+    const pastResult = await makeResult({ entryClassId: pastEc.id, placement: 1, specialAward: 'CC' });
+    await testDb.update(results).set({ publishedAt: new Date() }).where(eq(results.id, pastResult.id));
+
+    for (const daysAhead of [3, 10]) {
+      const upcoming = await makeShow({
+        organisationId: org.id,
+        status: 'entries_closed',
+        startDate: futureDate(daysAhead),
+        endDate: futureDate(daysAhead),
+      });
+      const upcomingClass = await makeShowClass({ showId: upcoming.id, breedId: breed.id });
+      const upcomingEntry = await makeEntry({ showId: upcoming.id, dogId: dog.id, exhibitorId: owner.id, status: 'confirmed' });
+      await makeEntryClass({ entryId: upcomingEntry.id, showClassId: upcomingClass.id });
+    }
+    return { owner, breed, dog, org };
+  }
+
+  it('the link preview and share image count only the show she has been judged at', async () => {
+    const { dog } = await rosebudShape();
+    expect(await getPublicDogSummary(testDb, dog.id)).toEqual({ shows: 1, firsts: 1, specialAwards: 1 });
+  });
+
+  it('the sitemap leaves out a dog whose only entries are upcoming', async () => {
+    const { dog } = await rosebudShape();
+    const owner = await makeUser({ role: 'exhibitor' });
+    const breed = await makeBreed();
+    const newcomer = await makeDog({ ownerId: owner.id, breedId: breed.id });
+    const org = await makeOrg();
+    const upcoming = await makeShow({ organisationId: org.id, status: 'entries_closed', startDate: futureDate(3), endDate: futureDate(3) });
+    await makeEntry({ showId: upcoming.id, dogId: newcomer.id, exhibitorId: owner.id, status: 'confirmed' });
+
+    const ids = (await listDogsWithPublicHistory(testDb)).map((d) => d.id);
+    expect(ids).toContain(dog.id);
+    expect(ids).not.toContain(newcomer.id);
+  });
+
+  it("on the day of the show, the dog's page says nothing until its result is published", async () => {
+    const owner = await makeUser({ role: 'exhibitor' });
+    const breed = await makeBreed();
+    const dog = await makeDog({ ownerId: owner.id, breedId: breed.id });
+    const org = await makeOrg();
+    const today = todayInLondon();
+    const show = await makeShow({ organisationId: org.id, status: 'in_progress', startDate: today, endDate: today });
+    const showClass = await makeShowClass({ showId: show.id, breedId: breed.id });
+    const entry = await makeEntry({ showId: show.id, dogId: dog.id, exhibitorId: owner.id, status: 'confirmed' });
+    const ec = await makeEntryClass({ entryId: entry.id, showClassId: showClass.id });
+
+    // Before judging: a judge looking the dog up must not see it is entered today.
+    expect((await anon().dogs.getPublicProfile({ id: dog.id })).showHistory).toHaveLength(0);
+
+    // Judged, keyed in, not yet published: still nothing.
+    const result = await makeResult({ entryClassId: ec.id, placement: 2 });
+    expect((await anon().dogs.getPublicProfile({ id: dog.id })).showHistory).toHaveLength(0);
+
+    // Published: the show and its placing appear.
+    await testDb.update(results).set({ publishedAt: new Date() }).where(eq(results.id, result.id));
+    const view = await anon().dogs.getPublicProfile({ id: dog.id });
+    expect(view.showHistory).toHaveLength(1);
+    expect(view.showHistory[0]!.classes[0]!.placement).toBe(2);
+  });
+
+  it('the championship widget counts no upcoming show and no unpublished CC', async () => {
+    const { owner, breed, dog, org } = await rosebudShape();
+    // A second CC, judged a week ago but not yet published.
+    const recent = await makeShow({ organisationId: org.id, status: 'completed', startDate: pastDate(7), endDate: pastDate(7) });
+    const recentClass = await makeShowClass({ showId: recent.id, breedId: breed.id });
+    const recentEntry = await makeEntry({ showId: recent.id, dogId: dog.id, exhibitorId: owner.id, status: 'confirmed' });
+    const recentEc = await makeEntryClass({ entryId: recentEntry.id, showClassId: recentClass.id });
+    await makeResult({ entryClassId: recentEc.id, placement: 1, specialAward: 'CC' });
+
+    const publicView = await anon().pro.getChampionshipProgress({ dogId: dog.id });
+    expect(publicView.championship.classic.ccs).toBe(1);
+    const publicShows = publicView.analytics.yearlyBreakdown.reduce((n, y) => n + y.shows, 0);
+    expect(publicShows).toBe(1);
+
+    const ownerView = await createTestCaller(owner).pro.getChampionshipProgress({ dogId: dog.id });
+    expect(ownerView.championship.classic.ccs).toBe(2);
+  });
+
+  it("a follower's feed never shows a placing before it is published", async () => {
+    const owner = await makeUser({ role: 'exhibitor' });
+    const follower = await makeUser({ role: 'exhibitor' });
+    const breed = await makeBreed();
+    const dog = await makeDog({ ownerId: owner.id, breedId: breed.id });
+    const org = await makeOrg();
+    const show = await makeShow({ organisationId: org.id, status: 'completed', startDate: pastDate(2), endDate: pastDate(2) });
+    const showClass = await makeShowClass({ showId: show.id, breedId: breed.id });
+    const entry = await makeEntry({ showId: show.id, dogId: dog.id, exhibitorId: owner.id, status: 'confirmed' });
+    const ec = await makeEntryClass({ entryId: entry.id, showClassId: showClass.id });
+    const result = await makeResult({ entryClassId: ec.id, placement: 1 });
+    await createTestCaller(follower).follows.toggle({ dogId: dog.id });
+
+    const showResults = async () =>
+      (await createTestCaller(follower).timeline.getFeed({ limit: 20 })).items.filter((i) => i.itemType === 'show_result');
+    expect(await showResults()).toHaveLength(0);
+
+    await testDb.update(results).set({ publishedAt: new Date() }).where(eq(results.id, result.id));
+    expect(await showResults()).toHaveLength(1);
+  });
+
+  it("another exhibitor asking for a dog's wins gets only published ones; the owner gets all", async () => {
+    const owner = await makeUser({ role: 'exhibitor' });
+    const rival = await makeUser({ role: 'exhibitor' });
+    const breed = await makeBreed();
+    const dog = await makeDog({ ownerId: owner.id, breedId: breed.id });
+    const org = await makeOrg();
+    const show = await makeShow({ organisationId: org.id, status: 'completed', showType: 'open', startDate: pastDate(2), endDate: pastDate(2) });
+    const showClass = await makeShowClass({ showId: show.id, breedId: breed.id });
+    const entry = await makeEntry({ showId: show.id, dogId: dog.id, exhibitorId: owner.id, status: 'confirmed' });
+    const ec = await makeEntryClass({ entryId: entry.id, showClassId: showClass.id });
+    await makeResult({ entryClassId: ec.id, placement: 1 });
+
+    const rivalSummary = await createTestCaller(rival).dogs.getWinSummary({ dogId: dog.id });
+    const ownerSummary = await createTestCaller(owner).dogs.getWinSummary({ dogId: dog.id });
+    expect(rivalSummary.totalFirsts).toBe(0);
+    expect(ownerSummary.totalFirsts).toBe(1);
   });
 });
 

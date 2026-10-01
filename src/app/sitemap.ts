@@ -1,7 +1,8 @@
 import type { MetadataRoute } from 'next';
 import { db } from '@/server/db';
-import { shows, dogs, entries } from '@/server/db/schema';
-import { and, eq, isNull, ne } from 'drizzle-orm';
+import { shows } from '@/server/db/schema';
+import { ne } from 'drizzle-orm';
+import { listDogsWithPublicHistory } from '@/server/services/public-dog-summary';
 
 const BASE_URL = 'https://remishowmanager.co.uk';
 
@@ -40,17 +41,10 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     ];
   });
 
-  // Only dogs with at least one confirmed entry — every other profile is thin
-  // content that dilutes crawl budget without ranking for anything.
-  const dogsWithHistory = await db
-    .select({ id: dogs.id, updatedAt: dogs.updatedAt })
-    .from(dogs)
-    .innerJoin(
-      entries,
-      and(eq(entries.dogId, dogs.id), eq(entries.status, 'confirmed'), isNull(entries.deletedAt))
-    )
-    .where(isNull(dogs.deletedAt))
-    .groupBy(dogs.id, dogs.updatedAt);
+  // Only dogs the public has something to see for — every other profile is
+  // thin content. "Has a confirmed entry" used to be the test, which listed
+  // dogs whose only entries were upcoming shows (Mandy, 1 Oct 2026).
+  const dogsWithHistory = await listDogsWithPublicHistory(db);
 
   const dogPages: MetadataRoute.Sitemap = dogsWithHistory.map((dog) => ({
     url: `${BASE_URL}/dog/${dog.id}`,

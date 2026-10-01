@@ -11,6 +11,9 @@ import {
 import { getStripe } from '@/server/services/stripe';
 import { isCcType, isRccType } from '@/lib/placements';
 import { effectiveCcType } from '@/lib/effective-achievement-type';
+import { isVisibleToViewer } from '@/lib/result-visibility';
+import { publicDogHistory } from '@/lib/public-dog-history';
+import { userMayActOnDog } from '@/server/dog-access';
 
 // Remi Pro price — will be created in Stripe Dashboard
 // £4.99/month or £39.99/year
@@ -155,14 +158,14 @@ export const proRouter = createTRPCRouter({
     .input(z.object({ dogId: z.string().uuid() }))
     .query(async ({ ctx, input }) => {
       // Fetch all confirmed entries with results for this dog
-      const dogEntries = await ctx.db.query.entries.findMany({
+      const allDogEntries = await ctx.db.query.entries.findMany({
         where: and(
           eq(entries.dogId, input.dogId),
           eq(entries.status, 'confirmed'),
           isNull(entries.deletedAt)
         ),
         with: {
-          show: { columns: { id: true, name: true, startDate: true, showType: true } },
+          show: { columns: { id: true, name: true, startDate: true, endDate: true, showType: true } },
           entryClasses: {
             with: {
               result: true,
@@ -174,10 +177,19 @@ export const proRouter = createTRPCRouter({
 
       // Also fetch manual achievements (with show type/scope so a single-breed
       // championship Best Dog/Bitch counts as the CC — Mandy 2026-07-09).
-      const dogAchievements = await ctx.db.query.achievements.findMany({
+      const allDogAchievements = await ctx.db.query.achievements.findMany({
         where: eq(achievements.dogId, input.dogId),
         with: { show: { columns: { showType: true, showScope: true } } },
       });
+
+      // A public widget on the dog's page: anyone but the dog's owners sees
+      // only shows it has been judged at and published awards — never an
+      // upcoming entry in the yearly counts, never a CC before publication
+      // (lib/public-dog-history.ts).
+      const viewerId = ctx.session?.user?.id;
+      const viewerIsOwner = !!viewerId && (await userMayActOnDog(ctx.db, viewerId, input.dogId));
+      const dogEntries = publicDogHistory(allDogEntries, { viewerIsOwner });
+      const dogAchievements = allDogAchievements.filter((a) => isVisibleToViewer(a, viewerIsOwner));
 
       const BOB_TYPE = 'best_of_breed';
 

@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { isVisibleToViewer } from '@/lib/result-visibility';
+import { publicDogHistory, visibleResult } from '@/lib/public-dog-history';
 import { SHOW_COLUMNS_FOR_PUBLIC_INCLUDE } from '../public-show-fields';
 import { TRPCError } from '@trpc/server';
 import { and, eq, inArray, isNull, isNotNull, or, asc, desc, sql, ne } from 'drizzle-orm';
@@ -10,7 +11,7 @@ import { deleteFromR2 } from '@/server/services/storage';
 import { searchKcDogs, fetchKcDogProfile, RkcUnavailableError } from '@/server/services/kc-lookup';
 import { isCcType, isRccType } from '@/lib/placements';
 import { effectiveCcType } from '@/lib/effective-achievement-type';
-import { isAgeEligibleOnShowDay, todayInLondon, ageInCompletedMonths } from '@/lib/date-utils';
+import { isAgeEligibleOnShowDay, ageInCompletedMonths } from '@/lib/date-utils';
 import { pickRecommendedAgeClass, preferCoatDivision, type AgeClassOption } from '@/lib/class-recommendation';
 import { dogAccessCondition, dogRowGrantsAccess, userMayActOnDog } from '@/server/dog-access';
 import { findClearedPedigreeFields, pedigreeClearMessage } from '@/lib/dog-pedigree';
@@ -252,40 +253,26 @@ export const dogsRouter = createTRPCRouter({
         },
       });
 
-      // Pre-judging privacy: entered dogs must never be visible on a public
-      // surface before show day — a judge could look up which dogs are entered
-      // in their upcoming show. Only the dog's owners see future entries.
+      // Pre-judging privacy: anyone but the dog's owners sees only shows the
+      // dog has been judged at — never an upcoming entry, never a placing
+      // before it is published. One owner: lib/public-dog-history.ts.
       const viewerId = ctx.session?.user?.id;
-      const viewerIsOwner =
-        !!viewerId &&
-        (dog.ownerId === viewerId ||
-          dog.owners.some((o) => o.userId === viewerId));
-      const today = todayInLondon();
-      const visibleEntries = viewerIsOwner
-        ? dogEntries
-        : dogEntries.filter((entry) => entry.show.startDate <= today);
+      const viewerIsOwner = !!viewerId && dogRowGrantsAccess(dog, viewerId);
 
-      // Build show history grouped by show. Result details are gated on
-      // publication (results.publishedAt) — keyed-in-but-unreleased results
-      // must not appear here before the steward/secretary publishes them.
-      const showHistory = visibleEntries
+      const showHistory = publicDogHistory(dogEntries, { viewerIsOwner })
         .map((entry) => ({
           showId: entry.show.id,
           showSlug: entry.show.slug,
           showName: entry.show.name,
           showDate: entry.show.startDate,
           showType: entry.show.showType,
-          classes: entry.entryClasses.map((ec) => {
-            const result =
-              isVisibleToViewer(ec.result, viewerIsOwner) ? ec.result : null;
-            return {
-              className: ec.showClass.classDefinition.name,
-              classNumber: ec.showClass.classNumber,
-              placement: result?.placement ?? null,
-              specialAward: result?.specialAward ?? null,
-              critiqueText: result?.critiqueText ?? null,
-            };
-          }),
+          classes: entry.entryClasses.map((ec) => ({
+            className: ec.showClass.classDefinition.name,
+            classNumber: ec.showClass.classNumber,
+            placement: ec.result?.placement ?? null,
+            specialAward: ec.result?.specialAward ?? null,
+            critiqueText: ec.result?.critiqueText ?? null,
+          })),
         }))
         .sort((a, b) => b.showDate.localeCompare(a.showDate));
 
@@ -1022,13 +1009,19 @@ export const dogsRouter = createTRPCRouter({
       showId: z.string().uuid().optional(),
     }))
     .query(async ({ ctx, input }) => {
+      // The dog's own people count every win as soon as it's keyed in (class
+      // eligibility on the entry form needs them); anyone else only published
+      // ones (lib/public-dog-history.ts).
+      const viewerMaySeeUnpublished = await userMayActOnDog(ctx.db, ctx.session.user.id, input.dogId);
+
       // Count first-place wins at Open and Championship shows
-      const winRows = await ctx.db
+      const allWinRows = await ctx.db
         .select({
           className: classDefinitions.name,
           classType: classDefinitions.type,
           showType: shows.showType,
           placement: results.placement,
+          publishedAt: results.publishedAt,
         })
         .from(results)
         .innerJoin(entryClasses, eq(results.entryClassId, entryClasses.id))
@@ -1044,6 +1037,7 @@ export const dogsRouter = createTRPCRouter({
             eq(results.placement, 1),
           )
         );
+      const winRows = allWinRows.filter((r) => visibleResult(r, viewerMaySeeUnpublished));
 
       const firstsAtQualifyingShows = winRows.filter(
         (r) => r.showType === 'open' || r.showType === 'championship' || r.showType === 'premier_open'
@@ -1057,6 +1051,7 @@ export const dogsRouter = createTRPCRouter({
         with: { show: { columns: { showType: true, showScope: true } } },
       });
       const ccFromAchievements = ccAchs.some((a) =>
+        isVisibleToViewer(a, viewerMaySeeUnpublished) &&
         isCcType(effectiveCcType(a.type, a.show?.showType, a.show?.showScope)),
       );
 
@@ -1179,6 +1174,11 @@ export const dogsRouter = createTRPCRouter({
         throw new TRPCError({ code: 'NOT_FOUND', message: 'Dog not found' });
       }
 
+      // The dog's own people count every award and win as soon as it's keyed
+      // in; anyone else only published ones (lib/public-dog-history.ts).
+      const viewerMaySeeUnpublished = await userMayActOnDog(ctx.db, ctx.session.user.id, input.dogId);
+      const dogAchievements = dog.achievements.filter((a) => isVisibleToViewer(a, viewerMaySeeUnpublished));
+
       // Check if the user has Pro subscription
       const user = await ctx.db.query.users.findFirst({
         where: eq(users.id, ctx.session.user.id),
@@ -1197,9 +1197,9 @@ export const dogsRouter = createTRPCRouter({
       // to the effective type first (Mandy 2026-07-09).
       const effType = (a: (typeof dog.achievements)[number]) =>
         effectiveCcType(a.type, a.show?.showType, a.show?.showScope);
-      const ccAchievements = dog.achievements.filter((a) => isCcType(effType(a)));
-      const reserveCCs = dog.achievements.filter((a) => isRccType(effType(a)));
-      const bobs = dog.achievements.filter((a) => a.type === 'best_of_breed');
+      const ccAchievements = dogAchievements.filter((a) => isCcType(effType(a)));
+      const reserveCCs = dogAchievements.filter((a) => isRccType(effType(a)));
+      const bobs = dogAchievements.filter((a) => a.type === 'best_of_breed');
 
       // Count unique judges who awarded CCs and RCCs
       const ccJudgeIds = new Set(ccAchievements.map((a) => a.judgeId).filter(Boolean));
@@ -1212,11 +1212,12 @@ export const dogsRouter = createTRPCRouter({
       const qualifyingRCCs = reserveCCs.filter((a) => a.date >= rccCutoffDate);
 
       // Count first-place wins from results for JW and ShCEx calculation
-      const firstPlaceWins = await ctx.db
+      const allFirstPlaceWins = await ctx.db
         .select({
           showType: shows.showType,
           showDate: shows.startDate,
           className: classDefinitions.name,
+          publishedAt: results.publishedAt,
         })
         .from(results)
         .innerJoin(entryClasses, eq(results.entryClassId, entryClasses.id))
@@ -1232,6 +1233,7 @@ export const dogsRouter = createTRPCRouter({
             eq(results.placement, 1),
           )
         );
+      const firstPlaceWins = allFirstPlaceWins.filter((w) => visibleResult(w, viewerMaySeeUnpublished));
 
       // Junior Warrant: 25 points from firsts between 6-18 months
       // Championship show first = 3 points, Open/Premier Open show first = 1 point

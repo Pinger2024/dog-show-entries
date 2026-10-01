@@ -1,7 +1,8 @@
 import { ImageResponse } from 'next/og';
 import { eq, and, isNull } from 'drizzle-orm';
 import { db } from '@/server/db';
-import { dogs, dogPhotos, entries } from '@/server/db/schema';
+import { dogs, dogPhotos } from '@/server/db/schema';
+import { getPublicDogSummary } from '@/server/services/public-dog-summary';
 import { toImageDataUri, loadShareImageFonts, SHARE_GREEN as G } from '@/lib/share-image-data';
 
 export const runtime = 'nodejs';
@@ -90,30 +91,12 @@ export default async function OGImage({
     }
   }
 
-  // Compute career stats
-  const dogEntries = await db?.query.entries.findMany({
-    where: and(
-      eq(entries.dogId, id),
-      eq(entries.status, 'confirmed'),
-      isNull(entries.deletedAt)
-    ),
-    with: {
-      entryClasses: {
-        with: { result: true },
-      },
-    },
-  });
-
-  let totalShows = dogEntries?.length ?? 0;
-  let firsts = 0;
-  let specialAwards = 0;
-
-  for (const entry of dogEntries ?? []) {
-    for (const ec of entry.entryClasses) {
-      if (ec.result?.placement === 1) firsts++;
-      if (ec.result?.specialAward) specialAwards++;
-    }
-  }
+  // Career stats — only what the public may see: never an upcoming entry, never
+  // an unpublished placing (Mandy, 1 Oct 2026 — this image said "6 Shows" for
+  // a dog with four past shows and two still to come).
+  const { shows: totalShows, firsts, specialAwards } = db
+    ? await getPublicDogSummary(db, id)
+    : { shows: 0, firsts: 0, specialAwards: 0 };
 
   // Build display name with title prefix
   const titlePrefix = dog.titles
