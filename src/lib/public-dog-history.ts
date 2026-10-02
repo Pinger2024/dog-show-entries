@@ -98,8 +98,10 @@ export function publicDogHistory<
  * a result the viewer may not see has already been taken away.
  *
  * Absence is per class (`entry_classes.absent` — the whole-show
- * `entries.absent` is only a roll-up) and wins over everything: the steward
- * page refuses to place a dog marked absent in that class.
+ * `entries.absent` is only a roll-up). A placing beats it: the steward page
+ * won't place a dog marked absent, so the two only meet in bad data (none on
+ * prod, 2 Oct 2026; generated demo data has some), and a placing proves the
+ * dog was in the ring.
  */
 export type ClassOutcome = 'placed' | 'withheld' | 'unplaced' | 'absent' | 'pending';
 
@@ -111,13 +113,10 @@ export function classOutcome(
   },
   today: string = todayInLondon(),
 ): ClassOutcome {
-  if (entryClass.absent) return 'absent';
   const result = entryClass.result;
-  if (result) {
-    if (result.placement != null) return 'placed';
-    if (result.placementStatus === 'withheld') return 'withheld';
-    return 'unplaced';
-  }
+  if (result?.placement != null) return 'placed';
+  if (entryClass.absent) return 'absent';
+  if (result) return result.placementStatus === 'withheld' ? 'withheld' : 'unplaced';
   // No result: not judged yet (the owner's own upcoming entry), or the show
   // is over and the dog wasn't placed.
   return isShowOver(show, today) ? 'unplaced' : 'pending';

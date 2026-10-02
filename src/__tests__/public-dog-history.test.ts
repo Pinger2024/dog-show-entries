@@ -126,6 +126,11 @@ describe('what a dog\'s page says happened in each class (classOutcome)', () => 
     expect(classOutcome(neRegional, visible[0]!.entryClasses[0]!, TODAY)).toBe('absent');
   });
 
+  it('a placing beats an absent mark — the placing proves the dog was in the ring', () => {
+    expect(classOutcome(neRegional, { absent: true, result: { placement: 5, placementStatus: null } }, TODAY)).toBe('placed');
+    expect(classOutcome(neRegional, { absent: true, result: { placement: null, placementStatus: 'unplaced' } }, TODAY)).toBe('absent');
+  });
+
   it('marked absent on the day of the show: still nothing public until the show is over', () => {
     const onTheDay = { show: show(TODAY), entryClasses: [{ absent: true, result: null }] };
     expect(publicDogHistory([onTheDay], pub)).toHaveLength(0);
