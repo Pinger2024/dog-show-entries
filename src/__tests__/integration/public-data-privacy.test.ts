@@ -292,6 +292,37 @@ describe("a dog's upcoming entries and unpublished placings stay private everywh
     expect(view.showHistory[0]!.classes[0]!.placement).toBe(2);
   });
 
+  it("a class the dog was absent from says Absent on its page, not Unplaced (Drama von Arlett)", async () => {
+    const owner = await makeUser({ role: 'exhibitor' });
+    const breed = await makeBreed();
+    const dog = await makeDog({ ownerId: owner.id, breedId: breed.id });
+    const org = await makeOrg();
+    const show = await makeShow({ organisationId: org.id, status: 'completed', startDate: pastDate(27), endDate: pastDate(27) });
+    const adult = await makeShowClass({ showId: show.id, breedId: breed.id });
+    const entry = await makeEntry({ showId: show.id, dogId: dog.id, exhibitorId: owner.id, status: 'confirmed' });
+    await makeEntryClass({ entryId: entry.id, showClassId: adult.id, absent: true });
+
+    const view = await anon().dogs.getPublicProfile({ id: dog.id });
+    expect(view.showHistory).toHaveLength(1);
+    expect(view.showHistory[0]!.classes[0]!.outcome).toBe('absent');
+  });
+
+  it('a withheld placing says Withheld on the dog\'s page', async () => {
+    const owner = await makeUser({ role: 'exhibitor' });
+    const breed = await makeBreed();
+    const dog = await makeDog({ ownerId: owner.id, breedId: breed.id });
+    const org = await makeOrg();
+    const show = await makeShow({ organisationId: org.id, status: 'completed', startDate: pastDate(10), endDate: pastDate(10) });
+    const cls = await makeShowClass({ showId: show.id, breedId: breed.id });
+    const entry = await makeEntry({ showId: show.id, dogId: dog.id, exhibitorId: owner.id, status: 'confirmed' });
+    const ec = await makeEntryClass({ entryId: entry.id, showClassId: cls.id });
+    const result = await makeResult({ entryClassId: ec.id, placement: null, placementStatus: 'withheld' });
+    await testDb.update(results).set({ publishedAt: new Date() }).where(eq(results.id, result.id));
+
+    const view = await anon().dogs.getPublicProfile({ id: dog.id });
+    expect(view.showHistory[0]!.classes[0]!.outcome).toBe('withheld');
+  });
+
   it('the championship widget counts no upcoming show and no unpublished CC', async () => {
     const { owner, breed, dog, org } = await rosebudShape();
     // A second CC, judged a week ago but not yet published.

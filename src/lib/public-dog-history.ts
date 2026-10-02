@@ -91,6 +91,39 @@ export function publicDogHistory<
 }
 
 /**
+ * What happened to the dog in one class, as its page says it (Mandy, 2 Oct
+ * 2026: "where a dog has been marked absent on the results, that should show
+ * as absent on their profile rather than unplaced" — Drama von Arlett, Adult
+ * at the North East Regional). Call it on a class from `publicDogHistory`, so
+ * a result the viewer may not see has already been taken away.
+ *
+ * Absence is per class (`entry_classes.absent` — the whole-show
+ * `entries.absent` is only a roll-up) and wins over everything: the steward
+ * page refuses to place a dog marked absent in that class.
+ */
+export type ClassOutcome = 'placed' | 'withheld' | 'unplaced' | 'absent' | 'pending';
+
+export function classOutcome(
+  show: HistoryShowLike,
+  entryClass: {
+    absent?: boolean | null;
+    result: { placement?: number | null; placementStatus?: string | null } | null;
+  },
+  today: string = todayInLondon(),
+): ClassOutcome {
+  if (entryClass.absent) return 'absent';
+  const result = entryClass.result;
+  if (result) {
+    if (result.placement != null) return 'placed';
+    if (result.placementStatus === 'withheld') return 'withheld';
+    return 'unplaced';
+  }
+  // No result: not judged yet (the owner's own upcoming entry), or the show
+  // is over and the dog wasn't placed.
+  return isShowOver(show, today) ? 'unplaced' : 'pending';
+}
+
+/**
  * Has the public got anything to see — at least one show visible to someone
  * who is not the owner? The sitemap lists only these dogs.
  */

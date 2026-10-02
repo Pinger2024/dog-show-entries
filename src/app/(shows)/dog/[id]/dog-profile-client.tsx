@@ -43,7 +43,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { getPlacementLabel, placementColors } from '@/lib/placements';
+import { classOutcomeLabel, placementColors } from '@/lib/placements';
 import { DogTimeline } from '@/components/dog-timeline';
 import { ChampionshipProgress } from '@/components/championship-progress';
 import { showTypeLabels } from '@/lib/show-types';
@@ -701,21 +701,20 @@ export function DogProfileClient({ id }: { id: string }) {
                           <span className="font-medium text-foreground">
                             {cls.className}
                           </span>
-                          {cls.placement ? (
-                            <Badge
-                              variant="outline"
-                              className={`text-xs font-semibold ${placementColors[cls.placement] ?? ''}`}
-                            >
-                              {getPlacementLabel(cls.placement)}
-                            </Badge>
-                          ) : (
-                            // Published result with no placing — say so
-                            // rather than leaving a bare class name that
-                            // reads like a data error (Mandy, 2026-07-31).
-                            <Badge variant="outline" className="text-xs text-muted-foreground">
-                              {cls.placementStatus === 'withheld' ? 'Withheld' : 'Unplaced'}
-                            </Badge>
-                          )}
+                          {/* Every class says what happened — a placing, or
+                              Absent / Withheld / Unplaced / Entered — never a
+                              bare class name that reads like a data error
+                              (Mandy, 2026-07-31; Absent 2026-10-02). */}
+                          <Badge
+                            variant="outline"
+                            className={
+                              cls.outcome === 'placed' && cls.placement
+                                ? `text-xs font-semibold ${placementColors[cls.placement] ?? ''}`
+                                : 'text-xs text-muted-foreground'
+                            }
+                          >
+                            {classOutcomeLabel(cls.outcome, cls.placement)}
+                          </Badge>
                           {cls.specialAward && (
                             <span className="inline-flex items-center gap-0.5 rounded-sm bg-se-honey-soft px-1.5 py-0.5 text-xs font-medium text-se-honey-deep ring-1 ring-inset ring-se-honey-line/50">
                               <Award className="size-2.5" />

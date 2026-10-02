@@ -4,7 +4,9 @@ import {
   publicHistoryCounts,
   hasPublicHistory,
   isShowOver,
+  classOutcome,
 } from '@/lib/public-dog-history';
+import { classOutcomeLabel } from '@/lib/placements';
 
 /**
  * What anyone but the dog's owner may see of its show history (Mandy,
@@ -108,5 +110,40 @@ describe('public dog history — show day and publication', () => {
   it('a multi-day show is over only after its last day', () => {
     expect(isShowOver(show('2026-09-30', TODAY), TODAY)).toBe(false);
     expect(isShowOver(show('2026-09-29', '2026-09-30'), TODAY)).toBe(true);
+  });
+});
+
+describe('what a dog\'s page says happened in each class (classOutcome)', () => {
+  // Mandy, 2 Oct 2026: Drama von Arlett was marked absent from Adult at the
+  // North East Regional; her page said "Unplaced".
+  const neRegional = show('2026-09-05');
+
+  it('absent from a class at a show that is over: visible, and it says Absent', () => {
+    const drama = { show: neRegional, entryClasses: [{ absent: true, result: null }] };
+    const visible = publicDogHistory([drama], pub);
+    expect(visible).toHaveLength(1);
+    expect(classOutcome(neRegional, visible[0]!.entryClasses[0]!, TODAY)).toBe('absent');
+  });
+
+  it('marked absent on the day of the show: still nothing public until the show is over', () => {
+    const onTheDay = { show: show(TODAY), entryClasses: [{ absent: true, result: null }] };
+    expect(publicDogHistory([onTheDay], pub)).toHaveLength(0);
+  });
+
+  it('placed, withheld, unplaced, and not yet judged', () => {
+    expect(classOutcome(neRegional, { result: { placement: 1, placementStatus: null } }, TODAY)).toBe('placed');
+    expect(classOutcome(neRegional, { result: { placement: null, placementStatus: 'withheld' } }, TODAY)).toBe('withheld');
+    expect(classOutcome(neRegional, { result: { placement: null, placementStatus: 'unplaced' } }, TODAY)).toBe('unplaced');
+    expect(classOutcome(neRegional, { result: null }, TODAY)).toBe('unplaced');
+    // The owner's own upcoming entry — not "Unplaced" before it has been judged.
+    expect(classOutcome(show('2026-10-11'), { result: null }, TODAY)).toBe('pending');
+  });
+
+  it('the words on the page', () => {
+    expect(classOutcomeLabel('absent', null)).toBe('Absent');
+    expect(classOutcomeLabel('withheld', null)).toBe('Withheld');
+    expect(classOutcomeLabel('unplaced', null)).toBe('Unplaced');
+    expect(classOutcomeLabel('pending', null)).toBe('Entered');
+    expect(classOutcomeLabel('placed', 1)).toBe('1st');
   });
 });

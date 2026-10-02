@@ -1,3 +1,4 @@
+import type { ClassOutcome } from '@/lib/public-dog-history';
 // Placements cap at 5 (VHC) — research across 14 non-GSD single-breed
 // championship schedules (Higham Press / Have A Dog Day, Apr 2026) showed
 // zero shows carding past VHC. Some shows only card the podium (RKC
@@ -137,6 +138,26 @@ export function comparePlacing(a: number | null | undefined, b: number | null | 
 
 export function getPlacementLabel(value: number): string {
   return KC_PLACEMENTS.find((p) => p.value === value)?.label ?? `${value}th`;
+}
+
+/**
+ * How a dog's page names what happened in a class — the one place the words
+ * "Absent", "Withheld", "Unplaced" and "Entered" are chosen for it. The
+ * outcome itself is decided by `classOutcome` (lib/public-dog-history.ts).
+ */
+export function classOutcomeLabel(outcome: ClassOutcome, placement: number | null): string {
+  switch (outcome) {
+    case 'placed':
+      return placement != null ? getPlacementLabel(placement) : 'Placed';
+    case 'absent':
+      return 'Absent';
+    case 'withheld':
+      return 'Withheld';
+    case 'unplaced':
+      return 'Unplaced';
+    case 'pending':
+      return 'Entered';
+  }
 }
 
 export function getPlacementShortLabel(value: number): string {

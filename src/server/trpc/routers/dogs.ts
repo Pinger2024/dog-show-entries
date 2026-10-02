@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { isVisibleToViewer } from '@/lib/result-visibility';
-import { publicDogHistory, visibleResult } from '@/lib/public-dog-history';
+import { classOutcome, publicDogHistory, visibleResult } from '@/lib/public-dog-history';
 import { searchDogsWithPublicHistory } from '@/server/services/public-dog-summary';
 import { SHOW_COLUMNS_FOR_PUBLIC_INCLUDE } from '../public-show-fields';
 import { TRPCError } from '@trpc/server';
@@ -12,7 +12,7 @@ import { deleteFromR2 } from '@/server/services/storage';
 import { searchKcDogs, fetchKcDogProfile, RkcUnavailableError } from '@/server/services/kc-lookup';
 import { isCcType, isRccType } from '@/lib/placements';
 import { effectiveCcType } from '@/lib/effective-achievement-type';
-import { isAgeEligibleOnShowDay, ageInCompletedMonths } from '@/lib/date-utils';
+import { isAgeEligibleOnShowDay, ageInCompletedMonths, todayInLondon } from '@/lib/date-utils';
 import { pickRecommendedAgeClass, preferCoatDivision, type AgeClassOption } from '@/lib/class-recommendation';
 import { dogAccessCondition, dogRowGrantsAccess, userMayActOnDog } from '@/server/dog-access';
 import { findClearedPedigreeFields, pedigreeClearMessage } from '@/lib/dog-pedigree';
@@ -267,7 +267,8 @@ export const dogsRouter = createTRPCRouter({
       const viewerId = ctx.session?.user?.id;
       const viewerIsOwner = !!viewerId && dogRowGrantsAccess(dog, viewerId);
 
-      const showHistory = publicDogHistory(dogEntries, { viewerIsOwner })
+      const today = todayInLondon();
+      const showHistory = publicDogHistory(dogEntries, { viewerIsOwner, today })
         .map((entry) => ({
           showId: entry.show.id,
           showSlug: entry.show.slug,
@@ -277,7 +278,11 @@ export const dogsRouter = createTRPCRouter({
           classes: entry.entryClasses.map((ec) => ({
             className: ec.showClass.classDefinition.name,
             classNumber: ec.showClass.classNumber,
+            // Absent / placed / withheld / unplaced / not yet judged — one
+            // rule (classOutcome), one set of words (classOutcomeLabel).
+            outcome: classOutcome(entry.show, ec, today),
             placement: ec.result?.placement ?? null,
+            placementStatus: ec.result?.placementStatus ?? null,
             specialAward: ec.result?.specialAward ?? null,
             critiqueText: ec.result?.critiqueText ?? null,
           })),
