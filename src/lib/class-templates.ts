@@ -20,20 +20,33 @@ export interface ClassTemplate {
   isHandling?: boolean;
   /** Show types this template is relevant for. If undefined, shown for all types. */
   showTypes?: string[];
+  /** Show scopes this template is valid for. Prevents breed-club-only classes
+   *  such as Baby Puppy leaking into multi-breed schedules. */
+  showScopes?: string[];
   /** If true, only shown for GSD single-breed shows. */
   gsdOnly?: boolean;
 }
 
 /** Filter templates to those relevant for a given show type and scope.
- *  GSD-only templates are shown for single-breed shows (user picks if relevant). */
-export function getRelevantTemplates(showType?: string, showScope?: string): ClassTemplate[] {
+ *  GSD-only templates are shown for single-breed shows (user picks if relevant).
+ *  WUSV/SV shows have their own class management UI (/wusv-classes) — the
+ *  RKC class templates don't apply, so for SV shows we only surface the
+ *  handling add-ons. */
+export function getRelevantTemplates(
+  showType?: string,
+  showScope?: string,
+  showRuleset?: 'rkc' | 'wusv',
+): ClassTemplate[] {
   return CLASS_TEMPLATES.filter((t) => {
+    // WUSV shows don't use the RKC class templates — only handling add-ons.
+    if (showRuleset === 'wusv') return t.isHandling === true;
     // Handling templates always shown (they're add-ons)
     if (t.isHandling) return true;
     // GSD-only templates: show for single-breed shows, hide for all-breed
     if (t.gsdOnly && showScope !== 'single_breed') return false;
     // If template has showTypes restriction, check it
     if (t.showTypes && showType && !t.showTypes.includes(showType)) return false;
+    if (t.showScopes && showScope && !t.showScopes.includes(showScope)) return false;
     return true;
   });
 }
@@ -44,7 +57,9 @@ export const CLASS_TEMPLATES: ClassTemplate[] = [
     name: 'Championship Standard',
     description: 'Full RKC championship class schedule with all standard classes, split by sex.',
     showTypes: ['championship'],
+    showScopes: ['single_breed'],
     classNames: [
+      'Baby Puppy',
       'Minor Puppy',
       'Puppy',
       'Junior',
@@ -61,15 +76,40 @@ export const CLASS_TEMPLATES: ClassTemplate[] = [
     splitBySex: true,
   },
   {
-    id: 'open_standard',
-    name: 'Open Standard',
-    description: 'Standard open show class schedule with popular classes.',
-    showTypes: ['open', 'premier_open'],
+    id: 'championship_multibreed_standard',
+    name: 'Championship Breed Classes',
+    description: 'RKC championship classes for a CC breed, with Open and Limit split by sex.',
+    showTypes: ['championship'],
+    showScopes: ['general', 'group'],
     classNames: [
       'Minor Puppy',
       'Puppy',
       'Junior',
+      'Yearling',
       'Novice',
+      'Post Graduate',
+      'Limit',
+      'Open',
+      'Veteran',
+    ],
+    defaultFeePence: 2500,
+    splitBySex: true,
+  },
+  {
+    id: 'open_standard',
+    name: 'Open Standard',
+    description: 'Standard open show class schedule with popular classes.',
+    showTypes: ['open', 'premier_open'],
+    showScopes: ['single_breed'],
+    classNames: [
+      'Baby Puppy',
+      'Minor Puppy',
+      'Puppy',
+      'Junior',
+      'Yearling',
+      'Maiden',
+      'Novice',
+      'Graduate',
       'Post Graduate',
       'Limit',
       'Open',
@@ -79,17 +119,45 @@ export const CLASS_TEMPLATES: ClassTemplate[] = [
     splitBySex: false,
   },
   {
+    id: 'open_multibreed_standard',
+    name: 'Open Show Breed Classes',
+    description: 'RKC multi-breed Open show classes. Baby Puppy is excluded as required.',
+    showTypes: ['open', 'premier_open'],
+    showScopes: ['general', 'group'],
+    classNames: ['Minor Puppy', 'Puppy', 'Junior', 'Yearling', 'Novice', 'Post Graduate', 'Limit', 'Open', 'Veteran'],
+    defaultFeePence: 500,
+    splitBySex: false,
+  },
+  {
     id: 'limited_basic',
     name: 'Limited Basic',
     description: 'Basic limited show schedule with core classes.',
     showTypes: ['limited', 'primary'],
+    showScopes: ['single_breed'],
     classNames: [
+      'Baby Puppy',
+      'Minor Puppy',
       'Puppy',
       'Junior',
+      'Yearling',
+      'Maiden',
       'Novice',
+      'Graduate',
       'Post Graduate',
+      'Limit',
       'Open',
+      'Veteran',
     ],
+    defaultFeePence: 300,
+    splitBySex: false,
+  },
+  {
+    id: 'limited_multibreed_basic',
+    name: 'Limited Show Breed Classes',
+    description: 'Core RKC multi-breed Limited show classes. Baby Puppy is excluded as required.',
+    showTypes: ['limited', 'primary'],
+    showScopes: ['general', 'group'],
+    classNames: ['Puppy', 'Junior', 'Novice', 'Post Graduate', 'Limit', 'Open'],
     defaultFeePence: 300,
     splitBySex: false,
   },
@@ -100,6 +168,7 @@ export const CLASS_TEMPLATES: ClassTemplate[] = [
     showTypes: ['championship'],
     gsdOnly: true,
     classNames: [
+      'Baby Puppy',
       'Minor Puppy',
       'Puppy',
       'Junior',
@@ -128,9 +197,11 @@ export const CLASS_TEMPLATES: ClassTemplate[] = [
     showTypes: ['open', 'premier_open'],
     gsdOnly: true,
     classNames: [
+      'Baby Puppy',
       'Minor Puppy',
       'Puppy',
       'Junior',
+      'Yearling',
       'Novice',
       'Undergraduate',
       'Post Graduate',
@@ -152,6 +223,7 @@ export const CLASS_TEMPLATES: ClassTemplate[] = [
     description: 'Companion show schedule for fun and social events.',
     showTypes: ['companion'],
     classNames: [
+      'Baby Puppy',
       'Puppy',
       'Open',
       'Veteran',

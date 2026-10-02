@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { publicOrgColumns } from '@/server/trpc/public-org-columns';
 import { db } from '@/server/db';
 import { eq } from 'drizzle-orm';
 import * as schema from '@/server/db/schema';
@@ -14,6 +15,7 @@ import {
   validateRasterLogoUrl,
   makePdfResponse,
 } from '@/lib/pdf-utils';
+import { setSimplexViewerPreference } from '@/lib/pdf-pad';
 
 /**
  * Prize Card Overprint PDF endpoint.
@@ -42,7 +44,7 @@ export async function GET(
   const show = await db.query.shows.findFirst({
     where: eq(schema.shows.id, showId),
     with: {
-      organisation: true,
+      organisation: { columns: publicOrgColumns },
       judgeAssignments: {
         with: { judge: true },
       },
@@ -53,7 +55,10 @@ export async function GET(
     return NextResponse.json({ error: 'Show not found' }, { status: 404 });
   }
 
-  const authResult = await authenticatePdfRequest(show.organisationId);
+  // Admin-only (see the doc comment above): the Mixam Overprint card in the
+  // secretary Documents page is gated on role === 'admin', so enforce it here
+  // rather than trusting the client gate.
+  const authResult = await authenticatePdfRequest(show.organisationId, { requireAdmin: true });
   if (authResult instanceof NextResponse) return authResult;
 
   const safeLogoUrl = await validateRasterLogoUrl(show.organisation?.logoUrl);
@@ -103,7 +108,11 @@ export async function GET(
 
   try {
     const pdfDocument = React.createElement(PrizeCardOverprint, { show: showInfo });
-    const buffer = await renderToBuffer(pdfDocument);
+    const rawBuffer = await renderToBuffer(pdfDocument);
+    // Same single-sided viewer preference as the composite prize cards route
+    // (see its doc comment) — one card variant per page, never meant to be
+    // printed duplex.
+    const buffer = Buffer.from(await setSimplexViewerPreference(rawBuffer));
     const filename = `${sanitizeFilename(show.name)}-Prize-Card-Overprint.pdf`;
     const isPreview = request.nextUrl.searchParams.has('preview');
     return makePdfResponse(buffer, filename, isPreview);

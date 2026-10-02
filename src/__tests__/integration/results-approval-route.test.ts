@@ -8,6 +8,13 @@ import {
   makeShow,
   makeJudge,
   makeJudgeAssignment,
+  makeUser,
+  makeStewardAssignment,
+  makeShowClass,
+  makeDog,
+  makeEntry,
+  makeEntryClass,
+  makeResult,
 } from '../helpers/factories';
 import {
   GET as resultsApprovalGET,
@@ -22,14 +29,19 @@ async function judgeWithApprovalToken() {
   });
   const judge = await makeJudge({ contactEmail: 'j@test.local' });
   await makeJudgeAssignment({ showId: show.id, judgeId: judge.id, breedId: breed.id });
+  const steward = await makeUser({ role: 'steward' });
+  await makeStewardAssignment({ userId: steward.id, showId: show.id });
+  // A judge can only be asked to approve results that exist — record one first.
+  const showClass = await makeShowClass({ showId: show.id, breedId: breed.id });
+  const exhibitor = await makeUser({ role: 'exhibitor' });
+  const dog = await makeDog({ ownerId: exhibitor.id, breedId: breed.id });
+  const entry = await makeEntry({
+    showId: show.id, dogId: dog.id, exhibitorId: exhibitor.id, status: 'confirmed',
+  });
+  const ec = await makeEntryClass({ entryId: entry.id, showClassId: showClass.id });
+  await makeResult({ entryClassId: ec.id, placement: 1, recordedBy: steward.id });
   // Trigger token generation via the steward submitForJudgeApproval procedure:
   // it stamps an approvalToken on every assignment row for that judge/show.
-  const steward = await (async () => {
-    const { makeUser, makeStewardAssignment } = await import('../helpers/factories');
-    const s = await makeUser({ role: 'steward' });
-    await makeStewardAssignment({ userId: s.id, showId: show.id });
-    return s;
-  })();
   await createTestCaller(steward).steward.submitForJudgeApproval({
     showId: show.id, judgeId: judge.id,
   });

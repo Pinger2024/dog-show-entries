@@ -68,18 +68,6 @@ describe('backlog router (admin internal)', () => {
     expect(counts.completed).toBe(1);
     expect(counts.awaiting_feedback).toBe(0); // zero-filled
   });
-
-  it('get returns a single item or NOT_FOUND', async () => {
-    const admin = await makeUser({ role: 'admin' });
-    const item = await makeBacklogItem();
-    const got = await createTestCaller(admin).backlog.get({ id: item.id });
-    expect(got.id).toBe(item.id);
-    await expect(
-      createTestCaller(admin).backlog.get({
-        id: '00000000-0000-0000-0000-000000000000',
-      }),
-    ).rejects.toThrow(/not found/i);
-  });
 });
 
 describe('soft-delete consistency sweep', () => {

@@ -2,6 +2,7 @@ import { randomBytes } from 'crypto';
 import { eq, and } from 'drizzle-orm';
 import { users, memberships } from '@/server/db/schema';
 import type { Database } from '@/server/db';
+import { roleAfterGrant, type UserRole } from '@/lib/roles';
 
 export function generateToken(): string {
   return randomBytes(32).toString('hex');
@@ -15,17 +16,26 @@ export function getBaseUrl(): string {
   );
 }
 
-/** Upgrade a user's role and create an org membership (if applicable). */
+/**
+ * Grant a user a role (never lowering the one they hold — see
+ * src/lib/roles.ts) and create an org membership (if applicable).
+ */
 export async function assignRole(
   db: Database,
   userId: string,
-  role: string,
+  role: UserRole,
   organisationId: string | null,
 ) {
+  const current = await db.query.users.findFirst({
+    where: eq(users.id, userId),
+    columns: { role: true },
+  });
+  const granted = current ? roleAfterGrant(current.role as UserRole, role) : role;
+
   const ops: Promise<unknown>[] = [
     db
       .update(users)
-      .set({ role, onboardingCompletedAt: new Date() })
+      .set({ role: granted, onboardingCompletedAt: new Date() })
       .where(eq(users.id, userId)),
   ];
 

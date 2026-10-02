@@ -262,8 +262,8 @@ export function ReportProblemWidget() {
         <DialogContent className="sm:max-w-md">
           {submitted ? (
             <div className="flex flex-col items-center gap-4 py-6 text-center">
-              <div className="flex size-14 items-center justify-center rounded-full bg-emerald-100">
-                <Send className="size-6 text-emerald-600" />
+              <div className="flex size-14 items-center justify-center rounded-full bg-se-fresh-soft">
+                <Send className="size-6 text-se-fresh-deep" />
               </div>
               <div>
                 <h3 className="font-serif text-lg font-semibold">Thanks for your feedback!</h3>
@@ -369,7 +369,7 @@ export function ReportProblemWidget() {
                         <X className="size-3.5" />
                       </button>
                       {attachment.uploaded && (
-                        <div className="flex items-center gap-1.5 border-t bg-emerald-50 px-2.5 py-1.5 text-xs text-emerald-700">
+                        <div className="flex items-center gap-1.5 border-t bg-se-fresh-soft px-2.5 py-1.5 text-xs text-se-fresh-deep">
                           <ImageIcon className="size-3" />
                           <span className="truncate">{attachment.uploaded.fileName}</span>
                         </div>

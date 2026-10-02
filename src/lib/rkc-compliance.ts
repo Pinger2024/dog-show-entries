@@ -18,6 +18,9 @@ export function getDockingStatement(
   if (publicAdmission && country === 'wales') {
     return 'A dog docked on or after 28th March 2007 may not be entered for exhibition at this show.';
   }
+  if (publicAdmission && country === 'northern_ireland') {
+    return 'A dog which had its tail docked on or after 1 January 2013 cannot be shown at events where the exhibitor pays a fee or members of the public pay an admittance fee.';
+  }
   return 'Only undocked dogs and legally docked dogs may be entered for exhibition at this show.';
 }
 

@@ -25,7 +25,6 @@ import {
 import { toast } from 'sonner';
 import { trpc } from '@/lib/trpc/client';
 import { cn } from '@/lib/utils';
-import { PostcodeLookup, formatAddress } from '@/components/postcode-lookup';
 import { ClubApplicationForm } from '@/components/club-application-form';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -60,12 +59,12 @@ import {
   CommandList,
 } from '@/components/ui/command';
 import {
-  Card,
   CardContent,
   CardDescription,
   CardHeader,
   CardTitle,
 } from '@/components/ui/card';
+import { SECard, Wordmark } from '@/components/show-experience/kit';
 import Link from 'next/link';
 
 // ── Types ───────────────────────────────────────────────────────
@@ -157,7 +156,7 @@ const profileSchema = z.object({
   phone: z.string().optional(),
 });
 
-/** Whether address fields have values (from lookup or pre-existing) */
+/** Whether address fields are already populated. */
 function hasAddress(address: string | undefined, postcode: string | undefined) {
   return !!(address && postcode);
 }
@@ -286,11 +285,8 @@ export function OnboardingWizard({ user }: OnboardingWizardProps) {
       <div className="w-full max-w-lg space-y-6 sm:space-y-8">
         {/* Logo */}
         <div className="text-center">
-          <Link
-            href="/"
-            className="font-serif text-2xl sm:text-3xl font-bold tracking-tight text-primary"
-          >
-            Remi
+          <Link href="/">
+            <Wordmark size={26} />
           </Link>
         </div>
 
@@ -322,7 +318,7 @@ function IntentStep({
   const firstName = userName?.split(' ')[0];
 
   return (
-    <Card>
+    <SECard className="flex flex-col gap-6">
       <CardHeader className="text-center">
         <CardTitle className="font-serif text-xl sm:text-2xl">
           Welcome{firstName ? `, ${firstName}` : ''}!
@@ -380,7 +376,7 @@ function IntentStep({
           </div>
         </button>
       </CardContent>
-    </Card>
+    </SECard>
   );
 }
 
@@ -423,7 +419,7 @@ function ProfileStep({
   const [editingAddress, setEditingAddress] = useState(!addressFilled);
 
   return (
-    <Card>
+    <SECard className="flex flex-col gap-6">
       <CardHeader>
         <CardTitle className="font-serif text-lg sm:text-xl">
           Your Details
@@ -457,7 +453,6 @@ function ProfileStep({
                 </FormItem>
               )}
             />
-            {/* Address — compact summary when filled, postcode lookup + fields when editing */}
             {addressFilled && !editingAddress ? (
               <div className="rounded-lg border bg-muted/30 p-3">
                 <div className="flex items-start justify-between gap-2">
@@ -479,13 +474,6 @@ function ProfileStep({
               </div>
             ) : (
               <>
-                <PostcodeLookup
-                  onSelect={(result) => {
-                    form.setValue('address', formatAddress(result));
-                    form.setValue('postcode', result.postcode);
-                    setEditingAddress(false);
-                  }}
-                />
                 <div className="grid gap-3 grid-cols-1 sm:grid-cols-[1fr_auto]">
                   <FormField
                     control={form.control}
@@ -495,7 +483,7 @@ function ProfileStep({
                         <FormLabel>Address</FormLabel>
                         <FormControl>
                           <Input
-                            placeholder="Your postal address"
+                            placeholder="House/flat, street, town"
                             className="h-11 sm:h-12"
                             {...field}
                           />
@@ -523,7 +511,7 @@ function ProfileStep({
                   />
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  Your address appears in show catalogues as required by RKC regulations.
+                  Your full address appears in show catalogues as required by RKC regulations.
                 </p>
               </>
             )}
@@ -566,7 +554,7 @@ function ProfileStep({
           </form>
         </Form>
       </CardContent>
-    </Card>
+    </SECard>
   );
 }
 
@@ -588,6 +576,11 @@ function DogStep({
 
   const { data: breeds, isLoading: breedsLoading } =
     trpc.breeds.list.useQuery();
+
+  // Owner name + address are mandatory on dog creation. The profile step
+  // runs before this one so the user always has them on file — pull them
+  // here and attach to the createDog payload.
+  const { data: userProfile } = trpc.users.getProfile.useQuery();
 
   const utils = trpc.useUtils();
 
@@ -614,7 +607,6 @@ function DogStep({
       colour?: string;
       sire: string;
       dam: string;
-      breeder: string;
     }[]
   >([]);
 
@@ -663,7 +655,6 @@ function DogStep({
     }
     if (data.sire) form.setValue('sireName', data.sire);
     if (data.dam) form.setValue('damName', data.dam);
-    if (data.breeder) form.setValue('breederName', data.breeder);
     if (data.colour) form.setValue('colour', data.colour);
 
     if (data.breed && breeds) {
@@ -699,10 +690,10 @@ function DogStep({
   // After adding dogs, show success + options
   if (dogsAdded > 0 && !showForm) {
     return (
-      <Card>
+      <SECard className="flex flex-col gap-6">
         <CardHeader className="text-center">
-          <div className="mx-auto mb-2 flex size-12 items-center justify-center rounded-full bg-emerald-100">
-            <Dog className="size-6 text-emerald-700" />
+          <div className="mx-auto mb-2 flex size-12 items-center justify-center rounded-full bg-se-fresh-soft">
+            <Dog className="size-6 text-se-fresh-deep" />
           </div>
           <CardTitle className="font-serif text-lg sm:text-xl">
             {dogsAdded === 1 ? 'Dog added!' : `${dogsAdded} dogs added!`}
@@ -728,12 +719,12 @@ function DogStep({
             <ArrowRight className="size-4" />
           </Button>
         </CardContent>
-      </Card>
+      </SECard>
     );
   }
 
   return (
-    <Card>
+    <SECard className="flex flex-col gap-6">
       <CardHeader>
         <CardTitle className="font-serif text-lg sm:text-xl">
           Add Your First Dog
@@ -746,7 +737,56 @@ function DogStep({
       <CardContent>
         <Form {...form}>
           <form
-            onSubmit={form.handleSubmit((data) => createDog.mutate(data))}
+            onSubmit={form.handleSubmit((data) => {
+              const ownerAddress = [userProfile?.address, userProfile?.postcode]
+                .filter(Boolean)
+                .join(', ');
+              if (!userProfile?.name || !ownerAddress) {
+                toast.error('Please finish your profile first', {
+                  description:
+                    'Owner name and full address are required — add them in the previous step.',
+                });
+                return;
+              }
+              // Pedigree (sire + dam + breeder) and colour are mandatory —
+              // a catalogue can't be produced with this missing. Mirrors
+              // dog-form.tsx's create-mode check so the two forms agree
+              // (Mandy 2026-07-27: the onboarding wizard was the gap that
+              // let dogs through with these blank).
+              let pedigreeMissing = false;
+              if (!data.sireName || !data.sireName.trim()) {
+                form.setError('sireName', { type: 'manual', message: "The sire's name is required" });
+                pedigreeMissing = true;
+              }
+              if (!data.damName || !data.damName.trim()) {
+                form.setError('damName', { type: 'manual', message: "The dam's name is required" });
+                pedigreeMissing = true;
+              }
+              if (!data.breederName || !data.breederName.trim()) {
+                form.setError('breederName', { type: 'manual', message: "The breeder's name is required" });
+                pedigreeMissing = true;
+              }
+              if (!data.colour || !data.colour.trim()) {
+                form.setError('colour', { type: 'manual', message: 'The colour is required' });
+                pedigreeMissing = true;
+              }
+              if (pedigreeMissing) {
+                toast.error('Please add the sire, dam, breeder and colour — they appear in the catalogue');
+                return;
+              }
+              createDog.mutate({
+                ...data,
+                owners: [
+                  {
+                    ownerName: userProfile.name,
+                    ownerAddress,
+                    ownerEmail: userProfile.email ?? '',
+                    ownerPhone: userProfile.phone ?? undefined,
+                    isPrimary: true,
+                  },
+                ],
+              });
+            })}
             className="space-y-4"
           >
             {/* RKC Reg + Name + Lookup */}
@@ -811,7 +851,7 @@ function DogStep({
                     lookup.
                   </p>
                   <p className="mt-1 text-xs text-muted-foreground/70">
-                    Tip: type the name exactly as it appears on your RKC registration certificate, including affixes (e.g. &quot;Dorabella Dancing Queen At Hundark&quot;).
+                    Tip: type the name exactly as it appears on your RKC registration certificate, including affixes (e.g. &quot;Thornfield Silver Dream At Ashcroft&quot;).
                   </p>
                   <Button
                     type="button"
@@ -1041,12 +1081,7 @@ function DogStep({
               name="colour"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>
-                    Colour{' '}
-                    <span className="text-muted-foreground font-normal">
-                      (optional)
-                    </span>
-                  </FormLabel>
+                  <FormLabel>Colour</FormLabel>
                   <FormControl>
                     <Input
                       placeholder="e.g. Black & Tan"
@@ -1060,10 +1095,15 @@ function DogStep({
 
             {/* Pedigree (collapsed/compact) */}
             <div className="space-y-3 rounded-lg border p-3 sm:p-4">
+              {/* Say WHY it's needed, not just that it's required. This
+                  section used to be marked "(optional)", which is how dogs
+                  reached the catalogue with no sire or dam at all. If the RKC
+                  lookup doesn't respond these get typed by hand, so the
+                  reason has to be worth the typing (Mandy 2026-07-27). */}
               <p className="text-sm font-medium">
                 Pedigree{' '}
-                <span className="text-muted-foreground font-normal">
-                  (optional)
+                <span className="font-normal text-muted-foreground">
+                  — these print in the show catalogue
                 </span>
               </p>
               <FormField
@@ -1137,7 +1177,7 @@ function DogStep({
           Skip for now
         </button>
       </CardContent>
-    </Card>
+    </SECard>
   );
 }
 
@@ -1150,7 +1190,7 @@ function ClubStep({
   onComplete: () => void;
 }) {
   return (
-    <Card>
+    <SECard className="flex flex-col gap-6">
       <CardHeader>
         <CardTitle className="font-serif text-lg sm:text-xl">
           Register Your Club
@@ -1167,7 +1207,7 @@ function ClubStep({
           tall
         />
       </CardContent>
-    </Card>
+    </SECard>
   );
 }
 
@@ -1199,7 +1239,7 @@ function SuccessStep({
   const showRunMessage = intent === 'run' || intent === 'both';
 
   return (
-    <Card>
+    <SECard className="flex flex-col gap-6">
       <CardHeader className="text-center">
         <div className="mx-auto mb-2 flex size-14 items-center justify-center rounded-full bg-primary/10">
           <PartyPopper className="size-7 text-primary" />
@@ -1250,6 +1290,6 @@ function SuccessStep({
           <ArrowRight className="size-4" />
         </Button>
       </CardContent>
-    </Card>
+    </SECard>
   );
 }

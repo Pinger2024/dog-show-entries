@@ -62,7 +62,7 @@ const EXHIBITOR_FEATURES: Feature[] = [
     title: 'Dog Profiles with Full Pedigree Details',
     description:
       'Store your dogs\' RKC registration numbers, titles, parentage, breeder details, and ownership information once. Every future entry is pre-filled automatically.',
-    colour: 'bg-amber-50 text-amber-600',
+    colour: 'bg-se-honey-soft text-se-honey-deep',
   },
   {
     icon: Sparkles,
@@ -90,7 +90,7 @@ const EXHIBITOR_FEATURES: Feature[] = [
     title: 'Instant Email Confirmations',
     description:
       'Receive a detailed confirmation email the moment your payment clears. Includes every class entered, fees paid, and your entry reference number.',
-    colour: 'bg-green-50 text-green-600',
+    colour: 'bg-se-fresh-soft text-se-fresh-deep',
   },
   {
     icon: Radio,
@@ -128,14 +128,14 @@ const SECRETARY_FEATURES: Feature[] = [
     title: 'Entry Dashboard',
     description:
       'View every entry in real time as they arrive. Filter by breed, class, or payment status. See at a glance how many entries you have, total income collected, and entries still pending.',
-    colour: 'bg-emerald-50 text-emerald-600',
+    colour: 'bg-se-fresh-soft text-se-fresh-deep',
   },
   {
     icon: BookOpen,
     title: 'Automatic Catalogue Generation',
     description:
       'Generate professional print-ready A5 catalogues at the click of a button. Four formats available: standard by-breed, by-class, alphabetical, and absentee. Catalogue numbers assigned in canonical RKC breed group order.',
-    colour: 'bg-amber-50 text-amber-600',
+    colour: 'bg-se-honey-soft text-se-honey-deep',
   },
   {
     icon: Gavel,
@@ -163,7 +163,7 @@ const SECRETARY_FEATURES: Feature[] = [
     title: 'Financial Reports',
     description:
       'Track every penny with detailed financial reporting. Income by class, payment reconciliation, VAT summary, refund tracking, and exportable reports for your club treasurer.',
-    colour: 'bg-green-50 text-green-600',
+    colour: 'bg-se-fresh-soft text-se-fresh-deep',
   },
   {
     icon: ListChecks,
@@ -208,14 +208,14 @@ const CLUB_FEATURES: Feature[] = [
     title: 'Secure Data and GDPR Compliance',
     description:
       'All exhibitor data is encrypted and stored securely. Built with GDPR compliance from day one — proper consent management, data retention policies, and the right to be forgotten.',
-    colour: 'bg-green-50 text-green-600',
+    colour: 'bg-se-fresh-soft text-se-fresh-deep',
   },
   {
     icon: ShieldCheck,
     title: 'Role-Based Access Control',
     description:
       'Control who can do what. Secretaries manage shows and entries, stewards handle ringside duties, and exhibitors see only their own data. Every action is logged.',
-    colour: 'bg-amber-50 text-amber-600',
+    colour: 'bg-se-honey-soft text-se-honey-deep',
   },
   {
     icon: Clock,
@@ -240,7 +240,7 @@ const TABS: Tab[] = [
     id: 'secretaries',
     label: 'Secretaries',
     icon: LayoutDashboard,
-    badgeColour: 'bg-amber-50 text-amber-700',
+    badgeColour: 'bg-se-honey-soft text-se-honey-deep',
     title: 'Run your show from one dashboard',
     subtitle: 'Create shows, manage entries, generate every document you need for show day, and track finances.',
     features: SECRETARY_FEATURES,
@@ -249,7 +249,7 @@ const TABS: Tab[] = [
     id: 'clubs',
     label: 'Clubs',
     icon: Building2,
-    badgeColour: 'bg-green-50 text-green-700',
+    badgeColour: 'bg-se-fresh-soft text-se-fresh-deep',
     title: 'Secure, compliant, and always on',
     subtitle: 'Your club\'s data is protected, payments are handled professionally, and entries are accepted 24/7.',
     features: CLUB_FEATURES,
@@ -290,7 +290,7 @@ export function FeatureTabs() {
         {active && (
           <div key={active.id}>
             <div className="mx-auto max-w-2xl text-center mb-10">
-              <h2 className="gold-rule-center font-serif text-2xl font-bold tracking-tight sm:text-3xl">
+              <h2 className="after:mx-auto after:mt-3 after:block after:h-0.5 after:w-12 after:bg-se-honey after:content-[''] font-serif text-2xl font-bold tracking-tight sm:text-3xl">
                 {active.title}
               </h2>
               <p className="mt-4 text-base text-muted-foreground sm:text-lg">

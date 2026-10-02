@@ -27,24 +27,6 @@ export const backlogRouter = createTRPCRouter({
       });
     }),
 
-  get: protectedProcedure
-    .input(z.object({ id: z.string().uuid() }))
-    .query(async ({ ctx, input }) => {
-      if (ctx.session.user.role !== 'admin') {
-        throw new TRPCError({ code: 'FORBIDDEN', message: 'Admin access required' });
-      }
-
-      const item = await ctx.db.query.backlog.findFirst({
-        where: eq(backlog.id, input.id),
-      });
-
-      if (!item) {
-        throw new TRPCError({ code: 'NOT_FOUND', message: 'Backlog item not found' });
-      }
-
-      return item;
-    }),
-
   updateStatus: protectedProcedure
     .input(
       z.object({

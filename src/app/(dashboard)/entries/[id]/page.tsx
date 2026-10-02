@@ -12,11 +12,15 @@ import {
   AlertTriangle,
   Pencil,
   Trophy,
+  Plus,
 } from 'lucide-react';
 import { useState } from 'react';
 import { toast } from 'sonner';
 import { trpc } from '@/lib/trpc/client';
+import { cn } from '@/lib/utils';
 import { formatCurrency } from '@/lib/date-utils';
+import { entryWindowOpen } from '@/lib/show-status';
+import { SE_H } from '@/components/show-experience/tokens';
 import { Button } from '@/components/ui/button';
 import {
   Card,
@@ -34,6 +38,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog';
+import { canChangeEntryClasses, canWithdrawEntry, entryWithdrawBlock, ENTRY_WITHDRAW_MESSAGES } from '@/lib/entry-edit-rules';
 
 const statusConfig: Record<
   string,
@@ -120,7 +125,7 @@ export default function EntryDetailPage() {
       {/* Header */}
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h1 className="text-lg font-bold sm:text-2xl">{entry.show.name}</h1>
+          <h1 className={cn(SE_H, 'text-lg sm:text-2xl')}>{entry.show.name}</h1>
           <div className="mt-1 flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
             <span className="flex items-center gap-1">
               <CalendarDays className="size-3.5" />
@@ -235,6 +240,35 @@ export default function EntryDetailPage() {
         </CardContent>
       </Card>
 
+      {/* Extras — items purchased on this entry's order, either at checkout
+          or added after entry (add-extras-to-entry, 2026-09-21). */}
+      {entry.order && entry.order.orderSundryItems.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Extras</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            {entry.order.orderSundryItems.map((osi) => (
+              <div key={osi.id} className="flex justify-between text-sm">
+                <span>
+                  {osi.sundryItem?.name ?? 'Extra'}
+                  {osi.quantity > 1 ? ` ×${osi.quantity}` : ''}
+                </span>
+                <span className="font-medium">{formatCurrency(osi.unitPrice * osi.quantity)}</span>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      )}
+
+      {entry.status === 'confirmed' && (!entry.orderId || !entry.order?.stripePaymentIntentId) && (
+        <p className="text-center text-sm text-muted-foreground">
+          {entry.orderId
+            ? 'This entry was paid directly to the club, so extras like a catalogue or class sponsorship can\'t be added online — please contact the show secretary.'
+            : 'This entry doesn\'t have an order attached — to add extras like a catalogue or class sponsorship, please contact the show secretary.'}
+        </p>
+      )}
+
       {/* Actions */}
       <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:gap-3">
         <Button variant="outline" asChild className="w-full sm:w-auto min-h-[2.75rem]">
@@ -248,7 +282,7 @@ export default function EntryDetailPage() {
             </Link>
           </Button>
         )}
-        {(entry.status === 'confirmed' || entry.status === 'pending') && entry.show.status === 'entries_open' && (
+        {canChangeEntryClasses(entry, entry.show) && (
           <Button variant="outline" asChild className="w-full sm:w-auto min-h-[2.75rem]">
             <Link href={`/shows/${entry.show.slug ?? entry.showId}/entries/${entry.id}/edit`}>
               <Pencil className="size-4" />
@@ -256,7 +290,19 @@ export default function EntryDetailPage() {
             </Link>
           </Button>
         )}
-        {entry.status !== 'withdrawn' && entry.status !== 'cancelled' && (
+        {/* Add extras (add-extras-to-entry, 2026-09-21): shown only when the
+            entry is confirmed, has an order to attach the purchase to, and
+            the window is still open. A legacy entry with no order can't take
+            extras online — the copy under the Extras card below explains why. */}
+        {entry.status === 'confirmed' && entry.orderId && entry.order?.stripePaymentIntentId && entryWindowOpen(entry.show) && (
+          <Button variant="outline" asChild className="w-full sm:w-auto min-h-[2.75rem]">
+            <Link href={`/shows/${entry.show.slug ?? entry.showId}/entries/${entry.id}/extras`}>
+              <Plus className="size-4" />
+              Add Extras
+            </Link>
+          </Button>
+        )}
+        {canWithdrawEntry(entry, entry.show) && (
           <Dialog open={withdrawOpen} onOpenChange={setWithdrawOpen}>
             <DialogTrigger asChild>
               <Button variant="destructive" size="default" className="w-full sm:w-auto min-h-[2.75rem]">
@@ -303,6 +349,11 @@ export default function EntryDetailPage() {
           </Dialog>
         )}
       </div>
+      {/* After close the Withdraw button goes (Mandy, 30 Sept 2026) — say why,
+          and what to do instead, rather than leave a gap where it was. */}
+      {entryWithdrawBlock(entry, entry.show) === 'entries_closed' && (
+        <p className="text-sm text-muted-foreground">{ENTRY_WITHDRAW_MESSAGES.entries_closed}</p>
+      )}
     </div>
   );
 }

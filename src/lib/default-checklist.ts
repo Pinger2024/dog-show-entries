@@ -361,7 +361,7 @@ export const DEFAULT_CHECKLIST_ITEMS: DefaultChecklistItem[] = [
   {
     title: 'Submit entry analysis form to RKC',
     description:
-      'Must be submitted to the RKC Regional Support Advisor within 14 days of the show.',
+      'You send this to the RKC Regional Support Advisor within 14 days of the show — Remi doesn\'t send it for you. Tick it here once you have.',
     phase: 'post_show',
     sortOrder: 0,
     relativeDueDays: -14,
@@ -371,7 +371,7 @@ export const DEFAULT_CHECKLIST_ITEMS: DefaultChecklistItem[] = [
   {
     title: 'Submit marked catalogue to RKC',
     description:
-      'Championship shows only — marked-up catalogue, absentee report and additional fee form due within 14 days.',
+      'Championship shows only — marked-up catalogue, absentee report and additional fee form due within 14 days. You send these to the RKC yourself; ticking this just records that you have.',
     phase: 'post_show',
     sortOrder: 1,
     relativeDueDays: -14,

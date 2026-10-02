@@ -1,22 +1,24 @@
 import type { MetadataRoute } from 'next';
 import { db } from '@/server/db';
-import { shows, dogs } from '@/server/db/schema';
-import { and, isNull, ne } from 'drizzle-orm';
+import { shows } from '@/server/db/schema';
+import { ne } from 'drizzle-orm';
+import { listDogsWithPublicHistory } from '@/server/services/public-dog-summary';
 
 const BASE_URL = 'https://remishowmanager.co.uk';
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
-  // Static pages
   const staticPages: MetadataRoute.Sitemap = [
     { url: BASE_URL, changeFrequency: 'weekly', priority: 1 },
     { url: `${BASE_URL}/shows`, changeFrequency: 'daily', priority: 0.9 },
+    { url: `${BASE_URL}/dog`, changeFrequency: 'weekly', priority: 0.7 },
     { url: `${BASE_URL}/pricing`, changeFrequency: 'monthly', priority: 0.7 },
     { url: `${BASE_URL}/help`, changeFrequency: 'monthly', priority: 0.5 },
     { url: `${BASE_URL}/about`, changeFrequency: 'monthly', priority: 0.5 },
     { url: `${BASE_URL}/features`, changeFrequency: 'monthly', priority: 0.6 },
   ];
 
-  // All non-draft shows (published, entries_open, entries_closed, completed, etc.)
+  // Live shows only — drafts are excluded (cancelled shows stay so Google sees the
+  // status update in the JSON-LD before deindexing).
   const allShows = await db
     .select({ id: shows.id, slug: shows.slug, updatedAt: shows.updatedAt })
     .from(shows)
@@ -40,13 +42,12 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     ];
   });
 
-  // Public dog profiles (dogs with at least a registered name)
-  const allDogs = await db
-    .select({ id: dogs.id, updatedAt: dogs.updatedAt })
-    .from(dogs)
-    .where(isNull(dogs.deletedAt));
+  // Only dogs the public has something to see for — every other profile is
+  // thin content. "Has a confirmed entry" used to be the test, which listed
+  // dogs whose only entries were upcoming shows (Mandy, 1 Oct 2026).
+  const dogsWithHistory = await listDogsWithPublicHistory(db);
 
-  const dogPages: MetadataRoute.Sitemap = allDogs.map((dog) => ({
+  const dogPages: MetadataRoute.Sitemap = dogsWithHistory.map((dog) => ({
     url: `${BASE_URL}/dog/${dog.id}`,
     lastModified: dog.updatedAt ?? undefined,
     changeFrequency: 'weekly' as const,

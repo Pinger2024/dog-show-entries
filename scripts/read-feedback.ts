@@ -1,19 +1,23 @@
 import 'dotenv/config';
 import postgres from 'postgres';
 import { drizzle } from 'drizzle-orm/postgres-js';
-import { eq } from 'drizzle-orm';
 import { feedback } from '../src/server/db/schema/feedback';
+import { eq } from 'drizzle-orm';
 
-async function main() {
+const id = process.argv[2];
+if (!id) { console.error('Usage: read-feedback.ts <id-or-subject-fragment>'); process.exit(1); }
+
+(async () => {
   const client = postgres(process.env.DATABASE_URL as string);
   const db = drizzle(client);
-
-  const [item] = await db.select({
-    textBody: feedback.textBody,
-  }).from(feedback).where(eq(feedback.id, process.argv[2]));
-
-  console.log(item?.textBody ?? '(empty)');
+  const rows = await db.select().from(feedback).where(eq(feedback.id, id));
+  if (!rows[0]) { console.log('not found'); await client.end(); return; }
+  const r = rows[0];
+  console.log('--- subject ---'); console.log(r.subject);
+  console.log('--- from ---'); console.log(r.fromEmail);
+  console.log('--- created ---'); console.log(r.createdAt.toISOString());
+  console.log('--- status ---'); console.log(r.status);
+  console.log('--- body ---');
+  console.log(r.textBody ?? r.htmlBody ?? '(empty)');
   await client.end();
-}
-
-main();
+})();

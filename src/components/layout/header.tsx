@@ -34,6 +34,12 @@ export async function Header() {
             Find a Show
           </Link>
           <Link
+            href="/dog"
+            className="rounded-lg px-4 py-2.5 text-[0.9375rem] font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+          >
+            Find a Dog
+          </Link>
+          <Link
             href="/features"
             className="rounded-lg px-4 py-2.5 text-[0.9375rem] font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
           >
