@@ -305,6 +305,10 @@ describe("a dog's upcoming entries and unpublished placings stay private everywh
     const view = await anon().dogs.getPublicProfile({ id: dog.id });
     expect(view.showHistory).toHaveLength(1);
     expect(view.showHistory[0]!.classes[0]!.outcome).toBe('absent');
+    // Listed, but she wasn't shown there — so it isn't one of her shows.
+    expect(view.stats.totalShows).toBe(0);
+    expect(view.stats.totalClasses).toBe(0);
+    expect((await getPublicDogSummary(testDb, dog.id)).shows).toBe(0);
   });
 
   it('a withheld placing says Withheld on the dog\'s page', async () => {

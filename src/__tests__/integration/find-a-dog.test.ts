@@ -95,6 +95,18 @@ describe('Find a Dog — only dogs already judged on Remi come up', () => {
     expect(await anon().dogs.searchPublic({ query: 'willow' })).toEqual([]);
   });
 
+  it('never finds a dog that was absent from every show it entered — it has never been shown', async () => {
+    const owner = await makeUser({ role: 'exhibitor' });
+    const breed = await makeBreed();
+    const dog = await makeDog({ ownerId: owner.id, breedId: breed.id, registeredName: 'Absent Annie of Hundark' });
+    const org = await makeOrg();
+    const show = await makeShow({ organisationId: org.id, status: 'completed', startDate: pastDate(20), endDate: pastDate(20) });
+    const showClass = await makeShowClass({ showId: show.id, breedId: breed.id });
+    const entry = await makeEntry({ showId: show.id, dogId: dog.id, exhibitorId: owner.id, status: 'confirmed' });
+    await makeEntryClass({ entryId: entry.id, showClassId: showClass.id, absent: true });
+    expect(await anon().dogs.searchPublic({ query: 'annie' })).toEqual([]);
+  });
+
   it("matches the way people type it — apostrophes don't matter", async () => {
     const { dog } = await dogAt({ name: "Wakematt's Luco", daysFromToday: -20, placement: 2, published: true });
     const found = await anon().dogs.searchPublic({ query: 'wakematts' });

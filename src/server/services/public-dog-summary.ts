@@ -18,8 +18,12 @@ import { normalizeName } from '@/lib/critique-match';
 const ENTRY_HISTORY_INCLUDE = {
   show: { columns: { startDate: true, endDate: true } },
   entryClasses: {
-    columns: { id: true },
-    with: { result: { columns: { publishedAt: true, placement: true, specialAward: true, critiqueText: true } } },
+    columns: { id: true, absent: true },
+    with: {
+      result: {
+        columns: { publishedAt: true, placement: true, placementStatus: true, specialAward: true, critiqueText: true },
+      },
+    },
   },
 } as const;
 

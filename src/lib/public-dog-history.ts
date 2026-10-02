@@ -123,40 +123,86 @@ export function classOutcome(
   return isShowOver(show, today) ? 'unplaced' : 'pending';
 }
 
-/**
- * Has the public got anything to see — at least one show visible to someone
- * who is not the owner? The sitemap lists only these dogs.
- */
-export function hasPublicHistory(entries: HistoryEntryLike[], today?: string): boolean {
-  return publicDogHistory(entries, { viewerIsOwner: false, today }).length > 0;
+const SHOWN: ReadonlySet<ClassOutcome> = new Set<ClassOutcome>(['placed', 'withheld', 'unplaced']);
+
+type CountableEntry = {
+  show: HistoryShowLike;
+  entryClasses: Array<{
+    absent?: boolean | null;
+    result:
+      | (ResultLike & {
+          placement?: number | null;
+          placementStatus?: string | null;
+          specialAward?: string | null;
+          critiqueText?: string | null;
+        })
+      | null;
+  }>;
+};
+
+/** Was the dog actually shown at this show — in the ring in at least one class (not absent, not still to come)? */
+export function wasShownAt(entry: CountableEntry, today: string = todayInLondon()): boolean {
+  return entry.entryClasses.some((ec) => SHOWN.has(classOutcome(entry.show, ec, today)));
 }
 
 /**
- * The headline numbers anyone may see — the link preview's "N shows entered",
- * the share image's "N Shows · N × 1st · N Awards", and Find a Dog's
+ * A dog's numbers, counting only shows and classes it was actually shown in
+ * (Mandy, 2 Oct 2026: "actually shown at" — a show it was absent from, or
+ * hasn't been to yet, isn't one). Pass entries already through
+ * `publicDogHistory` for the viewer. The career box, the link preview, the
+ * share image, Find a Dog and the yearly analytics all count with this.
+ */
+export function historyCounts(
+  visibleEntries: CountableEntry[],
+  today: string = todayInLondon(),
+): {
+  shows: number;
+  classes: number;
+  firsts: number;
+  seconds: number;
+  thirds: number;
+  specialAwards: number;
+  critiques: number;
+} {
+  const counts = { shows: 0, classes: 0, firsts: 0, seconds: 0, thirds: 0, specialAwards: 0, critiques: 0 };
+  for (const entry of visibleEntries) {
+    let shownHere = false;
+    for (const ec of entry.entryClasses) {
+      if (!SHOWN.has(classOutcome(entry.show, ec, today))) continue;
+      shownHere = true;
+      counts.classes++;
+      const r = ec.result;
+      if (r?.placement === 1) counts.firsts++;
+      if (r?.placement === 2) counts.seconds++;
+      if (r?.placement === 3) counts.thirds++;
+      if (r?.specialAward) counts.specialAwards++;
+      if (r?.critiqueText?.trim()) counts.critiques++;
+    }
+    if (shownHere) counts.shows++;
+  }
+  return counts;
+}
+
+/**
+ * The headline numbers anyone may see — the link preview's "Shown at N
+ * shows", the share image's "N Shows · N × 1st · N Awards", and Find a Dog's
  * "Shown at N Remi shows · N judge's critiques".
  */
 export function publicHistoryCounts(
-  entries: Array<{
-    show: HistoryShowLike;
-    entryClasses: Array<{
-      result:
-        | (ResultLike & { placement: number | null; specialAward: string | null; critiqueText?: string | null })
-        | null;
-    }>;
-  }>,
-  today?: string,
+  entries: CountableEntry[],
+  today: string = todayInLondon(),
 ): { shows: number; firsts: number; specialAwards: number; critiques: number } {
-  const visible = publicDogHistory(entries, { viewerIsOwner: false, today });
-  let firsts = 0;
-  let specialAwards = 0;
-  let critiques = 0;
-  for (const entry of visible) {
-    for (const ec of entry.entryClasses) {
-      if (ec.result?.placement === 1) firsts++;
-      if (ec.result?.specialAward) specialAwards++;
-      if (ec.result?.critiqueText?.trim()) critiques++;
-    }
-  }
-  return { shows: visible.length, firsts, specialAwards, critiques };
+  const { shows, firsts, specialAwards, critiques } = historyCounts(
+    publicDogHistory(entries, { viewerIsOwner: false, today }),
+    today,
+  );
+  return { shows, firsts, specialAwards, critiques };
+}
+
+/**
+ * Has the public got a show to see — one the dog was actually shown at?
+ * The sitemap and Find a Dog list only these dogs.
+ */
+export function hasPublicHistory(entries: CountableEntry[], today?: string): boolean {
+  return publicHistoryCounts(entries, today).shows > 0;
 }

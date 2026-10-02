@@ -12,7 +12,8 @@ import { getStripe } from '@/server/services/stripe';
 import { isCcType, isRccType } from '@/lib/placements';
 import { effectiveCcType } from '@/lib/effective-achievement-type';
 import { isVisibleToViewer } from '@/lib/result-visibility';
-import { publicDogHistory } from '@/lib/public-dog-history';
+import { publicDogHistory, wasShownAt } from '@/lib/public-dog-history';
+import { todayInLondon } from '@/lib/date-utils';
 import { userMayActOnDog } from '@/server/dog-access';
 
 // Remi Pro price — will be created in Stripe Dashboard
@@ -279,9 +280,15 @@ export const proRouter = createTRPCRouter({
       const sortByDate = (a: { date: string }, b: { date: string }) =>
         b.date.localeCompare(a.date);
 
+      // Year-by-year and show-type figures count only shows the dog was
+      // actually shown at — the same count as the Career box on its page
+      // (historyCounts / wasShownAt, Mandy 2 Oct 2026).
+      const today = todayInLondon();
+      const shownEntries = dogEntries.filter((entry) => wasShownAt(entry, today));
+
       // Compute year-by-year stats
       const yearStats = new Map<number, { shows: number; firsts: number; placements: number; awards: number }>();
-      for (const entry of dogEntries) {
+      for (const entry of shownEntries) {
         const year = new Date(entry.show.startDate).getFullYear();
         const stats = yearStats.get(year) ?? { shows: 0, firsts: 0, placements: 0, awards: 0 };
         stats.shows++;
@@ -300,7 +307,7 @@ export const proRouter = createTRPCRouter({
 
       // Show type breakdown
       const showTypeBreakdown = new Map<string, { count: number; firsts: number }>();
-      for (const entry of dogEntries) {
+      for (const entry of shownEntries) {
         const showType = entry.show.showType;
         const stats = showTypeBreakdown.get(showType) ?? { count: 0, firsts: 0 };
         stats.count++;

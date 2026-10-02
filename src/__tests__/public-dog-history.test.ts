@@ -5,6 +5,7 @@ import {
   hasPublicHistory,
   isShowOver,
   classOutcome,
+  historyCounts,
 } from '@/lib/public-dog-history';
 import { classOutcomeLabel } from '@/lib/placements';
 
@@ -145,5 +146,36 @@ describe('what a dog\'s page says happened in each class (classOutcome)', () => 
     expect(classOutcomeLabel('unplaced', null)).toBe('Unplaced');
     expect(classOutcomeLabel('pending', null)).toBe('Entered');
     expect(classOutcomeLabel('placed', 1)).toBe('1st');
+  });
+});
+
+describe('counting only shows a dog was actually shown at (historyCounts)', () => {
+  // Mandy, 2 Oct 2026: "actually shown at". Drama von Arlett: placed at
+  // Clyde Valley and Scotland, absent from her only class at the NE Regional.
+  const clyde = { show: show('2026-08-29'), entryClasses: [{ absent: false, result: result(3, published) }] };
+  const scotland = { show: show('2026-08-30'), entryClasses: [{ absent: false, result: result(2, published) }] };
+  const neRegionalAbsent = { show: show('2026-09-05'), entryClasses: [{ absent: true, result: null }] };
+
+  it('a show she was absent from is listed on her page but not counted', () => {
+    const visible = publicDogHistory([clyde, scotland, neRegionalAbsent], pub);
+    expect(visible).toHaveLength(3);
+    expect(historyCounts(visible, TODAY)).toMatchObject({ shows: 2, classes: 2 });
+    expect(publicHistoryCounts([clyde, scotland, neRegionalAbsent], TODAY).shows).toBe(2);
+  });
+
+  it('absent from one class but shown in another at the same show — that show counts', () => {
+    const split = {
+      show: show('2026-08-09'),
+      entryClasses: [{ absent: true, result: null }, { absent: false, result: result(1, published) }],
+    };
+    expect(historyCounts(publicDogHistory([split], pub), TODAY)).toMatchObject({ shows: 1, classes: 1, firsts: 1 });
+  });
+
+  it('a dog absent from every show it entered has nothing to count — kept out of the sitemap and Find a Dog', () => {
+    expect(hasPublicHistory([neRegionalAbsent], TODAY)).toBe(false);
+  });
+
+  it("the owner's upcoming entries are listed for them but never counted as shows", () => {
+    expect(historyCounts(publicDogHistory([clyde, midlands], owner), TODAY).shows).toBe(1);
   });
 });

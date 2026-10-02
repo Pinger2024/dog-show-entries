@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { isVisibleToViewer } from '@/lib/result-visibility';
-import { classOutcome, publicDogHistory, visibleResult } from '@/lib/public-dog-history';
+import { classOutcome, historyCounts, publicDogHistory, visibleResult } from '@/lib/public-dog-history';
 import { searchDogsWithPublicHistory } from '@/server/services/public-dog-summary';
 import { SHOW_COLUMNS_FOR_PUBLIC_INCLUDE } from '../public-show-fields';
 import { TRPCError } from '@trpc/server';
@@ -268,7 +268,8 @@ export const dogsRouter = createTRPCRouter({
       const viewerIsOwner = !!viewerId && dogRowGrantsAccess(dog, viewerId);
 
       const today = todayInLondon();
-      const showHistory = publicDogHistory(dogEntries, { viewerIsOwner, today })
+      const history = publicDogHistory(dogEntries, { viewerIsOwner, today });
+      const showHistory = history
         .map((entry) => ({
           showId: entry.show.id,
           showSlug: entry.show.slug,
@@ -289,23 +290,10 @@ export const dogsRouter = createTRPCRouter({
         }))
         .sort((a, b) => b.showDate.localeCompare(a.showDate));
 
-      // Compute stats
-      const totalShows = showHistory.length;
-      let totalClasses = 0;
-      let firsts = 0;
-      let seconds = 0;
-      let thirds = 0;
-      let specialAwards = 0;
-
-      for (const show of showHistory) {
-        totalClasses += show.classes.length;
-        for (const cls of show.classes) {
-          if (cls.placement === 1) firsts++;
-          if (cls.placement === 2) seconds++;
-          if (cls.placement === 3) thirds++;
-          if (cls.specialAward) specialAwards++;
-        }
-      }
+      // Career numbers count only shows and classes the dog was actually
+      // shown in — not one it was absent from or hasn't been to yet (Mandy,
+      // 2 Oct 2026). One counter for every view: historyCounts.
+      const counts = historyCounts(history, today);
 
       return {
         dog: {
@@ -336,12 +324,12 @@ export const dogsRouter = createTRPCRouter({
           : dog.achievements.filter((a) => isVisibleToViewer(a, false)).map(withEffectiveType),
         showHistory,
         stats: {
-          totalShows,
-          totalClasses,
-          firsts,
-          seconds,
-          thirds,
-          specialAwards,
+          totalShows: counts.shows,
+          totalClasses: counts.classes,
+          firsts: counts.firsts,
+          seconds: counts.seconds,
+          thirds: counts.thirds,
+          specialAwards: counts.specialAwards,
         },
       };
     }),
