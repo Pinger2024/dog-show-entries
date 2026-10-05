@@ -1401,7 +1401,9 @@ export const dogsRouter = createTRPCRouter({
           // Different judges who have given the dog a CC or a Reserve CC.
           uniqueJudges: isPro ? champion.alternative.judges : undefined,
         },
-        disclaimer: 'Progress shown is based on results recorded in Remi only. Wins at shows not using Remi are not included.',
+        // CCs, Reserve CCs and BOBs include the ones the owner has added by
+        // hand (services/title-awards.ts); class wins come from Remi shows only.
+        disclaimer: 'Counts results from shows run on Remi and the awards you have added yourself. Always check with the Royal Kennel Club before claiming a title.',
       };
     }),
 
