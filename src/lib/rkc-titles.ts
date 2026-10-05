@@ -106,3 +106,161 @@ export function championProgress(awards: TitleAward[], dateOfBirth: string): Cha
     bestRoute: classicMet || classicShare >= alternativeShare ? 'classic' : 'alternative',
   };
 }
+
+/* ─── Show Certificate of Excellence (ShCEx) ─────────────────────────────── */
+
+/**
+ * Royal Kennel Club, "Certificate types" (fetched 2 Oct 2026),
+ * https://www.royalkennelclub.com/events-and-activities/dog-showing/already-competing-in-dog-showing/certificate-types/
+ * and the claim form https://www.royalkennelclub.com/forms/show-certificate-of-excellence/ :
+ *   50 points at general and group open shows, the dog aged 18 months and
+ *   over, points won from 1 January 2018, at least 5 of them "won in group
+ *   competition at show(s) judged on the group system".
+ *   Best of Breed 1 · group placings (multi-group shows) 1st 4, 2nd 3,
+ *   3rd 2, 4th 1 · Best in Show 5 / Reserve 3 on the group system;
+ *   9 / 7 at a general open show not on the group system; 5 / 4 at a group
+ *   open show not on the group system. Class wins earn nothing.
+ * (It replaced the Show Certificate of Merit, which closed on 31 Dec 2018.
+ * Until 5 Oct 2026 Remi counted "1 point per class first at open shows".)
+ */
+export const SHCEX_POINTS_NEEDED = 50;
+export const SHCEX_GROUP_POINTS_NEEDED = 5;
+export const SHCEX_POINTS_FROM = '2018-01-01';
+
+export type ShowKind = {
+  showType: 'open' | 'premier_open' | 'championship' | 'limited' | 'companion' | 'primary' | null;
+  showScope: 'general' | 'group' | 'single_breed' | null;
+};
+
+/**
+ * The choices the owner picks from when adding a result by hand — one list
+ * for the form and the server, so they can't disagree about what a show is.
+ */
+export const EXTERNAL_SHOW_KINDS = [
+  { value: 'open_general', label: 'All-breed open show', showType: 'open', showScope: 'general' },
+  { value: 'premier_open', label: 'Premier open show', showType: 'premier_open', showScope: 'general' },
+  { value: 'open_group', label: 'Group open show (one group, e.g. Pastoral)', showType: 'open', showScope: 'group' },
+  { value: 'open_breed', label: 'Breed club open show', showType: 'open', showScope: 'single_breed' },
+  { value: 'championship', label: 'Championship show', showType: 'championship', showScope: 'general' },
+] as const;
+
+export type ExternalShowKindValue = (typeof EXTERNAL_SHOW_KINDS)[number]['value'];
+
+export function externalShowKind(value: string): ShowKind | null {
+  const kind = EXTERNAL_SHOW_KINDS.find((k) => k.value === value);
+  return kind ? { showType: kind.showType, showScope: kind.showScope } : null;
+}
+
+export function externalShowKindValue(kind: ShowKind): ExternalShowKindValue | null {
+  return EXTERNAL_SHOW_KINDS.find((k) => k.showType === kind.showType && k.showScope === kind.showScope)?.value ?? null;
+}
+
+/** An award that can earn ShCEx points, with what the rule needs to know. */
+export type ShcexAward = ShowKind & {
+  kind: 'bob' | 'group' | 'bis' | 'rbis';
+  date: string;
+  /** Group placings: 1–4. */
+  groupPlace?: number | null;
+  /** BIS / RBIS: was it judged on the group system (from the group winners)? */
+  groupSystem?: boolean | null;
+};
+
+/** Award types that can earn ShCEx points. */
+export const SHCEX_AWARD_KIND: Readonly<Record<string, ShcexAward['kind']>> = {
+  best_of_breed: 'bob',
+  group_placement: 'group',
+  best_in_show: 'bis',
+  reserve_best_in_show: 'rbis',
+};
+
+/**
+ * A result the owner added by hand that can't be counted yet because it's
+ * missing the show type / group place — the dashboard asks them to fill it in.
+ */
+export function externalResultNeedsInfo(
+  type: string,
+  date: string,
+  details: {
+    showType?: string | null;
+    showScope?: string | null;
+    groupPlace?: number | null;
+    groupSystem?: boolean | null;
+  } | null,
+): boolean {
+  const kind = SHCEX_AWARD_KIND[type];
+  if (!kind) return false;
+  return !!shcexMissingInfo({
+    kind,
+    date,
+    showType: (details?.showType ?? null) as ShowKind['showType'],
+    showScope: (details?.showScope ?? null) as ShowKind['showScope'],
+    groupPlace: details?.groupPlace ?? null,
+    groupSystem: details?.groupSystem ?? null,
+  });
+}
+
+/** What the owner still has to tell Remi before this award can be counted. */
+export function shcexMissingInfo(a: ShcexAward): 'show_type' | 'group_place' | 'group_system' | null {
+  if (!a.showType) return 'show_type';
+  if (a.kind === 'group' && !a.groupPlace) return 'group_place';
+  if ((a.kind === 'bis' || a.kind === 'rbis') && a.showScope !== 'single_breed' && a.groupSystem == null) {
+    return 'group_system';
+  }
+  return null;
+}
+
+/** Points one award earns (0 when it can't count), and whether they're group-competition points. */
+export function shcexPoints(a: ShcexAward, dateOfBirth: string): { points: number; group: boolean } {
+  const none = { points: 0, group: false };
+  if (shcexMissingInfo(a)) return none;
+  const openShow = a.showType === 'open' || a.showType === 'premier_open';
+  const generalOrGroup = a.showScope === 'general' || a.showScope === 'group';
+  if (!openShow || !generalOrGroup) return none;
+  if (a.date < SHCEX_POINTS_FROM) return none;
+  if (a.date < addMonths(dateOfBirth, 18)) return none;
+
+  switch (a.kind) {
+    case 'bob':
+      return { points: 1, group: false };
+    case 'group': {
+      if (a.showScope !== 'general') return none; // group placings: multi-group shows only
+      const points = [0, 4, 3, 2, 1][a.groupPlace ?? 0] ?? 0;
+      return { points, group: points > 0 };
+    }
+    case 'bis':
+      if (a.groupSystem) return { points: 5, group: true };
+      return { points: a.showScope === 'general' ? 9 : 5, group: false };
+    case 'rbis':
+      if (a.groupSystem) return { points: 3, group: true };
+      return { points: a.showScope === 'general' ? 7 : 4, group: false };
+  }
+}
+
+export type ShcexProgress = {
+  points: number;
+  groupPoints: number;
+  met: boolean;
+  /** Awards that could count but are missing the show type / group place. */
+  needInfo: number;
+};
+
+export function shcexProgress(awards: ShcexAward[], dateOfBirth: string): ShcexProgress {
+  let points = 0;
+  let groupPoints = 0;
+  let needInfo = 0;
+  for (const a of awards) {
+    if (shcexMissingInfo(a)) {
+      needInfo++;
+      continue;
+    }
+    const p = shcexPoints(a, dateOfBirth);
+    points += p.points;
+    if (p.group) groupPoints += p.points;
+  }
+  return {
+    points,
+    groupPoints,
+    met: points >= SHCEX_POINTS_NEEDED && groupPoints >= SHCEX_GROUP_POINTS_NEEDED,
+    needInfo,
+  };
+}

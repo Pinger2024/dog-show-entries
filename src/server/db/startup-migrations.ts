@@ -280,5 +280,17 @@ export async function runStartupMigrations() {
       ADD COLUMN IF NOT EXISTS sv_depth_cm NUMERIC(4,1);
   `);
 
+  // ── 2026-10-05: results an owner adds by hand show on the dog's public
+  // page, marked "added by owner" (Mandy). New ones are published when added
+  // (dogs.addExternalResult); this publishes the ones added before. Only
+  // rows still unpublished are touched, so it's safe to run every boot. ──
+  await db.execute(sql`
+    UPDATE achievements
+       SET published_at = created_at
+     WHERE published_at IS NULL
+       AND show_id IS NULL
+       AND details->>'selfReported' = 'true';
+  `);
+
   console.log(`[startup-migrations] done in ${Date.now() - started}ms`);
 }

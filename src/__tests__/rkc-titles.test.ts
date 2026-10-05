@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { championProgress, judgeKey, type TitleAward } from '@/lib/rkc-titles';
+import { championProgress, judgeKey, shcexPoints, shcexProgress, type ShcexAward, type TitleAward } from '@/lib/rkc-titles';
 import { scanFiles } from './helpers/static-scan';
 
 /**
@@ -86,5 +86,67 @@ describe('the Champion rule has one owner', () => {
     const hits = scanFiles(['src'], ['.ts', '.tsx'], /RCCs? under 7|7 RCCs|requiredRCCs:\s*7|qualifyingRCCs/)
       .filter((m) => m.file !== 'src/lib/rkc-titles.ts' && !m.file.includes('__tests__'));
     expect(hits).toEqual([]);
+  });
+});
+
+describe('Show Certificate of Excellence points (RKC table)', () => {
+  const allBreedOpen = { showType: 'open' as const, showScope: 'general' as const };
+  const premierOpen = { showType: 'premier_open' as const, showScope: 'general' as const };
+  const award = (a: Partial<ShcexAward> & Pick<ShcexAward, 'kind' | 'date'>): ShcexAward => ({
+    showType: null, showScope: null, groupPlace: null, groupSystem: null, ...a,
+  });
+
+  it("Paula's four shows for Bali come to 7 — her own sum: BOB 1 each, and 3 for Group 2nd at Eston", () => {
+    const p = shcexProgress([
+      award({ kind: 'bob', date: '2025-06-01', ...allBreedOpen }),   // Ripon & District
+      award({ kind: 'bob', date: '2025-06-18', ...premierOpen }),    // Royal Cheshire Premier Open
+      award({ kind: 'bob', date: '2025-07-13', ...allBreedOpen }),   // Durham County
+      award({ kind: 'bob', date: '2025-07-19', ...premierOpen }),    // Eston & Barnaby Premier Open
+      award({ kind: 'group', date: '2025-07-19', groupPlace: 2, ...premierOpen }),
+    ], DOB);
+    expect(p).toMatchObject({ points: 7, groupPoints: 3, met: false, needInfo: 0 });
+  });
+
+  it('group placings 1st–4th are 4, 3, 2, 1 — and only at all-breed shows', () => {
+    const at = (groupPlace: number, scope: 'general' | 'group') =>
+      shcexPoints(award({ kind: 'group', date: '2025-07-19', groupPlace, showType: 'open', showScope: scope }), DOB).points;
+    expect([1, 2, 3, 4].map((p) => at(p, 'general'))).toEqual([4, 3, 2, 1]);
+    expect(at(1, 'group')).toBe(0);
+  });
+
+  it('Best in Show: 5 / Reserve 3 on the group system; 9 / 7 at an all-breed show without groups', () => {
+    const bis = (kind: 'bis' | 'rbis', groupSystem: boolean) =>
+      shcexPoints(award({ kind, date: '2025-07-19', groupSystem, ...allBreedOpen }), DOB);
+    expect(bis('bis', true)).toEqual({ points: 5, group: true });
+    expect(bis('rbis', true)).toEqual({ points: 3, group: true });
+    expect(bis('bis', false)).toEqual({ points: 9, group: false });
+    expect(bis('rbis', false)).toEqual({ points: 7, group: false });
+  });
+
+  it('nothing at championship shows or breed club shows', () => {
+    expect(shcexPoints(award({ kind: 'bob', date: '2025-07-19', showType: 'championship', showScope: 'general' }), DOB).points).toBe(0);
+    expect(shcexPoints(award({ kind: 'bob', date: '2025-07-19', showType: 'open', showScope: 'single_breed' }), DOB).points).toBe(0);
+  });
+
+  it('nothing before the dog is 18 months old, or before 1 January 2018', () => {
+    expect(shcexPoints(award({ kind: 'bob', date: '2025-02-13', ...allBreedOpen }), DOB).points).toBe(0);
+    expect(shcexPoints(award({ kind: 'bob', date: '2025-02-14', ...allBreedOpen }), DOB).points).toBe(1);
+    expect(shcexPoints(award({ kind: 'bob', date: '2017-12-31', ...allBreedOpen }), '2010-01-01').points).toBe(0);
+  });
+
+  it('50 points is not enough without 5 from group competition', () => {
+    const bobs = Array.from({ length: 50 }, (_, i) =>
+      award({ kind: 'bob', date: `2025-${String((i % 12) + 1).padStart(2, '0')}-15`, ...allBreedOpen }));
+    expect(shcexProgress(bobs, '2020-01-01')).toMatchObject({ points: 50, met: false });
+    expect(shcexProgress([...bobs, award({ kind: 'group', date: '2025-06-01', groupPlace: 1, ...allBreedOpen })], '2020-01-01'))
+      .toMatchObject({ points: 54, groupPoints: 4, met: false });
+    expect(shcexProgress([...bobs, award({ kind: 'group', date: '2025-06-01', groupPlace: 1, ...allBreedOpen }),
+      award({ kind: 'group', date: '2025-06-02', groupPlace: 4, ...allBreedOpen })], '2020-01-01'))
+      .toMatchObject({ points: 55, groupPoints: 5, met: true });
+  });
+
+  it("a result added before Remi asked the type of show isn't counted — it's flagged so the owner can fill it in", () => {
+    const p = shcexProgress([award({ kind: 'bob', date: '2025-06-01' }), award({ kind: 'group', date: '2025-07-19', ...premierOpen })], DOB);
+    expect(p).toMatchObject({ points: 0, needInfo: 2 });
   });
 });

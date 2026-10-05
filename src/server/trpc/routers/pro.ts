@@ -186,7 +186,11 @@ export const proRouter = createTRPCRouter({
         loadTitleAwards(ctx.db, input.dogId, viewerIsOwner),
       ]);
       const champion = championProgress(titleAwards, dog?.dateOfBirth ?? '1900-01-01');
-      const toListItem = (a: { showName: string; date: string }) => ({ showName: a.showName, date: a.date });
+      const toListItem = (a: { showName: string; date: string; addedByOwner: boolean }) => ({
+        showName: a.showName,
+        date: a.date,
+        addedByOwner: a.addedByOwner,
+      });
       const ccAwards = titleAwards.filter((a) => a.kind === 'cc').map(toListItem);
       const rccAwards = titleAwards.filter((a) => a.kind === 'rcc').map(toListItem);
       const bobAwards = bobs.map(toListItem);

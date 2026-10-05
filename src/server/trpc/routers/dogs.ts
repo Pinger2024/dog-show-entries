@@ -3,7 +3,8 @@ import { isVisibleToViewer } from '@/lib/result-visibility';
 import { classOutcome, historyCounts, publicDogHistory, visibleResult } from '@/lib/public-dog-history';
 import { searchDogsWithPublicHistory } from '@/server/services/public-dog-summary';
 import { loadTitleAwards } from '@/server/services/title-awards';
-import { championProgress } from '@/lib/rkc-titles';
+import { championProgress, externalShowKind, shcexProgress, EXTERNAL_SHOW_KINDS, SHCEX_POINTS_NEEDED, SHCEX_GROUP_POINTS_NEEDED, type ExternalShowKindValue } from '@/lib/rkc-titles';
+import type { ExternalResultDetails } from '@/server/services/title-awards';
 import { SHOW_COLUMNS_FOR_PUBLIC_INCLUDE } from '../public-show-fields';
 import { TRPCError } from '@trpc/server';
 import { and, eq, inArray, isNull, isNotNull, or, asc, desc, sql, ne } from 'drizzle-orm';
@@ -12,7 +13,7 @@ import { createTRPCRouter } from '../init';
 import { dogs, dogOwners, dogTitles, dogPhotos, users, entries, entryClasses, showClasses, shows, results, classDefinitions, achievements, judgeAssignments, judges, dogSvProfile } from '@/server/db/schema';
 import { deleteFromR2 } from '@/server/services/storage';
 import { searchKcDogs, fetchKcDogProfile, RkcUnavailableError } from '@/server/services/kc-lookup';
-import { isCcType } from '@/lib/placements';
+import { isCcType, isRccType } from '@/lib/placements';
 import { effectiveCcType } from '@/lib/effective-achievement-type';
 import { isAgeEligibleOnShowDay, ageInCompletedMonths, todayInLondon } from '@/lib/date-utils';
 import { pickRecommendedAgeClass, preferCoatDivision, type AgeClassOption } from '@/lib/class-recommendation';
@@ -197,6 +198,73 @@ export const dogAutosaveFieldsSchema = z.object({
   damRegistrationBody: z.enum(['kc', 'sv', 'ikc', 'other']).nullable().optional(),
   damRegistrationNumber: z.string().nullable().optional(),
 });
+
+/** The award types an owner can add by hand. */
+const EXTERNAL_RESULT_TYPES = [
+  'cc',
+  'reserve_cc',
+  'best_of_breed',
+  'best_in_show',
+  'reserve_best_in_show',
+  'best_puppy_in_breed',
+  'best_puppy_in_show',
+  'best_veteran_in_breed',
+  'group_placement',
+  'class_placement',
+  'junior_warrant',
+  'stud_book',
+  'dog_cc',
+  'reserve_dog_cc',
+  'bitch_cc',
+  'reserve_bitch_cc',
+  'best_puppy_dog',
+  'best_puppy_bitch',
+] as const;
+
+/**
+ * A result the owner adds or corrects by hand. `showKind` is one of
+ * EXTERNAL_SHOW_KINDS (lib/rkc-titles.ts); CCs and Reserve CCs are always
+ * championship shows, so they don't need it. A group placing needs its place;
+ * Best in Show / Reserve needs whether it was judged on the group system —
+ * that's what the RKC's Show Certificate of Excellence points turn on.
+ */
+const externalResultInput = z
+  .object({
+    type: z.enum(EXTERNAL_RESULT_TYPES),
+    date: z.string(), // YYYY-MM-DD
+    showName: z.string().min(1).max(255),
+    judgeName: z.string().max(255).optional(),
+    showKind: z.enum(EXTERNAL_SHOW_KINDS.map((k) => k.value) as [ExternalShowKindValue, ...ExternalShowKindValue[]]).optional(),
+    groupPlace: z.number().int().min(1).max(4).optional(),
+    groupSystem: z.boolean().optional(),
+  })
+  .superRefine((v, ctx) => {
+    const isCcOrRcc = isCcType(v.type) || isRccType(v.type);
+    if (!isCcOrRcc && !v.showKind) {
+      ctx.addIssue({ code: 'custom', path: ['showKind'], message: 'Please choose what kind of show it was' });
+    }
+    if (v.type === 'group_placement' && !v.groupPlace) {
+      ctx.addIssue({ code: 'custom', path: ['groupPlace'], message: 'Please choose the place in the group' });
+    }
+  });
+
+function externalResultDetails(input: z.infer<typeof externalResultInput>): ExternalResultDetails {
+  const kind = isCcType(input.type) || isRccType(input.type)
+    ? { showType: 'championship' as const, showScope: 'general' as const }
+    : input.showKind
+      ? externalShowKind(input.showKind)
+      : null;
+  return {
+    showName: input.showName,
+    judgeName: input.judgeName ?? null,
+    selfReported: true,
+    showType: kind?.showType ?? null,
+    showScope: kind?.showScope ?? null,
+    groupPlace: input.type === 'group_placement' ? (input.groupPlace ?? null) : null,
+    groupSystem:
+      input.type === 'best_in_show' || input.type === 'reserve_best_in_show' ? (input.groupSystem ?? null) : null,
+  };
+}
 
 export const dogsRouter = createTRPCRouter({
   // ── Find a Dog (public search) ──────────────────────────
@@ -1194,8 +1262,9 @@ export const dogsRouter = createTRPCRouter({
       // CCs, Reserve CCs and Bests of Breed — won at Remi shows or added by
       // the owner — and the RKC Champion rule, each from one owner
       // (services/title-awards.ts, lib/rkc-titles.ts).
-      const { awards: titleAwards, bobs } = await loadTitleAwards(ctx.db, input.dogId, viewerMaySeeUnpublished);
+      const { awards: titleAwards, bobs, shcexAwards } = await loadTitleAwards(ctx.db, input.dogId, viewerMaySeeUnpublished);
       const champion = championProgress(titleAwards, dog.dateOfBirth);
+      const shcex = shcexProgress(shcexAwards, dog.dateOfBirth);
       const ccCount = champion.classic.ccs;
       const reserveCcCount = titleAwards.filter((a) => a.kind === 'rcc').length;
 
@@ -1237,13 +1306,6 @@ export const dogsRouter = createTRPCRouter({
       const jwChampionshipWins = jwWins.filter((w) => w.showType === 'championship').length;
       const jwOpenWins = jwWins.filter((w) => w.showType === 'open' || w.showType === 'premier_open').length;
       const jwPoints = jwChampionshipWins * 3 + jwOpenWins * 1;
-
-      // ShCEx: 50 points from firsts at open shows
-      // Points scale: 1st in class = depends on entries (simplified: 1 point per first at open show)
-      const shcexWins = firstPlaceWins.filter(
-        (w) => w.showType === 'open' || w.showType === 'premier_open'
-      );
-      const shcexPoints = shcexWins.length; // Simplified — 1 point per first at open shows
 
       // Veteran Warrant: 25 points from veteran classes at open shows
       const veteranWins = firstPlaceWins.filter(
@@ -1356,16 +1418,21 @@ export const dogsRouter = createTRPCRouter({
         });
       }
 
-      // Pro-only: Show Certificate of Excellence (ShCEx)
+      // Pro-only: Show Certificate of Excellence (ShCEx) — the RKC's points
+      // table, from Best of Breed, group placings and Best in Show at
+      // all-breed and group open shows (lib/rkc-titles.ts shcexProgress).
       if (isPro && !existingTitles.has('sh_ch')) {
+        const needInfo = shcex.needInfo > 0
+          ? ` · ${shcex.needInfo} result${shcex.needInfo !== 1 ? 's need' : ' needs'} the type of show — tap Edit`
+          : '';
         titleProgress.push({
           title: 'Show Certificate of Excellence (ShCEx)',
           code: 'shcex',
-          current: shcexPoints,
-          required: 50,
-          progress: Math.min(shcexPoints / 50, 1),
-          detail: `${shcexPoints}/50 points from ${shcexWins.length} first${shcexWins.length !== 1 ? 's' : ''} at open shows`,
-          milestoneReached: shcexPoints >= 50,
+          current: shcex.points,
+          required: SHCEX_POINTS_NEEDED,
+          progress: Math.min(shcex.points / SHCEX_POINTS_NEEDED, 1),
+          detail: `${shcex.points}/${SHCEX_POINTS_NEEDED} points · ${shcex.groupPoints} from group competition (${SHCEX_GROUP_POINTS_NEEDED} needed)${needInfo}`,
+          milestoneReached: shcex.met,
           proOnly: true,
         });
       }
@@ -1396,7 +1463,7 @@ export const dogsRouter = createTRPCRouter({
           bobs: bobs.length,
           totalFirsts: firstPlaceWins.length,
           jwPoints,
-          shcexPoints: isPro ? shcexPoints : undefined,
+          shcexPoints: isPro ? shcex.points : undefined,
           veteranPoints: isPro && ageMonths >= 84 ? veteranPoints : undefined,
           // Different judges who have given the dog a CC or a Reserve CC.
           uniqueJudges: isPro ? champion.alternative.judges : undefined,
@@ -1566,34 +1633,7 @@ export const dogsRouter = createTRPCRouter({
 
   // ── Self-Reported Results (external shows) ────────────────
   addExternalResult: protectedProcedure
-    .input(
-      z.object({
-        dogId: z.string().uuid(),
-        type: z.enum([
-          'cc',
-          'reserve_cc',
-          'best_of_breed',
-          'best_in_show',
-          'reserve_best_in_show',
-          'best_puppy_in_breed',
-          'best_puppy_in_show',
-          'best_veteran_in_breed',
-          'group_placement',
-          'class_placement',
-          'junior_warrant',
-          'stud_book',
-          'dog_cc',
-          'reserve_dog_cc',
-          'bitch_cc',
-          'reserve_bitch_cc',
-          'best_puppy_dog',
-          'best_puppy_bitch',
-        ]),
-        date: z.string(), // YYYY-MM-DD
-        showName: z.string().min(1).max(255),
-        judgeName: z.string().max(255).optional(),
-      })
-    )
+    .input(externalResultInput.extend({ dogId: z.string().uuid() }))
     .mutation(async ({ ctx, input }) => {
       const dog = await ctx.db.query.dogs.findFirst({
         where: and(eq(dogs.id, input.dogId), isNull(dogs.deletedAt)),
@@ -1603,8 +1643,9 @@ export const dogsRouter = createTRPCRouter({
         throw new TRPCError({ code: 'FORBIDDEN', message: 'Not your dog' });
       }
 
-      // Store showName and judgeName in the details jsonb field
-      // No showId — marks this as an external/self-reported result
+      // No showId — marks this as an external result the owner added. It
+      // shows on the dog's public page straight away, marked "added by
+      // owner" (Mandy, 5 Oct 2026).
       const [achievement] = await ctx.db
         .insert(achievements)
         .values({
@@ -1612,15 +1653,39 @@ export const dogsRouter = createTRPCRouter({
           type: input.type,
           date: input.date,
           showId: null,
-          details: {
-            showName: input.showName,
-            judgeName: input.judgeName ?? null,
-            selfReported: true,
-          },
+          details: externalResultDetails(input),
+          publishedAt: new Date(),
         })
         .returning();
 
       return achievement!;
+    }),
+
+  /** Fix or complete a result the owner added — e.g. add the show type to one added before Remi asked for it. */
+  updateExternalResult: protectedProcedure
+    .input(externalResultInput.extend({ id: z.string().uuid() }))
+    .mutation(async ({ ctx, input }) => {
+      const achievement = await ctx.db.query.achievements.findFirst({
+        where: eq(achievements.id, input.id),
+        with: { dog: true },
+      });
+      if (!achievement || !(await userMayActOnDog(ctx.db, ctx.session.user.id, achievement.dog.id))) {
+        throw new TRPCError({ code: 'FORBIDDEN', message: 'Not your dog' });
+      }
+      if (achievement.showId) {
+        throw new TRPCError({ code: 'BAD_REQUEST', message: 'Cannot change results recorded by show officials' });
+      }
+      const [updated] = await ctx.db
+        .update(achievements)
+        .set({
+          type: input.type,
+          date: input.date,
+          details: externalResultDetails(input),
+          publishedAt: achievement.publishedAt ?? new Date(),
+        })
+        .where(eq(achievements.id, input.id))
+        .returning();
+      return updated!;
     }),
 
   removeExternalResult: protectedProcedure

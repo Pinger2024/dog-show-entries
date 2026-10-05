@@ -753,7 +753,17 @@ export function DogProfileClient({ id }: { id: string }) {
                 })
                 .map((achievement) => {
                   const effType = achievement.effectiveType ?? achievement.type;
-                  const label = achievementLabels[effType] ?? effType;
+                  const details0 =
+                    achievement.details != null && typeof achievement.details === 'object'
+                      ? (achievement.details as Record<string, unknown>)
+                      : null;
+                  const groupPlace = details0?.groupPlace as number | undefined;
+                  const label =
+                    effType === 'group_placement' && groupPlace
+                      ? `Group ${['', '1st', '2nd', '3rd', '4th'][groupPlace] ?? ''}`.trim()
+                      : (achievementLabels[effType] ?? effType);
+                  // A result the owner added themselves says so (Mandy, 5 Oct 2026).
+                  const addedByOwner = details0?.selfReported === true;
                   const isPrestigious = (achievementWeight[effType] ?? 0) >= 7;
                   const details =
                     achievement.details != null && typeof achievement.details === 'object'
@@ -793,6 +803,9 @@ export function DogProfileClient({ id }: { id: string }) {
                           )}
                           {judgeName && (
                             <span> &middot; Judge: {judgeName}</span>
+                          )}
+                          {addedByOwner && (
+                            <span> &middot; Added by owner</span>
                           )}
                         </p>
                       </div>

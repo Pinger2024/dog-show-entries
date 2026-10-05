@@ -74,6 +74,7 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { DogSvHealthCard } from '@/components/dogs/dog-sv-health-card';
+import { EXTERNAL_SHOW_KINDS, externalResultNeedsInfo, type ExternalShowKindValue } from '@/lib/rkc-titles';
 
 function formatAge(dateOfBirth: string): string {
   const dob = parseISO(dateOfBirth);
@@ -844,6 +845,36 @@ const achievementTypes = [
   { value: 'reserve_bitch_cc', label: 'Reserve Bitch CC' },
 ] as const;
 
+type AchievementTypeValue = (typeof achievementTypes)[number]['value'];
+
+/** CCs and Reserve CCs are always at championship shows — no need to ask. */
+const CC_TYPES = new Set<string>(['cc', 'reserve_cc', 'dog_cc', 'reserve_dog_cc', 'bitch_cc', 'reserve_bitch_cc']);
+
+const GROUP_PLACES = [
+  { value: '1', label: '1st' },
+  { value: '2', label: '2nd' },
+  { value: '3', label: '3rd' },
+  { value: '4', label: '4th' },
+] as const;
+
+type ExternalDetails = {
+  showName?: string;
+  judgeName?: string | null;
+  selfReported?: boolean;
+  showType?: string | null;
+  showScope?: string | null;
+  groupPlace?: number | null;
+  groupSystem?: boolean | null;
+};
+
+function achievementLabel(type: string, details: ExternalDetails | null): string {
+  if (type === 'group_placement' && details?.groupPlace) {
+    return `Group ${GROUP_PLACES.find((g) => g.value === String(details.groupPlace))?.label ?? ''}`.trim();
+  }
+  return achievementTypes.find((t) => t.value === type)?.label
+    ?? type.replace(/_/g, ' ').replace(/\b\w/g, (l) => l.toUpperCase());
+}
+
 function AchievementsCard({
   dogId,
   achievements,
@@ -858,24 +889,74 @@ function AchievementsCard({
   }>;
 }) {
   const [open, setOpen] = useState(false);
+  // null = adding a new result; an id = correcting one already added.
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [showName, setShowName] = useState('');
   const [date, setDate] = useState('');
   const [type, setType] = useState('');
+  const [showKind, setShowKind] = useState('');
+  const [groupPlace, setGroupPlace] = useState('');
+  const [groupSystem, setGroupSystem] = useState('');
   const [judgeName, setJudgeName] = useState('');
   const [pendingAction, setPendingAction] = useState<{ message: string; action: () => void } | null>(null);
   const utils = trpc.useUtils();
 
+  // Ask only what this award needs (Mandy, 5 Oct 2026): the kind of show for
+  // everything but CCs; the place for a group placing; for Best in Show,
+  // whether there were group competitions. That's what the RKC's Show
+  // Certificate of Excellence points turn on (lib/rkc-titles.ts).
+  const needsShowKind = !!type && !CC_TYPES.has(type);
+  const needsGroupPlace = type === 'group_placement';
+  const needsGroupSystem =
+    (type === 'best_in_show' || type === 'reserve_best_in_show') && !!showKind && showKind !== 'open_breed';
+  const complete =
+    !!showName && !!date && !!type
+    && (!needsShowKind || !!showKind)
+    && (!needsGroupPlace || !!groupPlace)
+    && (!needsGroupSystem || !!groupSystem);
+
+  function resetForm() {
+    setEditingId(null);
+    setShowName('');
+    setDate('');
+    setType('');
+    setShowKind('');
+    setGroupPlace('');
+    setGroupSystem('');
+    setJudgeName('');
+  }
+
+  function startEdit(a: { id: string; type: string; date: string; details: unknown }) {
+    const d = (a.details ?? {}) as ExternalDetails;
+    setEditingId(a.id);
+    setShowName(d.showName ?? '');
+    setDate(a.date.slice(0, 10));
+    setType(a.type);
+    setShowKind(
+      d.showType && d.showScope
+        ? (EXTERNAL_SHOW_KINDS.find((k) => k.showType === d.showType && k.showScope === d.showScope)?.value ?? '')
+        : '',
+    );
+    setGroupPlace(d.groupPlace ? String(d.groupPlace) : '');
+    setGroupSystem(d.groupSystem == null ? '' : d.groupSystem ? 'yes' : 'no');
+    setJudgeName(d.judgeName ?? '');
+    setOpen(true);
+  }
+
+  const onSaved = (message: string) => {
+    utils.dogs.getById.invalidate({ id: dogId });
+    utils.dogs.getTitleProgress.invalidate({ dogId });
+    toast.success(message);
+    setOpen(false);
+    resetForm();
+  };
+
   const addResult = trpc.dogs.addExternalResult.useMutation({
-    onSuccess: () => {
-      utils.dogs.getById.invalidate({ id: dogId });
-      utils.dogs.getTitleProgress.invalidate({ dogId });
-      toast.success('Result added');
-      setOpen(false);
-      setShowName('');
-      setDate('');
-      setType('');
-      setJudgeName('');
-    },
+    onSuccess: () => onSaved('Result added'),
+    onError: (err) => toast.error(err.message),
+  });
+  const updateResult = trpc.dogs.updateExternalResult.useMutation({
+    onSuccess: () => onSaved('Result updated'),
     onError: (err) => toast.error(err.message),
   });
 
@@ -890,15 +971,21 @@ function AchievementsCard({
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!showName || !date || !type) return;
-    addResult.mutate({
-      dogId,
+    if (!complete) return;
+    const fields = {
       showName,
       date,
-      type: type as (typeof achievementTypes)[number]['value'],
+      type: type as AchievementTypeValue,
       judgeName: judgeName || undefined,
-    });
+      showKind: needsShowKind ? (showKind as ExternalShowKindValue) : undefined,
+      groupPlace: needsGroupPlace ? Number(groupPlace) : undefined,
+      groupSystem: needsGroupSystem ? groupSystem === 'yes' : undefined,
+    };
+    if (editingId) updateResult.mutate({ id: editingId, ...fields });
+    else addResult.mutate({ dogId, ...fields });
   }
+
+  const saving = addResult.isPending || updateResult.isPending;
 
   return (
     <>
@@ -914,7 +1001,13 @@ function AchievementsCard({
               Major awards from all shows — including those not on Remi.
             </CardDescription>
           </div>
-          <Dialog open={open} onOpenChange={setOpen}>
+          <Dialog
+            open={open}
+            onOpenChange={(next) => {
+              setOpen(next);
+              if (!next) resetForm();
+            }}
+          >
             <DialogTrigger asChild>
               <Button variant="outline" size="sm" className="min-h-[44px] px-4 sm:min-h-0">
                 <Plus className="size-3.5" />
@@ -923,7 +1016,7 @@ function AchievementsCard({
             </DialogTrigger>
             <DialogContent>
               <DialogHeader>
-                <DialogTitle>Add External Result</DialogTitle>
+                <DialogTitle>{editingId ? 'Edit Result' : 'Add External Result'}</DialogTitle>
                 <DialogDescription>
                   Record a result from a show not managed by Remi (e.g. Crufts, club matches).
                   This will count toward your title progress tracking.
@@ -952,7 +1045,7 @@ function AchievementsCard({
                 </div>
                 <div className="space-y-2">
                   <Label>Award Type</Label>
-                  <Select value={type} onValueChange={setType} required>
+                  <Select value={type} onValueChange={(v) => v && setType(v)} required>
                     <SelectTrigger>
                       <SelectValue placeholder="Select award type" />
                     </SelectTrigger>
@@ -965,6 +1058,54 @@ function AchievementsCard({
                     </SelectContent>
                   </Select>
                 </div>
+                {needsShowKind && (
+                  <div className="space-y-2">
+                    <Label>What kind of show was it?</Label>
+                    <Select value={showKind} onValueChange={(v) => v && setShowKind(v)} required>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Choose the kind of show" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {EXTERNAL_SHOW_KINDS.map((k) => (
+                          <SelectItem key={k.value} value={k.value}>
+                            {k.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+                {needsGroupPlace && (
+                  <div className="space-y-2">
+                    <Label>Which place in the group?</Label>
+                    <Select value={groupPlace} onValueChange={(v) => v && setGroupPlace(v)} required>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Choose the place" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {GROUP_PLACES.map((g) => (
+                          <SelectItem key={g.value} value={g.value}>
+                            {g.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+                {needsGroupSystem && (
+                  <div className="space-y-2">
+                    <Label>Were there group competitions at this show?</Label>
+                    <Select value={groupSystem} onValueChange={(v) => v && setGroupSystem(v)} required>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Choose yes or no" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="yes">Yes — Best in Show came from the group winners</SelectItem>
+                        <SelectItem value="no">No — no groups were judged</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
                 <div className="space-y-2">
                   <Label htmlFor="ext-judge">Judge Name (optional)</Label>
                   <Input
@@ -974,13 +1115,9 @@ function AchievementsCard({
                     onChange={(e) => setJudgeName(e.target.value)}
                   />
                 </div>
-                <Button
-                  type="submit"
-                  className="w-full"
-                  disabled={addResult.isPending || !showName || !date || !type}
-                >
-                  {addResult.isPending && <Loader2 className="size-4 animate-spin" />}
-                  Add Result
+                <Button type="submit" className="w-full" disabled={saving || !complete}>
+                  {saving && <Loader2 className="size-4 animate-spin" />}
+                  {editingId ? 'Save Changes' : 'Add Result'}
                 </Button>
               </form>
             </DialogContent>
@@ -998,31 +1135,50 @@ function AchievementsCard({
           </div>
         ) : (
           <div className="space-y-2">
-            {achievements
+            {[...achievements]
               .sort((a, b) => b.date.localeCompare(a.date))
               .map((a) => {
-                const details = a.details as { showName?: string; judgeName?: string; selfReported?: boolean } | null;
+                const details = a.details as ExternalDetails | null;
                 const isSelfReported = !a.showId;
+                const needsInfo = isSelfReported && externalResultNeedsInfo(a.type, a.date, details);
                 return (
                   <div
                     key={a.id}
                     className="flex items-center gap-3 rounded-lg border p-3"
                   >
                     <Badge variant={isSelfReported ? 'outline' : 'secondary'} className="shrink-0">
-                      {a.type.replace(/_/g, ' ').replace(/\b\w/g, (l) => l.toUpperCase())}
+                      {achievementLabel(a.type, details)}
                     </Badge>
                     <div className="min-w-0 flex-1">
                       <p className="text-sm font-medium">
                         {details?.showName ?? 'Remi Show'}
                         {isSelfReported && (
-                          <span className="ml-1.5 text-xs text-muted-foreground">(self-reported)</span>
+                          <span className="ml-1.5 text-xs text-muted-foreground">(added by you)</span>
                         )}
                       </p>
                       <p className="text-xs text-muted-foreground">
                         {format(parseISO(a.date), 'd MMM yyyy')}
                         {details?.judgeName && ` · Judge: ${details.judgeName}`}
                       </p>
+                      {needsInfo && (
+                        <button
+                          type="button"
+                          onClick={() => startEdit(a)}
+                          className="mt-1 text-xs font-medium text-se-honey-deep underline underline-offset-2"
+                        >
+                          Add the type of show so this counts towards your points
+                        </button>
+                      )}
                     </div>
+                    {isSelfReported && (
+                      <button
+                        onClick={() => startEdit(a)}
+                        className="shrink-0 rounded-md p-1.5 min-h-[2.75rem] min-w-[2.75rem] flex items-center justify-center text-muted-foreground hover:text-foreground"
+                        title="Edit"
+                      >
+                        <Pencil className="size-3.5" />
+                      </button>
+                    )}
                     {isSelfReported && (
                       <button
                         onClick={() => {

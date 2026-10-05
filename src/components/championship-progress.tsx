@@ -346,7 +346,7 @@ function AwardList({
 }: {
   title: string;
   icon: React.ReactNode;
-  items: { showName: string; date: string; className?: string }[];
+  items: { showName: string; date: string; className?: string; addedByOwner?: boolean }[];
 }) {
   return (
     <div>
@@ -363,6 +363,7 @@ function AwardList({
             <span className="text-se-ink2">
               {item.showName || 'Show'}
               {item.className ? ` — ${item.className}` : ''}
+              {item.addedByOwner && <span className="text-se-ink3"> · added by owner</span>}
             </span>
             <span className="text-se-ink3">
               {format(new Date(item.date), 'd MMM yyyy')}
