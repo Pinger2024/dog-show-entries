@@ -323,6 +323,23 @@ describe('owner-added results — Show Certificate of Excellence points and the 
     );
   });
 
+  it("Paula's entries as she really made them — Eston as Group 2nd only — still count 7, and say why", async () => {
+    // Mandy, 5 Oct 2026: "it's given me 6 for 3 BOB and 1 with group 2 but I have that as 7".
+    const owner = await makeUser({ role: 'exhibitor', proSubscriptionStatus: 'active' });
+    const dog = await makeDog({ ownerId: owner.id, dateOfBirth: '2023-08-14' });
+    const caller = createTestCaller(owner);
+    const add = (input: Parameters<typeof caller.dogs.addExternalResult>[0]) => caller.dogs.addExternalResult(input);
+    await add({ dogId: dog.id, type: 'best_of_breed', date: '2025-06-01', showName: 'Ripon & District canine society', showKind: 'open_general' });
+    await add({ dogId: dog.id, type: 'best_of_breed', date: '2025-06-18', showName: 'Royal Cheshire Premier Open Show', showKind: 'premier_open' });
+    await add({ dogId: dog.id, type: 'best_of_breed', date: '2025-07-13', showName: 'Durham county Canine Society', showKind: 'open_general' });
+    await add({ dogId: dog.id, type: 'group_placement', date: '2025-07-19', showName: 'Eston & Barnaby Premier Open', showKind: 'premier_open', groupPlace: 2 });
+    const progress = await caller.dogs.getTitleProgress({ dogId: dog.id });
+    expect(progress.stats.shcexPoints).toBe(7);
+    expect(progress.titleProgress.find((t) => t.code === 'shcex')?.detail).toBe(
+      '7/50 points · 3 from group competition (5 needed) · includes 1 point for the Best of Breed won before the group',
+    );
+  });
+
   it('the form must say what kind of show it was, and the group place for a group placing', async () => {
     const owner = await makeUser({ role: 'exhibitor' });
     const dog = await makeDog({ ownerId: owner.id });

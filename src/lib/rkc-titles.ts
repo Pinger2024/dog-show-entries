@@ -242,12 +242,58 @@ export type ShcexProgress = {
   met: boolean;
   /** Awards that could count but are missing the show type / group place. */
   needInfo: number;
+  /** Best of Breed points counted from a group placing or Best in Show, where the owner didn't enter the BOB. */
+  impliedBobs: number;
 };
+
+/**
+ * The awards a dog must have won on the way to the ones entered. It is only placed
+ * in the group, or made Best (or Reserve) in Show, after winning its breed — Best
+ * of Breed, or Best AVNSC / Best Imported Register, 1 point each — and on the
+ * group system Best in Show and Reserve are chosen from the group winners. The
+ * RKC counts every award at a show (unlike the Junior Warrant, there's no
+ * one-award-per-show rule), so those points were won even when the owner entered
+ * only the top award.
+ *
+ * Mandy, 5 Oct 2026, for Paula's Bali: Group 2nd at Eston & Barnaby is the
+ * Best of Breed point plus 3 — "they must have won best of breed".
+ *
+ * Counted once per show day, and never when that day already has the award
+ * entered — so entering the Best of Breed as well can't count it twice.
+ */
+function awardsOnTheWay(awards: ShcexAward[]): ShcexAward[] {
+  const days = new Map<string, ShcexAward[]>();
+  for (const a of awards) days.set(a.date, [...(days.get(a.date) ?? []), a]);
+
+  const implied: ShcexAward[] = [];
+  for (const [date, day] of days) {
+    const top = day.find((a) => (a.kind === 'group' || a.kind === 'bis' || a.kind === 'rbis') && !shcexMissingInfo(a));
+    if (!top) continue;
+    const show = { showType: top.showType, showScope: top.showScope };
+    if (!day.some((a) => a.kind === 'bob')) {
+      implied.push({ ...show, kind: 'bob', date, groupPlace: null, groupSystem: null });
+    }
+    const bestOnGroupSystem = day.some(
+      (a) => (a.kind === 'bis' || a.kind === 'rbis') && a.groupSystem === true && a.showScope === 'general',
+    );
+    if (bestOnGroupSystem && !day.some((a) => a.kind === 'group')) {
+      implied.push({ ...show, kind: 'group', date, groupPlace: 1, groupSystem: null });
+    }
+  }
+  return implied;
+}
 
 export function shcexProgress(awards: ShcexAward[], dateOfBirth: string): ShcexProgress {
   let points = 0;
   let groupPoints = 0;
   let needInfo = 0;
+  let impliedBobs = 0;
+  for (const a of awardsOnTheWay(awards)) {
+    const p = shcexPoints(a, dateOfBirth);
+    points += p.points;
+    if (p.group) groupPoints += p.points;
+    if (a.kind === 'bob' && p.points > 0) impliedBobs++;
+  }
   for (const a of awards) {
     if (shcexMissingInfo(a)) {
       needInfo++;
@@ -262,5 +308,6 @@ export function shcexProgress(awards: ShcexAward[], dateOfBirth: string): ShcexP
     groupPoints,
     met: points >= SHCEX_POINTS_NEEDED && groupPoints >= SHCEX_GROUP_POINTS_NEEDED,
     needInfo,
+    impliedBobs,
   };
 }

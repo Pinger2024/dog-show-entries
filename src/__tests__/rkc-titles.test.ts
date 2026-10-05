@@ -107,6 +107,54 @@ describe('Show Certificate of Excellence points (RKC table)', () => {
     expect(p).toMatchObject({ points: 7, groupPoints: 3, met: false, needInfo: 0 });
   });
 
+  it("Paula's Bali as she actually entered it — Group 2nd at Eston with no Best of Breed for that show — is still 7", () => {
+    // Mandy, 5 Oct 2026, relaying Paula: "it's given me 6 for 3 BOB and 1 with group 2 but I have that as 7". A dog is
+    // only placed in the group after winning its breed, and the RKC counts both (no one-award-per-show rule, unlike
+    // the Junior Warrant), so Eston is 1 + 3.
+    const p = shcexProgress([
+      award({ kind: 'bob', date: '2025-06-01', ...allBreedOpen }),   // Ripon & District
+      award({ kind: 'bob', date: '2025-06-18', ...premierOpen }),    // Royal Cheshire Premier Open
+      award({ kind: 'bob', date: '2025-07-13', ...allBreedOpen }),   // Durham County
+      award({ kind: 'group', date: '2025-07-19', groupPlace: 2, ...premierOpen }), // Eston & Barnaby
+    ], DOB);
+    expect(p).toMatchObject({ points: 7, groupPoints: 3, met: false, needInfo: 0, impliedBobs: 1 });
+  });
+
+  it('the Best of Breed point at a group show is never counted twice when the owner has entered it too', () => {
+    const p = shcexProgress([
+      award({ kind: 'bob', date: '2025-07-19', ...premierOpen }),
+      award({ kind: 'group', date: '2025-07-19', groupPlace: 2, ...premierOpen }),
+    ], DOB);
+    expect(p).toMatchObject({ points: 4, groupPoints: 3, impliedBobs: 0 });
+  });
+
+  it('Best in Show on the group system was a group winner, and won its breed: 5 + 4 + 1', () => {
+    const bisOnly = shcexProgress([award({ kind: 'bis', date: '2025-08-02', groupSystem: true, ...allBreedOpen })], DOB);
+    expect(bisOnly).toMatchObject({ points: 10, groupPoints: 9 });
+    const everything = shcexProgress([
+      award({ kind: 'bob', date: '2025-08-02', ...allBreedOpen }),
+      award({ kind: 'group', date: '2025-08-02', groupPlace: 1, ...allBreedOpen }),
+      award({ kind: 'bis', date: '2025-08-02', groupSystem: true, ...allBreedOpen }),
+    ], DOB);
+    expect(everything).toMatchObject({ points: 10, groupPoints: 9 });
+    const reserve = shcexProgress([award({ kind: 'rbis', date: '2025-08-02', groupSystem: true, ...allBreedOpen })], DOB);
+    expect(reserve).toMatchObject({ points: 8, groupPoints: 7 });
+  });
+
+  it('Best in Show without groups still won its breed first: 9 + 1 at an all-breed show, 5 + 1 at a group show', () => {
+    expect(shcexProgress([award({ kind: 'bis', date: '2025-08-02', groupSystem: false, ...allBreedOpen })], DOB))
+      .toMatchObject({ points: 10, groupPoints: 0 });
+    expect(shcexProgress([award({ kind: 'bis', date: '2025-08-02', groupSystem: false, showType: 'open', showScope: 'group' })], DOB))
+      .toMatchObject({ points: 6, groupPoints: 0 });
+  });
+
+  it('no Best of Breed point is added where the show earns nothing, or before 18 months', () => {
+    expect(shcexProgress([award({ kind: 'group', date: '2025-07-19', groupPlace: 1, showType: 'championship', showScope: 'general' })], DOB))
+      .toMatchObject({ points: 0, impliedBobs: 0 });
+    expect(shcexProgress([award({ kind: 'group', date: '2025-02-13', groupPlace: 1, ...allBreedOpen })], DOB))
+      .toMatchObject({ points: 0, impliedBobs: 0 });
+  });
+
   it('group placings 1st–4th are 4, 3, 2, 1 — and only at all-breed shows', () => {
     const at = (groupPlace: number, scope: 'general' | 'group') =>
       shcexPoints(award({ kind: 'group', date: '2025-07-19', groupPlace, showType: 'open', showScope: scope }), DOB).points;
@@ -138,11 +186,12 @@ describe('Show Certificate of Excellence points (RKC table)', () => {
     const bobs = Array.from({ length: 50 }, (_, i) =>
       award({ kind: 'bob', date: `2025-${String((i % 12) + 1).padStart(2, '0')}-15`, ...allBreedOpen }));
     expect(shcexProgress(bobs, '2020-01-01')).toMatchObject({ points: 50, met: false });
+    // (each group placing also brings the Best of Breed point won at that show)
     expect(shcexProgress([...bobs, award({ kind: 'group', date: '2025-06-01', groupPlace: 1, ...allBreedOpen })], '2020-01-01'))
-      .toMatchObject({ points: 54, groupPoints: 4, met: false });
+      .toMatchObject({ points: 55, groupPoints: 4, met: false });
     expect(shcexProgress([...bobs, award({ kind: 'group', date: '2025-06-01', groupPlace: 1, ...allBreedOpen }),
       award({ kind: 'group', date: '2025-06-02', groupPlace: 4, ...allBreedOpen })], '2020-01-01'))
-      .toMatchObject({ points: 55, groupPoints: 5, met: true });
+      .toMatchObject({ points: 57, groupPoints: 5, met: true });
   });
 
   it("a result added before Remi asked the type of show isn't counted — it's flagged so the owner can fill it in", () => {

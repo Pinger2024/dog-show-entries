@@ -1090,6 +1090,9 @@ function AchievementsCard({
                         ))}
                       </SelectContent>
                     </Select>
+                    <p className="text-sm text-muted-foreground">
+                      The Best of Breed point from this show is counted too — you don&rsquo;t need to add it separately.
+                    </p>
                   </div>
                 )}
                 {needsGroupSystem && (

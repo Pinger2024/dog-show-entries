@@ -1425,13 +1425,18 @@ export const dogsRouter = createTRPCRouter({
         const needInfo = shcex.needInfo > 0
           ? ` · ${shcex.needInfo} result${shcex.needInfo !== 1 ? 's need' : ' needs'} the type of show — tap Edit`
           : '';
+        // A group placing or Best in Show brings the Best of Breed point won first
+        // at that show — say so, so the owner isn't left wondering where it came from.
+        const impliedBobs = shcex.impliedBobs > 0
+          ? ` · includes ${shcex.impliedBobs} point${shcex.impliedBobs !== 1 ? 's' : ''} for the Best of Breed won before the group`
+          : '';
         titleProgress.push({
           title: 'Show Certificate of Excellence (ShCEx)',
           code: 'shcex',
           current: shcex.points,
           required: SHCEX_POINTS_NEEDED,
           progress: Math.min(shcex.points / SHCEX_POINTS_NEEDED, 1),
-          detail: `${shcex.points}/${SHCEX_POINTS_NEEDED} points · ${shcex.groupPoints} from group competition (${SHCEX_GROUP_POINTS_NEEDED} needed)${needInfo}`,
+          detail: `${shcex.points}/${SHCEX_POINTS_NEEDED} points · ${shcex.groupPoints} from group competition (${SHCEX_GROUP_POINTS_NEEDED} needed)${impliedBobs}${needInfo}`,
           milestoneReached: shcex.met,
           proOnly: true,
         });
