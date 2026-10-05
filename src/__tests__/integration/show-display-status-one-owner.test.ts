@@ -59,11 +59,13 @@ const KNOWN_DISPLAY_SITES = [
 ];
 
 describe('show display status — one owner', () => {
-  it('every known display site imports effectiveShowStatus', () => {
+  // Public labels call publicShowStatus (5 Oct 2026), which is effectiveShowStatus
+  // plus "a show on its own day reads as live" — same module, same owner.
+  it('every known display site imports effectiveShowStatus or publicShowStatus', () => {
     for (const rel of KNOWN_DISPLAY_SITES) {
       const src = readFileSync(join(SRC, rel), 'utf8');
-      expect(src, `${rel} should import effectiveShowStatus from @/lib/show-status`).toContain(
-        'effectiveShowStatus'
+      expect(src, `${rel} should import effectiveShowStatus or publicShowStatus from @/lib/show-status`).toMatch(
+        /import \{[^}]*\b(effectiveShowStatus|publicShowStatus)\b[^}]*\} from '@\/lib\/show-status'/
       );
     }
   });

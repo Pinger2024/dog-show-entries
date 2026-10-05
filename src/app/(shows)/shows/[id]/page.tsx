@@ -6,7 +6,7 @@ import { shows } from '@/server/db/schema';
 import { ShowPreviewClient } from './preview/show-preview';
 import { buildShowJsonLd } from '@/lib/show-json-ld';
 import { isUuid } from '@/lib/slugify';
-import { effectiveShowStatus } from '@/lib/show-status';
+import { publicShowStatus } from '@/lib/show-status';
 
 const SHOW_TYPE_LABELS: Record<string, string> = {
   companion: 'Companion Show',
@@ -66,10 +66,10 @@ export async function generateMetadata({
   const title = org ? `${show.name} — ${org}` : `${show.name} — ${showType}`;
 
   // Pick the metadata tagline based on the show's actual state — the
-  // status field can lag a few minutes after the close cron, so a
-  // status=entries_open show whose close date has passed should not
-  // still claim "now accepting entries". One owner: show-status.ts.
-  const displayStatus = effectiveShowStatus(show);
+  // status field can lag the cron, so a status=entries_open show whose close
+  // date has passed should not still claim "now accepting entries", and a show
+  // on its own day reads as live. One owner: show-status.ts.
+  const displayStatus = publicShowStatus(show);
   let tagline: string | undefined;
   if (displayStatus === 'in_progress') tagline = 'Live results on Remi.';
   else if (displayStatus === 'completed') tagline = 'Results on Remi.';

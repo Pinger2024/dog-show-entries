@@ -23,6 +23,7 @@ import {
   Rss,
   Calculator,
   Receipt,
+  Trophy,
 } from 'lucide-react';
 import { isUuid } from '@/lib/slugify';
 import { cn } from '@/lib/utils';
@@ -48,6 +49,9 @@ const personalNavItems = [
   { href: '/dogs', label: 'My Dogs', mobileLabel: 'Dogs', icon: Dog },
   { href: '/entries', label: 'My Entries', mobileLabel: 'Entries', icon: Ticket },
   { href: '/browse', label: 'Find a Show', mobileLabel: 'Shows', icon: CalendarDays },
+  // Sidebar only — the phone's bottom bar has no room for a sixth tab; on a
+  // phone the "Live now" banner on Home and Shows takes people to results.
+  { href: '/results', label: 'Results', mobileLabel: 'Results', icon: Trophy, sidebarOnly: true },
   { href: '/feed', label: 'My Feed', mobileLabel: 'Feed', icon: Rss },
 ];
 
@@ -299,7 +303,7 @@ export function DashboardShell({ user, children }: DashboardShellProps) {
 
         {/* Mobile bottom tab bar */}
         <nav className="fixed bottom-0 left-0 right-0 z-50 flex border-t bg-background pb-[env(safe-area-inset-bottom)] md:hidden">
-          {(user.role === 'admin' ? adminMobileItems : personalNavItems).map((item) => {
+          {(user.role === 'admin' ? adminMobileItems : personalNavItems.filter((item) => !('sidebarOnly' in item))).map((item) => {
             const isActive =
               item.href === '/admin'
                 ? pathname === '/admin'

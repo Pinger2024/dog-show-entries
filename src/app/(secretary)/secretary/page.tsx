@@ -16,7 +16,7 @@ import { trpc } from '@/lib/trpc';
 import { cn } from '@/lib/utils';
 import { formatCurrency, formatCloseTimeUK } from '@/lib/date-utils';
 import { displayShowTitle } from '@/lib/show-types';
-import { effectiveShowStatus } from '@/lib/show-status';
+import { publicShowStatus } from '@/lib/show-status';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   Eyebrow,
@@ -52,7 +52,8 @@ function getStatusPill(show: DashboardShow): {
   showClock?: boolean;
   dangerText?: boolean;
 } {
-  const displayStatus = effectiveShowStatus(show);
+  // A show on its own day reads In progress before the morning cron (lib/show-status.ts).
+  const displayStatus = publicShowStatus(show);
 
   if (displayStatus === 'entries_open') {
     if (show.entryCloseDate) {

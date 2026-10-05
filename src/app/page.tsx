@@ -18,6 +18,7 @@ import { Badge } from '@/components/ui/badge';
 import { Header } from '@/components/layout/header';
 import { Footer } from '@/components/layout/footer';
 import { AnimateIn } from '@/components/animate-in';
+import { LiveResultsStrip } from '@/components/shows/live-results-strip';
 import { SE_H } from '@/components/show-experience/tokens';
 import { cn } from '@/lib/utils';
 
@@ -138,6 +139,11 @@ export default async function HomePage() {
       <Header />
 
       <main className="flex-1">
+        {/* A show running today → straight to its results (Mandy, 5 Oct 2026). */}
+        <div className="mx-auto max-w-3xl px-3 pt-4 empty:hidden sm:px-4">
+          <LiveResultsStrip />
+        </div>
+
         {/* Hero */}
         <section className="relative overflow-hidden">
           {/* Warm background decoration */}

@@ -1,3 +1,5 @@
+import { todayInLondon } from '@/lib/date-utils';
+
 /**
  * The status to *display* for a show, derived from its close date.
  *
@@ -74,4 +76,64 @@ export function entryWindowOpen(
     return false;
   }
   return true;
+}
+
+type ShowDays = {
+  status: string;
+  startDate: string;
+  endDate?: string | null;
+  entryCloseDate?: string | Date | null;
+};
+
+/**
+ * ONE owner for "is this show running today" — the Results page, the "Live now"
+ * banner, the show page's red Live Results button and the results page's own
+ * "being recorded live" note all ask this, so they never disagree about which
+ * shows are live.
+ *
+ * Mandy, 5 Oct 2026 (Midland Regional): people couldn't find the live results,
+ * because Find a Show hid a running show unless you picked "In progress" from a
+ * filter.
+ *
+ * The cron moves a show to in_progress on the morning of the show and on to
+ * completed after its last day. A closed show on one of its own days counts as
+ * live too, so a late cron run never hides it.
+ */
+export function isShowLive(show: ShowDays, today: string = todayInLondon()): boolean {
+  if (show.status === 'in_progress') return true;
+  const status = effectiveShowStatus({ status: show.status, entryCloseDate: show.entryCloseDate ?? null });
+  const lastDay = show.endDate ?? show.startDate;
+  return status === 'entries_closed' && show.startDate <= today && lastDay >= today;
+}
+
+/**
+ * The status a PUBLIC label should read — a badge, a link preview, a page
+ * description: effectiveShowStatus (entries close on the dot), plus a show on one
+ * of its own days reads 'in_progress' even before the cron has moved it. Compare
+ * this to 'in_progress', never the raw `status` field.
+ */
+export function publicShowStatus(show: ShowDays, today: string = todayInLondon()): string {
+  if (isShowLive(show, today)) return 'in_progress';
+  return effectiveShowStatus({ status: show.status, entryCloseDate: show.entryCloseDate ?? null });
+}
+
+/**
+ * What a show offers by way of results: 'live' while it is running, 'available'
+ * once it has published results to look back at, otherwise 'none' — never a
+ * link to an empty results page.
+ */
+export type ShowResultsState = 'live' | 'available' | 'none';
+
+export function showResultsState(
+  show: ShowDays,
+  hasPublishedResults: boolean,
+  today: string = todayInLondon(),
+): ShowResultsState {
+  if (isShowLive(show, today)) return 'live';
+  return hasPublishedResults ? 'available' : 'none';
+}
+
+/** Where a show's results page is — one place builds the link. */
+export function showResultsHref(show: { id: string; slug?: string | null }): string {
+  return `/shows/${show.slug ?? show.id}/results`;
 }

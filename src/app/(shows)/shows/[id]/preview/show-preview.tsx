@@ -41,7 +41,7 @@ import { ShareKitDialog } from '@/components/show/share-kit-dialog';
 import { ShareKitCard } from '@/components/show/share-kit';
 import { cn } from '@/lib/utils';
 import { captureReferralSource } from '@/lib/referral-source';
-import { effectiveShowStatus } from '@/lib/show-status';
+import { effectiveShowStatus, showResultsHref, showResultsState } from '@/lib/show-status';
 import { useCountdown } from '@/components/show-experience/use-countdown';
 import { useInView, useStuckReveal } from '@/components/show-experience/use-in-view';
 import {
@@ -693,6 +693,11 @@ export function ShowPreviewClient() {
     };
   };
 
+  // Live / results available / none — one rule for every results link on this
+  // page and the public Results page (lib/show-status.ts).
+  const resultsState = showResultsState(show, !!showAny.hasPublishedResults);
+  const resultsHref = showResultsHref({ id: show.id, slug: show.slug });
+
   const org = show.organisation;
   const venue = show.venue;
   // entryCloseDate is derived earlier (before the loading early-return) so
@@ -887,30 +892,30 @@ export function ShowPreviewClient() {
         </div>
       </div>
 
-      {/* ─── LIVE RESULTS banner — appears as soon as ANY class has been
-           published, regardless of whether the show is formally
-           "in_progress". Drops to a calmer tone once the show is completed
+      {/* ─── LIVE RESULTS banner — while the show is running (the live rule,
+           showResultsState in lib/show-status.ts), and afterwards once it
+           has published results. Drops to a calmer tone once the show is over
            so the pulsing dot doesn't carry on weeks later. ── */}
-      {(showAny.hasPublishedResults || show.status === 'in_progress') && (
+      {resultsState !== 'none' && (
         <Link
-          href={`/shows/${slug}/results`}
+          href={resultsHref}
           className={cn(
             'block text-se-cream shadow-md transition-opacity hover:opacity-95',
-            show.status === 'completed' ? 'bg-se-ink2' : 'bg-gradient-to-r from-red-600 via-red-500 to-red-600'
+            resultsState === 'available' ? 'bg-se-ink2' : 'bg-gradient-to-r from-red-600 via-red-500 to-red-600'
           )}
         >
           <div className="mx-auto flex max-w-6xl items-center justify-center gap-3 px-3 py-3 sm:gap-4 sm:py-3.5">
-            {show.status !== 'completed' && (
+            {resultsState === 'live' && (
               <span className="relative flex size-3 shrink-0">
                 <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-white opacity-75" />
                 <span className="relative inline-flex size-3 rounded-full bg-white" />
               </span>
             )}
             <span className="text-sm font-bold uppercase tracking-[0.2em] sm:text-base sm:tracking-[0.25em]">
-              {show.status === 'completed' ? 'Results Available' : 'Live Results'}
+              {resultsState === 'available' ? 'Results Available' : 'Live Results'}
             </span>
             <span className="hidden text-xs font-medium opacity-90 sm:inline">
-              {show.status === 'completed'
+              {resultsState === 'available'
                 ? 'See who took the top prizes →'
                 : "See who's winning right now →"}
             </span>
@@ -943,19 +948,19 @@ export function ShowPreviewClient() {
                 Enter This Show
               </Link>
             </SEButton>
-          ) : show.status === 'in_progress' || show.status === 'completed' || showAny.hasPublishedResults ? (
+          ) : resultsState !== 'none' ? (
             <Button
               className={cn(
                 'h-12 flex-1 px-5 text-base font-semibold shadow-lg sm:h-11 sm:flex-initial sm:shrink-0 sm:px-5 text-white',
-                show.status === 'completed'
+                resultsState === 'available'
                   ? 'bg-se-ink2 hover:bg-se-ink2/90 shadow-se-ink2/30'
                   : 'bg-red-600 hover:bg-red-700 shadow-red-600/30'
               )}
               asChild
             >
-              <Link href={`/shows/${slug}/results`}>
+              <Link href={resultsHref}>
                 <Trophy className="size-5 sm:size-4" />
-                {show.status === 'completed' ? 'View Results' : 'View Live Results'}
+                {resultsState === 'available' ? 'View Results' : 'View Live Results'}
               </Link>
             </Button>
           ) : (
@@ -1190,11 +1195,11 @@ export function ShowPreviewClient() {
                       ))}
                     </div>
                   </>
-                ) : show.status === 'in_progress' || show.status === 'completed' || showAny.hasPublishedResults ? (
-                  <SEButton asChild variant={show.status === 'completed' ? 'primary' : 'fresh'} full className="mt-3.5">
-                    <Link href={`/shows/${slug}/results`}>
+                ) : resultsState !== 'none' ? (
+                  <SEButton asChild variant={resultsState === 'available' ? 'primary' : 'fresh'} full className="mt-3.5">
+                    <Link href={resultsHref}>
                       <Trophy className="size-[17px]" />
-                      {show.status === 'completed' ? 'View Results' : 'View Live Results'}
+                      {resultsState === 'available' ? 'View Results' : 'View Live Results'}
                     </Link>
                   </SEButton>
                 ) : (
@@ -1273,12 +1278,12 @@ export function ShowPreviewClient() {
                 ))}
               </div>
             </SECard>
-          ) : show.status === 'in_progress' || show.status === 'completed' || showAny.hasPublishedResults ? (
+          ) : resultsState !== 'none' ? (
             <SECard className="p-4">
-              <SEButton asChild variant={show.status === 'completed' ? 'primary' : 'fresh'} full>
-                <Link href={`/shows/${slug}/results`}>
+              <SEButton asChild variant={resultsState === 'available' ? 'primary' : 'fresh'} full>
+                <Link href={resultsHref}>
                   <Trophy className="size-[18px]" />
-                  {show.status === 'completed' ? 'View Results' : 'View Live Results'}
+                  {resultsState === 'available' ? 'View Results' : 'View Live Results'}
                 </Link>
               </SEButton>
               <SEButton asChild variant="ghost" size="sm" full className="mt-2">

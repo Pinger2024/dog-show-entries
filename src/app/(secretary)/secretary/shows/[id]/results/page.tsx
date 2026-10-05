@@ -54,6 +54,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
+import { isShowLive } from '@/lib/show-status';
 
 // ── Achievement award groupings ──────────────────────────
 
@@ -692,7 +693,7 @@ export default function SecretaryResultsPage() {
     );
   }
 
-  const isLive = show.status === 'in_progress';
+  const isLive = isShowLive(show);
   const judged = summary?.judgedClasses ?? 0;
   const total = summary?.totalClasses ?? 0;
   const progress = total > 0 ? Math.round((judged / total) * 100) : 0;

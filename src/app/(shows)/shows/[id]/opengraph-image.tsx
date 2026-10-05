@@ -4,7 +4,7 @@ import { db } from '@/server/db';
 import { shows, entries, showSponsors } from '@/server/db/schema';
 import { isUuid } from '@/lib/slugify';
 import { toImageDataUri, loadShareImageFonts, SHARE_GREEN as G, type ShareImageFont } from '@/lib/share-image-data';
-import { effectiveShowStatus } from '@/lib/show-status';
+import { publicShowStatus } from '@/lib/show-status';
 
 export const runtime = 'nodejs';
 export const alt = 'Preview card for a dog show listing on Remi';
@@ -243,7 +243,7 @@ export default async function OGImage({
     // translucent cream = neutral, solid green = wrapped up. Display status
     // (one owner: show-status.ts) so a show whose close date has passed but
     // hasn't been flipped by the once-daily cron doesn't still say "Open".
-    const displayStatus = effectiveShowStatus(show);
+    const displayStatus = publicShowStatus(show);
     const closeDateMs = show.entryCloseDate ? new Date(show.entryCloseDate).getTime() : null;
     const hoursToClose = closeDateMs ? (closeDateMs - Date.now()) / 3600000 : Infinity;
     const closeDate = show.entryCloseDate

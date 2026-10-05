@@ -26,6 +26,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { SE_H } from '@/components/show-experience/tokens';
 import { cn } from '@/lib/utils';
+import { isShowLive } from '@/lib/show-status';
 
 function slugify(text: string) {
   return text.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
@@ -174,7 +175,7 @@ export default function LiveResultsPage({
   }
 
   const { show, breedGroups, critiqueOverviews } = data;
-  const isLive = show.status === 'in_progress';
+  const isLive = isShowLive(show);
   const isCompleted = show.status === 'completed';
   const isPublished = !!show.resultsPublishedAt;
   const isUnpublished = 'unpublished' in data && data.unpublished;

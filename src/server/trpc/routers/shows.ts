@@ -15,8 +15,6 @@ import {
   sundryItems,
   memberships,
   entries,
-  entryClasses,
-  results,
   showSponsors,
   classDefinitions,
   orders,
@@ -36,6 +34,7 @@ import { DEFAULT_REGIONAL_FEE_TIERS } from '@/lib/regional-fee-calc';
 import type { RegionalFeeConfig } from '@/server/db/schema/shows';
 import { PUBLIC_SHOW_STATUSES } from '@/lib/public-show-statuses';
 import { scheduleCatalogueRefresh } from '@/server/services/catalogue-jobs';
+import { listResultsShows, showIdsWithPublishedResults } from '@/server/services/results-shows';
 import { SV_CLASS_AUTO_CREATE_COMBOS, isUnnumberedClassDef } from '@/lib/class-labels';
 import type { Database } from '@/server/db';
 
@@ -319,21 +318,10 @@ export const showsRouter = createTRPCRouter({
         });
       }
 
-      // Surface whether this show has any published results — drives the
-      // public-facing "LIVE RESULTS" banner. One small COUNT, much cheaper
-      // than fetching all live results just to test for non-empty.
-      const publishedCount = await ctx.db
-        .select({ n: sql<number>`count(*)::int` })
-        .from(results)
-        .innerJoin(entryClasses, eq(entryClasses.id, results.entryClassId))
-        .innerJoin(entries, eq(entries.id, entryClasses.entryId))
-        .where(
-          and(
-            eq(entries.showId, show.id),
-            isNotNull(results.publishedAt),
-          ),
-        );
-      const hasPublishedResults = (publishedCount[0]?.n ?? 0) > 0;
+      // Whether this show has any published results — with the show's dates it
+      // decides the public "Live Results" / "View Results" link
+      // (showResultsState in lib/show-status.ts).
+      const hasPublishedResults = (await showIdsWithPublishedResults(ctx.db, [show.id])).has(show.id);
 
       // Non-members get judge rows without the approval token, approval state
       // or the judge's personal contact details (see public-judge-fields.ts).
@@ -381,6 +369,9 @@ export const showsRouter = createTRPCRouter({
         orderBy: [asc(showClasses.sortOrder)],
       });
     }),
+
+  // The public Results page and the "Live now" banner (Mandy, 5 Oct 2026).
+  results: publicProcedure.query(({ ctx }) => listResultsShows(ctx.db)),
 
   nearby: publicProcedure
     .input(

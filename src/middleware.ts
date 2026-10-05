@@ -8,7 +8,7 @@ const publicRoutes = ['/', '/login', '/register', '/forgot-password', '/reset-pa
 // is the same: the judge's emailed link carries the token, and most judges
 // have no Remi account (bug hunt 2026-09-22 — they were bounced to /login).
 // middleware-public-paths.test.ts fails if any `[token]` API route is missing.
-const publicPrefixes = ['/shows', '/dog', '/api/auth', '/api/trpc', '/api/upload', '/api/webhooks', '/api/catalogue', '/api/schedule', '/api/judge-contract', '/api/critique-upload', '/api/results-approval', '/api/share-events', '/api/shares', '/api/cron', '/api/health', '/about', '/help', '/privacy', '/terms', '/invite', '/critiques', '/pricing', '/promo', '/features', '/for-secretaries', '/reviews'];
+const publicPrefixes = ['/shows', '/results', '/dog', '/api/auth', '/api/trpc', '/api/upload', '/api/webhooks', '/api/catalogue', '/api/schedule', '/api/judge-contract', '/api/critique-upload', '/api/results-approval', '/api/share-events', '/api/shares', '/api/cron', '/api/health', '/about', '/help', '/privacy', '/terms', '/invite', '/critiques', '/pricing', '/promo', '/features', '/for-secretaries', '/reviews'];
 
 // Routes that match a public prefix but require authentication
 const authRequiredPatterns = [

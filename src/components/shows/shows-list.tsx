@@ -8,7 +8,7 @@ import { cn } from '@/lib/utils';
 import { formatCurrency } from '@/lib/date-utils';
 import { PUBLIC_SHOW_STATUSES } from '@/lib/public-show-statuses';
 import { showTypeLabels, displayShowTypeLabel } from '@/lib/show-types';
-import { effectiveShowStatus } from '@/lib/show-status';
+import { effectiveShowStatus, isShowLive, publicShowStatus } from '@/lib/show-status';
 import {
   MapPin,
   Search,
@@ -24,6 +24,7 @@ import {
 import { trpc } from '@/lib/trpc/client';
 import { Input } from '@/components/ui/input';
 import { useDebounce } from '@/hooks/use-debounce';
+import { LiveResultsStrip } from '@/components/shows/live-results-strip';
 import { EmptyState } from '@/components/ui/empty-state';
 import {
   Select,
@@ -98,7 +99,9 @@ function getStatusPill(show: ShowListItem): {
   showClock?: boolean;
   showPulse?: boolean;
 } {
-  const displayStatus = effectiveShowStatus(show);
+  const displayStatus = publicShowStatus(show);
+
+  if (displayStatus === 'in_progress') return { tone: 'fresh', label: 'Live today', showPulse: true };
 
   if (displayStatus === 'entries_open') {
     if (show.entryCloseDate) {
@@ -576,13 +579,15 @@ export default function ShowsList() {
   const openShows = filteredShows.filter(
     (s) => effectiveShowStatus(s) === 'entries_open' && !isShowDatePast(s.startDate),
   );
+  // A show running today (isShowLive, lib/show-status.ts) stays here on every
+  // day it runs, not only its first.
   const aboutToRun = filteredShows.filter(
-    (s) =>
-      !isShowDatePast(s.startDate) &&
-      (effectiveShowStatus(s) === 'entries_closed' || s.status === 'in_progress'),
+    (s) => isShowLive(s) || (!isShowDatePast(s.startDate) && effectiveShowStatus(s) === 'entries_closed'),
   );
   const openingSoon = filteredShows.filter((s) => s.status === 'published' && !isShowDatePast(s.startDate));
-  const recentlyHeld = filteredShows.filter((s) => s.status === 'completed' || isShowDatePast(s.startDate));
+  const recentlyHeld = filteredShows.filter(
+    (s) => !isShowLive(s) && (s.status === 'completed' || isShowDatePast(s.startDate)),
+  );
   const visibleSectionCount = [openShows, aboutToRun, openingSoon, recentlyHeld].filter(
     (g) => g.length > 0,
   ).length;
@@ -603,6 +608,10 @@ export default function ShowsList() {
             : 'Browse championship, open, and companion shows across the country. Find your next ring and enter online.'}
         </p>
       </div>
+
+      {/* ─── Live now — a show running today, straight to its results; on a
+           quiet day a small link to the Results page (Mandy, 5 Oct 2026). ── */}
+      <LiveResultsStrip quietLink className="mb-4" />
 
       {/* ─── Filters ─────────────────────────────── */}
       <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:gap-3">
