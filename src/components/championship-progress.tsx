@@ -61,34 +61,32 @@ export function ChampionshipProgress({ dogId, isPro }: ChampionshipProgressProps
           </div>
 
           <div className="grid gap-4 p-4 sm:grid-cols-2">
-            {/* Classic Route */}
+            {/* The RKC's two routes to Champion — the rule is lib/rkc-titles.ts. */}
             <RouteCard
               title="Classic Route"
               subtitle="3 CCs under 3 different judges"
-              progress={championship.classic.progress}
+              progress={Math.min(championship.classic.ccs, 3)}
               required={3}
               complete={championship.classic.complete}
               stats={[
-                { label: 'CCs', value: championship.classic.ccs },
-                { label: 'Unique judges', value: championship.classic.uniqueJudges },
+                { label: 'CCs', value: championship.classic.ccs, of: 3 },
+                { label: 'judges', value: championship.classic.uniqueJudges, of: 3 },
               ]}
               isRecommended={championship.bestRoute === 'classic'}
             />
 
-            {/* Alternative Route */}
             <RouteCard
               title="Alternative Route"
-              subtitle="1 CC + 7 RCCs under 7 judges"
+              subtitle="2 CCs + 5 Reserve CCs, from 7 different judges"
               progress={
-                (championship.alternative.hasCC ? 1 : 0) +
-                Math.min(championship.alternative.rccProgress, 7)
+                Math.min(championship.alternative.ccs, 2) + Math.min(championship.alternative.rccs, 5)
               }
-              required={8}
+              required={7}
               complete={championship.alternative.complete}
               stats={[
-                { label: 'CC', value: championship.alternative.hasCC ? 1 : 0, of: 1 },
-                { label: 'RCCs', value: championship.alternative.rccs },
-                { label: 'Unique judges', value: championship.alternative.uniqueRCCJudges },
+                { label: 'CCs', value: championship.alternative.ccs, of: 2 },
+                { label: 'RCCs', value: championship.alternative.rccs, of: 5 },
+                { label: 'judges', value: championship.alternative.uniqueJudges, of: 7 },
               ]}
               isRecommended={championship.bestRoute === 'alternative'}
             />

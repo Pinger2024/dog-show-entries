@@ -2,6 +2,8 @@ import { z } from 'zod';
 import { isVisibleToViewer } from '@/lib/result-visibility';
 import { classOutcome, historyCounts, publicDogHistory, visibleResult } from '@/lib/public-dog-history';
 import { searchDogsWithPublicHistory } from '@/server/services/public-dog-summary';
+import { loadTitleAwards } from '@/server/services/title-awards';
+import { championProgress } from '@/lib/rkc-titles';
 import { SHOW_COLUMNS_FOR_PUBLIC_INCLUDE } from '../public-show-fields';
 import { TRPCError } from '@trpc/server';
 import { and, eq, inArray, isNull, isNotNull, or, asc, desc, sql, ne } from 'drizzle-orm';
@@ -10,7 +12,7 @@ import { createTRPCRouter } from '../init';
 import { dogs, dogOwners, dogTitles, dogPhotos, users, entries, entryClasses, showClasses, shows, results, classDefinitions, achievements, judgeAssignments, judges, dogSvProfile } from '@/server/db/schema';
 import { deleteFromR2 } from '@/server/services/storage';
 import { searchKcDogs, fetchKcDogProfile, RkcUnavailableError } from '@/server/services/kc-lookup';
-import { isCcType, isRccType } from '@/lib/placements';
+import { isCcType } from '@/lib/placements';
 import { effectiveCcType } from '@/lib/effective-achievement-type';
 import { isAgeEligibleOnShowDay, ageInCompletedMonths, todayInLondon } from '@/lib/date-utils';
 import { pickRecommendedAgeClass, preferCoatDivision, type AgeClassOption } from '@/lib/class-recommendation';
@@ -1167,7 +1169,6 @@ export const dogsRouter = createTRPCRouter({
         with: {
           breed: { with: { group: true } },
           titles: true,
-          achievements: { with: { show: { columns: { showType: true, showScope: true } } } },
         },
       });
 
@@ -1178,7 +1179,6 @@ export const dogsRouter = createTRPCRouter({
       // The dog's own people count every award and win as soon as it's keyed
       // in; anyone else only published ones (lib/public-dog-history.ts).
       const viewerMaySeeUnpublished = await userMayActOnDog(ctx.db, ctx.session.user.id, input.dogId);
-      const dogAchievements = dog.achievements.filter((a) => isVisibleToViewer(a, viewerMaySeeUnpublished));
 
       // Check if the user has Pro subscription
       const user = await ctx.db.query.users.findFirst({
@@ -1191,26 +1191,13 @@ export const dogsRouter = createTRPCRouter({
       const dob = new Date(dog.dateOfBirth);
       const ageMonths = ageInCompletedMonths(dob, now);
 
-      // Count achievements by type. CCs at UK championship shows are
-      // recorded as `dog_cc` / `bitch_cc` (sex-specific), so we need to
-      // include all CC variants — matching the canonical set in placements.ts.
-      // At a single-breed championship show a Best Dog/Bitch IS the CC, so map
-      // to the effective type first (Mandy 2026-07-09).
-      const effType = (a: (typeof dog.achievements)[number]) =>
-        effectiveCcType(a.type, a.show?.showType, a.show?.showScope);
-      const ccAchievements = dogAchievements.filter((a) => isCcType(effType(a)));
-      const reserveCCs = dogAchievements.filter((a) => isRccType(effType(a)));
-      const bobs = dogAchievements.filter((a) => a.type === 'best_of_breed');
-
-      // Count unique judges who awarded CCs and RCCs
-      const ccJudgeIds = new Set(ccAchievements.map((a) => a.judgeId).filter(Boolean));
-      const rccJudgeIds = new Set(reserveCCs.map((a) => a.judgeId).filter(Boolean));
-      // Combined unique judges across CCs and RCCs (for 2CC+5RCC route)
-      const allCcRccJudgeIds = new Set([...ccJudgeIds, ...rccJudgeIds]);
-
-      // RCCs awarded from July 2023 onwards (when the alternative champion route started)
-      const rccCutoffDate = '2023-07-01';
-      const qualifyingRCCs = reserveCCs.filter((a) => a.date >= rccCutoffDate);
+      // CCs, Reserve CCs and Bests of Breed — won at Remi shows or added by
+      // the owner — and the RKC Champion rule, each from one owner
+      // (services/title-awards.ts, lib/rkc-titles.ts).
+      const { awards: titleAwards, bobs } = await loadTitleAwards(ctx.db, input.dogId, viewerMaySeeUnpublished);
+      const champion = championProgress(titleAwards, dog.dateOfBirth);
+      const ccCount = champion.classic.ccs;
+      const reserveCcCount = titleAwards.filter((a) => a.kind === 'rcc').length;
 
       // Count first-place wins from results for JW and ShCEx calculation
       const allFirstPlaceWins = await ctx.db
@@ -1287,43 +1274,42 @@ export const dogsRouter = createTRPCRouter({
         }>;
       }> = [];
 
-      // Champion: 3 CCs under 3 different judges
-      // OR (from July 2023): 2 CCs + 5 RCCs under at least 7 different judges
+      // Champion (RKC): 3 CCs under 3 different judges, or — from July 2023 —
+      // 2 CCs + 5 RCCs from 7 different judges; either way one CC won after
+      // 12 months of age (lib/rkc-titles.ts).
       if (!existingTitles.has('ch')) {
-        const classicProgress = Math.min(ccAchievements.length / 3, 1);
-        const altCCProgress = Math.min(ccAchievements.length / 2, 1);
-        const altRCCProgress = Math.min(qualifyingRCCs.length / 5, 1);
-        const altJudgeProgress = Math.min(allCcRccJudgeIds.size / 7, 1);
-        const altOverallProgress = Math.min((altCCProgress + altRCCProgress + altJudgeProgress) / 3, 1);
-
-        const classicMet = ccAchievements.length >= 3 && ccJudgeIds.size >= 3;
-        const altMet = ccAchievements.length >= 2 && qualifyingRCCs.length >= 5 && allCcRccJudgeIds.size >= 7;
+        const { classic, alternative } = champion;
+        const classicProgress = Math.min(classic.ccs / 3, 1);
+        const alternativeProgress = (Math.min(alternative.ccs, 2) + Math.min(alternative.rccs, 5)) / 7;
+        const over12Note = classic.ccs > 0 && !classic.hasCcOver12Months
+          ? ' · one CC must be won after 12 months of age'
+          : '';
 
         titleProgress.push({
           title: 'Champion (Ch)',
           code: 'ch',
-          current: ccAchievements.length,
+          current: classic.ccs,
           required: 3,
-          progress: Math.max(classicProgress, altOverallProgress),
-          detail: `${ccAchievements.length}/3 CCs${ccJudgeIds.size > 0 ? ` (${ccJudgeIds.size} judge${ccJudgeIds.size !== 1 ? 's' : ''})` : ''}`,
-          milestoneReached: classicMet || altMet,
+          progress: Math.max(classicProgress, alternativeProgress),
+          detail: `${classic.ccs}/3 CCs${classic.judges > 0 ? ` (${classic.judges} judge${classic.judges !== 1 ? 's' : ''})` : ''}${over12Note}`,
+          milestoneReached: champion.met,
           routes: isPro
             ? [
                 {
                   name: 'Classic Route',
-                  current: ccAchievements.length,
+                  current: classic.ccs,
                   required: 3,
                   progress: classicProgress,
-                  detail: `${ccAchievements.length}/3 CCs under ${ccJudgeIds.size}/3 judges`,
-                  met: classicMet,
+                  detail: `${classic.ccs}/3 CCs under ${classic.judges}/3 judges`,
+                  met: classic.met,
                 },
                 {
                   name: 'Alternative Route (from July 2023)',
-                  current: ccAchievements.length + qualifyingRCCs.length,
+                  current: Math.min(alternative.ccs, 2) + Math.min(alternative.rccs, 5),
                   required: 7,
-                  progress: altOverallProgress,
-                  detail: `${ccAchievements.length}/2 CCs + ${qualifyingRCCs.length}/5 RCCs under ${allCcRccJudgeIds.size}/7 judges`,
-                  met: altMet,
+                  progress: alternativeProgress,
+                  detail: `${alternative.ccs}/2 CCs + ${alternative.rccs}/5 RCCs under ${alternative.judges}/7 judges`,
+                  met: alternative.met,
                 },
               ]
             : undefined,
@@ -1336,10 +1322,10 @@ export const dogsRouter = createTRPCRouter({
         titleProgress.push({
           title: 'Show Champion (Sh Ch)',
           code: 'sh_ch',
-          current: ccAchievements.length,
+          current: ccCount,
           required: 3,
-          progress: Math.min(ccAchievements.length / 3, 1),
-          detail: `${ccAchievements.length}/3 CCs (+ qualifying field trial win required)`,
+          progress: Math.min(ccCount / 3, 1),
+          detail: `${ccCount}/3 CCs (+ qualifying field trial win required)`,
           milestoneReached: false,
         });
       }
@@ -1405,14 +1391,15 @@ export const dogsRouter = createTRPCRouter({
         titleProgress,
         isPro,
         stats: {
-          ccs: ccAchievements.length,
-          reserveCCs: reserveCCs.length,
+          ccs: ccCount,
+          reserveCCs: reserveCcCount,
           bobs: bobs.length,
           totalFirsts: firstPlaceWins.length,
           jwPoints,
           shcexPoints: isPro ? shcexPoints : undefined,
           veteranPoints: isPro && ageMonths >= 84 ? veteranPoints : undefined,
-          uniqueJudges: isPro ? ccJudgeIds.size : undefined,
+          // Different judges who have given the dog a CC or a Reserve CC.
+          uniqueJudges: isPro ? champion.alternative.judges : undefined,
         },
         disclaimer: 'Progress shown is based on results recorded in Remi only. Wins at shows not using Remi are not included.',
       };

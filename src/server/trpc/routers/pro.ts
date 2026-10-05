@@ -6,15 +6,14 @@ import { createTRPCRouter } from '../init';
 import {
   users,
   entries,
-  achievements,
+  dogs,
 } from '@/server/db/schema';
 import { getStripe } from '@/server/services/stripe';
-import { isCcType, isRccType } from '@/lib/placements';
-import { effectiveCcType } from '@/lib/effective-achievement-type';
-import { isVisibleToViewer } from '@/lib/result-visibility';
 import { publicDogHistory, wasShownAt } from '@/lib/public-dog-history';
 import { todayInLondon } from '@/lib/date-utils';
 import { userMayActOnDog } from '@/server/dog-access';
+import { loadTitleAwards } from '@/server/services/title-awards';
+import { championProgress } from '@/lib/rkc-titles';
 
 // Remi Pro price — will be created in Stripe Dashboard
 // £4.99/month or £39.99/year
@@ -148,12 +147,10 @@ export const proRouter = createTRPCRouter({
    * Championship progress for a dog — computes CC/RCC counts, unique judges,
    * and progress toward Classic and Alternative championship routes.
    *
-   * UK RKC Championship Routes:
-   * - Classic: 3 CCs under 3 different judges
-   * - Alternative: 1 CC + 7 RCCs under 7 different judges
-   *
-   * This combines data from both the `results` table (show judging) and
-   * the `achievements` table (manually recorded awards).
+   * The RKC Champion rule and the awards it counts each have one owner —
+   * lib/rkc-titles.ts and services/title-awards.ts — shared with the
+   * dashboard's title progress. (Until 5 Oct 2026 this box had its own
+   * one-CC-plus-seven-reserves route, which is not the RKC's.)
    */
   getChampionshipProgress: publicProcedure
     .input(z.object({ dogId: z.string().uuid() }))
@@ -176,13 +173,6 @@ export const proRouter = createTRPCRouter({
         },
       });
 
-      // Also fetch manual achievements (with show type/scope so a single-breed
-      // championship Best Dog/Bitch counts as the CC — Mandy 2026-07-09).
-      const allDogAchievements = await ctx.db.query.achievements.findMany({
-        where: eq(achievements.dogId, input.dogId),
-        with: { show: { columns: { showType: true, showScope: true } } },
-      });
-
       // A public widget on the dog's page: anyone but the dog's owners sees
       // only shows it has been judged at and published awards — never an
       // upcoming entry in the yearly counts, never a CC before publication
@@ -190,91 +180,16 @@ export const proRouter = createTRPCRouter({
       const viewerId = ctx.session?.user?.id;
       const viewerIsOwner = !!viewerId && (await userMayActOnDog(ctx.db, viewerId, input.dogId));
       const dogEntries = publicDogHistory(allDogEntries, { viewerIsOwner });
-      const dogAchievements = allDogAchievements.filter((a) => isVisibleToViewer(a, viewerIsOwner));
 
-      const BOB_TYPE = 'best_of_breed';
-
-      // Collect CCs from results
-      const ccAwards: { showId: string; showName: string; date: string; judgeId: string | null; className: string }[] = [];
-      const rccAwards: { showId: string; showName: string; date: string; judgeId: string | null; className: string }[] = [];
-      const bobAwards: { showId: string; showName: string; date: string }[] = [];
-
-      for (const entry of dogEntries) {
-        for (const ec of entry.entryClasses) {
-          if (!ec.result?.specialAward) continue;
-          const award = ec.result.specialAward.toLowerCase().replace(/\s+/g, '_');
-          const className = ec.showClass?.classDefinition?.name ?? '';
-
-          if (isCcType(award)) {
-            ccAwards.push({
-              showId: entry.show.id,
-              showName: entry.show.name,
-              date: entry.show.startDate,
-              judgeId: ec.result.judgeId,
-              className,
-            });
-          } else if (isRccType(award)) {
-            rccAwards.push({
-              showId: entry.show.id,
-              showName: entry.show.name,
-              date: entry.show.startDate,
-              judgeId: ec.result.judgeId,
-              className,
-            });
-          }
-
-          if (award === BOB_TYPE) {
-            bobAwards.push({
-              showId: entry.show.id,
-              showName: entry.show.name,
-              date: entry.show.startDate,
-            });
-          }
-        }
-      }
-
-      // Also collect from achievements table (may have pre-Remi data)
-      for (const ach of dogAchievements) {
-        const achShowId = ach.showId ?? '';
-        const achType = effectiveCcType(ach.type, ach.show?.showType, ach.show?.showScope);
-        if (isCcType(achType)) {
-          // Avoid duplicates — normalize null showIds to empty string for comparison
-          if (!ccAwards.some((a) => a.showId === achShowId && a.date === ach.date)) {
-            ccAwards.push({
-              showId: achShowId,
-              showName: '',
-              date: ach.date,
-              judgeId: ach.judgeId,
-              className: '',
-            });
-          }
-        } else if (isRccType(achType)) {
-          if (!rccAwards.some((a) => a.showId === achShowId && a.date === ach.date)) {
-            rccAwards.push({
-              showId: achShowId,
-              showName: '',
-              date: ach.date,
-              judgeId: ach.judgeId,
-              className: '',
-            });
-          }
-        }
-      }
-
-      // Count unique judges
-      const ccJudgeIds = new Set(ccAwards.map((a) => a.judgeId).filter(Boolean));
-      const rccJudgeIds = new Set(rccAwards.map((a) => a.judgeId).filter(Boolean));
-
-      // Classic route: 3 CCs under 3 different judges
-      const classicCCs = ccAwards.length;
-      const classicUniqueJudges = ccJudgeIds.size;
-      const classicProgress = Math.min(classicCCs, classicUniqueJudges);
-
-      // Alternative route: 1 CC + 7 RCCs under 7 different judges
-      const altHasCC = ccAwards.length >= 1;
-      const altRCCs = rccAwards.length;
-      const altUniqueJudges = rccJudgeIds.size;
-      const altRCCProgress = Math.min(altRCCs, altUniqueJudges);
+      const [dog, { awards: titleAwards, bobs }] = await Promise.all([
+        ctx.db.query.dogs.findFirst({ where: eq(dogs.id, input.dogId), columns: { dateOfBirth: true } }),
+        loadTitleAwards(ctx.db, input.dogId, viewerIsOwner),
+      ]);
+      const champion = championProgress(titleAwards, dog?.dateOfBirth ?? '1900-01-01');
+      const toListItem = (a: { showName: string; date: string }) => ({ showName: a.showName, date: a.date });
+      const ccAwards = titleAwards.filter((a) => a.kind === 'cc').map(toListItem);
+      const rccAwards = titleAwards.filter((a) => a.kind === 'rcc').map(toListItem);
+      const bobAwards = bobs.map(toListItem);
 
       // Sort awards by date descending for display
       const sortByDate = (a: { date: string }, b: { date: string }) =>
@@ -321,25 +236,21 @@ export const proRouter = createTRPCRouter({
         championship: {
           classic: {
             required: 3,
-            ccs: classicCCs,
-            uniqueJudges: classicUniqueJudges,
-            progress: classicProgress,
-            complete: classicProgress >= 3,
+            ccs: champion.classic.ccs,
+            uniqueJudges: champion.classic.judges,
+            hasCcOver12Months: champion.classic.hasCcOver12Months,
+            complete: champion.classic.met,
           },
           alternative: {
-            requiredCCs: 1,
-            requiredRCCs: 7,
-            hasCC: altHasCC,
-            rccs: altRCCs,
-            uniqueRCCJudges: altUniqueJudges,
-            rccProgress: altRCCProgress,
-            complete: altHasCC && altRCCProgress >= 7,
+            requiredCCs: 2,
+            requiredRCCs: 5,
+            requiredJudges: 7,
+            ccs: champion.alternative.ccs,
+            rccs: champion.alternative.rccs,
+            uniqueJudges: champion.alternative.judges,
+            complete: champion.alternative.met,
           },
-          // Compare routes by percentage completion: classic needs 3 steps, alternative needs 8 (1 CC + 7 RCCs)
-          bestRoute:
-            classicProgress >= 3 || classicProgress / 3 >= (altRCCProgress + (altHasCC ? 1 : 0)) / 8
-              ? 'classic'
-              : 'alternative',
+          bestRoute: champion.bestRoute,
         },
         awards: {
           ccs: ccAwards.sort(sortByDate),

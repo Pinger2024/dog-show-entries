@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { eq } from 'drizzle-orm';
-import { dogOwners, judgeAssignments, results } from '@/server/db/schema';
+import { achievements, dogOwners, judgeAssignments, results } from '@/server/db/schema';
 import { testDb } from '../helpers/db';
 import { getPublicDogSummary, listDogsWithPublicHistory } from '@/server/services/public-dog-summary';
 import { todayInLondon } from '@/lib/date-utils';
@@ -329,12 +329,16 @@ describe("a dog's upcoming entries and unpublished placings stay private everywh
 
   it('the championship widget counts no upcoming show and no unpublished CC', async () => {
     const { owner, breed, dog, org } = await rosebudShape();
-    // A second CC, judged a week ago but not yet published.
+    // CCs are awards (the achievements table — recorded on show day, or added
+    // by the owner): one published 50 days ago, one judged a week ago and
+    // not yet published.
+    await testDb.insert(achievements).values({ dogId: dog.id, type: 'cc', date: pastDate(50), publishedAt: new Date() });
     const recent = await makeShow({ organisationId: org.id, status: 'completed', startDate: pastDate(7), endDate: pastDate(7) });
     const recentClass = await makeShowClass({ showId: recent.id, breedId: breed.id });
     const recentEntry = await makeEntry({ showId: recent.id, dogId: dog.id, exhibitorId: owner.id, status: 'confirmed' });
     const recentEc = await makeEntryClass({ entryId: recentEntry.id, showClassId: recentClass.id });
-    await makeResult({ entryClassId: recentEc.id, placement: 1, specialAward: 'CC' });
+    await makeResult({ entryClassId: recentEc.id, placement: 1 });
+    await testDb.insert(achievements).values({ dogId: dog.id, showId: recent.id, type: 'cc', date: pastDate(7) });
 
     const publicView = await anon().pro.getChampionshipProgress({ dogId: dog.id });
     expect(publicView.championship.classic.ccs).toBe(1);
