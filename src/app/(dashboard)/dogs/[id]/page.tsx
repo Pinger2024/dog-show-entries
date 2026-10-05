@@ -1141,56 +1141,58 @@ function AchievementsCard({
                 const details = a.details as ExternalDetails | null;
                 const isSelfReported = !a.showId;
                 const needsInfo = isSelfReported && externalResultNeedsInfo(a.type, a.date, details);
+                // Award and buttons on one line, the show underneath at full
+                // width — side by side, a phone squeezed the show name to one
+                // word per line.
                 return (
-                  <div
-                    key={a.id}
-                    className="flex items-center gap-3 rounded-lg border p-3"
-                  >
-                    <Badge variant={isSelfReported ? 'outline' : 'secondary'} className="shrink-0">
-                      {achievementLabel(a.type, details)}
-                    </Badge>
-                    <div className="min-w-0 flex-1">
-                      <p className="text-sm font-medium">
-                        {details?.showName ?? 'Remi Show'}
-                        {isSelfReported && (
-                          <span className="ml-1.5 text-xs text-muted-foreground">(added by you)</span>
-                        )}
-                      </p>
-                      <p className="text-xs text-muted-foreground">
-                        {format(parseISO(a.date), 'd MMM yyyy')}
-                        {details?.judgeName && ` · Judge: ${details.judgeName}`}
-                      </p>
-                      {needsInfo && (
-                        <button
-                          type="button"
-                          onClick={() => startEdit(a)}
-                          className="mt-1 text-xs font-medium text-se-honey-deep underline underline-offset-2"
-                        >
-                          Add the type of show so this counts towards your points
-                        </button>
+                  <div key={a.id} className="rounded-lg border p-3">
+                    <div className="flex items-start gap-2">
+                      <Badge variant={isSelfReported ? 'outline' : 'secondary'} className="mt-2.5 shrink-0">
+                        {achievementLabel(a.type, details)}
+                      </Badge>
+                      {isSelfReported && (
+                        <div className="ml-auto flex shrink-0">
+                          <button
+                            onClick={() => startEdit(a)}
+                            className="rounded-md p-1.5 min-h-[2.75rem] min-w-[2.75rem] flex items-center justify-center text-muted-foreground hover:text-foreground"
+                            title="Edit"
+                            aria-label="Edit this result"
+                          >
+                            <Pencil className="size-4" />
+                          </button>
+                          <button
+                            onClick={() => {
+                              setPendingAction({
+                                message: 'Remove this result? This cannot be undone.',
+                                action: () => removeResult.mutate({ id: a.id }),
+                              });
+                            }}
+                            className="rounded-md p-1.5 min-h-[2.75rem] min-w-[2.75rem] flex items-center justify-center text-muted-foreground hover:text-destructive"
+                            title="Remove"
+                            aria-label="Remove this result"
+                          >
+                            <Trash2 className="size-4" />
+                          </button>
+                        </div>
                       )}
                     </div>
-                    {isSelfReported && (
+                    <p className="mt-1 text-sm font-medium">
+                      {details?.showName ?? 'Remi Show'}
+                      {isSelfReported && (
+                        <span className="ml-1.5 text-xs font-normal text-muted-foreground">(added by you)</span>
+                      )}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      {format(parseISO(a.date), 'd MMM yyyy')}
+                      {details?.judgeName && ` · Judge: ${details.judgeName}`}
+                    </p>
+                    {needsInfo && (
                       <button
+                        type="button"
                         onClick={() => startEdit(a)}
-                        className="shrink-0 rounded-md p-1.5 min-h-[2.75rem] min-w-[2.75rem] flex items-center justify-center text-muted-foreground hover:text-foreground"
-                        title="Edit"
+                        className="mt-2 min-h-[2.75rem] text-left text-sm font-medium text-se-honey-deep underline underline-offset-2"
                       >
-                        <Pencil className="size-3.5" />
-                      </button>
-                    )}
-                    {isSelfReported && (
-                      <button
-                        onClick={() => {
-                          setPendingAction({
-                            message: 'Remove this result? This cannot be undone.',
-                            action: () => removeResult.mutate({ id: a.id }),
-                          });
-                        }}
-                        className="shrink-0 rounded-md p-1.5 min-h-[2.75rem] min-w-[2.75rem] flex items-center justify-center text-muted-foreground hover:text-destructive"
-                        title="Remove"
-                      >
-                        <Trash2 className="size-3.5" />
+                        Add the type of show so this counts towards your points
                       </button>
                     )}
                   </div>
