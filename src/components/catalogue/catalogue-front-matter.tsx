@@ -14,6 +14,7 @@ import { getRkcScheduleProfile } from '@/lib/rkc-schedule-profile';
 import { RKC_JUDGES_WELFARE_STATEMENT, isRkcJudgesWelfareStatement } from '@/lib/rkc-statements';
 import { formatLondonLongDate } from '@/lib/date-utils';
 import { pickSvCoverJudges } from '@/lib/schedule-judges';
+import { what3wordsAddress } from '@/lib/what3words';
 
 // A5 portrait is 148mm x 210mm = ~419.53pt x ~595.28pt. These widths are the
 // usable content width inside CoverPage's coverTopBand (paddingHorizontal:
@@ -920,7 +921,7 @@ function SvCoverPage({ show, classCount }: { show: CatalogueShowInfo; classCount
               <Text style={[ss.bodySmall, { marginTop: 2 }]}>{show.venueAddress}</Text>
             ) : null}
             {show.venueWhat3words ? (
-              <Text style={[ss.bodySmall, { marginTop: 2 }]}>what3words: {show.venueWhat3words}</Text>
+              <Text style={[ss.bodySmall, { marginTop: 2 }]}>what3words: {what3wordsAddress(show.venueWhat3words)}</Text>
             ) : null}
           </View>
           <View style={{ width: '50%', paddingLeft: 8 }}>
@@ -1173,7 +1174,7 @@ export function CoverPage({ show }: FrontMatterProps) {
               <Text style={styles.coverDetailLabel}>Venue</Text>
               <Text style={styles.coverDetailValue}>
                 {[show.venue, show.venueAddress].filter(Boolean).join(', ').replace(/,\s*,/g, ',').trim()}
-                {show.venueWhat3words ? `\nwhat3words: ${show.venueWhat3words}` : ''}
+                {show.venueWhat3words ? `\nwhat3words: ${what3wordsAddress(show.venueWhat3words)}` : ''}
               </Text>
             </View>
           )}

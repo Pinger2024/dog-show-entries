@@ -42,6 +42,7 @@ import { ShareKitCard } from '@/components/show/share-kit';
 import { cn } from '@/lib/utils';
 import { captureReferralSource } from '@/lib/referral-source';
 import { effectiveShowStatus, showResultsHref, showResultsState } from '@/lib/show-status';
+import { what3wordsAddress, what3wordsUrl } from '@/lib/what3words';
 import { useCountdown } from '@/components/show-experience/use-countdown';
 import { useInView, useStuckReveal } from '@/components/show-experience/use-in-view';
 import {
@@ -726,7 +727,8 @@ export function ShowPreviewClient() {
     show.showRuleset !== 'wusv'
       ? (org as { kcRegNumber?: string | null } | null | undefined)?.kcRegNumber
       : null;
-  const what3words = showAny.scheduleData?.what3words?.replace(/^\/+/, '');
+  const what3words = what3wordsAddress(showAny.scheduleData?.what3words);
+  const what3wordsLink = what3wordsUrl(showAny.scheduleData?.what3words);
 
   // Desktop right-rail quick facts — only cells backed by real data.
   const quickFacts: Array<[string, string]> = [
@@ -1690,15 +1692,15 @@ export function ShowPreviewClient() {
                     </p>
                   </div>
                 )}
-                {what3words && (
+                {what3words && what3wordsLink && (
                   <a
-                    href={`https://what3words.com/${what3words}`}
+                    href={what3wordsLink}
                     target="_blank"
                     rel="noopener"
                     className="mt-3 inline-flex items-center gap-1.5 text-sm font-semibold text-se-fresh-deep underline-offset-2 hover:underline"
                   >
                     <MapPin className="size-3.5" />
-                    {`///${what3words}`}
+                    {what3words}
                   </a>
                 )}
                 {/* Desktop covers Catering/Weather in the "At the show" card

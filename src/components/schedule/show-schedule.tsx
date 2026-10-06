@@ -31,6 +31,7 @@ import { groupSvClasses, type SvClassificationGroups } from './shared/sv-classif
 import { sectionClasses } from '@/lib/class-labels';
 import { getRkcScheduleProfile } from '@/lib/rkc-schedule-profile';
 import { isRkcJudgesWelfareStatement } from '@/lib/rkc-statements';
+import { what3wordsAddress } from '@/lib/what3words';
 
 // Re-export so existing consumers (route.ts, pdf-generation.ts, tests,
 // preview scripts) continue importing from this module path.
@@ -542,7 +543,7 @@ export function ShowSchedule({
             {show.venue.address && <Text style={s.infoText}>{show.venue.address}</Text>}
             {show.venue.postcode && <Text style={s.infoText}>{show.venue.postcode}</Text>}
             {sd?.what3words && (
-              <Text style={{ ...s.infoText, marginTop: 4 }}>what3words: ///{sd.what3words.replace(/^\/+/, '')}</Text>
+              <Text style={{ ...s.infoText, marginTop: 4 }}>what3words: {what3wordsAddress(sd.what3words)}</Text>
             )}
           </InfoCard>
         )}

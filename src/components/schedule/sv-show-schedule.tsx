@@ -50,6 +50,7 @@ import {
 } from '@/lib/sv-grading';
 import { SV_RULES } from '@/lib/sv-rules';
 import { formatLondonLongDate, formatLondonAbbrevDate } from '@/lib/date-utils';
+import { what3wordsAddress } from '@/lib/what3words';
 
 // ── Formatting helpers ─────────────────────────────────────────────────────
 //
@@ -311,6 +312,13 @@ function SvCover({
             <Text style={[ss.bodySmall, { marginTop: 2 }]}>
               {[show.venue?.address, show.venue?.postcode].filter(Boolean).join(' · ')}
             </Text>
+            {/* Mandy, 6 Oct 2026: the regional schedule never printed the
+                what3words the secretary typed in (lib/what3words.ts). */}
+            {what3wordsAddress(show.scheduleData?.what3words) ? (
+              <Text style={[ss.bodySmall, { marginTop: 1 }]}>
+                what3words {what3wordsAddress(show.scheduleData?.what3words)}
+              </Text>
+            ) : null}
           </View>
           {/* Breed Judge */}
           <View style={{ width: '50%', paddingLeft: 8 }}>
