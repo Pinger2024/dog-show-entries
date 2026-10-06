@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import React from 'react';
 import { renderToBuffer } from '@react-pdf/renderer';
-import { SvShowSchedule } from '@/components/schedule/sv-show-schedule';
+import { SvShowSchedule, svSchedulePageCount } from '@/components/schedule/sv-show-schedule';
 import {
   renderScheduleWithFit,
   pdfPageCount,
@@ -14,9 +14,9 @@ import type {
 import type { ScheduleData } from '@/server/db/schema/shows';
 
 /**
- * SV schedule pagination — the document must render exactly its six designed
- * pages (cover · at-a-glance · classification · eligibility · grading ·
- * rules). A regional show with a rich fee config (several memberships +
+ * SV schedule pagination — the document must render exactly its designed
+ * pages (cover · at-a-glance · on the day · classification · eligibility ·
+ * grading · rules — seven since 6 Oct 2026). A regional show with a rich fee config (several memberships +
  * Baby Puppy + catalogue rows + sundries) once overflowed the At-a-glance
  * A5 page and orphaned the prizes text onto a near-blank seventh page while
  * the folio still read "02 / 06" (Mandy 2026-07-11, North East regional).
@@ -194,7 +194,7 @@ describe('SV schedule pagination', () => {
         judges={judges}
       />,
     );
-    expect(await pdfPageCount(buf)).toBe(6);
+    expect(await pdfPageCount(buf)).toBe(svSchedulePageCount());
   }, 60_000);
 
   it('renders exactly 6 pages for a lean SV show without a regional fee config', async () => {
@@ -212,7 +212,7 @@ describe('SV schedule pagination', () => {
         judges={judges}
       />,
     );
-    expect(await pdfPageCount(buf)).toBe(6);
+    expect(await pdfPageCount(buf)).toBe(svSchedulePageCount());
   }, 60_000);
 
   // renderScheduleWithFit is the production render path (HTTP route +
@@ -254,14 +254,14 @@ describe('SV schedule pagination', () => {
 
     // Sanity: this fixture genuinely overflows at normal density…
     const normal = await renderToBuffer(<SvShowSchedule {...props} />);
-    expect(await pdfPageCount(normal)).toBeGreaterThan(6);
+    expect(await pdfPageCount(normal)).toBeGreaterThan(svSchedulePageCount());
 
-    // …and the fit renderer brings it back to the designed six pages.
+    // …and the fit renderer brings it back to the designed page count.
     const fitted = await renderScheduleWithFit(
       SvShowSchedule as React.ComponentType<Record<string, unknown>>,
       props,
-      6,
+      svSchedulePageCount(),
     );
-    expect(await pdfPageCount(fitted)).toBe(6);
+    expect(await pdfPageCount(fitted)).toBe(svSchedulePageCount());
   }, 60_000);
 });

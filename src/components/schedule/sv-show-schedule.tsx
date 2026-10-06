@@ -1,15 +1,17 @@
 /**
  * SV / WUSV Regional Show schedule renderer — "Sieger Editorial" port.
  *
- * Six-page A5 schedule for WUSV-ruleset shows (GSDL-BRG and equivalent).
+ * Seven-page A5 schedule for WUSV-ruleset shows (GSDL-BRG and equivalent).
  * Ported from the design brief at `sv-schedule/HANDOFF.md`:
  *
  *   1. Cover            — host club, date, venue, breed judge, secretary
  *   2. At a glance      — fees · key dates · secretary · vet · awards · pull-quote
- *   3. Classification   — numbered 1–12 (breed) + 13/14 (JH), Bitch-before-Dog
- *   4. Eligibility      — definition table + health threshold panel + notes
- *   5. Grading          — SV grading scale (over-12 + under-12)
- *   6. Regulations      — 16-point WUSV/BRG rules summary, two columns
+ *   3. On the day       — times · who's who · getting there · catering · prize
+ *                         money · future shows · notes (Mandy, 6 Oct 2026)
+ *   4. Classification   — numbered 1–12 (breed) + 13/14 (JH), Bitch-before-Dog
+ *   5. Eligibility      — definition table + health threshold panel + notes
+ *   6. Grading          — SV grading scale (over-12 + under-12)
+ *   7. Regulations      — 16-point WUSV/BRG rules summary, two columns
  *
  * Adverts (inside-front / inside-back / last-page) slot in via the existing
  * `AdvertPage` helper, same as the RKC renderer.
@@ -100,7 +102,10 @@ function pickBreedJudge(judges: readonly ScheduleJudge[]): ScheduleJudge | null 
 // TonalWash / MastheadBand / ClubCrestSlot are shared between the schedule
 // and the catalogue — extracted to `src/components/sv-pdf/cover-atoms.tsx`.
 
-function Folio({ num, total = 6, label }: { num: number; total?: number; label: string }) {
+/** Editorial pages in the regional schedule (adverts are extra, unnumbered). */
+const SV_EDITORIAL_PAGES = 7;
+
+function Folio({ num, total = SV_EDITORIAL_PAGES, label }: { num: number; total?: number; label: string }) {
   return (
     <View style={ss.folio} fixed>
       <Text style={ss.eyebrow}>{label}</Text>
@@ -628,7 +633,155 @@ function SvOverview({
   );
 }
 
-// ── PAGE 3 — BREED CLASSIFICATION ──────────────────────────────────────────
+// ── PAGE 3 — ON THE DAY ────────────────────────────────────────────────────
+
+/** A secretary's free text, tidied for print: tabs (pasted bullet lists) become
+ *  spaces, and blank text counts as nothing. */
+function printable(text: string | null | undefined): string | null {
+  const t = (text ?? '').replace(/\t/g, ' ').replace(/[ \u00a0]+\n/g, '\n').trim();
+  return t || null;
+}
+
+/** A role and the person in it — the role above, the name below, so a long name
+ *  (or a name with a phone number, as secretaries often type) wraps instead of
+ *  running into the role. */
+function PersonRow({ role, name, dense }: { role: string; name: string; dense?: boolean }) {
+  return (
+    <View
+      style={{
+        paddingVertical: dense ? 1.5 : 2.5,
+        borderBottomWidth: 0.5,
+        borderBottomColor: SV.rule,
+      }}
+    >
+      <Text style={{ fontFamily: SV_FONTS.sans, fontSize: 7.5, color: SV.ink3 }}>{role}</Text>
+      <Text style={[ss.feeRowValue, { marginTop: 1 }]}>{name}</Text>
+    </View>
+  );
+}
+
+/**
+ * Everything else the secretary fills in on the schedule form for a regional
+ * show: the times, the Event Manager and officers, how to get there (what3words
+ * and directions), catering, prize money, future show dates and any notes or
+ * extra statements. The six-page design printed none of it (Mandy, 6 Oct 2026,
+ * setting up the BRG Winter Spectacular: "what3words isn't showing up on the
+ * schedule … the secretary has added catering info too").
+ */
+function SvOnTheDayPage({
+  show,
+  washes,
+  density = 'normal',
+}: {
+  show: ScheduleShowInfo;
+  washes?: SvWashBuffers;
+  density?: 'normal' | 'compact';
+}) {
+  const sd = show.scheduleData;
+  const dense = density === 'compact';
+  const sectionGap = dense ? 5 : 9;
+  const body = {
+    fontFamily: SV_FONTS.sans,
+    fontSize: dense ? 7.5 : 8,
+    color: SV.ink2,
+    lineHeight: dense ? 1.3 : 1.4,
+  } as const;
+  const strong = { fontFamily: SV_FONTS.sans, fontSize: dense ? 8.5 : 9, fontWeight: 'bold', color: SV.ink } as const;
+
+  const latestArrival = printable(sd?.latestArrivalTime);
+  const manager = printable(sd?.showManager);
+  const officers = (sd?.officers ?? []).filter((o) => o.name?.trim());
+  const w3w = what3wordsAddress(sd?.what3words);
+  const directions = printable(sd?.directions);
+  const catering = printable(sd?.catering);
+  const prizeMoney = printable(sd?.prizeMoney);
+  const futureShows = printable(sd?.futureShowDates);
+  const notes = printable(sd?.additionalNotes);
+  const statements = (sd?.customStatements ?? []).map((st) => printable(st)).filter((st): st is string => !!st);
+  const venueLine = [show.venue?.address, show.venue?.postcode].filter(Boolean).join(' · ');
+
+  return (
+    <Page size="A5" style={ss.page}>
+      <TonalWash buffer={washes?.inside} />
+      <Topper num={3} subject={show.name} />
+
+      <View style={{ marginTop: dense ? 5 : 8 }}>
+        <Text style={[ss.displayIt, { fontSize: 10, color: SV.ink3 }]}>On the day —</Text>
+        <Text style={[ss.display, { fontSize: dense ? 19 : 22, lineHeight: 1, marginTop: 2 }]}>the practical bits.</Text>
+      </View>
+
+      <View style={{ flexDirection: 'row', marginTop: dense ? 5 : 8 }}>
+        {/* LEFT — times, who's who, prize money, future shows */}
+        <View style={{ width: '50%', paddingRight: 10 }}>
+          <SectionTitle dense={dense} title="Times" />
+          {show.showOpenTime ? <FeeRow label="Grounds open" value={show.showOpenTime} dense={dense} /> : null}
+          {latestArrival ? <FeeRow label="Latest arrival" value={latestArrival} dense={dense} /> : null}
+          {show.startTime ? <FeeRow label="Judging from" value={show.startTime} dense={dense} /> : null}
+
+          {manager || officers.length > 0 ? (
+            <>
+              <View style={{ height: sectionGap }} />
+              <SectionTitle dense={dense} title="Who's who" />
+              {manager ? <PersonRow role="Event Manager" name={manager} dense={dense} /> : null}
+              {officers.map((o) => (
+                <PersonRow key={`${o.position}-${o.name}`} role={o.position?.trim() || 'Officer'} name={o.name.trim()} dense={dense} />
+              ))}
+            </>
+          ) : null}
+
+          {prizeMoney ? (
+            <>
+              <View style={{ height: sectionGap }} />
+              <SectionTitle dense={dense} title="Prize money" />
+              <Text style={body}>{prizeMoney}</Text>
+            </>
+          ) : null}
+
+          {futureShows ? (
+            <>
+              <View style={{ height: sectionGap }} />
+              <SectionTitle dense={dense} title="Future shows" />
+              <Text style={body}>{futureShows}</Text>
+            </>
+          ) : null}
+        </View>
+
+        {/* RIGHT — getting there, catering */}
+        <View style={{ width: '50%', paddingLeft: 10 }}>
+          <SectionTitle dense={dense} title="Getting there" />
+          <Text style={strong}>{show.venue?.name ?? ''}</Text>
+          {venueLine ? <Text style={[body, { marginTop: 1 }]}>{venueLine}</Text> : null}
+          {w3w ? <Text style={[strong, { marginTop: 3 }]}>what3words {w3w}</Text> : null}
+          {directions ? <Text style={[body, { marginTop: 4 }]}>{directions}</Text> : null}
+
+          {catering ? (
+            <>
+              <View style={{ height: sectionGap }} />
+              <SectionTitle dense={dense} title="Catering" />
+              <Text style={body}>{catering}</Text>
+            </>
+          ) : null}
+        </View>
+      </View>
+
+      {notes || statements.length > 0 ? (
+        <View style={{ marginTop: sectionGap }}>
+          <SectionTitle dense={dense} title="Notes" />
+          {notes ? <Text style={body}>{notes}</Text> : null}
+          {statements.map((st, i) => (
+            <Text key={i} style={[body, { marginTop: notes || i > 0 ? 3 : 0 }]}>
+              {st}
+            </Text>
+          ))}
+        </View>
+      ) : null}
+
+      <Folio num={3} label="On the day" />
+    </Page>
+  );
+}
+
+// ── PAGE 4 — BREED CLASSIFICATION ──────────────────────────────────────────
 
 function ClassNumberCircle({ n, accent }: { n: number; accent?: boolean }) {
   return (
@@ -691,7 +844,7 @@ function SvClassificationPage({
   return (
     <Page size="A5" style={ss.page}>
       <TonalWash buffer={washes?.inside} />
-      <Topper num={3} subject={`Classes 1 – ${breedClasses.length + juniorHandling.length}`} />
+      <Topper num={4} subject={`Classes 1 – ${breedClasses.length + juniorHandling.length}`} />
 
       <View style={{ marginTop: 10 }}>
         <Text style={[ss.displayIt, { fontSize: 10, color: SV.ink3 }]}>Breed —</Text>
@@ -814,18 +967,18 @@ function SvClassificationPage({
         </Text>
       </View>
 
-      <Folio num={3} label="Breed classification" />
+      <Folio num={4} label="Breed classification" />
     </Page>
   );
 }
 
-// ── PAGE 4 — DEFINITIONS & ELIGIBILITY ─────────────────────────────────────
+// ── PAGE 5 — DEFINITIONS & ELIGIBILITY ─────────────────────────────────────
 
 function SvEligibilityPage({ washes }: { washes?: SvWashBuffers }) {
   return (
     <Page size="A5" style={ss.page}>
       <TonalWash buffer={washes?.inside} />
-      <Topper num={4} subject="Class definitions & eligibility" />
+      <Topper num={5} subject="Class definitions & eligibility" />
 
       <View style={{ marginTop: 14 }}>
         <Text style={[ss.displayIt, { fontSize: 10, color: SV.ink3 }]}>Who can enter —</Text>
@@ -890,12 +1043,12 @@ function SvEligibilityPage({ washes }: { washes?: SvWashBuffers }) {
         </View>
       </View>
 
-      <Folio num={4} label="Definitions" />
+      <Folio num={5} label="Definitions" />
     </Page>
   );
 }
 
-// ── PAGE 5 — GRADING ───────────────────────────────────────────────────────
+// ── PAGE 6 — GRADING ───────────────────────────────────────────────────────
 
 function GradingCol({ title, rows, accentFirst }: { title: string; rows: SvGrade[]; accentFirst?: boolean }) {
   return (
@@ -942,7 +1095,7 @@ function SvGradingPage({ washes }: { washes?: SvWashBuffers }) {
   return (
     <Page size="A5" style={ss.page}>
       <TonalWash buffer={washes?.inside} />
-      <Topper num={5} subject="SV grading system" />
+      <Topper num={6} subject="SV grading system" />
 
       <View style={{ marginTop: 10 }}>
         <Text style={[ss.displayIt, { fontSize: 10, color: SV.ink3 }]}>Every dog graded —</Text>
@@ -969,12 +1122,12 @@ function SvGradingPage({ washes }: { washes?: SvWashBuffers }) {
         </Text>
       </View>
 
-      <Folio num={5} label="Grading" />
+      <Folio num={6} label="Grading" />
     </Page>
   );
 }
 
-// ── PAGE 6 — REGULATIONS ───────────────────────────────────────────────────
+// ── PAGE 7 — REGULATIONS ───────────────────────────────────────────────────
 
 function SvRulesPage({ washes }: { washes?: SvWashBuffers }) {
   // Split rules into two columns by halving — React-PDF doesn't support CSS
@@ -997,7 +1150,7 @@ function SvRulesPage({ washes }: { washes?: SvWashBuffers }) {
   return (
     <Page size="A5" style={ss.page}>
       <TonalWash buffer={washes?.inside} />
-      <Topper num={6} subject="Summary of WUSV / BRG rules" />
+      <Topper num={7} subject="Summary of WUSV / BRG rules" />
 
       <View style={{ marginTop: 14 }}>
         <Text style={[ss.displayIt, { fontSize: 10, color: SV.ink3 }]}>Event regulations —</Text>
@@ -1013,20 +1166,20 @@ function SvRulesPage({ washes }: { washes?: SvWashBuffers }) {
         <View style={{ flex: 1 }}>{right.map((r, i) => ruleRow(r, mid + i + 1))}</View>
       </View>
 
-      <Folio num={6} label="Regulations" />
+      <Folio num={7} label="Regulations" />
     </Page>
   );
 }
 
 // ── Top-level document ─────────────────────────────────────────────────────
 
-/** Designed page count for the SV schedule: six editorial pages plus one
+/** Designed page count for the SV schedule: seven editorial pages plus one
  *  page per full-page advert. `renderScheduleWithFit` re-renders at compact
  *  density when a normal render paginates past this (i.e. a data-elastic
  *  section outgrew its page). */
 export function svSchedulePageCount(adverts: readonly ScheduleAdvert[] = []): number {
   return (
-    6 +
+    SV_EDITORIAL_PAGES +
     selectAdverts(adverts, 'schedule', 'inside_front').length +
     selectAdverts(adverts, 'schedule', 'inside_back').length +
     selectAdverts(adverts, 'schedule', 'last_page').length
@@ -1086,6 +1239,7 @@ export function SvShowSchedule({
       ))}
 
       <SvOverview show={show} classes={classes} washes={washes} density={density} />
+      <SvOnTheDayPage show={show} washes={washes} density={density} />
       <SvClassificationPage
         breedClasses={groups.breedClasses}
         juniorHandling={groups.juniorHandling}
