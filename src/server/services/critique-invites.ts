@@ -9,7 +9,7 @@
  * one show out of five.
  */
 import { TRPCError } from '@trpc/server';
-import { and, eq, gte, isNotNull, isNull, lte, ne } from 'drizzle-orm';
+import { and, eq, gte, isNotNull, isNull, lte } from 'drizzle-orm';
 import type { Database } from '@/server/db';
 import { critiqueDocuments, judgeAssignments, judges, shows } from '@/server/db/schema';
 import {
@@ -23,6 +23,7 @@ import {
   CRITIQUE_AUTO_SEND_WINDOW_DAYS,
   CRITIQUE_INVITE_DAYS_AFTER_SHOW,
   addCalendarDays,
+  critiqueAutoSendPhase,
   isCritiqueInviteDue,
   isCritiqueReminderDue,
 } from '@/lib/critique-schedule';
@@ -145,16 +146,16 @@ export async function runCritiqueAutoInvites(db: Database, today: string) {
   const earliestEnd = addCalendarDays(latestEnd, -CRITIQUE_AUTO_SEND_WINDOW_DAYS);
   const candidates = await db.query.shows.findMany({
     where: and(
-      ne(shows.status, 'cancelled'),
       isNull(shows.critiqueAutoInvitesAt),
       gte(shows.endDate, earliestEnd),
       lte(shows.endDate, latestEnd),
     ),
-    columns: { id: true, slug: true, name: true, endDate: true, showRuleset: true, showType: true, secretaryEmail: true },
+    columns: { id: true, slug: true, name: true, endDate: true, status: true, showRuleset: true, showType: true, secretaryEmail: true },
   });
 
   const summary = { shows: 0, invited: 0, notices: 0, errors: [] as string[] };
   for (const show of candidates) {
+    if (critiqueAutoSendPhase(show.status) !== 'now') continue;
     if (!isCritiqueInviteDue(show.endDate, today) || !showHasCritiqueLink(show)) continue;
     const [claimed] = await db
       .update(shows)
@@ -234,7 +235,7 @@ export async function runCritiqueReminders(db: Database, today: string) {
 
   const summary = { reminded: 0, errors: [] as string[] };
   for (const doc of pending) {
-    if (!doc.show || doc.show.status === 'cancelled' || !showHasCritiqueLink(doc.show)) continue;
+    if (!doc.show || critiqueAutoSendPhase(doc.show.status) !== 'now' || !showHasCritiqueLink(doc.show)) continue;
     if (!isCritiqueReminderDue(londonCalendarDateStr(doc.invitedAt!), today)) continue;
     const [claimed] = await db
       .update(critiqueDocuments)

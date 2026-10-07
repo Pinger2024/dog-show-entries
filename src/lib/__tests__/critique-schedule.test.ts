@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
+  critiqueAutoSendPhase,
   critiqueInviteDate,
   critiqueReminderDate,
   isCritiqueInviteDue,
@@ -45,5 +46,14 @@ describe('critique link dates — two weeks after the show, reminder four weeks 
     expect(upcomingAutoInviteDate('2026-10-11', '2026-10-27')).toBe('2026-10-27');
     // Too old for Remi to send — the secretary's to send by hand.
     expect(upcomingAutoInviteDate('2026-07-04', '2026-09-30')).toBeNull();
+  });
+
+  it('writes only about a show that has been held — never a draft or a cancelled show', () => {
+    expect(critiqueAutoSendPhase('completed')).toBe('now');
+    for (const s of ['published', 'entries_open', 'entries_closed', 'in_progress']) {
+      expect(critiqueAutoSendPhase(s)).toBe('later');
+    }
+    expect(critiqueAutoSendPhase('draft')).toBe('never');
+    expect(critiqueAutoSendPhase('cancelled')).toBe('never');
   });
 });

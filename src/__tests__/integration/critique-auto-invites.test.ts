@@ -36,7 +36,7 @@ beforeEach(() => {
 
 /** An RKC single-breed show that ended on `endDate`, with a breed judge (dogs
  *  and bitches), a Junior Handling judge and a Special Awards judge. */
-async function show(opts: { endDate?: string; showRuleset?: 'rkc' | 'wusv'; status?: 'completed' | 'cancelled'; breedJudgeEmail?: string | null } = {}) {
+async function show(opts: { endDate?: string; showRuleset?: 'rkc' | 'wusv'; status?: 'completed' | 'cancelled' | 'draft' | 'published'; breedJudgeEmail?: string | null } = {}) {
   const { org, breed } = await makeSecretaryWithOrgAndBreed();
   const endDate = opts.endDate ?? '2026-10-11';
   const s = await makeShow({
@@ -139,6 +139,18 @@ describe('the critique link goes to breed judges two weeks after the show', () =
     await runCritiqueAutoInvites(testDb, TODAY);
     expect([...(await docsFor(regional.show.id)), ...(await docsFor(cancelled.show.id))]).toEqual([]);
     expect(vi.mocked(sendCritiqueInviteEmail)).not.toHaveBeenCalled();
+  });
+
+  it('a show that was never held gets nothing — a practice show left in draft, or one never opened', async () => {
+    // Remi writes to judges only about a show that has been held: the hourly
+    // job marks it 'completed' the midnight after its last day. A secretary's
+    // practice show can carry real judges' email addresses.
+    const draft = await show({ status: 'draft' });
+    const neverOpened = await show({ status: 'published' });
+    await runCritiqueAutoInvites(testDb, TODAY);
+    expect([...(await docsFor(draft.show.id)), ...(await docsFor(neverOpened.show.id))]).toEqual([]);
+    expect(vi.mocked(sendCritiqueInviteEmail)).not.toHaveBeenCalled();
+    expect(vi.mocked(sendCritiqueAutoInviteNoticeEmail)).not.toHaveBeenCalled();
   });
 
   it('never writes about an old show', async () => {

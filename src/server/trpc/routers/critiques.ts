@@ -19,7 +19,7 @@ import {
 import { publishGateStatus } from '@/lib/critique-publish-gate';
 import { sendCritiqueSubmittedEmail, APP_URL } from '@/server/services/email';
 import { breedJudgesForShow, inviteJudgeForCritiques, showHasCritiqueLink } from '@/server/services/critique-invites';
-import { critiqueReminderDate, upcomingAutoInviteDate } from '@/lib/critique-schedule';
+import { critiqueAutoSendPhase, critiqueReminderDate, upcomingAutoInviteDate } from '@/lib/critique-schedule';
 import { londonCalendarDateStr } from '@/lib/date-utils';
 
 // Mirrors CritiqueParsedBlock (src/server/db/schema/critique-documents.ts) —
@@ -296,8 +296,8 @@ export const critiquesRouter = createTRPCRouter({
       const breedJudgeIds = new Set(breedJudges.map((j) => j.id));
       // What Remi will send by itself (Mandy, 30 Sept 2026) — shown on the
       // page so nobody sends it twice. Dates: lib/critique-schedule.ts.
-      const autoSends =
-        !!show && show.status !== 'cancelled' && showHasCritiqueLink(show) && !show.critiqueAutoInvitesAt;
+      const willSend = !!show && critiqueAutoSendPhase(show.status) !== 'never' && showHasCritiqueLink(show);
+      const autoSends = willSend && !show!.critiqueAutoInvitesAt;
 
       return Array.from(judgeById.values()).map((judge) => {
         const doc = docByJudge.get(judge.id);
@@ -312,7 +312,7 @@ export const critiquesRouter = createTRPCRouter({
               : null,
           // Invited, nothing back yet: the day of the one reminder.
           reminderOn:
-            doc && doc.status === 'invited' && doc.invitedAt && !doc.reminderSentAt
+            willSend && doc && doc.status === 'invited' && doc.invitedAt && !doc.reminderSentAt
               ? critiqueReminderDate(londonCalendarDateStr(doc.invitedAt))
               : null,
           document: doc

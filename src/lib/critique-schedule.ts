@@ -25,6 +25,21 @@ export const CRITIQUE_AUTO_SEND_WINDOW_DAYS = 46;
  *  run was missed — never months later. */
 export const CRITIQUE_REMINDER_WINDOW_DAYS = 14;
 
+/**
+ * Remi writes to a show's judges by itself only about a show that has been
+ * HELD. The hourly job marks a show 'completed' the midnight after its last
+ * day; a draft (a secretary's practice show can carry real judges' email
+ * addresses) or a cancelled show never gets there.
+ *   'now'   — held: the link and the reminder can go
+ *   'later' — still to come: the Critiques page can promise the date
+ *   'never' — Remi sends nothing, and promises nothing
+ */
+export function critiqueAutoSendPhase(showStatus: string): 'now' | 'later' | 'never' {
+  if (showStatus === 'completed') return 'now';
+  if (showStatus === 'draft' || showStatus === 'cancelled') return 'never';
+  return 'later';
+}
+
 /** `date` (YYYY-MM-DD) plus `days` calendar days. */
 export function addCalendarDays(date: string, days: number): string {
   const [y, m, d] = date.split('-').map(Number) as [number, number, number];
