@@ -22,10 +22,12 @@ const FILES = [
 
 // A `[ ... ]` literal naming both 'published' and 'entries_open' is a status
 // list for "upcoming". (The updateStatus transition map is keyed, not an array
-// of both, and the results-hub "held" pool has no 'published'.)
+// of both, and the results-hub "held" pool has no 'published'.) A literal that
+// also names 'draft' is the full status enum in a zod schema (shows.update), not
+// a selection of upcoming shows, so it is ignored.
 const ARRAY_LITERAL = /\[[^\]]*\]/g;
 const handWrittenUpcomingList = (source: string) =>
-  (source.match(ARRAY_LITERAL) ?? []).filter((arr) => /['"]published['"]/.test(arr) && /['"]entries_open['"]/.test(arr));
+  (source.match(ARRAY_LITERAL) ?? []).filter((arr) => /['"]published['"]/.test(arr) && /['"]entries_open['"]/.test(arr) && !/['"]draft['"]/.test(arr));
 
 describe('upcoming shows — one owner', () => {
   for (const file of FILES) {

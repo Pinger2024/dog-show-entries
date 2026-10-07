@@ -23,6 +23,7 @@ import {
   showBreeds,
 } from '@/server/db/schema';
 import { verifyShowAccess } from '../verify-show-access';
+import { upcomingShowsCondition } from '@/server/services/upcoming-shows';
 import { publicOrgColumns } from '../public-org-columns';
 import { redactJudgeAssignmentForPublic } from '../public-judge-fields';
 import { toPublicScheduleData } from '../public-show-fields';
@@ -118,11 +119,9 @@ export const showsRouter = createTRPCRouter({
       if (input.status) {
         conditions.push(eq(shows.status, input.status));
       } else {
-        // Default: show entries_open and published only (active/upcoming shows)
-        // Users can filter to see entries_closed, completed, etc. via the status dropdown
-        conditions.push(
-          inArray(shows.status, ['published', 'entries_open'])
-        );
+        // Default: every upcoming show — entries closed stays listed until the day
+        // (Mandy, 7 Oct 2026). Held shows are reachable via the status dropdown.
+        conditions.push(upcomingShowsCondition());
       }
 
       if (input.showType) {
@@ -208,13 +207,14 @@ export const showsRouter = createTRPCRouter({
       const where =
         conditions.length > 0 ? and(...conditions) : undefined;
 
-      // Prioritise entries_open shows first (sorted by close date — soonest closing first),
-      // then published (sorted by start date), then everything else
+      // Follows the page's section order: open (soonest closing first), then about
+      // to run (live, then entries closed), then opening soon, then held — so a
+      // closed show this weekend isn't paged behind shows months away (7 Oct 2026).
       const statusPriority = sql<number>`CASE
         WHEN ${shows.status} = 'entries_open' THEN 0
-        WHEN ${shows.status} = 'published' THEN 1
+        WHEN ${shows.status} = 'in_progress' THEN 1
         WHEN ${shows.status} = 'entries_closed' THEN 2
-        WHEN ${shows.status} = 'in_progress' THEN 3
+        WHEN ${shows.status} = 'published' THEN 3
         WHEN ${shows.status} = 'completed' THEN 4
         ELSE 5
       END`;
@@ -384,7 +384,6 @@ export const showsRouter = createTRPCRouter({
       })
     )
     .query(async ({ ctx, input }) => {
-      const today = new Date().toISOString().split('T')[0]!;
       const { lat, lng, radiusMiles, breedId, limit } = input;
 
       // Haversine distance formula in miles
@@ -398,8 +397,7 @@ export const showsRouter = createTRPCRouter({
 
       // Build base conditions
       const conditions = [
-        gte(shows.startDate, today),
-        inArray(shows.status, ['published', 'entries_open']),
+        upcomingShowsCondition(),
         isNotNull(venues.lat),
         isNotNull(venues.lng),
         sql`${distanceExpr} <= ${radiusMiles}`,

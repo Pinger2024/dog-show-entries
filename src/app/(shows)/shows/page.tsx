@@ -1,7 +1,6 @@
 import type { Metadata } from 'next';
-import { and, gte, inArray, isNull } from 'drizzle-orm';
 import { db } from '@/server/db';
-import { shows } from '@/server/db/schema';
+import { upcomingShowsCondition } from '@/server/services/upcoming-shows';
 import { buildShowJsonLd } from '@/lib/show-json-ld';
 import ShowsList from '@/components/shows/shows-list';
 
@@ -33,12 +32,8 @@ export const metadata: Metadata = {
 
 async function getUpcomingShowsForJsonLd() {
   if (!db) return [];
-  const today = new Date().toISOString().slice(0, 10);
   return db.query.shows.findMany({
-    where: and(
-      inArray(shows.status, ['published', 'entries_open', 'entries_closed', 'in_progress']),
-      gte(shows.startDate, today),
-    ),
+    where: upcomingShowsCondition(),
     with: {
       organisation: { columns: { name: true, website: true, logoUrl: true } },
       venue: true,

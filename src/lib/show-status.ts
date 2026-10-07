@@ -1,5 +1,11 @@
 import { todayInLondon } from '@/lib/date-utils';
 
+/** The shows Find a Show lists by default: everything still to come or on today —
+ *  opening soon, open, entries closed, and live. Mandy, 7 Oct 2026: a show stays
+ *  visible with entries closed right up to the day. Never draft or cancelled;
+ *  held shows live on /results. */
+export const UPCOMING_SHOW_STATUSES = ['published', 'entries_open', 'entries_closed', 'in_progress'] as const;
+
 /**
  * The status to *display* for a show, derived from its close date.
  *

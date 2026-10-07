@@ -4,6 +4,7 @@ import { entries, entryClasses, results, shows } from '@/server/db/schema';
 import { publicOrgColumns } from '@/server/trpc/public-org-columns';
 import { showResultsState } from '@/lib/show-status';
 import { todayInLondon } from '@/lib/date-utils';
+import { upcomingShowsCondition } from './upcoming-shows';
 
 /**
  * ONE owner for "has this show published any results" — the show page's Live
@@ -86,10 +87,7 @@ export async function listResultsShows(
     .map((x) => toItem(x.show));
 
   const upcoming = await db.query.shows.findFirst({
-    where: and(
-      inArray(shows.status, ['published', 'entries_open', 'entries_closed']),
-      gt(shows.startDate, today),
-    ),
+    where: and(upcomingShowsCondition(today), gt(shows.startDate, today)),
     columns,
     with: withClubAndVenue,
     orderBy: [asc(shows.startDate)],
