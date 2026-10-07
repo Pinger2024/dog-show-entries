@@ -18,7 +18,7 @@ import {
 } from '@/server/services/critique-results-graph';
 import { publishGateStatus } from '@/lib/critique-publish-gate';
 import { sendCritiqueSubmittedEmail, APP_URL } from '@/server/services/email';
-import { breedJudgesForShow, inviteJudgeForCritiques, showHasCritiqueLink } from '@/server/services/critique-invites';
+import { critiqueJudgesForShow, inviteJudgeForCritiques, showHasCritiqueLink } from '@/server/services/critique-invites';
 import { critiqueAutoSendPhase, critiqueReminderDate, upcomingAutoInviteDate } from '@/lib/critique-schedule';
 import { londonCalendarDateStr } from '@/lib/date-utils';
 
@@ -282,7 +282,7 @@ export const critiquesRouter = createTRPCRouter({
         if (a.judge && !judgeById.has(a.judge.id)) judgeById.set(a.judge.id, a.judge);
       }
 
-      const [docs, show, breedJudges] = await Promise.all([
+      const [docs, show, critiqueJudges] = await Promise.all([
         ctx.db.query.critiqueDocuments.findMany({
           where: eq(critiqueDocuments.showId, input.showId),
         }),
@@ -290,10 +290,10 @@ export const critiquesRouter = createTRPCRouter({
           where: eq(shows.id, input.showId),
           columns: { endDate: true, status: true, showRuleset: true, showType: true, critiqueAutoInvitesAt: true },
         }),
-        breedJudgesForShow(ctx.db, input.showId),
+        critiqueJudgesForShow(ctx.db, input.showId),
       ]);
       const docByJudge = new Map(docs.map((d) => [d.judgeId, d]));
-      const breedJudgeIds = new Set(breedJudges.map((j) => j.id));
+      const critiqueJudgeIds = new Set(critiqueJudges.map((j) => j.id));
       // What Remi will send by itself (Mandy, 30 Sept 2026) — shown on the
       // page so nobody sends it twice. Dates: lib/critique-schedule.ts.
       const willSend = !!show && critiqueAutoSendPhase(show.status) !== 'never' && showHasCritiqueLink(show);
@@ -305,9 +305,9 @@ export const critiquesRouter = createTRPCRouter({
           judgeId: judge.id,
           judgeName: judge.name,
           contactEmail: judge.contactEmail,
-          // Breed judges without a link yet: the day Remi sends it.
+          // Judges without a link yet (never Junior Handling): the day Remi sends it.
           autoInviteOn:
-            !doc && autoSends && breedJudgeIds.has(judge.id) && judge.contactEmail
+            !doc && autoSends && critiqueJudgeIds.has(judge.id) && judge.contactEmail
               ? upcomingAutoInviteDate(show!.endDate)
               : null,
           // Invited, nothing back yet: the day of the one reminder.

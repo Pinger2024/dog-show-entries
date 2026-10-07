@@ -1,9 +1,10 @@
 /**
  * Sending a judge the link to send in their critiques — ONE owner for it:
  *  - the secretary's Invite button (critiques.invite), and
- *  - Remi by itself: two weeks after the show to every BREED judge who hasn't
- *    been sent it, and one reminder four weeks after the link if nothing has
- *    come back (Mandy, 30 Sept 2026 — dates in lib/critique-schedule.ts).
+ *  - Remi by itself: two weeks after the show to every judge who hasn't been
+ *    sent it — breed and Special Awards judges, never Junior Handling — and
+ *    one reminder four weeks after the link if nothing has come back (Mandy,
+ *    30 Sept and 7 Oct 2026 — dates in lib/critique-schedule.ts).
  *
  * Before this, only the button sent it, and on live it had been pressed for
  * one show out of five.
@@ -18,7 +19,7 @@ import {
   sendCritiqueInviteEmail,
   sendCritiqueReminderEmail,
 } from '@/server/services/email';
-import { isBreedClassAssignment } from '@/lib/judge-breed-classification';
+import { isJuniorHandlingOnlyAssignment } from '@/lib/judge-exhibitor-conflict';
 import {
   CRITIQUE_AUTO_SEND_WINDOW_DAYS,
   CRITIQUE_INVITE_DAYS_AFTER_SHOW,
@@ -118,9 +119,12 @@ export async function inviteJudgeForCritiques(
   return { ...doc!, link, emailSent };
 }
 
-/** The show's breed judges (not Junior Handling, not Special Awards), once
- *  each — a judge of several breeds or both sexes gets one link. */
-export async function breedJudgesForShow(db: Database, showId: string) {
+/** The judges who write critiques: everyone but a Junior Handling judge, who
+ *  assesses the handler, not the dog (Mandy, 7 Oct 2026: Special Awards judges
+ *  too). Once each — a judge of several breeds, both sexes, or the breed AND
+ *  Junior Handling gets one link. "Pure Junior Handling" has one owner, shared
+ *  with the judge-may-not-exhibit rule. */
+export async function critiqueJudgesForShow(db: Database, showId: string) {
   const assignments = await db.query.judgeAssignments.findMany({
     where: eq(judgeAssignments.showId, showId),
     with: {
@@ -130,13 +134,13 @@ export async function breedJudgesForShow(db: Database, showId: string) {
   });
   const byId = new Map<string, { id: string; name: string; contactEmail: string | null }>();
   for (const a of assignments) {
-    if (a.judge && isBreedClassAssignment(a) && !byId.has(a.judge.id)) byId.set(a.judge.id, a.judge);
+    if (a.judge && !isJuniorHandlingOnlyAssignment(a) && !byId.has(a.judge.id)) byId.set(a.judge.id, a.judge);
   }
   return [...byId.values()];
 }
 
 /**
- * Two weeks after each show: send every breed judge who hasn't had it the
+ * Two weeks after each show: send every judge who hasn't had it the
  * critique link, then tell the secretary who it went to and whom Remi couldn't
  * email. Each show is claimed once (critique_auto_invites_at) BEFORE anything
  * is sent, so two overlapping runs can never email a judge twice.
@@ -165,14 +169,14 @@ export async function runCritiqueAutoInvites(db: Database, today: string) {
     if (!claimed) continue;
     summary.shows++;
 
-    const [breedJudges, docs] = await Promise.all([
-      breedJudgesForShow(db, show.id),
+    const [critiqueJudges, docs] = await Promise.all([
+      critiqueJudgesForShow(db, show.id),
       db.query.critiqueDocuments.findMany({ where: eq(critiqueDocuments.showId, show.id), columns: { judgeId: true } }),
     ]);
     const alreadyInvited = new Set(docs.map((d) => d.judgeId));
     const sentTo: string[] = [];
     const noEmail: string[] = [];
-    for (const judge of breedJudges) {
+    for (const judge of critiqueJudges) {
       if (alreadyInvited.has(judge.id)) continue;
       const email = judge.contactEmail?.trim();
       if (!email) {

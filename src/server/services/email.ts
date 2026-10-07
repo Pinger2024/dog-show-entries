@@ -1100,7 +1100,7 @@ function critiqueLinkEmailHtml(params: {
   const showName = escapeHtml(params.showName.replace(/\s+/g, ' '));
   const showDateText = formatLongDate(params.showDate);
   const opening = params.reminder
-    ? `Just a gentle reminder about your critiques from <strong>${showName}</strong> on <strong>${showDateText}</strong>. If you've already sent them, thank you — please ignore this email.`
+    ? `Just a gentle reminder about your critiques from <strong>${showName}</strong> on <strong>${showDateText}</strong>. If you've already sent them to the club another way, thank you — please ignore this email.`
     : `Thank you for judging at <strong>${showName}</strong> on <strong>${showDateText}</strong>. When you're ready, please send us your critiques using the button below.`;
   return `
 <!DOCTYPE html>
@@ -1188,7 +1188,7 @@ export async function sendCritiqueReminderEmail(params: {
 }
 
 /**
- * Tells the show secretary that Remi has sent the breed judges their critique
+ * Tells the show secretary that Remi has sent the judges their critique
  * links two weeks after the show — and which judges have no email address, so
  * she can send those herself (Mandy, 30 Sept 2026). Sent once per show.
  */

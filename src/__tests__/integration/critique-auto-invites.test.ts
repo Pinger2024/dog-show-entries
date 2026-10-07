@@ -1,8 +1,9 @@
 /**
- * Remi sends breed judges the critique link by itself, two weeks after the
- * show, and one reminder four weeks after that if nothing has come back
- * (Mandy, 30 Sept 2026: "maybe 2 weeks after judging to give them time to
- * write them" · "Breed only" · "Yes send a reminder 4 weeks later"). Until
+ * Remi sends judges the critique link by itself, two weeks after the show,
+ * and one reminder four weeks after that if nothing has come back (Mandy,
+ * 30 Sept 2026: "maybe 2 weeks after judging to give them time to write
+ * them" · "Yes send a reminder 4 weeks later"; 7 Oct 2026: Special Awards
+ * judges get it too — only Junior Handling judges don't). Until
  * then only the secretary's Invite button sent it — and on live it had been
  * pressed once, for one show out of five.
  */
@@ -67,37 +68,57 @@ async function show(opts: { endDate?: string; showRuleset?: 'rkc' | 'wusv'; stat
 const docsFor = (showId: string) =>
   testDb.query.critiqueDocuments.findMany({ where: eq(schema.critiqueDocuments.showId, showId) });
 
-describe('the critique link goes to breed judges two weeks after the show', () => {
-  it('sends the breed judge the link — not the Junior Handling or Special Awards judge — and tells the secretary', async () => {
-    const { show: s, breedJudge } = await show();
+describe('the critique link goes to the judges two weeks after the show', () => {
+  it('sends the breed judge and the Special Awards judge the link — never the Junior Handling judge — and tells the secretary', async () => {
+    const { show: s, breedJudge, sacJudge } = await show();
     await runCritiqueAutoInvites(testDb, TODAY);
 
     const docs = await docsFor(s.id);
-    expect(docs.map((d) => [d.judgeId, d.status, d.invitedEmail])).toEqual([
-      [breedJudge.id, 'invited', 'breed.judge@test.local'],
-    ]);
-    expect(vi.mocked(sendCritiqueInviteEmail)).toHaveBeenCalledTimes(1);
-    expect(vi.mocked(sendCritiqueInviteEmail).mock.calls[0]![0]).toMatchObject({
-      judgeName: 'Mrs Breed Judge',
-      email: 'breed.judge@test.local',
-      link: expect.stringContaining(docs[0]!.uploadToken),
-    });
+    const byJudge = new Map(docs.map((d) => [d.judgeId, d]));
+    expect([...byJudge.keys()].sort()).toEqual([breedJudge.id, sacJudge.id].sort());
+    expect(byJudge.get(breedJudge.id)).toMatchObject({ status: 'invited', invitedEmail: 'breed.judge@test.local' });
+    expect(byJudge.get(sacJudge.id)).toMatchObject({ status: 'invited', invitedEmail: 'sac.judge@test.local' });
+    expect(vi.mocked(sendCritiqueInviteEmail)).toHaveBeenCalledTimes(2);
+    expect(vi.mocked(sendCritiqueInviteEmail).mock.calls.map((c) => c[0])).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          judgeName: 'Mrs Breed Judge',
+          email: 'breed.judge@test.local',
+          link: expect.stringContaining(byJudge.get(breedJudge.id)!.uploadToken),
+        }),
+        expect.objectContaining({ judgeName: 'Ms Special Awards', email: 'sac.judge@test.local' }),
+      ]),
+    );
     expect(vi.mocked(sendCritiqueAutoInviteNoticeEmail)).toHaveBeenCalledTimes(1);
-    expect(vi.mocked(sendCritiqueAutoInviteNoticeEmail).mock.calls[0]![0]).toMatchObject({
-      secretaryEmail: 'secretary@club.test',
-      sentTo: ['Mrs Breed Judge'],
-      noEmail: [],
+    const notice = vi.mocked(sendCritiqueAutoInviteNoticeEmail).mock.calls[0]![0];
+    expect(notice).toMatchObject({ secretaryEmail: 'secretary@club.test', noEmail: [] });
+    expect([...notice.sentTo].sort()).toEqual(['Mrs Breed Judge', 'Ms Special Awards']);
+  });
+
+  it("a judge of the breed AND Junior Handling gets one link (North Eastern's judge, 11 Oct 2026)", async () => {
+    const { org, breed } = await makeSecretaryWithOrgAndBreed();
+    const s = await makeShow({
+      organisationId: org.id, showType: 'championship', showScope: 'single_breed', showRuleset: 'rkc',
+      breedId: breed.id, startDate: '2026-10-11', endDate: '2026-10-11', status: 'completed', secretaryEmail: 'sec@club.test',
     });
+    const judge = await makeJudge({ name: 'Philippe Tran Ngoc An', contactEmail: 'pt@test.local' });
+    await makeJudgeAssignment({ showId: s.id, judgeId: judge.id, sex: 'dog' });
+    await makeJudgeAssignment({ showId: s.id, judgeId: judge.id, sex: 'bitch' });
+    await makeJudgeAssignment({ showId: s.id, judgeId: judge.id, sex: null });
+    await runCritiqueAutoInvites(testDb, TODAY);
+    expect((await docsFor(s.id)).map((d) => d.judgeId)).toEqual([judge.id]);
+    expect(vi.mocked(sendCritiqueInviteEmail)).toHaveBeenCalledTimes(1);
   });
 
   it('sends once — the next hourly run does nothing', async () => {
     const { show: s } = await show();
     await runCritiqueAutoInvites(testDb, TODAY);
-    const token = (await docsFor(s.id))[0]!.uploadToken;
+    const tokens = (await docsFor(s.id)).map((d) => d.uploadToken).sort();
     await runCritiqueAutoInvites(testDb, '2026-10-26');
-    expect(vi.mocked(sendCritiqueInviteEmail)).toHaveBeenCalledTimes(1);
+    // One email per judge (breed + Special Awards), none on the second run.
+    expect(vi.mocked(sendCritiqueInviteEmail)).toHaveBeenCalledTimes(2);
     expect(vi.mocked(sendCritiqueAutoInviteNoticeEmail)).toHaveBeenCalledTimes(1);
-    expect((await docsFor(s.id))[0]!.uploadToken).toBe(token);
+    expect((await docsFor(s.id)).map((d) => d.uploadToken).sort()).toEqual(tokens);
   });
 
   it('waits the full two weeks', async () => {
@@ -107,12 +128,15 @@ describe('the critique link goes to breed judges two weeks after the show', () =
     expect(vi.mocked(sendCritiqueInviteEmail)).not.toHaveBeenCalled();
   });
 
-  it('leaves alone a judge the secretary has already invited — and says nothing', async () => {
-    const { show: s, breedJudge } = await show();
+  it('leaves alone judges the secretary has already invited — and says nothing', async () => {
+    const { show: s, breedJudge, sacJudge } = await show();
     const [doc] = await testDb
       .insert(schema.critiqueDocuments)
       .values({ showId: s.id, judgeId: breedJudge.id, status: 'invited', invitedEmail: 'own@test.local', invitedAt: new Date('2026-10-12T10:00:00Z') })
       .returning();
+    await testDb
+      .insert(schema.critiqueDocuments)
+      .values({ showId: s.id, judgeId: sacJudge.id, status: 'invited', invitedEmail: 'sac.own@test.local', invitedAt: new Date('2026-10-12T10:00:00Z') });
     await runCritiqueAutoInvites(testDb, TODAY);
     const after = await testDb.query.critiqueDocuments.findFirst({ where: eq(schema.critiqueDocuments.id, doc!.id) });
     expect([after!.uploadToken, after!.invitedEmail]).toEqual([doc!.uploadToken, 'own@test.local']);
@@ -120,15 +144,15 @@ describe('the critique link goes to breed judges two weeks after the show', () =
     expect(vi.mocked(sendCritiqueAutoInviteNoticeEmail)).not.toHaveBeenCalled();
   });
 
-  it('a breed judge with no email: nothing sent to them, the secretary is asked to send it — once', async () => {
-    const { show: s } = await show({ breedJudgeEmail: null });
+  it('a judge with no email: nothing sent to them, the secretary is asked to send it — once', async () => {
+    const { show: s, breedJudge } = await show({ breedJudgeEmail: null });
     await runCritiqueAutoInvites(testDb, TODAY);
     await runCritiqueAutoInvites(testDb, '2026-10-26');
-    expect(await docsFor(s.id)).toEqual([]);
-    expect(vi.mocked(sendCritiqueInviteEmail)).not.toHaveBeenCalled();
+    expect((await docsFor(s.id)).map((d) => d.judgeId)).not.toContain(breedJudge.id);
+    expect(vi.mocked(sendCritiqueInviteEmail).mock.calls.map((c) => c[0].judgeName)).toEqual(['Ms Special Awards']);
     expect(vi.mocked(sendCritiqueAutoInviteNoticeEmail)).toHaveBeenCalledTimes(1);
     expect(vi.mocked(sendCritiqueAutoInviteNoticeEmail).mock.calls[0]![0]).toMatchObject({
-      sentTo: [],
+      sentTo: ['Ms Special Awards'],
       noEmail: ['Mrs Breed Judge'],
     });
   });

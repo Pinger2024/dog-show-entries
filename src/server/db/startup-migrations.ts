@@ -293,7 +293,7 @@ export async function runStartupMigrations() {
   `);
 
   // ── 2026-09-30: critique links sent by Remi itself (Mandy) — two weeks after
-  // the show to the breed judges, one reminder four weeks later. ──
+  // the show to the judges (not Junior Handling), one reminder four weeks later. ──
   await db.execute(sql`
     ALTER TABLE shows ADD COLUMN IF NOT EXISTS critique_auto_invites_at TIMESTAMPTZ;
   `);

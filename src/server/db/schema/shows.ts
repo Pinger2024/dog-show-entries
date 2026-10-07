@@ -172,7 +172,7 @@ export const shows = pgTable(
     description: text('description'),
     secretaryUserId: uuid('secretary_user_id').references(() => users.id),
     secretaryEmail: text('secretary_email'),
-    // When the hourly job handed this show's breed judges their critique
+    // When the hourly job handed this show's judges their critique
     // links (services/critique-invites.ts) — set once, so it never repeats.
     critiqueAutoInvitesAt: timestamp('critique_auto_invites_at', { withTimezone: true }),
     secretaryName: text('secretary_name'),

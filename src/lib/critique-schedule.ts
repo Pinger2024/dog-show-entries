@@ -1,7 +1,8 @@
 /**
  * When Remi sends a judge the critique link by itself (Mandy, 30 Sept 2026):
  *   "maybe 2 weeks after judging to give them time to write them"
- *   "Breed only" — breed-class judges, not Junior Handling or Special Awards
+ *   Every judge but Junior Handling — breed and (Mandy, 7 Oct 2026) Special
+ *   Awards judges; services/critique-invites.ts critiqueJudgesForShow
  *   "Yes send a reminder 4 weeks later" — 4 weeks after the link, if nothing
  *   has come back (she confirmed: North Eastern 11 Oct → link 25 Oct,
  *   reminder 22 Nov).

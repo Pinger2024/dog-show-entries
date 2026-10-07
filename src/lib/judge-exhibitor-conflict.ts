@@ -23,7 +23,9 @@ export type JudgeConflictAssignment = {
   judge: { name: string | null } | null;
 };
 
-/** True when an assignment is a Junior-Handling-only assignment (no conflict). */
+/** True when an assignment is a Junior-Handling-only assignment (no conflict).
+ *  Also decides who Remi sends the critique link to — every judge but a pure
+ *  Junior Handling one (services/critique-invites.ts). */
 export function isJuniorHandlingOnlyAssignment(a: JudgeConflictAssignment): boolean {
   return (
     !a.isSpecialAwardsClassesJudge &&

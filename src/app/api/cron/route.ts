@@ -250,7 +250,7 @@ export async function GET(request: Request) {
   }
 
   // Judges' critique links, sent by Remi itself (Mandy, 30 Sept 2026): two
-  // weeks after the show to the breed judges, one reminder four weeks after
+  // weeks after the show to the judges (not Junior Handling), one reminder four weeks after
   // the link if nothing has come back. Same 8:30am floor as the emails above;
   // both claim before sending, so an hourly re-run never sends twice.
   let critiqueInvites: Awaited<ReturnType<typeof runCritiqueAutoInvites>> | null = null;
