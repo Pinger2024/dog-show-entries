@@ -64,9 +64,24 @@ export function critiqueReminderDate(invitedOn: string): string {
   return addCalendarDays(invitedOn, CRITIQUE_REMINDER_DAYS_AFTER_INVITE);
 }
 
-export function isCritiqueReminderDue(invitedOn: string, today: string): boolean {
+/**
+ * The day Remi sends the reminder — "today" if it's due now (on its day, or
+ * catching up) — or null if it never will. The hourly job sends it when this
+ * returns today; the Critiques page shows it ("Remi will send a reminder on
+ * 22 Nov"), so the page can't promise a day the job won't send on (the demo
+ * said "28 August" on 8 Oct 2026, for a reminder that was never coming).
+ * Never before the show has been held: the hourly job marks it 'completed'
+ * the day after its last day, and a judge can be invited by hand before then.
+ */
+export function upcomingReminderDate(
+  invitedOn: string,
+  showEndDate: string,
+  today: string = todayInLondon(),
+): string | null {
   const from = critiqueReminderDate(invitedOn);
-  return today >= from && today <= addCalendarDays(from, CRITIQUE_REMINDER_WINDOW_DAYS);
+  const heldFrom = addCalendarDays(showEndDate, 1);
+  const on = [from, heldFrom, today].reduce((a, b) => (a > b ? a : b));
+  return on <= addCalendarDays(from, CRITIQUE_REMINDER_WINDOW_DAYS) ? on : null;
 }
 
 /**

@@ -26,6 +26,9 @@ import {
   sendCritiqueAutoInviteNoticeEmail,
 } from '@/server/services/email';
 import { runCritiqueAutoInvites, runCritiqueReminders } from '@/server/services/critique-invites';
+import { createTestCaller } from '../helpers/context';
+import { addCalendarDays, critiqueReminderDate } from '@/lib/critique-schedule';
+import { londonCalendarDateStr, todayInLondon } from '@/lib/date-utils';
 
 const TODAY = '2026-10-25';
 
@@ -38,7 +41,7 @@ beforeEach(() => {
 /** An RKC single-breed show that ended on `endDate`, with a breed judge (dogs
  *  and bitches), a Junior Handling judge and a Special Awards judge. */
 async function show(opts: { endDate?: string; showRuleset?: 'rkc' | 'wusv'; status?: 'completed' | 'cancelled' | 'draft' | 'published'; breedJudgeEmail?: string | null } = {}) {
-  const { org, breed } = await makeSecretaryWithOrgAndBreed();
+  const { user, org, breed } = await makeSecretaryWithOrgAndBreed();
   const endDate = opts.endDate ?? '2026-10-11';
   const s = await makeShow({
     organisationId: org.id,
@@ -62,7 +65,7 @@ async function show(opts: { endDate?: string; showRuleset?: 'rkc' | 'wusv'; stat
   await makeJudgeAssignment({ showId: s.id, judgeId: breedJudge.id, sex: 'bitch' });
   await makeJudgeAssignment({ showId: s.id, judgeId: jhJudge.id, sex: null });
   await makeJudgeAssignment({ showId: s.id, judgeId: sacJudge.id, sex: null, isSpecialAwardsClassesJudge: true });
-  return { show: s, breedJudge, jhJudge, sacJudge };
+  return { show: s, breedJudge, jhJudge, sacJudge, secretary: user };
 }
 
 const docsFor = (showId: string) =>
@@ -238,6 +241,36 @@ describe('one gentle reminder, four weeks after the link, if nothing has come ba
     await invited('2026-09-30T18:32:00Z');
     await runCritiqueReminders(testDb, '2026-10-28');
     expect(vi.mocked(sendCritiqueReminderEmail)).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('the Critiques page promises only what Remi will really send', () => {
+  // listForShow reads the real clock, so these dates are relative to today.
+  const daysAgo = (n: number) => new Date(Date.now() - n * 86_400_000);
+
+  async function reminderLine(invitedAt: Date) {
+    const { show: s, breedJudge, secretary } = await show({ endDate: addCalendarDays(todayInLondon(), -100) });
+    await testDb
+      .insert(schema.critiqueDocuments)
+      .values({ showId: s.id, judgeId: breedJudge.id, status: 'invited', invitedEmail: 'breed.judge@test.local', invitedAt });
+    const rows = await createTestCaller(secretary).critiques.listForShow({ showId: s.id });
+    return rows.find((r) => r.judgeId === breedJudge.id)!.reminderOn;
+  }
+
+  it('a link sent two days ago: the reminder date four weeks on', async () => {
+    const invitedAt = daysAgo(2);
+    expect(await reminderLine(invitedAt)).toBe(critiqueReminderDate(londonCalendarDateStr(invitedAt)));
+  });
+
+  it('the reminder day has just passed: it goes on the next hourly run, so the page says today', async () => {
+    expect(await reminderLine(daysAgo(30))).toBe(todayInLondon());
+  });
+
+  it('a link sent ten weeks ago: no reminder is coming, so the page promises none', async () => {
+    // The demo's Summer Championship show, 8 Oct 2026: "Remi will send a
+    // reminder on 28 August 2026" — a date already gone, for a reminder the
+    // hourly job would never send.
+    expect(await reminderLine(daysAgo(70))).toBeNull();
   });
 });
 

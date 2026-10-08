@@ -19,7 +19,7 @@ import {
 import { publishGateStatus } from '@/lib/critique-publish-gate';
 import { sendCritiqueSubmittedEmail, APP_URL } from '@/server/services/email';
 import { critiqueJudgesForShow, inviteJudgeForCritiques, showHasCritiqueLink } from '@/server/services/critique-invites';
-import { critiqueAutoSendPhase, critiqueReminderDate, upcomingAutoInviteDate } from '@/lib/critique-schedule';
+import { critiqueAutoSendPhase, upcomingAutoInviteDate, upcomingReminderDate } from '@/lib/critique-schedule';
 import { londonCalendarDateStr } from '@/lib/date-utils';
 
 // Mirrors CritiqueParsedBlock (src/server/db/schema/critique-documents.ts) —
@@ -313,7 +313,7 @@ export const critiquesRouter = createTRPCRouter({
           // Invited, nothing back yet: the day of the one reminder.
           reminderOn:
             willSend && doc && doc.status === 'invited' && doc.invitedAt && !doc.reminderSentAt
-              ? critiqueReminderDate(londonCalendarDateStr(doc.invitedAt))
+              ? upcomingReminderDate(londonCalendarDateStr(doc.invitedAt), show!.endDate)
               : null,
           document: doc
             ? {

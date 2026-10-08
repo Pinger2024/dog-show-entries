@@ -26,7 +26,7 @@ import {
   addCalendarDays,
   critiqueAutoSendPhase,
   isCritiqueInviteDue,
-  isCritiqueReminderDue,
+  upcomingReminderDate,
 } from '@/lib/critique-schedule';
 import { londonCalendarDateStr } from '@/lib/date-utils';
 import { documentRowVisible, type DocumentEligibilityContext } from '@/app/(secretary)/secretary/shows/[id]/_lib/document-eligibility';
@@ -231,7 +231,7 @@ export async function runCritiqueReminders(db: Database, today: string) {
     with: {
       judge: { columns: { name: true } },
       show: {
-        columns: { id: true, name: true, startDate: true, status: true, showRuleset: true, showType: true },
+        columns: { id: true, name: true, startDate: true, endDate: true, status: true, showRuleset: true, showType: true },
         with: { organisation: { columns: { name: true } } },
       },
     },
@@ -240,7 +240,8 @@ export async function runCritiqueReminders(db: Database, today: string) {
   const summary = { reminded: 0, errors: [] as string[] };
   for (const doc of pending) {
     if (!doc.show || critiqueAutoSendPhase(doc.show.status) !== 'now' || !showHasCritiqueLink(doc.show)) continue;
-    if (!isCritiqueReminderDue(londonCalendarDateStr(doc.invitedAt!), today)) continue;
+    // Sent on the day the Critiques page promised (lib/critique-schedule.ts).
+    if (upcomingReminderDate(londonCalendarDateStr(doc.invitedAt!), doc.show.endDate, today) !== today) continue;
     const [claimed] = await db
       .update(critiqueDocuments)
       .set({ reminderSentAt: new Date() })
