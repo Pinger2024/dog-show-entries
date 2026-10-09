@@ -171,6 +171,9 @@ const svEntry = {
     lineHeight: 1.1,
   } as const,
   metaLabel: { fontWeight: 'bold' as const, color: SV.ink } as const,
+  // The owner's NAMES on line 4 — same bold face as metaLabel (already
+  // registered for SV_FONTS.sans), so no new font reaches the print preflight.
+  ownerName: { fontWeight: 'bold' as const, color: SV.ink } as const,
   pedigree: {
     fontFamily: SV_FONTS.serif,
     fontStyle: 'italic' as const,
@@ -507,26 +510,29 @@ export function renderSvEntry(
         </Text>
       )}
 
-      {/* Line 4 — Breeder + Owner on one line, separated by a centred dot
-          (Amanda 2026-05-23 — saves a row per entry, page is denser). */}
+      {/* Line 4 — Owner + Breeder on one line, separated by a centred dot
+          (Amanda 2026-05-23 — saves a row per entry, page is denser).
+          Owner FIRST and the owner's names in bold: a BRG secretary
+          stewarding the Midland regional kept reading the breeder when she
+          meant to call in the owner (Mandy 2026-10-09). */}
       {(breederParts.length > 0 || ownersHeading) && (
         <Text style={svEntry.meta}>
-          {breederParts.length > 0 && (
-            <>
-              <Text style={svEntry.metaLabel}>Breeder </Text>
-              {breederParts.join(', ')}
-            </>
-          )}
-          {breederParts.length > 0 && ownersHeading ? '    ·    ' : ''}
           {ownersHeading && (
             <>
               <Text style={svEntry.metaLabel}>
                 Owner{entry.owners.length > 1 ? 's' : ''}{' '}
               </Text>
-              {ownersHeading}
+              <Text style={svEntry.ownerName}>{ownersHeading}</Text>
               {primaryOwnerAddr.town || primaryOwnerAddr.postcode
                 ? `, ${[primaryOwnerAddr.town, primaryOwnerAddr.postcode].filter(Boolean).join(', ')}`
                 : ''}
+            </>
+          )}
+          {breederParts.length > 0 && ownersHeading ? '    ·    ' : ''}
+          {breederParts.length > 0 && (
+            <>
+              <Text style={svEntry.metaLabel}>Breeder </Text>
+              {breederParts.join(', ')}
             </>
           )}
         </Text>
