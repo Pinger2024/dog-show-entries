@@ -90,3 +90,54 @@ describe('renderSvEntry name line', () => {
     expect(numberText, 'catalogue number should be its own Text').toBeTruthy();
   });
 });
+
+// Mandy 2026-10-09: a BRG secretary stewarding the Midland regional kept
+// reading the breeder when she meant to call in the owner. The line now leads
+// with the owner, and the owner's NAMES are bold so they stand out on the page.
+describe('renderSvEntry owner / breeder line', () => {
+  const withOwner = {
+    catalogueNumber: 12,
+    dogName: 'Bella',
+    breeder: 'Mrs B Reeder',
+    breederCity: 'Leeds',
+    breederPostcode: 'LS1 1AA',
+    owners: [{ name: 'Smith', title: null, address: '1 High St, York, YO1 7HH' }],
+    titles: [],
+    entryType: 'standard',
+  } as unknown as CatalogueEntry;
+
+  function ownerBreederLine(e: CatalogueEntry) {
+    const row = renderSvEntry(e, 'k');
+    const line = elementsOfType(row, Text).find((t) => {
+      const s = subtreeText(t);
+      return s.includes('Owner') && s.includes('Breeder');
+    });
+    return line;
+  }
+
+  it('prints the owner BEFORE the breeder, on ONE line', () => {
+    const line = ownerBreederLine(withOwner);
+    expect(line, 'owner and breeder should share one Text').toBeTruthy();
+    const s = subtreeText(line);
+    expect(s.indexOf('Owner')).toBeLessThan(s.indexOf('Breeder'));
+    expect(s.indexOf('SMITH')).toBeLessThan(s.indexOf('Reeder'));
+  });
+
+  it('prints the owner names bold, and the owner town/postcode in normal weight', () => {
+    const line = ownerBreederLine(withOwner)!;
+    const bold = elementsOfType(line, Text).filter(
+      (t) => (t.props as { style?: { fontWeight?: string } }).style?.fontWeight === 'bold',
+    );
+    const boldTexts = bold.map((t) => subtreeText(t));
+    expect(boldTexts.some((s) => s.includes('SMITH'))).toBe(true);
+    // The town is not inside any bold node.
+    expect(boldTexts.some((s) => s.includes('York') || s.includes('YO1'))).toBe(false);
+  });
+
+  it('has no stray separator when there is no breeder', () => {
+    const noBreeder = { ...withOwner, breeder: null, breederCity: null, breederPostcode: null } as unknown as CatalogueEntry;
+    const s1 = subtreeText(renderSvEntry(noBreeder, 'k'));
+    expect(s1).not.toContain('Breeder');
+    expect(s1).not.toMatch(/·\s*$/);
+  });
+});
