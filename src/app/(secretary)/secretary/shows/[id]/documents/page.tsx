@@ -415,6 +415,16 @@ export default function DocumentsPage() {
                 <PdfViewerButton icon={<Award className="size-4" />} label="View" url={`/api/reports/${showId}/grading-cards`} />
               </DocRow>
             )}
+            {documentRowVisible('results-sheet', docCtx) && (
+              <DocRow
+                icon={<ClipboardList className="size-4" />}
+                label="Results Sheet"
+                description="For the steward to fill in and the judge to sign. The right half is for the scoreboard."
+                note={!catalogueData?.entries?.length ? 'Ring numbers will be blank until entries are confirmed' : undefined}
+              >
+                <PdfViewerButton icon={<ClipboardList className="size-4" />} label="View" url={`/api/reports/${showId}/results-sheet`} />
+              </DocRow>
+            )}
             {documentRowVisible('catalogue-standard', docCtx) && (
               <DocRow
                 icon={<BookOpen className="size-4" />}

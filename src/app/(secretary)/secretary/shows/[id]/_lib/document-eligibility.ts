@@ -27,6 +27,7 @@ export type DocumentRowKey =
   | 'sh01'
   | 'sv-results'
   | 'grading-cards'
+  | 'results-sheet'
   | 'judge-critiques'
   | 'judge-copy-catalogue';
 
@@ -56,6 +57,7 @@ export function documentRowVisible(rowKey: DocumentRowKey, ctx: DocumentEligibil
   switch (rowKey) {
     case 'sv-results':
     case 'grading-cards':
+    case 'results-sheet':
     // The judge's keepsake copy (catalogue with results filled in) is an
     // SV/WUSV-only concept — RKC has no per-dog grading scale to fill in
     // and already gets the Marked Catalogue for its post-results record

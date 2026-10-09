@@ -22,6 +22,7 @@ import {
   makeJudgeAssignment,
 } from '../helpers/factories';
 import * as schema from '@/server/db/schema';
+import { eq } from 'drizzle-orm';
 import { loadGradingCardsData } from '@/server/services/grading-cards-data';
 import { loadResultsSheetData } from '@/server/services/results-sheet-data';
 
@@ -82,11 +83,14 @@ async function regional(customAwards?: string[]) {
     showType: 'championship',
     breedId: breed.id,
     status: 'entries_open',
-    ...(customAwards ? { bestAwards: customAwards } : {}),
+    ...(customAwards ? { scheduleData: { bestAwards: customAwards } } : {}),
   });
-  const puppyDef = await makeClassDef({ name: 'SV Minor Puppy', type: 'sv_age' });
-  const juniorDef = await makeClassDef({ name: 'SV Junior', type: 'sv_age' });
-  const jhDef = await makeClassDef({ name: 'Junior Handling', type: 'junior_handler' });
+  const def = async (name: string, type: 'sv_age' | 'junior_handler') =>
+    (await testDb.query.classDefinitions.findFirst({ where: eq(schema.classDefinitions.name, name) })) ??
+    (await makeClassDef({ name, type }));
+  const puppyDef = await def('SV Minor Puppy', 'sv_age');
+  const juniorDef = await def('SV Junior', 'sv_age');
+  const jhDef = await def('Junior Handling', 'junior_handler');
   // Inserted Junior first, JH second, puppy last — sortOrder says otherwise.
   const junior = await makeShowClass({ showId: show.id, classDefinitionId: juniorDef.id, sortOrder: 2, sex: 'bitch', svCoatType: 'long_stock' });
   const jh = await makeShowClass({ showId: show.id, classDefinitionId: jhDef.id, sortOrder: 3 });

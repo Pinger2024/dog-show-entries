@@ -94,4 +94,29 @@ describe('Results Sheet PDF text', () => {
     );
     expect(out).toHaveLength(0);
   });
+
+  it('runs onto more pages with the heading, column row and page count on every page, and never strands a class band', async () => {
+    const many: ResultsSheetData = {
+      ...data,
+      blocks: Array.from({ length: 6 }, (_, i) => ({
+        showClassId: `c${i}`, label: `${i + 1}a`, heading: `Class ${i + 1}a  ·  Junior Bitch  ·  Long Coat`,
+        measured: true, isJuniorHandling: false,
+        rows: Array.from({ length: 9 }, (_, j) => ({ ringNumber: String(i * 10 + j + 1), name: `Dog ${i}-${j}`, absent: false })),
+      })),
+    };
+    const pdf = await render(many);
+    const doc = await PDFDocument.load(pdf);
+    const pages = doc.getPageCount();
+    expect(pages).toBeGreaterThan(1);
+    const t = text(pdf);
+    expect(t.match(/For the scoreboard/g)).toHaveLength(pages);
+    expect(t.match(/Judge's signature/g)).toHaveLength(pages);
+    expect(t).toContain(`Page ${pages} of ${pages}`);
+    // A band never ends a page: the last body line of each page is not a band.
+    for (const pageText of t.split('\f').filter((p) => p.trim())) {
+      const lines = pageText.split('\n').map((l) => l.trim()).filter(Boolean);
+      const body = lines.filter((l) => !/Judge's signature|Page \d+ of/.test(l));
+      expect(/^Class \d+a/.test(body[body.length - 1] ?? '')).toBe(false);
+    }
+  });
 });

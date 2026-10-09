@@ -26,6 +26,8 @@ import { buildSvResultsReport, buildSvResultsXlsxRows } from '@/lib/sv-results';
 import { buildSvResultsXlsx } from '@/lib/sv-results-xlsx';
 import { GradingCardsReport } from '@/components/reports/grading-cards-pdf';
 import { loadGradingCardsData } from '@/server/services/grading-cards-data';
+import { ResultsSheetReport } from '@/components/reports/results-sheet-pdf';
+import { loadResultsSheetData } from '@/server/services/results-sheet-data';
 import { getPaidOrderIdsForShow } from '@/server/services/show-metrics';
 import {
   loadAbsenteeLikeEntries,
@@ -48,7 +50,7 @@ import {
 import { isLiveEntry } from '@/lib/entry-counts';
 
 const PDF_TYPES = ['catalogue-order', 'class-breakdown', 'catalogue-orders', 'sh01'] as const;
-const SV_TYPES = ['sv-results', 'sv-results-xlsx', 'grading-cards'] as const;
+const SV_TYPES = ['sv-results', 'sv-results-xlsx', 'grading-cards', 'results-sheet'] as const;
 // Excel twins of the PDF/CSV reports above — Mandy's original ask: "the
 // option to generate on excel or pdf". Each one reuses the exact row-
 // builder or DB query its PDF/CSV sibling uses (see report-rows.ts and
@@ -164,6 +166,29 @@ export async function GET(
       console.error('Grading cards generation failed:', err);
       const message = err instanceof Error ? err.message : String(err);
       return NextResponse.json({ error: 'Grading cards generation failed', detail: message }, { status: 500 });
+    }
+  }
+
+  // ── Regional Results Sheet — A4 landscape master sheet (steward fills in,
+  // judge signs) + a scoreboard half for folk to write up their catalogues. ──
+  if (type === 'results-sheet') {
+    if (show.showRuleset !== 'wusv') {
+      return NextResponse.json(
+        { error: 'The results sheet is only available for regional shows.' },
+        { status: 400 },
+      );
+    }
+    const data = await loadResultsSheetData(db, showId);
+    if (!data) {
+      return NextResponse.json({ error: 'Show not found' }, { status: 404 });
+    }
+    try {
+      const element = React.createElement(ResultsSheetReport, { data });
+      return await renderPdf(element, `${sanitizeFilename(show.name)}-Results-Sheet.pdf`, isPreview);
+    } catch (err) {
+      console.error('Results sheet generation failed:', err);
+      const message = err instanceof Error ? err.message : String(err);
+      return NextResponse.json({ error: 'Results sheet generation failed', detail: message }, { status: 500 });
     }
   }
 
