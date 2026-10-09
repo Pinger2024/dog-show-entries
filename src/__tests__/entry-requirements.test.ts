@@ -203,8 +203,8 @@ describe('entryRequirements — what applies to which entry', () => {
 
 describe('character assessment (WB) for young Adults — regional only', () => {
   // Mandy 2026-10-09, confirming the BRG rule (secretary Shirley Hutchinson):
-  // a dog born on or after 1 Jan 2025 entered in Adult must have its WB
-  // recorded. WB can only be sat at 9-13 months, so older dogs are exempt.
+  // a dog born on or after 1 Jan 2025 entered in Adult or Working must have its
+  // WB recorded. WB can only be sat at 9-13 months, so older dogs are exempt.
   const WB = 'Character Assessment (WB)';
   const wbGaps = (o: {
     dateOfBirth?: string | Date | null;
@@ -243,10 +243,12 @@ describe('character assessment (WB) for young Adults — regional only', () => {
     expect(wbGaps({ dateOfBirth: new Date(2024, 11, 31) }).sv).not.toContain(WB);
   });
 
-  it('only applies to the Adult class', () => {
+  it('applies to Adult and Working, not the younger classes', () => {
     expect(wbGaps({ dateOfBirth: '2025-06-01', classNames: ['SV Yearling'] }).sv).not.toContain(WB);
-    // Working is NOT included yet — Mandy is checking.
-    expect(wbGaps({ dateOfBirth: '2025-06-01', classNames: ['Working'] }).sv).not.toContain(WB);
+    // Working too, same birth date (Mandy 2026-10-09: "Wb is a requirement for
+    // the working class too" — "that's perfect" to the same 1 Jan 2025 rule).
+    expect(wbGaps({ dateOfBirth: '2025-06-01', classNames: ['Working'] }).sv).toContain(WB);
+    expect(wbGaps({ dateOfBirth: '2024-12-31', classNames: ['Working'] }).sv).not.toContain(WB);
   });
 
   it('does not apply to NFC, an RKC show, or a Junior Handler entry', () => {

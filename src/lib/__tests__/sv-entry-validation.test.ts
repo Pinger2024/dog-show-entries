@@ -99,6 +99,6 @@ describe('regional entry requirements (entryRequirements)', () => {
 describe('svWbRequirementSentence — the WB rule in words, from the same constants', () => {
   it('reads the classes and date the entry rule enforces', async () => {
     const { svWbRequirementSentence } = await import('../sv-entry-validation');
-    expect(svWbRequirementSentence()).toBe('WB is needed to enter Adult for dogs born on or after 1 January 2025.');
+    expect(svWbRequirementSentence()).toBe('WB is needed to enter Adult or Working for dogs born on or after 1 January 2025.');
   });
 });
