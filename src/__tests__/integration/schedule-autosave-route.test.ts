@@ -146,6 +146,42 @@ describe('POST /api/schedule-autosave/[showId] — wipe protection', () => {
     expect(dbShow?.scheduleData?.awardsDescription).toBe('Trophies 1st to 3rd in all classes');
   });
 
+  it('autosaves the Reserve Event Manager (Mandy 2026-10-09)', async () => {
+    const { user, org } = await makeSecretaryWithOrg();
+    const show = await makeShow({ organisationId: org.id, scheduleData: POPULATED_EXISTING });
+    mockAuthedAs(user);
+
+    const res = await autosavePOST(
+      beaconRequest(show.id, {
+        scheduleData: {
+          ...BLANK_DEFAULT_PAYLOAD.scheduleData,
+          showManager: 'Mr Andrew Winfrow',
+          reserveShowManager: 'Mrs Ray Reserve',
+          officers: POPULATED_EXISTING.officers,
+        },
+      }) as never,
+      params(show.id),
+    );
+    expect(res.status).toBe(200);
+
+    const dbShow = await testDb.query.shows.findFirst({ where: eq(shows.id, show.id) });
+    expect(dbShow?.scheduleData?.reserveShowManager).toBe('Mrs Ray Reserve');
+  });
+
+  it('counts a lone Reserve Event Manager as content worth protecting from a blank beacon', async () => {
+    const { user, org } = await makeSecretaryWithOrg();
+    const show = await makeShow({
+      organisationId: org.id,
+      scheduleData: { country: 'england', reserveShowManager: 'Mrs Ray Reserve' },
+    });
+    mockAuthedAs(user);
+
+    const res = await autosavePOST(beaconRequest(show.id, BLANK_DEFAULT_PAYLOAD) as never, params(show.id));
+    expect((await res.json()).skipped).toBe('suspicious-wipe');
+    const dbShow = await testDb.query.shows.findFirst({ where: eq(shows.id, show.id) });
+    expect(dbShow?.scheduleData?.reserveShowManager).toBe('Mrs Ray Reserve');
+  });
+
   it('accepts a payload with real user content (one officer) even if most fields are default', async () => {
     const { user, org } = await makeSecretaryWithOrg();
     const show = await makeShow({ organisationId: org.id, scheduleData: POPULATED_EXISTING });

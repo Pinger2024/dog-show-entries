@@ -77,6 +77,18 @@ describe('secretary.updateScheduleData', () => {
     expect(dbShow?.scheduleData?.welcomeNote).toBe('Welcome to the show!');
   });
 
+  it('saves the Reserve Event Manager alongside the Event Manager (Mandy 2026-10-09)', async () => {
+    const { user, org } = await makeSecretaryWithOrg();
+    const show = await makeShow({ organisationId: org.id });
+    await createTestCaller(user).secretary.updateScheduleData({
+      showId: show.id,
+      scheduleData: { showManager: 'Sue Manager', reserveShowManager: 'Ray Reserve' },
+    });
+    const dbShow = await testDb.query.shows.findFirst({ where: eq(shows.id, show.id) });
+    expect(dbShow?.scheduleData?.showManager).toBe('Sue Manager');
+    expect(dbShow?.scheduleData?.reserveShowManager).toBe('Ray Reserve');
+  });
+
   it('syncs new officers (incl. guarantors) into organisationPeople for re-use', async () => {
     const { user, org } = await makeSecretaryWithOrg();
     const show = await makeShow({ organisationId: org.id });

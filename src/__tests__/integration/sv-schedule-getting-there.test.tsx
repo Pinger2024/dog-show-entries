@@ -118,6 +118,7 @@ describe('SV schedule — what3words and On the day', () => {
           directions: DIRECTIONS,
           catering: 'The cafe will be open during the show - serving excellent food and drinks.',
           showManager: 'Heather Macdonald',
+          reserveShowManager: 'Reggie Reserve',
           officers: [{ name: 'Jane Example', position: 'Chairman' }],
           latestArrivalTime: '08:45',
           prizeMoney: 'No prize money.',
@@ -136,6 +137,8 @@ describe('SV schedule — what3words and On the day', () => {
       '08:45',
       'Event Manager',
       'Heather Macdonald',
+      'Reserve Event Manager',
+      'Reggie Reserve',
       'Chairman',
       'Jane Example',
       'Getting there',
@@ -150,6 +153,16 @@ describe('SV schedule — what3words and On the day', () => {
       expect(page3).toContain(expected);
     }
     expect(await pdfPageCount(buf)).toBe(7);
+  }, 60_000);
+
+  it('"Who\'s who" appears for a Reserve Event Manager alone', async () => {
+    const buf = await renderToBuffer(
+      <SvShowSchedule show={winterSpectacular({ reserveShowManager: 'Reggie Reserve' })} classes={classes} judges={[]} />,
+    );
+    const page3 = (await pageText(buf, 3)).replace(/\s+/g, ' ');
+    expect(page3).toContain("Who's who");
+    expect(page3).toContain('Reserve Event Manager');
+    expect(page3).toContain('Reggie Reserve');
   }, 60_000);
 
   it("Midland's half-page of turn-by-turn directions, with every other box filled, still fits", async () => {
