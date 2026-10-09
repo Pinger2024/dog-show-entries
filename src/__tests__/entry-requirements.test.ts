@@ -25,6 +25,7 @@ const completeRegionalDog = {
   breederPostcode: 'PH1 1AA',
   sireRegistrationNumber: 'AT00843504',
   damRegistrationNumber: 'AV02742901',
+  dateOfBirth: '2020-03-04',
 };
 
 const healthyProfile = { hipGrade: 'bva', elbowGrade: 'bva', dna: 'recorded' };
@@ -200,6 +201,65 @@ describe('entryRequirements — what applies to which entry', () => {
   });
 });
 
+describe('character assessment (WB) for young Adults — regional only', () => {
+  // Mandy 2026-10-09, confirming the BRG rule (secretary Shirley Hutchinson):
+  // a dog born on or after 1 Jan 2025 entered in Adult must have its WB
+  // recorded. WB can only be sat at 9-13 months, so older dogs are exempt.
+  const WB = 'Character Assessment (WB)';
+  const wbGaps = (o: {
+    dateOfBirth?: string | Date | null;
+    wb?: boolean;
+    classNames?: string[];
+    showRuleset?: string;
+    isNfc?: boolean;
+    entryType?: string;
+  }) =>
+    entryRequirements({
+      dog: { ...completeRegionalDog, dateOfBirth: o.dateOfBirth === undefined ? '2025-01-01' : o.dateOfBirth },
+      svProfile: { ...healthyProfile, wb: o.wb ?? false },
+      classNames: o.classNames ?? ['Adult'],
+      showRuleset: o.showRuleset ?? 'wusv',
+      entryType: o.entryType ?? 'standard',
+      isNfc: o.isNfc ?? false,
+    });
+
+  it('asks for it: born 2025-01-01, Adult, no WB', () => {
+    expect(wbGaps({}).sv).toContain(WB);
+    expect(wbGaps({}).all).toContain(WB);
+  });
+
+  it('is satisfied once WB is ticked', () => {
+    expect(wbGaps({ wb: true }).sv).not.toContain(WB);
+  });
+
+  it('exempts a dog born 2024-12-31', () => {
+    expect(wbGaps({ dateOfBirth: '2024-12-31' }).sv).not.toContain(WB);
+  });
+
+  it('counts 1 Jan 2025 as "on or after" however the date arrives (London, not UTC)', () => {
+    // A Date at local midnight and the same day as an ISO timestamp.
+    expect(wbGaps({ dateOfBirth: new Date(2025, 0, 1) }).sv).toContain(WB);
+    expect(wbGaps({ dateOfBirth: '2025-01-01T00:00:00.000Z' }).sv).toContain(WB);
+    expect(wbGaps({ dateOfBirth: new Date(2024, 11, 31) }).sv).not.toContain(WB);
+  });
+
+  it('only applies to the Adult class', () => {
+    expect(wbGaps({ dateOfBirth: '2025-06-01', classNames: ['SV Yearling'] }).sv).not.toContain(WB);
+    // Working is NOT included yet — Mandy is checking.
+    expect(wbGaps({ dateOfBirth: '2025-06-01', classNames: ['Working'] }).sv).not.toContain(WB);
+  });
+
+  it('does not apply to NFC, an RKC show, or a Junior Handler entry', () => {
+    expect(wbGaps({ isNfc: true }).all).not.toContain(WB);
+    expect(wbGaps({ showRuleset: 'rkc' }).all).not.toContain(WB);
+    expect(wbGaps({ entryType: 'junior_handler' }).all).toEqual([]);
+  });
+
+  it('does not guess when the date of birth is missing', () => {
+    expect(wbGaps({ dateOfBirth: null }).sv).not.toContain(WB);
+  });
+});
+
 describe('entry requirements — one owner guard', () => {
   const SRC = join(__dirname, '..');
   const filesMentioning = (needle: string) =>
@@ -214,6 +274,11 @@ describe('entry requirements — one owner guard', () => {
   it('only entryRequirements composes the SV summary and the health gate', () => {
     expect(filesMentioning('svMissingRequirements(')).toEqual(['src/lib/entry-requirements.ts', 'src/lib/sv-entry-readiness.ts']);
     expect(filesMentioning('SV_HEALTH_FROM_CLASSES')).toEqual(['src/lib/entry-requirements.ts', 'src/lib/sv-entry-validation.ts']);
+  });
+
+  it('the WB rule\'s class list and date are declared once', () => {
+    expect(filesMentioning('SV_WB_REQUIRED_CLASSES')).toEqual(['src/lib/entry-requirements.ts', 'src/lib/sv-entry-validation.ts']);
+    expect(filesMentioning('SV_WB_BORN_ON_OR_AFTER')).toEqual(['src/lib/entry-requirements.ts', 'src/lib/sv-entry-validation.ts']);
   });
 
   it('the regional field messages are declared once — no page keeps its own list', () => {
