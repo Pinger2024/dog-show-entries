@@ -41,6 +41,8 @@ describe('documentRowVisible', () => {
   it('shows Grading Cards only on a wusv show', () => {
     expect(documentRowVisible('grading-cards', { showRuleset: 'wusv', showType: 'open' })).toBe(true);
     expect(documentRowVisible('grading-cards', { showRuleset: 'rkc', showType: 'championship' })).toBe(false);
+    expect(documentRowVisible('results-sheet', { showRuleset: 'wusv', showType: 'open' })).toBe(true);
+    expect(documentRowVisible('results-sheet', { showRuleset: 'rkc', showType: 'championship' })).toBe(false);
   });
 
   // Mandy 2026-09-05: the judge's keepsake catalogue (results filled into
