@@ -14,7 +14,7 @@ import { eq } from 'drizzle-orm';
 import type { Database } from '@/server/db';
 import * as schema from '@/server/db/schema';
 import { showNameWithClub } from '@/lib/show-types';
-import { formatLondonDateSlash } from '@/lib/date-utils';
+import { formatLondonLongDate } from '@/lib/date-utils';
 import { buildClassLabelMap, compareShowClassRunningOrder, isJuniorHandler, svClassHeading } from '@/lib/class-labels';
 import { buildBestAwards } from '@/lib/best-awards';
 import { isSvMeasuredClass } from '@/lib/sv-grading';
@@ -25,7 +25,7 @@ import type { ResultsSheetData, ResultsSheetBlock } from '@/components/reports/r
 function safeDate(iso: string | null | undefined): string {
   if (!iso) return '';
   try {
-    return formatLondonDateSlash(iso);
+    return formatLondonLongDate(iso);
   } catch {
     return iso;
   }

@@ -160,6 +160,8 @@ describe('loadResultsSheetData', () => {
     const data = await loadResultsSheetData(testDb, f.show.id);
     expect(data).not.toBeNull();
     expect(data!.showName).toContain('Sample Regional');
+    // Written out in full for the people reading it — "Sunday, 11 October 2026", never 11/10/2026.
+    expect(data!.showDate).toMatch(/^[A-Z][a-z]+day, \d{1,2} [A-Z][a-z]+ \d{4}$/);
     expect(data!.judges).toEqual(['Peter Schorling']);
     expect(data!.jhJudges).toEqual(['Mandy McAteer']);
 

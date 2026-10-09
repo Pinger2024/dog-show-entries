@@ -18,7 +18,7 @@ const LONG = 'Westmac Lleuad Leo Mit Tollelite';
 
 const data: ResultsSheetData = {
   showName: 'Sample Regional GSD Show',
-  showDate: '11/10/2026',
+  showDate: 'Sunday, 11 October 2026',
   judges: ['Peter Schorling'],
   jhJudges: ['Mandy McAteer'],
   blocks: [
