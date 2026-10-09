@@ -252,6 +252,7 @@ export function ScheduleSettingsForm({ showId, onSaved }: ScheduleSettingsFormPr
   const [firstAiders, setFirstAiders] = useState<string[]>([]);
   const [what3words, setWhat3words] = useState('');
   const [showManager, setShowManager] = useState('');
+  const [reserveShowManager, setReserveShowManager] = useState('');
   const [officers, setOfficers] = useState<OfficerWithGuarantor[]>([]);
   const [bestAwards, setBestAwards] = useState<string[]>([]);
   const [awardsDescription, setAwardsDescription] = useState('');
@@ -294,6 +295,7 @@ export function ScheduleSettingsForm({ showId, onSaved }: ScheduleSettingsFormPr
     setOnCallVet(showData?.onCallVet ?? previousData?.onCallVet ?? '');
     setWhat3words(sd?.what3words ?? '');
     setShowManager(sd?.showManager ?? '');
+    setReserveShowManager(sd?.reserveShowManager ?? '');
 
     const existingOfficers = sd?.officers ?? [];
     const existingGuarantors = sd?.guarantors ?? [];
@@ -397,6 +399,9 @@ export function ScheduleSettingsForm({ showId, onSaved }: ScheduleSettingsFormPr
       judgedOnGroupSystem,
       latestArrivalTime: latestArrivalTime || undefined,
       showManager: showManager || undefined,
+      // Sent as-is (even '') so clearing it reaches the server — both save
+      // paths MERGE, and an omitted key would leave the old name in place.
+      reserveShowManager,
       officers: officers
         .filter((o) => o.name)
         .map((o) => ({ name: o.name, position: o.position })),
@@ -474,7 +479,7 @@ export function ScheduleSettingsForm({ showId, onSaved }: ScheduleSettingsFormPr
   }, [
     hasLoaded, country, publicAdmission, wetWeather, isBenched, benchingRemovalTime,
     acceptsNfc, judgedOnGroupSystem, latestArrivalTime, showOpenTime, judgingStartTime,
-    onCallVet, what3words, showManager, officers, firstAiders, bestAwards, isWusvShow, awardsDescription, prizeMoney,
+    onCallVet, what3words, showManager, reserveShowManager, officers, firstAiders, bestAwards, isWusvShow, awardsDescription, prizeMoney,
     directions, catering, futureShowDates, additionalNotes, welcomeNote,
     outsideAttraction, hasBestVeteranInShow, bestVeteranInShowEligibility, customStatements,
   ]);
@@ -545,6 +550,9 @@ export function ScheduleSettingsForm({ showId, onSaved }: ScheduleSettingsFormPr
       judgedOnGroupSystem,
       latestArrivalTime: latestArrivalTime || undefined,
       showManager: showManager || undefined,
+      // Sent as-is (even '') so clearing it reaches the server — both save
+      // paths MERGE, and an omitted key would leave the old name in place.
+      reserveShowManager,
       officers: officers
         .filter((o) => o.name)
         .map((o) => ({ name: o.name, position: o.position })),
@@ -583,7 +591,7 @@ export function ScheduleSettingsForm({ showId, onSaved }: ScheduleSettingsFormPr
   }, [
     effectiveExisting, country, publicAdmission, wetWeather, isBenched,
     benchingRemovalTime, acceptsNfc, judgedOnGroupSystem, latestArrivalTime,
-    showOpenTime, judgingStartTime, onCallVet, what3words, showManager,
+    showOpenTime, judgingStartTime, onCallVet, what3words, showManager, reserveShowManager,
     officers, firstAiders, bestAwards, isWusvShow, awardsDescription, prizeMoney, directions, catering,
     futureShowDates, additionalNotes, welcomeNote, outsideAttraction,
     hasBestVeteranInShow, bestVeteranInShowEligibility,
@@ -803,6 +811,7 @@ export function ScheduleSettingsForm({ showId, onSaved }: ScheduleSettingsFormPr
                   {section.id === 'people' && (
                     <PeopleSection
                       showManager={showManager} setShowManager={setShowManager}
+                      reserveShowManager={reserveShowManager} setReserveShowManager={setReserveShowManager}
                       officers={officers}
                       addOfficer={addOfficer}
                       removeOfficer={removeOfficer}
@@ -1113,12 +1122,13 @@ function AutoSaveIndicator({
 }
 
 function PeopleSection({
-  showManager, setShowManager, officers,
+  showManager, setShowManager, reserveShowManager, setReserveShowManager, officers,
   addOfficer, removeOfficer, updateOfficer,
   clubPeople, clubPickerOpen, setClubPickerOpen, addFromClub,
   guarantorCount, requiredGuarantors, showType, isWusvShow,
 }: {
   showManager: string; setShowManager: (v: string) => void;
+  reserveShowManager: string; setReserveShowManager: (v: string) => void;
   officers: OfficerWithGuarantor[];
   addOfficer: () => void;
   removeOfficer: (idx: number) => void;
@@ -1139,6 +1149,14 @@ function PeopleSection({
         </Label>
         <Input id="showManager" value={showManager} onChange={(e) => setShowManager(e.target.value)} placeholder="Full name" className="min-h-[2.75rem]" />
       </div>
+
+      {/* Regionals only, just a printed name (Mandy 2026-10-09). */}
+      {isWusvShow && (
+        <div className="space-y-1.5">
+          <Label htmlFor="reserveShowManager" className="text-xs">Reserve Event Manager</Label>
+          <Input id="reserveShowManager" value={reserveShowManager} onChange={(e) => setReserveShowManager(e.target.value)} placeholder="Full name" className="min-h-[2.75rem]" />
+        </div>
+      )}
 
       {/* Officers */}
       <div className="space-y-3">

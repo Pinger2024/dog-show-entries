@@ -6171,6 +6171,7 @@ export const secretaryRouter = createTRPCRouter({
           judgedOnGroupSystem: z.boolean().optional(),
           latestArrivalTime: z.string().optional(),
           showManager: z.string().optional(),
+          reserveShowManager: z.string().optional(),
           guarantors: z.array(z.object({
             name: z.string(),
             address: z.string().optional(),

@@ -690,6 +690,7 @@ function SvOnTheDayPage({
 
   const latestArrival = printable(sd?.latestArrivalTime);
   const manager = printable(sd?.showManager);
+  const reserveManager = printable(sd?.reserveShowManager);
   const officers = (sd?.officers ?? []).filter((o) => o.name?.trim());
   const w3w = what3wordsAddress(sd?.what3words);
   const directions = printable(sd?.directions);
@@ -718,11 +719,12 @@ function SvOnTheDayPage({
           {latestArrival ? <FeeRow label="Latest arrival" value={latestArrival} dense={dense} /> : null}
           {show.startTime ? <FeeRow label="Judging from" value={show.startTime} dense={dense} /> : null}
 
-          {manager || officers.length > 0 ? (
+          {manager || reserveManager || officers.length > 0 ? (
             <>
               <View style={{ height: sectionGap }} />
               <SectionTitle dense={dense} title="Who's who" />
               {manager ? <PersonRow role="Event Manager" name={manager} dense={dense} /> : null}
+              {reserveManager ? <PersonRow role="Reserve Event Manager" name={reserveManager} dense={dense} /> : null}
               {officers.map((o) => (
                 <PersonRow key={`${o.position}-${o.name}`} role={o.position?.trim() || 'Officer'} name={o.name.trim()} dense={dense} />
               ))}

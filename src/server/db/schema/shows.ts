@@ -34,6 +34,9 @@ export interface ScheduleData {
 
   // People
   showManager?: string;
+  /** Reserve Event Manager — a printed name on REGIONAL schedules only
+   *  (Mandy 2026-10-09: "just a name"). */
+  reserveShowManager?: string;
   guarantors?: { name: string; address?: string }[];
   officers?: { name: string; position: string }[];
   /** First aider name(s) — required to be on the schedule and catalogue

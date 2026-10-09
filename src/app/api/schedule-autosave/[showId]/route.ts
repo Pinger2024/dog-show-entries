@@ -114,7 +114,7 @@ export async function POST(
 }
 
 const SCHEDULE_TEXT_FIELDS = [
-  'showManager', 'awardsDescription', 'prizeMoney', 'what3words',
+  'showManager', 'reserveShowManager', 'awardsDescription', 'prizeMoney', 'what3words',
   'directions', 'catering', 'futureShowDates', 'additionalNotes',
   'welcomeNote', 'benchingRemovalTime', 'latestArrivalTime',
 ] as const;
