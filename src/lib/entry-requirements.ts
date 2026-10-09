@@ -39,7 +39,12 @@ import {
   SV_ENTRY_DOG_FIELDS,
   type SvHealthProfile,
 } from './sv-entry-readiness';
-import { SV_HEALTH_FROM_CLASSES } from './sv-entry-validation';
+import {
+  SV_HEALTH_FROM_CLASSES,
+  SV_WB_REQUIRED_CLASSES,
+  SV_WB_BORN_ON_OR_AFTER,
+} from './sv-entry-validation';
+import { londonCalendarDateStr } from './date-utils';
 import { PEDIGREE_FIELDS } from './dog-pedigree';
 
 export type EntryRequirementDog = {
@@ -56,10 +61,16 @@ export type EntryRequirementDog = {
   breederPostcode?: string | null;
   sireRegistrationNumber?: string | null;
   damRegistrationNumber?: string | null;
+  /** REQUIRED (null allowed): the character-assessment rule turns on the birth
+   *  date, so a caller that forgot to pass it must fail to compile rather than
+   *  silently skip the rule. */
+  dateOfBirth: string | Date | null;
 };
 
 export type EntryRequirementProfile = SvHealthProfile & {
   workingTitle?: string | null;
+  /** Character assessment (WB) ticked on the dog's SV health card. */
+  wb?: boolean | null;
 };
 
 export type EntryRequirements = {
@@ -77,6 +88,16 @@ export type EntryRequirements = {
    *  entries list shows as "Still needed". */
   all: string[];
 };
+
+/** Dates of birth are date-only values. Reduce to the London calendar day as a
+ *  YYYY-MM-DD string (the same normalisation formatDobKC uses), then compare as
+ *  strings — a dog born 1 Jan 2025 is "on or after" it in UTC and in London. */
+function bornOnOrAfter(dob: string | Date | null | undefined, isoDate: string): boolean {
+  if (!dob) return false;
+  const day =
+    typeof dob === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(dob) ? dob : londonCalendarDateStr(new Date(dob));
+  return day >= isoDate;
+}
 
 /** The catalogue pedigree gaps alone — every show, every standard entry. */
 export function pedigreeRequirementsMissing(dog: EntryRequirementDog): string[] {
@@ -136,6 +157,18 @@ export function entryRequirements(opts: {
   // quietly admitted (Mandy 2026-08-19).
   if (classNames.includes('Working') && !hasWorkingTitle(svProfile?.workingTitle)) {
     sv.push('Working title');
+  }
+
+  // Character assessment (WB) for young Adults (Mandy 2026-10-09, BRG rule —
+  // see SV_WB_REQUIRED_CLASSES). The label matches the "Character Assessment"
+  // tick on the dog's SV health card, where the owner sets it. A missing date
+  // of birth is not guessed at; the dog form requires one anyway.
+  if (
+    classNames.some((n) => SV_WB_REQUIRED_CLASSES.includes(n)) &&
+    bornOnOrAfter(dog.dateOfBirth, SV_WB_BORN_ON_OR_AFTER) &&
+    !svProfile?.wb
+  ) {
+    sv.push('Character Assessment (WB)');
   }
 
   // A pedigree field the SV declaration also checks is already on an SV line.

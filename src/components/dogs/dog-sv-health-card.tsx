@@ -570,7 +570,7 @@ export function DogSvHealthCard({ dogId, isOwner, sex, kcHealthSuggestions }: Do
               disabled={readOnly}
             />
             <p className="text-[11px] text-muted-foreground">
-              Printed in the catalogue after the working title. These don&apos;t decide which class your dog enters.
+              Printed in the catalogue after the working title. WB is needed to enter Adult for dogs born on or after 1 January 2025. BH and AD don&apos;t decide which class your dog enters.
             </p>
           </div>
 

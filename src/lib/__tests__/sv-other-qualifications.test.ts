@@ -27,6 +27,7 @@ const fullDog = {
   breederCity: 'Perth',
   breederPostcode: 'PH1 1AA',
   colour: 'Black & Gold',
+  dateOfBirth: '2020-01-01',
 };
 
 /** What the server's entry gate refuses a regional entry for (the SV half). */

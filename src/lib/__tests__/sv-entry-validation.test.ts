@@ -39,7 +39,7 @@ const svGaps = (
   classNames: string[],
 ) =>
   entryRequirements({
-    dog: { ...fullDog, ...dog },
+    dog: { dateOfBirth: null, ...fullDog, ...dog },
     svProfile,
     classNames,
     showRuleset: 'wusv',

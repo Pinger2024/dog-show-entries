@@ -37,7 +37,7 @@ const gaps = (opts: Omit<Parameters<typeof entryRequirements>[0], 'entryType' | 
 describe('entryRequirementsMissing — standard RKC show', () => {
   it('wants only the pedigree the catalogue prints', () => {
     const missing = gaps({
-      dog: { sireName: null, damName: 'Dam', breederName: 'Breeder', colour: 'Black' },
+      dog: { sireName: null, damName: 'Dam', breederName: 'Breeder', colour: 'Black', dateOfBirth: null },
       classNames: ['Open'],
       showRuleset: 'rkc',
     });
@@ -47,7 +47,7 @@ describe('entryRequirementsMissing — standard RKC show', () => {
 
   it('does NOT demand the regional fields on a standard show', () => {
     const missing = gaps({
-      dog: { sireName: 'S', damName: 'D', breederName: 'B', colour: 'Black' },
+      dog: { sireName: 'S', damName: 'D', breederName: 'B', colour: 'Black', dateOfBirth: null },
       classNames: ['Open'],
       showRuleset: 'rkc',
     });
@@ -183,19 +183,19 @@ describe('entryRequirements — what applies to which entry', () => {
   const base = { svProfile: {}, classNames: ['SV Yearling'], showRuleset: 'wusv' as const };
 
   it('an NFC dog on a regional needs only the catalogue pedigree', () => {
-    const r = entryRequirements({ ...base, dog: { colour: 'Black' }, entryType: 'standard', isNfc: true });
+    const r = entryRequirements({ ...base, dog: { colour: 'Black', dateOfBirth: null }, entryType: 'standard', isNfc: true });
     expect(r.sv).toEqual([]);
     expect(r.pedigree).toEqual(["the sire's name", "the dam's name", "the breeder's name"]);
     expect(r.all).toEqual(r.pedigree);
   });
 
   it('a Junior Handler entry needs nothing from a dog', () => {
-    const r = entryRequirements({ ...base, dog: {}, entryType: 'junior_handler', isNfc: false });
+    const r = entryRequirements({ ...base, dog: { dateOfBirth: null }, entryType: 'junior_handler', isNfc: false });
     expect(r).toEqual({ pedigree: [], sv: [], pedigreeNotInSv: [], all: [] });
   });
 
   it('a standard RKC entry needs only the pedigree, whatever the class', () => {
-    const r = entryRequirements({ ...base, showRuleset: 'rkc', dog: {}, entryType: 'standard', isNfc: false });
+    const r = entryRequirements({ ...base, showRuleset: 'rkc', dog: { dateOfBirth: null }, entryType: 'standard', isNfc: false });
     expect(r.sv).toEqual([]);
     expect(r.all).toHaveLength(4);
   });
