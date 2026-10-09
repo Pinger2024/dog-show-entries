@@ -9,6 +9,7 @@
  * rule (svEntryMissingRequirements) which the server ran instead of the
  * wizard's; removed 29 Sept 2026.
  */
+import { formatLondonShortDate } from './date-utils';
 
 /** DB class-definition names from Yearling up, where health data is required. */
 export const SV_HEALTH_FROM_CLASSES = new Set([
@@ -29,3 +30,11 @@ export const SV_WB_REQUIRED_CLASSES: readonly string[] = ['Adult'];
 
 /** Date-only (YYYY-MM-DD) birth date from which SV_WB_REQUIRED_CLASSES apply. */
 export const SV_WB_BORN_ON_OR_AFTER = '2025-01-01';
+
+/** The rule above in words, for the owner beside the WB tick — built from the
+ *  same two constants so the sentence can't drift from what entry enforces:
+ *  "WB is needed to enter Adult for dogs born on or after 1 January 2025." */
+export function svWbRequirementSentence(): string {
+  const classes = SV_WB_REQUIRED_CLASSES.join(' or ');
+  return `WB is needed to enter ${classes} for dogs born on or after ${formatLondonShortDate(SV_WB_BORN_ON_OR_AFTER)}.`;
+}

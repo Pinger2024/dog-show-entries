@@ -22,6 +22,7 @@ import {
 } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
+import { svWbRequirementSentence } from '@/lib/sv-entry-validation';
 
 // Amanda 2026-05-19: extended hip / elbow grading to recognise BVA + ANKC
 // alongside the SV grade vocab. "Other" surfaces a free-text field so any
@@ -570,7 +571,7 @@ export function DogSvHealthCard({ dogId, isOwner, sex, kcHealthSuggestions }: Do
               disabled={readOnly}
             />
             <p className="text-[11px] text-muted-foreground">
-              Printed in the catalogue after the working title. WB is needed to enter Adult for dogs born on or after 1 January 2025. BH and AD don&apos;t decide which class your dog enters.
+              Printed in the catalogue after the working title. {svWbRequirementSentence()} BH and AD don&apos;t decide which class your dog enters.
             </p>
           </div>
 
