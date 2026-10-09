@@ -159,7 +159,7 @@ export function entryRequirements(opts: {
     sv.push('Working title');
   }
 
-  // Character assessment (WB) for young Adults (Mandy 2026-10-09, BRG rule —
+  // Character assessment (WB) for young Adult and Working dogs (Mandy 2026-10-09, BRG rule —
   // see SV_WB_REQUIRED_CLASSES). The label matches the "Character Assessment"
   // tick on the dog's SV health card, where the owner sets it. A missing date
   // of birth is not guessed at; the dog form requires one anyway.

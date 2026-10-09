@@ -22,11 +22,11 @@ export const SV_HEALTH_FROM_CLASSES = new Set([
  * Character assessment (WB) is required to enter these classes when the dog
  * was born on or after SV_WB_BORN_ON_OR_AFTER (Mandy 2026-10-09, confirming the
  * BRG rule from secretary Shirley Hutchinson: from 1/1/27, dogs born on or
- * after 1/1/2025 entering Adult need WB; WB can only be sat at 9-13 months, so
- * older dogs are exempt). Working is NOT included yet — pending Mandy's check;
- * adding it is one more name here.
+ * after 1/1/2025 entering Adult need WB — and Working too, same date, as the
+ * regional schedule already prints). WB can only be sat at 9-13 months, so
+ * older dogs are exempt.
  */
-export const SV_WB_REQUIRED_CLASSES: readonly string[] = ['Adult'];
+export const SV_WB_REQUIRED_CLASSES: readonly string[] = ['Adult', 'Working'];
 
 /** Date-only (YYYY-MM-DD) birth date from which SV_WB_REQUIRED_CLASSES apply. */
 export const SV_WB_BORN_ON_OR_AFTER = '2025-01-01';
