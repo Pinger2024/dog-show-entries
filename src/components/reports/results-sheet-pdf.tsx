@@ -129,8 +129,8 @@ function ColHeads() {
 }
 
 /** A class band spanning both halves; the text repeats in each half. */
-function Band({ text, dark }: { text: string; dark: boolean }) {
-  const shade = dark ? BAND : ROW_SHADE;
+function Band({ text, shaded }: { text: string; shaded: boolean }) {
+  const shade = shaded ? BAND : ROW_SHADE;
   return (
     <View style={s.row} minPresenceAhead={52}>
       <View style={[s.half, { width: LEFT_W, backgroundColor: shade }]}>
@@ -223,7 +223,7 @@ export function ResultsSheetReport({ data }: { data: ResultsSheetData }) {
         </View>
 
         {data.blocks.flatMap((b, i) => [
-          <Band key={`${b.showClassId}-band`} text={b.heading} dark={i % 2 === 0} />,
+          <Band key={`${b.showClassId}-band`} text={b.heading} shaded={i % 2 === 0} />,
           ...b.rows.map((r, j) => (
             <DataRow
               key={`${b.showClassId}-${j}`}
@@ -237,7 +237,7 @@ export function ResultsSheetReport({ data }: { data: ResultsSheetData }) {
           )),
         ])}
 
-        {data.awards.length > 0 && <Band text="Best awards" dark />}
+        {data.awards.length > 0 && <Band text="Best awards" shaded />}
         {data.awards.map((a, i) => (
           <AwardRow key={`${a.label}-${i}`} label={a.label} shaded={false} />
         ))}
