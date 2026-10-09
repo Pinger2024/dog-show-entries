@@ -232,6 +232,12 @@ const REGIONAL_FOOTER_LABELS: Record<string, string> = {
   'Most Promising Bitch': 'Most Promising Female',
 };
 
+/** The printed label for a regional Best Award ("Best Dog" prints "Best Male").
+ *  ONE owner: the SV results footer and the Results Sheet both read it. */
+export function regionalAwardLabel(name: string): string {
+  return REGIONAL_FOOTER_LABELS[name] ?? name;
+}
+
 /**
  * Footer best-of awards in their printed order, mapped to achievement types.
  * Derived from `REGIONAL_BEST_AWARDS` (best-awards.ts) — the SAME list the
@@ -246,7 +252,7 @@ export const FOOTER_AWARDS: { type: string; label: string }[] = REGIONAL_BEST_AW
       `REGIONAL_BEST_AWARDS entry "${name}" has no recordable achievement type — check top-awards.ts NAME_TO_TYPE`,
     );
   }
-  return { type, label: REGIONAL_FOOTER_LABELS[name] ?? name };
+  return { type, label: regionalAwardLabel(name) };
 });
 
 // ── Small helpers ───────────────────────────────────────────────────
@@ -294,7 +300,7 @@ export function formatSireDam(sire: string | null, dam: string | null): { sire: 
 }
 
 /** Ring numbers sort numerically when they're numeric, else lexically. */
-function ringSort(a: string | null, b: string | null): number {
+export function ringSort(a: string | null, b: string | null): number {
   const an = parseInt(a ?? '', 10);
   const bn = parseInt(b ?? '', 10);
   if (!Number.isNaN(an) && !Number.isNaN(bn)) return an - bn;
@@ -441,7 +447,7 @@ function computeSvAgeClasses(input: SvResultsReportInput): SvComputedClass[] {
     });
 }
 
-function judgeNames(judges: SvJudgeRowInput[]): { breed: string[]; jh: string[] } {
+export function judgeNames(judges: SvJudgeRowInput[]): { breed: string[]; jh: string[] } {
   const breed = new Map<string, string>();
   const jh = new Map<string, string>();
   for (const ja of judges) {

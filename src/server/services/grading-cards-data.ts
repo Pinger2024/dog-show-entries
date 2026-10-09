@@ -44,6 +44,32 @@ function sexLabel(sex: string | null | undefined): string {
   return '';
 }
 
+/**
+ * THE selection of entries a regional show's printed sheets are built on:
+ * confirmed (so not withdrawn), not deleted, and on a PAID order. Grading Cards
+ * and the Results Sheet both call it, so every dog with a card has a row on
+ * the sheet. Absent entries stay (the steward writes "Abs"). Junior Handling
+ * entries come through too (no dog) — the Grading Cards skip them naturally.
+ * No paid orders yet gives no rows, not an error.
+ */
+export async function loadPaidConfirmedEntries(db: Database, showId: string, paidOrderIds?: string[]) {
+  const orderIds = paidOrderIds ?? (await getPaidOrderIdsForShow(db, showId));
+  if (orderIds.length === 0) return [];
+  return db.query.entries.findMany({
+    where: and(
+      eq(schema.entries.showId, showId),
+      inArray(schema.entries.orderId, orderIds),
+      eq(schema.entries.status, 'confirmed'),
+      isNull(schema.entries.deletedAt),
+    ),
+    with: {
+      dog: true,
+      juniorHandlerDetails: true,
+      entryClasses: { with: { showClass: { with: { classDefinition: true } } } },
+    },
+  });
+}
+
 export async function loadGradingCardsData(
   db: Database,
   showId: string,
@@ -66,23 +92,7 @@ export async function loadGradingCardsData(
       where: eq(schema.judgeAssignments.showId, showId),
       with: { judge: true },
     }),
-    // No paid orders yet → no rows, not an error (grading cards simply have
-    // nothing to render until an order is paid, same as every other
-    // paid-orders-only report on this page).
-    paidOrderIds.length > 0
-      ? db.query.entries.findMany({
-          where: and(
-            eq(schema.entries.showId, showId),
-            inArray(schema.entries.orderId, paidOrderIds),
-            eq(schema.entries.status, 'confirmed'),
-            isNull(schema.entries.deletedAt),
-          ),
-          with: {
-            dog: true,
-            entryClasses: { with: { showClass: { with: { classDefinition: true } } } },
-          },
-        })
-      : Promise.resolve([]),
+    loadPaidConfirmedEntries(db, showId, paidOrderIds),
   ]);
 
   const showClassById = new Map(showClasses.map((sc) => [sc.id, sc]));

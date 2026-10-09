@@ -12,7 +12,7 @@ import {
 } from './sv-front-matter';
 import { TonalWash } from '@/components/sv-pdf/cover-atoms';
 import { SV, SV_FONTS } from '@/components/schedule/shared/sv-styles';
-import { svCoatDisplayName, sectionClasses } from '@/lib/class-labels';
+import { svClassHeading, sectionClasses } from '@/lib/class-labels';
 import { AdvertPage } from '@/components/schedule/shared/advert-page';
 import { formatSvGradeBare } from '@/lib/sv-grading';
 import { catalogueBackMatter } from '@/lib/catalogue-back-matter';
@@ -1074,19 +1074,7 @@ export function CatalogueByClass({ show, entries, compact, judgeResults }: Props
                 // Wording + a/b lettering: regional groups' 2026-08-11
                 // decision (long coat = 'a'/Long Coat, short = 'b'/Short Coat;
                 // previously stock was 'a'/"Stock Coat").
-                const cleanName = className.replace(/^SV\s+/, '');
-                const sexWord = sex === 'dog' ? 'Dog' : sex === 'bitch' ? 'Bitch' : null;
-                const coatLabel = svCoatDisplayName(svCoatType)
-                  ?? (classLabel?.endsWith('a')
-                    ? 'Long Coat'
-                    : classLabel?.endsWith('b')
-                      ? 'Short Coat'
-                      : null);
-                const headParts = [
-                  classLabel ? `Class ${classLabel}` : null,
-                  sexWord ? `${cleanName} ${sexWord}` : cleanName,
-                  coatLabel,
-                ].filter(Boolean) as string[];
+                const heading = svClassHeading({ classLabel, className, sex, svCoatType });
                 return (
                   <View
                     style={{
@@ -1100,7 +1088,7 @@ export function CatalogueByClass({ show, entries, compact, judgeResults }: Props
                     }}
                   >
                     <Text style={{ fontFamily: SV_FONTS.serif, fontSize: 12, fontWeight: 'bold', color: SV.ink }}>
-                      {headParts.join('  ·  ')}
+                      {heading}
                     </Text>
                   </View>
                 );

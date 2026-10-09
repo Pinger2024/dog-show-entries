@@ -605,6 +605,38 @@ export function formatSvClassName(
   return coat ? `${base} — ${coat}` : base;
 }
 
+/**
+ * The class heading a regional (WUSV) catalogue prints over each class:
+ * "Class 1a  ·  Minor Puppy Bitch  ·  Long Coat" (Amanda 2026-05-23; wording
+ * and a/b lettering per the regional groups' 2026-08-11 decision). ONE owner —
+ * the catalogue and the Results Sheet band both call it, so the sheet the
+ * steward fills in always reads exactly like the catalogue the judge holds.
+ *
+ * Coat comes from `show_classes.sv_coat_type`; a class with none falls back to
+ * its label's a/b sub-letter (some demos use sequential labels).
+ */
+export function svClassHeading(opts: {
+  classLabel?: string | null;
+  className: string;
+  sex?: string | null;
+  svCoatType?: 'stock' | 'long_stock' | null;
+}): string {
+  const { classLabel, className, sex, svCoatType } = opts;
+  const cleanName = className.replace(/^SV\s+/, '');
+  const sexWord = sex === 'dog' ? 'Dog' : sex === 'bitch' ? 'Bitch' : null;
+  const coatLabel = svCoatDisplayName(svCoatType)
+    ?? (classLabel?.endsWith('a')
+      ? 'Long Coat'
+      : classLabel?.endsWith('b')
+        ? 'Short Coat'
+        : null);
+  return [
+    classLabel ? `Class ${classLabel}` : null,
+    sexWord ? `${cleanName} ${sexWord}` : cleanName,
+    coatLabel,
+  ].filter(Boolean).join('  ·  ');
+}
+
 // ── Deterministic ordering for a single entry's OWN classes ────────────────
 
 /** The minimum shape sortEntryClassesByShowClassOrder needs from a fetched
