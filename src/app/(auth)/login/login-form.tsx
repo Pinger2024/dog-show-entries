@@ -9,12 +9,13 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import {
-  Card,
   CardContent,
   CardFooter,
   CardHeader,
   CardTitle,
 } from '@/components/ui/card';
+import { SECard, Wordmark } from '@/components/show-experience/kit';
+import { safeCallbackUrl } from '@/lib/safe-redirect';
 
 function GoogleIcon({ className }: { className?: string }) {
   return (
@@ -41,7 +42,11 @@ function GoogleIcon({ className }: { className?: string }) {
 
 export function LoginForm() {
   const searchParams = useSearchParams();
-  const callbackUrl = searchParams.get('callbackUrl') ?? '/dashboard';
+  // Only a same-site path, ever — see src/lib/safe-redirect.ts. This one
+  // value feeds all three sign-in paths (password, Google, magic link).
+  const callbackUrl = safeCallbackUrl(searchParams.get('callbackUrl'), {
+    origin: typeof window !== 'undefined' ? window.location.origin : undefined,
+  });
   const verify = searchParams.get('verify');
   const resetSuccess = searchParams.get('reset') === 'success';
   const authError = searchParams.get('error');
@@ -141,8 +146,8 @@ export function LoginForm() {
 
   if (emailSent) {
     return (
-      <div className="flex min-h-screen items-center justify-center px-3 sm:px-4">
-        <Card className="w-full max-w-sm">
+      <div className="flex min-h-screen items-center justify-center bg-se-paper px-3 sm:px-4">
+        <SECard className="flex w-full max-w-sm flex-col gap-6">
           <CardHeader className="text-center">
             <div className="mx-auto mb-3 flex size-12 items-center justify-center rounded-full bg-primary/10">
               <Mail className="size-6 text-primary" />
@@ -158,18 +163,18 @@ export function LoginForm() {
               Try a different email
             </Button>
           </CardFooter>
-        </Card>
+        </SECard>
       </div>
     );
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center px-3 sm:px-4">
+    <div className="flex min-h-screen items-center justify-center bg-se-paper px-3 sm:px-4">
       <div className="w-full max-w-sm space-y-4 sm:space-y-5">
         {/* Logo */}
         <div className="text-center">
-          <Link href="/" className="font-serif text-2xl sm:text-3xl font-bold tracking-tight text-primary">
-            Remi
+          <Link href="/" className="inline-flex justify-center">
+            <Wordmark size={26} />
           </Link>
           <p className="mt-2 text-sm sm:text-base text-muted-foreground">
             Sign in to manage your dogs and entries
@@ -177,12 +182,12 @@ export function LoginForm() {
         </div>
 
         {resetSuccess && (
-          <div className="rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800">
+          <div className="rounded-lg border border-se-fresh-line bg-se-fresh-soft px-4 py-3 text-sm text-se-fresh-deep">
             Password reset successfully. You can now sign in with your new password.
           </div>
         )}
 
-        <Card>
+        <SECard className="flex flex-col gap-6">
           <CardContent className="space-y-4 pt-6">
             {/* Google sign-in */}
             <Button
@@ -273,7 +278,7 @@ export function LoginForm() {
               )}
 
               {error && (
-                <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+                <div className="rounded-lg border border-destructive/20 bg-destructive/10 px-4 py-3 text-sm text-destructive">
                   {error}
                 </div>
               )}
@@ -331,7 +336,7 @@ export function LoginForm() {
               </Link>
             </p>
           </CardFooter>
-        </Card>
+        </SECard>
       </div>
     </div>
   );

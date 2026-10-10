@@ -1,4 +1,4 @@
-import { S3Client, PutObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3';
+import { S3Client, PutObjectCommand, DeleteObjectCommand, GetObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 
 let _s3: S3Client | null = null;
@@ -26,9 +26,13 @@ const PUBLIC_URL = process.env.R2_PUBLIC_URL ?? '';
 
 const ALLOWED_MIME_TYPES: Record<string, { maxSizeBytes: number }> = {
   'application/pdf': { maxSizeBytes: 10 * 1024 * 1024 }, // 10 MB
-  'image/jpeg': { maxSizeBytes: 5 * 1024 * 1024 }, // 5 MB
-  'image/png': { maxSizeBytes: 5 * 1024 * 1024 },
-  'image/webp': { maxSizeBytes: 5 * 1024 * 1024 },
+  // 15 MB for photos — modern phone cameras routinely produce 6–12 MB JPEGs,
+  // and our users (often 60+) can't easily resize before uploading. The old
+  // 5 MB limit rejected ordinary dog photos (Mandy 2026-06-01). Follow-up:
+  // client-side downscale so size is never a concern.
+  'image/jpeg': { maxSizeBytes: 15 * 1024 * 1024 },
+  'image/png': { maxSizeBytes: 15 * 1024 * 1024 },
+  'image/webp': { maxSizeBytes: 15 * 1024 * 1024 },
   'image/svg+xml': { maxSizeBytes: 2 * 1024 * 1024 }, // 2 MB
 };
 
@@ -81,6 +85,29 @@ export async function uploadToR2(
     ContentType: contentType,
   });
   await client.send(command);
+}
+
+/**
+ * Generate a short-lived presigned GET URL for a private R2 object. Use for
+ * content that shouldn't sit on a public URL — e.g. judge contracts with
+ * personal details that must not be cached by a CDN.
+ */
+export async function generatePresignedGetUrl(
+  key: string,
+  opts: { expiresIn?: number; filename?: string } = {},
+): Promise<string> {
+  const client = getS3Client();
+  // Strip quotes before embedding in the Content-Disposition header — a stray
+  // quote would otherwise terminate the filename field and corrupt the header.
+  const safeFilename = opts.filename?.replace(/"/g, '');
+  const command = new GetObjectCommand({
+    Bucket: BUCKET,
+    Key: key,
+    ...(safeFilename
+      ? { ResponseContentDisposition: `attachment; filename="${safeFilename}"` }
+      : {}),
+  });
+  return getSignedUrl(client, command, { expiresIn: opts.expiresIn ?? 300 });
 }
 
 /**

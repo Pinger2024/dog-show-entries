@@ -10,11 +10,13 @@ import {
   FileText,
   FolderOpen,
   Handshake,
+  Image as ImageIcon,
   LayoutDashboard,
   ListChecks,
   PoundSterling,
   Printer,
   Settings,
+  Shield,
   Ticket,
   Trophy,
   Users,
@@ -29,6 +31,11 @@ import {
   SheetTitle,
 } from '@/components/ui/sheet';
 
+const SECTION_BADGE_TONES: Record<'fresh' | 'honey', string> = {
+  fresh: 'bg-se-fresh-soft text-se-fresh-deep',
+  honey: 'bg-se-honey-soft text-se-honey-deep',
+};
+
 type Section = {
   path: string;
   label: string;
@@ -37,7 +44,7 @@ type Section = {
   hasBadge?: boolean;
 };
 
-const sections: Section[] = [
+const BASE_SECTIONS: Section[] = [
   { path: '', label: 'Secretary Tools', icon: LayoutDashboard, exact: true },
   { path: '/checklist', label: 'Show Checklist', icon: ListChecks, hasBadge: true },
   { path: '/schedule', label: 'Schedule', icon: CalendarDays },
@@ -49,27 +56,12 @@ const sections: Section[] = [
   { path: '/reports', label: 'Reports', icon: FileText },
   { path: '/people', label: 'People', icon: Users },
   { path: '/sponsors', label: 'Sponsors', icon: Handshake },
-  { path: '/documents', label: 'Documents', icon: FolderOpen },
+  { path: '/adverts', label: 'Adverts', icon: ImageIcon },
+  { path: '/documents', label: 'Documents & Reports', icon: FolderOpen },
   { path: '/print-shop', label: 'Print Shop', icon: Printer },
 ];
 
-// Grouped for the mobile sheet
-const sectionGroups = [
-  {
-    label: 'Manage',
-    items: ['', '/checklist', '/schedule', '/entries', '/results'],
-  },
-  {
-    label: 'Finance & Print',
-    items: ['/financial', '/catalogue', '/catalogue-settings', '/reports', '/print-shop'],
-  },
-  {
-    label: 'Setup',
-    items: ['/people', '/sponsors', '/documents'],
-  },
-];
-
-const sectionMap = new Map(sections.map((s) => [s.path, s]));
+const WUSV_SECTION: Section = { path: '/wusv-classes', label: 'SV Classes', icon: Shield };
 
 function isActive(section: Section, pathname: string, basePath: string): boolean {
   if (section.exact) {
@@ -78,10 +70,31 @@ function isActive(section: Section, pathname: string, basePath: string): boolean
   return pathname.startsWith(`${basePath}${section.path}`);
 }
 
-export function ShowSectionNav({ showId }: { showId: string }) {
+export function ShowSectionNav({ showId, isWusv = false }: { showId: string; isWusv?: boolean }) {
   const pathname = usePathname();
   const router = useRouter();
   const basePath = `/secretary/shows/${showId}`;
+
+  const sections: Section[] = isWusv
+    ? [...BASE_SECTIONS, WUSV_SECTION]
+    : BASE_SECTIONS;
+
+  const sectionMap = new Map(sections.map((s) => [s.path, s]));
+
+  const sectionGroups = [
+    {
+      label: 'Manage',
+      items: ['', '/checklist', '/schedule', '/entries', '/results', ...(isWusv ? ['/wusv-classes'] : [])],
+    },
+    {
+      label: 'Finance & Print',
+      items: ['/financial', '/catalogue', '/catalogue-settings', '/reports', '/documents', '/print-shop'],
+    },
+    {
+      label: 'Setup',
+      items: ['/people', '/sponsors', '/adverts'],
+    },
+  ];
   const [open, setOpen] = useState(false);
 
   // Check for pending actions (accepted judges needing confirmation)
@@ -99,18 +112,18 @@ export function ShowSectionNav({ showId }: { showId: string }) {
   const pendingActions = (judgeSummary?.summary.accepted ?? 0) + (judgeSummary?.summary.declined ?? 0);
 
   // Phase-aware badges for sections
-  function getSectionBadge(path: string): { label: string; color: string } | null {
+  function getSectionBadge(path: string): { label: string; tone: 'fresh' | 'honey' } | null {
     if (!phaseContext) return null;
     const { phase } = phaseContext;
 
     if (path === '/entries' && phase === 'entries_open') {
-      return { label: 'Live', color: 'bg-emerald-100 text-emerald-700' };
+      return { label: 'Live', tone: 'fresh' };
     }
     if (path === '/results' && phase === 'show_day') {
-      return { label: 'Recording', color: 'bg-emerald-100 text-emerald-700' };
+      return { label: 'Recording', tone: 'fresh' };
     }
     if (path === '/results' && phase === 'post_show' && !phaseContext.resultsPublished) {
-      return { label: 'Publish', color: 'bg-amber-100 text-amber-700' };
+      return { label: 'Publish', tone: 'honey' };
     }
     return null;
   }
@@ -122,7 +135,7 @@ export function ShowSectionNav({ showId }: { showId: string }) {
   return (
     <>
       {/* ─── Mobile: section picker button + bottom sheet ─── */}
-      <div className="md:hidden">
+      <div className="lg:hidden">
         <button
           onClick={() => setOpen(true)}
           className="flex w-full items-center gap-3 rounded-xl border bg-card px-4 py-3 text-left transition-colors active:bg-muted"
@@ -136,7 +149,7 @@ export function ShowSectionNav({ showId }: { showId: string }) {
           </div>
           <ChevronDown className="size-4 text-muted-foreground" />
           {currentSection.path !== '/checklist' && pendingActions > 0 && (
-            <span className="flex size-5 items-center justify-center rounded-full bg-amber-500 text-xs font-bold text-white">
+            <span className="flex size-5 items-center justify-center rounded-full bg-se-honey text-xs font-bold text-white">
               {pendingActions > 9 ? '9+' : pendingActions}
             </span>
           )}
@@ -181,7 +194,7 @@ export function ShowSectionNav({ showId }: { showId: string }) {
                             const phaseBadge = getSectionBadge(path);
                             if (phaseBadge && !active) {
                               return (
-                                <span className={`ml-auto shrink-0 rounded-full px-1.5 py-0.5 text-xs font-medium ${phaseBadge.color}`}>
+                                <span className={cn("ml-auto shrink-0 rounded-full px-1.5 py-0.5 text-xs font-semibold", SECTION_BADGE_TONES[phaseBadge.tone])}>
                                   {phaseBadge.label}
                                 </span>
                               );
@@ -189,7 +202,7 @@ export function ShowSectionNav({ showId }: { showId: string }) {
                             return null;
                           })()}
                           {showBadge && (
-                            <span className="absolute -top-1 -right-1 flex size-4 items-center justify-center rounded-full bg-amber-500 text-xs font-bold text-white">
+                            <span className="absolute -top-1 -right-1 flex size-4 items-center justify-center rounded-full bg-se-honey text-xs font-bold text-white">
                               {pendingActions > 9 ? '9+' : pendingActions}
                             </span>
                           )}
@@ -205,7 +218,7 @@ export function ShowSectionNav({ showId }: { showId: string }) {
       </div>
 
       {/* ─── Desktop: vertical sidebar nav ─── */}
-      <nav className="hidden w-48 shrink-0 md:block">
+      <nav className="hidden w-48 shrink-0 lg:sticky lg:top-6 lg:block lg:max-h-[calc(100vh-3rem)] lg:self-start lg:overflow-y-auto">
         <div className="sticky top-24 space-y-4">
           {sectionGroups.map((group) => (
             <div key={group.label}>
@@ -238,7 +251,7 @@ export function ShowSectionNav({ showId }: { showId: string }) {
                         const phaseBadge = getSectionBadge(path);
                         if (phaseBadge && !active) {
                           return (
-                            <span className={`ml-auto shrink-0 rounded-full px-1.5 py-0.5 text-xs font-medium ${phaseBadge.color}`}>
+                            <span className={cn("ml-auto shrink-0 rounded-full px-1.5 py-0.5 text-xs font-semibold", SECTION_BADGE_TONES[phaseBadge.tone])}>
                               {phaseBadge.label}
                             </span>
                           );
@@ -246,7 +259,7 @@ export function ShowSectionNav({ showId }: { showId: string }) {
                         return null;
                       })()}
                       {showBadge && (
-                        <span className="absolute -top-0.5 -right-0.5 flex size-4 items-center justify-center rounded-full bg-amber-500 text-xs font-bold text-white">
+                        <span className="absolute -top-0.5 -right-0.5 flex size-4 items-center justify-center rounded-full bg-se-honey text-xs font-bold text-white">
                           {pendingActions > 9 ? '9+' : pendingActions}
                         </span>
                       )}

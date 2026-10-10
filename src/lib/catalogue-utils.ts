@@ -26,6 +26,10 @@ export const SECRETARY_ONLY_FORMATS = new Set([
   'marked',
   'ringside',
   'absentees',
+  // The judge's post-results keepsake copy — carries real placements/grades
+  // per dog, so it must never be exhibitor-reachable (Mandy 2026-09-05,
+  // regionals only).
+  'judge-copy',
 ]);
 
 /** Check if a user has a paid order with a catalogue sundry item for a given show */

@@ -1,0 +1,97 @@
+/**
+ * When Remi sends a judge the critique link by itself (Mandy, 30 Sept 2026):
+ *   "maybe 2 weeks after judging to give them time to write them"
+ *   Every judge but Junior Handling — breed and (Mandy, 7 Oct 2026) Special
+ *   Awards judges; services/critique-invites.ts critiqueJudgesForShow
+ *   "Yes send a reminder 4 weeks later" — 4 weeks after the link, if nothing
+ *   has come back (she confirmed: North Eastern 11 Oct → link 25 Oct,
+ *   reminder 22 Nov).
+ *
+ * ONE owner for these dates: the hourly job sends on them
+ * (services/critique-invites.ts) and the secretary's Critiques page shows
+ * them ("Remi will send this on 25 Oct"). Dates are Europe/London calendar
+ * days, YYYY-MM-DD.
+ */
+import { todayInLondon } from '@/lib/date-utils';
+
+export const CRITIQUE_INVITE_DAYS_AFTER_SHOW = 14;
+export const CRITIQUE_REMINDER_DAYS_AFTER_INVITE = 28;
+
+/** Never write to a judge about an old show: the automatic send began on 30
+ *  Sept 2026, and anything older than this is the secretary's to chase by
+ *  hand. Also gives the hourly job room to catch up after a missed run. */
+export const CRITIQUE_AUTO_SEND_WINDOW_DAYS = 46;
+
+/** Same room for the reminder: sent on its day, or up to two weeks late if a
+ *  run was missed — never months later. */
+export const CRITIQUE_REMINDER_WINDOW_DAYS = 14;
+
+/**
+ * Remi writes to a show's judges by itself only about a show that has been
+ * HELD. The hourly job marks a show 'completed' the midnight after its last
+ * day; a draft (a secretary's practice show can carry real judges' email
+ * addresses) or a cancelled show never gets there.
+ *   'now'   — held: the link and the reminder can go
+ *   'later' — still to come: the Critiques page can promise the date
+ *   'never' — Remi sends nothing, and promises nothing
+ */
+export function critiqueAutoSendPhase(showStatus: string): 'now' | 'later' | 'never' {
+  if (showStatus === 'completed') return 'now';
+  if (showStatus === 'draft' || showStatus === 'cancelled') return 'never';
+  return 'later';
+}
+
+/** `date` (YYYY-MM-DD) plus `days` calendar days. */
+export function addCalendarDays(date: string, days: number): string {
+  const [y, m, d] = date.split('-').map(Number) as [number, number, number];
+  return new Date(Date.UTC(y, m - 1, d + days)).toISOString().slice(0, 10);
+}
+
+/** The day the judge's critique link goes out: two weeks after the show's
+ *  last day. */
+export function critiqueInviteDate(showEndDate: string): string {
+  return addCalendarDays(showEndDate, CRITIQUE_INVITE_DAYS_AFTER_SHOW);
+}
+
+/** Is today a day the link should go out (on its day, or catching up)? */
+export function isCritiqueInviteDue(showEndDate: string, today: string): boolean {
+  const from = critiqueInviteDate(showEndDate);
+  return today >= from && today <= addCalendarDays(from, CRITIQUE_AUTO_SEND_WINDOW_DAYS);
+}
+
+/** The day of the one reminder: four weeks after the link went out. */
+export function critiqueReminderDate(invitedOn: string): string {
+  return addCalendarDays(invitedOn, CRITIQUE_REMINDER_DAYS_AFTER_INVITE);
+}
+
+/**
+ * The day Remi sends the reminder — "today" if it's due now (on its day, or
+ * catching up) — or null if it never will. The hourly job sends it when this
+ * returns today; the Critiques page shows it ("Remi will send a reminder on
+ * 22 Nov"), so the page can't promise a day the job won't send on (the demo
+ * said "28 August" on 8 Oct 2026, for a reminder that was never coming).
+ * Never before the show has been held: the hourly job marks it 'completed'
+ * the day after its last day, and a judge can be invited by hand before then.
+ */
+export function upcomingReminderDate(
+  invitedOn: string,
+  showEndDate: string,
+  today: string = todayInLondon(),
+): string | null {
+  const from = critiqueReminderDate(invitedOn);
+  const heldFrom = addCalendarDays(showEndDate, 1);
+  const on = [from, heldFrom, today].reduce((a, b) => (a > b ? a : b));
+  return on <= addCalendarDays(from, CRITIQUE_REMINDER_WINDOW_DAYS) ? on : null;
+}
+
+/**
+ * The date to show the secretary for a link Remi hasn't sent yet: the send
+ * date, or today if that has passed and the next hourly run will catch up —
+ * or null once the show is too old for Remi to send it at all (never promise
+ * a date that won't happen).
+ */
+export function upcomingAutoInviteDate(showEndDate: string, today: string = todayInLondon()): string | null {
+  const on = critiqueInviteDate(showEndDate);
+  if (today < on) return on;
+  return isCritiqueInviteDue(showEndDate, today) ? today : null;
+}

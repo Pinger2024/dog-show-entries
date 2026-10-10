@@ -42,16 +42,16 @@ export function ResultsApprovalAction({ showId }: ActionPanelProps) {
       {/* Summary bar */}
       <div className="flex flex-wrap gap-2 text-xs">
         <Badge variant="secondary" className="gap-1">
-          <CheckCircle2 className="size-3 text-green-500" />
+          <CheckCircle2 className="size-3 text-se-fresh-deep" />
           {approvals.approved} approved
         </Badge>
         <Badge variant="secondary" className="gap-1">
-          <Clock className="size-3 text-amber-500" />
+          <Clock className="size-3 text-se-honey-deep" />
           {approvals.pending} pending
         </Badge>
         {approvals.declined > 0 && (
           <Badge variant="secondary" className="gap-1">
-            <XCircle className="size-3 text-red-500" />
+            <XCircle className="size-3 text-destructive" />
             {approvals.declined} queried
           </Badge>
         )}
@@ -75,24 +75,24 @@ export function ResultsApprovalAction({ showId }: ActionPanelProps) {
                 {judge.breeds.length > 0 ? judge.breeds.join(', ') : 'All breeds'}
               </p>
               {judge.note && (
-                <p className="mt-1 text-xs text-amber-700 italic">
+                <p className="mt-1 text-xs text-se-honey-deep italic">
                   "{judge.note}"
                 </p>
               )}
             </div>
             <div className="flex items-center gap-2">
               {judge.status === 'approved' ? (
-                <Badge className="bg-green-100 text-green-800 text-xs gap-1">
+                <Badge className="bg-se-fresh-soft text-se-fresh-deep text-xs gap-1">
                   <CheckCircle2 className="size-3" />
                   Approved
                 </Badge>
               ) : judge.status === 'pending' ? (
-                <Badge className="bg-amber-100 text-amber-800 text-xs gap-1">
+                <Badge className="bg-se-honey-soft text-se-honey-deep text-xs gap-1">
                   <Clock className="size-3" />
                   Awaiting
                 </Badge>
               ) : judge.status === 'declined' ? (
-                <Badge className="bg-red-100 text-red-800 text-xs gap-1">
+                <Badge className="bg-destructive/10 text-destructive text-xs gap-1">
                   <XCircle className="size-3" />
                   Query
                 </Badge>
@@ -102,7 +102,7 @@ export function ResultsApprovalAction({ showId }: ActionPanelProps) {
                 </Badge>
               )}
               {!judge.contactEmail ? (
-                <span className="text-xs text-red-500">No email</span>
+                <span className="text-xs text-destructive">No email</span>
               ) : (
                 <Button
                   variant="ghost"

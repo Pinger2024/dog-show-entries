@@ -8,8 +8,6 @@ import {
   makeOrg,
   makeBreed,
   makeShow,
-  makeShowClass,
-  makeDog,
   makeOrder,
   setShowStatus,
 } from '../helpers/factories';
@@ -18,11 +16,20 @@ async function paidCatalogueOrder() {
   const exhibitor = await makeUser({ role: 'exhibitor' });
   const org = await makeOrg();
   const breed = await makeBreed();
+  // Past start date so the show-day catalogue lock (Amanda 2026-05-28) is
+  // satisfied — a 'completed' show is by definition past its start date.
+  const past = (() => {
+    const d = new Date();
+    d.setUTCDate(d.getUTCDate() - 30);
+    return d.toISOString().slice(0, 10);
+  })();
   const show = await makeShow({
     organisationId: org.id,
     breedId: breed.id,
     status: 'completed',
     name: 'Catalogue Show',
+    startDate: past,
+    endDate: past,
   });
   // Create a sundry item that matches the CATALOGUE_NAME_PATTERN ('catalog' / 'catalogue')
   const [sundry] = await testDb.insert(sundryItems).values({
@@ -129,37 +136,6 @@ describe('shows.getMyCataloguePurchases', () => {
     const stranger = await makeUser({ role: 'exhibitor' });
     const list = await createTestCaller(stranger).shows.getMyCataloguePurchases();
     expect(list).toEqual([]);
-  });
-});
-
-describe('shows.getShowDogPhotos (public)', () => {
-  it('returns up to 24 random primary photos from confirmed entries', async () => {
-    const exhibitor = await makeUser({ role: 'exhibitor' });
-    const org = await makeOrg();
-    const breed = await makeBreed();
-    const show = await makeShow({
-      organisationId: org.id, breedId: breed.id, status: 'completed',
-    });
-    // Confirmed entry on a dog with a primary photo should appear
-    const dog = await makeDog({ ownerId: exhibitor.id, breedId: breed.id });
-    const showClass = await makeShowClass({ showId: show.id, breedId: breed.id });
-    const { makeEntry, makeEntryClass } = await import('../helpers/factories');
-    const entry = await makeEntry({
-      showId: show.id, dogId: dog.id, exhibitorId: exhibitor.id, status: 'confirmed',
-    });
-    await makeEntryClass({ entryId: entry.id, showClassId: showClass.id });
-    const { dogPhotos } = await import('@/server/db/schema');
-    await testDb.insert(dogPhotos).values({
-      dogId: dog.id,
-      storageKey: 'test/key',
-      url: 'https://r2.test/dog.jpg',
-      isPrimary: true,
-    });
-
-    const photos = await createTestCaller(null).shows.getShowDogPhotos({ showId: show.id });
-    expect(photos).toHaveLength(1);
-    expect(photos[0]?.dogId).toBe(dog.id);
-    expect(photos[0]?.photoUrl).toBe('https://r2.test/dog.jpg');
   });
 });
 

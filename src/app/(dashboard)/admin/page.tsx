@@ -697,6 +697,36 @@ export default function AdminDashboardPage() {
               </CardContent>
             </Card>
           )}
+
+          <Card>
+            <CardHeader className="pb-3 p-4">
+              <CardTitle className="text-base font-semibold">Print Assets</CardTitle>
+              <CardDescription className="text-xs">
+                Master artwork for bulk print runs (Remi-branded, not show-specific).
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="p-4 pt-0">
+              <a
+                href="/api/admin/print-assets/award-board-a3"
+                className="flex items-center justify-between rounded-lg border p-3 hover:bg-muted/40 transition-colors"
+                target="_blank"
+                rel="noopener"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="flex size-9 items-center justify-center rounded-md bg-amber-50 text-amber-700">
+                    <Printer className="size-4" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium">Award Board — A3 generic</p>
+                    <p className="text-xs text-muted-foreground">
+                      Wipe-clean master, blank header fields — bulk-print via Mixam
+                    </p>
+                  </div>
+                </div>
+                <ChevronRight className="size-4 text-muted-foreground" />
+              </a>
+            </CardContent>
+          </Card>
         </>
       )}
     </div>

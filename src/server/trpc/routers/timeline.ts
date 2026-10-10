@@ -1,4 +1,6 @@
 import { z } from 'zod';
+import { publicDogHistory } from '@/lib/public-dog-history';
+import { SHOW_COLUMNS_FOR_PUBLIC_INCLUDE } from '../public-show-fields';
 import { TRPCError } from '@trpc/server';
 import { and, eq, desc, isNull, inArray, lt } from 'drizzle-orm';
 import { protectedProcedure, publicProcedure } from '../procedures';
@@ -17,6 +19,7 @@ import {
 } from '@/server/db/schema';
 import { deleteFromR2 } from '@/server/services/storage';
 import { isSupportedVideoUrl } from '@/lib/video-utils';
+import { dogAccessCondition, userMayActOnDog } from '@/server/dog-access';
 
 export const timelineRouter = createTRPCRouter({
   /** Get timeline for a specific dog — user posts + show results merged chronologically */
@@ -56,7 +59,7 @@ export const timelineRouter = createTRPCRouter({
           isNull(entries.deletedAt)
         ),
         with: {
-          show: true,
+          show: { columns: SHOW_COLUMNS_FOR_PUBLIC_INCLUDE },
           entryClasses: {
             with: {
               showClass: {
@@ -68,9 +71,13 @@ export const timelineRouter = createTRPCRouter({
         },
       });
 
-      // Only include entries that have at least one result
-      const showResults = dogEntries
-        .filter((e) => e.entryClasses.some((ec) => ec.result))
+      // A public surface: only what anyone may see of the dog's record
+      // (lib/public-dog-history.ts — never an upcoming entry, never an
+      // unpublished placing). This is a RESULTS feed, so it then keeps only
+      // the classes that have a result to show.
+      const showResults = publicDogHistory(dogEntries, { viewerIsOwner: false })
+        .map((entry) => ({ ...entry, entryClasses: entry.entryClasses.filter((ec) => ec.result) }))
+        .filter((entry) => entry.entryClasses.length > 0)
         .map((entry) => ({
           itemType: 'show_result' as const,
           id: `result-${entry.id}`,
@@ -82,15 +89,14 @@ export const timelineRouter = createTRPCRouter({
             date: entry.show.startDate,
             showType: entry.show.showType,
           },
-          classes: entry.entryClasses
-            .filter((ec) => ec.result)
-            .map((ec) => ({
-              className: ec.showClass.classDefinition.name,
-              classNumber: ec.showClass.classNumber,
-              placement: ec.result?.placement ?? null,
-              specialAward: ec.result?.specialAward ?? null,
-              critiqueText: ec.result?.critiqueText ?? null,
-            })),
+          classes: entry.entryClasses.map((ec) => ({
+            className: ec.showClass.classDefinition.name,
+            classNumber: ec.showClass.classNumber,
+            placement: ec.result?.placement ?? null,
+            placementStatus: ec.result?.placementStatus ?? null,
+            specialAward: ec.result?.specialAward ?? null,
+            critiqueText: ec.result?.critiqueText ?? null,
+          })),
         }));
 
       // 3. Merge and sort
@@ -142,11 +148,11 @@ export const timelineRouter = createTRPCRouter({
       })
     )
     .mutation(async ({ ctx, input }) => {
-      // Verify ownership
+      // Verify access (account holder or linked co-owner)
       const dog = await ctx.db.query.dogs.findFirst({
         where: and(
           eq(dogs.id, input.dogId),
-          eq(dogs.ownerId, ctx.session.user.id),
+          dogAccessCondition(ctx.db, ctx.session.user.id),
           isNull(dogs.deletedAt)
         ),
       });
@@ -187,7 +193,6 @@ export const timelineRouter = createTRPCRouter({
     .mutation(async ({ ctx, input }) => {
       const post = await ctx.db.query.dogTimelinePosts.findFirst({
         where: eq(dogTimelinePosts.id, input.postId),
-        with: { dog: { columns: { ownerId: true } } },
       });
 
       if (!post) {
@@ -195,7 +200,9 @@ export const timelineRouter = createTRPCRouter({
       }
 
       const isAuthor = post.authorId === ctx.session.user.id;
-      const isOwner = post.dog.ownerId === ctx.session.user.id;
+      // Owner or linked co-owner — either can moderate posts on their dog's
+      // timeline, same as the account holder always could.
+      const isOwner = await userMayActOnDog(ctx.db, ctx.session.user.id, post.dogId);
 
       if (!isAuthor && !isOwner) {
         throw new TRPCError({
@@ -237,7 +244,7 @@ export const timelineRouter = createTRPCRouter({
         ctx.db
           .select({ id: dogs.id })
           .from(dogs)
-          .where(and(eq(dogs.ownerId, ctx.session.user.id), isNull(dogs.deletedAt))),
+          .where(and(dogAccessCondition(ctx.db, ctx.session.user.id), isNull(dogs.deletedAt))),
       ]);
 
       const ownDogIds = new Set(ownDogs.map((d) => d.id));
@@ -288,7 +295,7 @@ export const timelineRouter = createTRPCRouter({
             isNull(entries.deletedAt)
           ),
           with: {
-            show: true,
+            show: { columns: SHOW_COLUMNS_FOR_PUBLIC_INCLUDE },
             dog: {
               columns: { id: true, registeredName: true },
               with: {
@@ -316,8 +323,15 @@ export const timelineRouter = createTRPCRouter({
         dogPhotoMap.set(photo.dogId, photo.url);
       }
 
+      // Followed dogs: only what anyone may see (lib/public-dog-history.ts —
+      // never an unpublished placing). The caller's own dogs: everything,
+      // as soon as it's keyed in. A results feed, so only classes with a result.
       const showResults = dogEntries
-        .filter((e) => e.entryClasses.some((ec) => ec.result))
+        .flatMap((entry) =>
+          publicDogHistory([entry], { viewerIsOwner: !!entry.dogId && ownDogIds.has(entry.dogId) }),
+        )
+        .map((entry) => ({ ...entry, entryClasses: entry.entryClasses.filter((ec) => ec.result) }))
+        .filter((entry) => entry.entryClasses.length > 0)
         .map((entry) => ({
           itemType: 'show_result' as const,
           id: `result-${entry.id}`,
@@ -335,14 +349,12 @@ export const timelineRouter = createTRPCRouter({
             date: entry.show.startDate,
             showType: entry.show.showType,
           },
-          classes: entry.entryClasses
-            .filter((ec) => ec.result)
-            .map((ec) => ({
-              className: ec.showClass.classDefinition.name,
-              classNumber: ec.showClass.classNumber,
-              placement: ec.result?.placement ?? null,
-              specialAward: ec.result?.specialAward ?? null,
-            })),
+          classes: entry.entryClasses.map((ec) => ({
+            className: ec.showClass.classDefinition.name,
+            classNumber: ec.showClass.classNumber,
+            placement: ec.result?.placement ?? null,
+            specialAward: ec.result?.specialAward ?? null,
+          })),
         }));
 
       const filteredResults = input.cursor

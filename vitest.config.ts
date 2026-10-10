@@ -1,4 +1,4 @@
-import { defineConfig } from 'vitest/config';
+import { defineConfig, configDefaults } from 'vitest/config';
 import { loadEnv } from 'vite';
 import path from 'path';
 
@@ -18,6 +18,10 @@ export default defineConfig({
     pool: 'forks',
     poolOptions: { forks: { singleFork: true } },
     testTimeout: 15_000,
+    // Exclude leftover git worktrees under .claude/ (e.g. from agent runs) so
+    // their stale copies of test files aren't double-collected and run against
+    // the main repo's source.
+    exclude: [...configDefaults.exclude, '**/.claude/**'],
   },
   resolve: {
     alias: {

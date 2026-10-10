@@ -1,12 +1,21 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { publicOrgColumns } from '@/server/trpc/public-org-columns';
 import { eq, and, ilike } from 'drizzle-orm';
 import { db } from '@/server/db';
 import { judgeContracts, judgeAssignments, showChecklistItems } from '@/server/db/schema';
 import { getBaseUrl } from '@/server/lib/utils';
 import { Resend } from 'resend';
+import { generateJudgeContractPdf } from '@/server/services/judge-contract-pdf';
+import { emailHeader } from '@/server/services/email';
+import { html, rawHtml, type SafeHtml } from '@/lib/html-escape';
+import { BRAND } from '@/lib/brand';
+import { FEEDBACK_REPLY_TO } from '@/lib/email-addresses';
+import { isContractOfferExpired } from '@/lib/judge-contract-offer';
 
-function renderPage(title: string, body: string) {
-  return `
+// Built with `html` (src/lib/html-escape.ts): show, club and judge names and
+// the secretary's notes are user-typed, so every interpolation is escaped.
+function renderPage(title: string, body: SafeHtml): string {
+  return html`
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -16,9 +25,9 @@ function renderPage(title: string, body: string) {
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
-      background-color: #f5f3ef;
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-      color: #1a1a1a;
+      background-color: ${BRAND.paper};
+      font-family: 'Hanken Grotesk', -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+      color: ${BRAND.ink};
       min-height: 100vh;
       display: flex;
       align-items: center;
@@ -26,57 +35,50 @@ function renderPage(title: string, body: string) {
       padding: 24px;
     }
     .container { max-width: 560px; width: 100%; }
-    .logo {
-      text-align: center;
-      padding: 24px 0;
-      font-family: Georgia, 'Times New Roman', serif;
-      font-size: 28px;
-      color: #2D5F3F;
-      letter-spacing: -0.5px;
-    }
     .card {
       background: #ffffff;
-      border-radius: 12px;
+      border: 1px solid ${BRAND.line};
+      border-radius: 14px;
       overflow: hidden;
       box-shadow: 0 1px 3px rgba(0,0,0,0.1);
     }
     .banner {
-      background: #2D5F3F;
+      background: ${BRAND.green};
       padding: 24px;
       text-align: center;
-      color: #ffffff;
+      color: ${BRAND.cream};
     }
     .banner h2 { font-size: 22px; font-weight: 700; }
-    .banner .sub { color: #b8d4c4; font-size: 14px; margin-top: 8px; }
+    .banner .sub { color: rgba(243, 236, 220, 0.78); font-size: 14px; margin-top: 8px; }
     .body { padding: 24px; }
-    .body p { font-size: 15px; line-height: 1.6; color: #333; margin-bottom: 16px; }
+    .body p { font-size: 15px; line-height: 1.6; color: ${BRAND.ink}; margin-bottom: 16px; }
     .detail-table { width: 100%; border-collapse: collapse; margin: 20px 0; }
-    .detail-table td { padding: 10px 12px; border-bottom: 1px solid #e5e5e5; }
-    .detail-table .label { font-weight: 600; color: #444; width: 120px; }
+    .detail-table td { padding: 10px 12px; border-bottom: 1px solid ${BRAND.line}; }
+    .detail-table .label { font-weight: 600; color: ${BRAND.ink}; width: 120px; }
     .buttons { text-align: center; margin: 28px 0; }
     .btn {
       display: inline-block;
       padding: 14px 32px;
-      border-radius: 8px;
+      border-radius: 13px;
       font-size: 16px;
-      font-weight: 600;
+      font-weight: 700;
       text-decoration: none;
       border: none;
       cursor: pointer;
       transition: opacity 0.2s;
     }
     .btn:hover { opacity: 0.9; }
-    .btn-primary { background: #2D5F3F; color: #ffffff; }
+    .btn-primary { background: ${BRAND.green}; color: ${BRAND.cream}; }
     .btn-danger { background: #dc2626; color: #ffffff; margin-left: 12px; }
-    .btn-outline { background: transparent; border: 1px solid #ddd; color: #666; margin-left: 12px; }
+    .btn-outline { background: transparent; border: 1px solid ${BRAND.line}; color: ${BRAND.ink2}; margin-left: 12px; }
     .success-icon { font-size: 48px; margin-bottom: 12px; }
-    .footer { text-align: center; padding: 24px; font-size: 12px; color: #999; }
+    .footer { text-align: center; padding: 24px; font-size: 12px; color: ${BRAND.ink2}; }
     form { display: inline; }
   </style>
 </head>
 <body>
   <div class="container">
-    <div class="logo">Remi</div>
+    ${rawHtml(emailHeader())}
     <div class="card">
       ${body}
     </div>
@@ -85,7 +87,7 @@ function renderPage(title: string, body: string) {
     </div>
   </div>
 </body>
-</html>`;
+</html>`.toString();
 }
 
 export async function GET(
@@ -98,14 +100,14 @@ export async function GET(
   const contract = await db.query.judgeContracts.findFirst({
     where: eq(judgeContracts.offerToken, token),
     with: {
-      show: { with: { venue: true, organisation: true } },
+      show: { with: { venue: true, organisation: { columns: publicOrgColumns } } },
       judge: true,
     },
   });
 
   if (!contract) {
     return new NextResponse(
-      renderPage('Not Found', `
+      renderPage('Not Found', html`
         <div class="banner"><h2>Link Not Found</h2></div>
         <div class="body">
           <p>This contract link is not valid. It may have already been used or the contract may have been cancelled.</p>
@@ -117,9 +119,9 @@ export async function GET(
   }
 
   // Check token expiry
-  if (contract.tokenExpiresAt && new Date() > contract.tokenExpiresAt) {
+  if (isContractOfferExpired(contract)) {
     return new NextResponse(
-      renderPage('Link Expired', `
+      renderPage('Link Expired', html`
         <div class="banner"><h2>Link Expired</h2></div>
         <div class="body">
           <p>This offer link has expired. Please contact the show secretary to request a new offer.</p>
@@ -132,7 +134,7 @@ export async function GET(
   // If already responded
   if (contract.stage === 'offer_accepted' || contract.stage === 'confirmed') {
     return new NextResponse(
-      renderPage('Already Accepted', `
+      renderPage('Already Accepted', html`
         <div class="banner">
           <div class="success-icon">&#10003;</div>
           <h2>Already Accepted</h2>
@@ -147,7 +149,7 @@ export async function GET(
 
   if (contract.stage === 'declined') {
     return new NextResponse(
-      renderPage('Declined', `
+      renderPage('Declined', html`
         <div class="banner"><h2>Offer Declined</h2></div>
         <div class="body">
           <p>You have already declined this judging appointment. If you would like to reconsider, please contact the show secretary directly.</p>
@@ -186,7 +188,7 @@ export async function GET(
   // Show acceptance page or decline confirmation based on action
   if (action === 'decline') {
     return new NextResponse(
-      renderPage('Decline Appointment', `
+      renderPage('Decline Appointment', html`
         <div class="banner">
           <h2>Decline Appointment</h2>
           <div class="sub">${orgName}</div>
@@ -196,7 +198,7 @@ export async function GET(
           <p>If you have a reason you'd like to share, please enter it below (optional):</p>
           <form method="POST" action="/api/judge-contract/${token}">
             <input type="hidden" name="action" value="decline">
-            <textarea name="reason" rows="3" placeholder="Reason for declining (optional)" style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 8px; font-size: 14px; font-family: inherit; resize: vertical; margin-bottom: 16px;"></textarea>
+            <textarea name="reason" rows="3" placeholder="Reason for declining (optional)" style="width: 100%; padding: 10px; border: 1px solid ${BRAND.line}; border-radius: 8px; font-size: 14px; font-family: inherit; resize: vertical; margin-bottom: 16px;"></textarea>
             <div class="buttons">
               <button type="submit" class="btn btn-danger">Yes, Decline</button>
               <a href="/api/judge-contract/${token}" class="btn btn-outline">Go Back</a>
@@ -210,7 +212,7 @@ export async function GET(
 
   // Default: show the full offer page
   return new NextResponse(
-    renderPage('Judging Offer', `
+    renderPage('Judging Offer', html`
       <div class="banner">
         <h2>Judging Appointment Offer</h2>
         <div class="sub">from ${orgName}</div>
@@ -224,10 +226,10 @@ export async function GET(
           <tr><td class="label">Date</td><td>${showDate}</td></tr>
           <tr><td class="label">Venue</td><td>${venue}</td></tr>
           <tr><td class="label">Breeds</td><td>${breedsText}</td></tr>
-          ${show.showType ? `<tr><td class="label">Show Type</td><td>${show.showType.replace('_', ' ').replace(/\b\w/g, (c: string) => c.toUpperCase())}</td></tr>` : ''}
+          ${show.showType ? html`<tr><td class="label">Show Type</td><td>${show.showType.replace('_', ' ').replace(/\b\w/g, (c: string) => c.toUpperCase())}</td></tr>` : ''}
         </table>
 
-        ${contract.notes ? `<p style="padding: 12px; background: #f9f8f6; border-radius: 8px; font-size: 14px; color: #555;">${contract.notes}</p>` : ''}
+        ${contract.notes ? html`<p style="padding: 12px; background: ${BRAND.paper}; border-radius: 8px; font-size: 14px; color: ${BRAND.ink2};">${contract.notes}</p>` : ''}
 
         <p>Please click the button below to accept or decline this appointment.</p>
 
@@ -256,14 +258,14 @@ export async function POST(
   const contract = await db.query.judgeContracts.findFirst({
     where: eq(judgeContracts.offerToken, token),
     with: {
-      show: { with: { venue: true, organisation: true } },
+      show: { with: { venue: true, organisation: { columns: publicOrgColumns } } },
       judge: true,
     },
   });
 
   if (!contract) {
     return new NextResponse(
-      renderPage('Not Found', `
+      renderPage('Not Found', html`
         <div class="banner"><h2>Link Not Found</h2></div>
         <div class="body"><p>This contract link is not valid.</p></div>
       `),
@@ -271,9 +273,9 @@ export async function POST(
     );
   }
 
-  if (contract.tokenExpiresAt && new Date() > contract.tokenExpiresAt) {
+  if (isContractOfferExpired(contract)) {
     return new NextResponse(
-      renderPage('Link Expired', `
+      renderPage('Link Expired', html`
         <div class="banner"><h2>Link Expired</h2></div>
         <div class="body"><p>This offer link has expired. Please contact the show secretary.</p></div>
       `),
@@ -283,7 +285,7 @@ export async function POST(
 
   if (contract.stage !== 'offer_sent') {
     return new NextResponse(
-      renderPage('Already Responded', `
+      renderPage('Already Responded', html`
         <div class="banner"><h2>Already Responded</h2></div>
         <div class="body"><p>This offer has already been responded to.</p></div>
       `),
@@ -300,6 +302,16 @@ export async function POST(
       .update(judgeContracts)
       .set({ stage: 'offer_accepted', acceptedAt: new Date() })
       .where(eq(judgeContracts.id, contract.id));
+
+    // Fire-and-forget: render + R2 upload would make the judge wait 2–3s on
+    // Accept, and the stage transition is already persisted. If archiving
+    // fails, the backfill path in secretary.sendJudgeConfirmation covers it.
+    void generateJudgeContractPdf(contract.id).catch((err) => {
+      console.error(
+        `[judge-contract] Failed to archive PDF snapshot for contract ${contract.id} (show ${contract.showId}):`,
+        err,
+      );
+    });
 
     // Auto-update checklist: "Receive judge acceptance letters"
     await db
@@ -332,32 +344,30 @@ export async function POST(
       await resend.emails.send({
         from: emailFrom,
         to: notifyEmail,
-        replyTo: process.env.FEEDBACK_EMAIL ?? 'feedback@remishowmanager.co.uk',
+        replyTo: FEEDBACK_REPLY_TO,
         subject: `Judge Accepted — ${contract.judgeName} for ${show.name}`,
-        html: `
+        html: html`
 <!DOCTYPE html>
 <html>
 <head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
-<body style="margin: 0; padding: 0; background-color: #f5f3ef; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
+<body style="margin: 0; padding: 0; background-color: ${BRAND.paper}; font-family: 'Hanken Grotesk', -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
   <div style="max-width: 600px; margin: 0 auto; padding: 24px 16px;">
-    <div style="text-align: center; padding: 24px 0;">
-      <h1 style="margin: 0; font-family: Georgia, 'Times New Roman', serif; font-size: 28px; color: #2D5F3F;">Remi</h1>
-    </div>
-    <div style="background: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
-      <div style="background: #2D5F3F; padding: 24px; text-align: center;">
+    ${rawHtml(emailHeader())}
+    <div style="background: #ffffff; border: 1px solid ${BRAND.line}; border-radius: 14px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+      <div style="background: ${BRAND.deep}; padding: 24px; text-align: center;">
         <div style="font-size: 32px; margin-bottom: 8px;">&#10003;</div>
-        <h2 style="margin: 0; color: #ffffff; font-size: 22px; font-weight: 700;">Judge Accepted</h2>
+        <h2 style="margin: 0; color: ${BRAND.cream}; font-size: 22px; font-weight: 700;">Judge Accepted</h2>
       </div>
       <div style="padding: 24px;">
-        <p style="font-size: 15px; color: #333; line-height: 1.6;">
+        <p style="font-size: 15px; color: ${BRAND.ink}; line-height: 1.6;">
           <strong>${contract.judgeName}</strong> has accepted the invitation to judge at <strong>${show.name}</strong>.
         </p>
-        <p style="font-size: 15px; color: #333; line-height: 1.6;">
+        <p style="font-size: 15px; color: ${BRAND.ink}; line-height: 1.6;">
           The next step is to send the formal confirmation letter. You can do this from the Judges tab in the show management page.
         </p>
         <div style="text-align: center; margin: 24px 0;">
           <a href="${getBaseUrl()}/secretary/shows/${show.slug ?? show.id}/people"
-             style="display: inline-block; background: #2D5F3F; color: #ffffff; padding: 12px 24px; border-radius: 8px; font-size: 15px; font-weight: 600; text-decoration: none;">
+             style="display: inline-block; background: ${BRAND.green}; color: ${BRAND.cream}; padding: 12px 24px; border-radius: 13px; font-size: 15px; font-weight: 700; text-decoration: none;">
             View Judges in Remi
           </a>
         </div>
@@ -365,14 +375,14 @@ export async function POST(
     </div>
   </div>
 </body>
-</html>`,
+</html>`.toString(),
       });
     } catch (error) {
       console.error('[email] Failed to notify secretary of judge acceptance:', error);
     }
 
     return new NextResponse(
-      renderPage('Accepted', `
+      renderPage('Accepted', html`
         <div class="banner">
           <div class="success-icon">&#10003;</div>
           <h2>Thank You</h2>
@@ -380,7 +390,7 @@ export async function POST(
         <div class="body">
           <p>Thank you for accepting the invitation to judge at <strong>${show.name}</strong>.</p>
           <p>${orgName} has been notified and will send your formal confirmation letter shortly.</p>
-          <p style="color: #666; font-size: 14px;">You can safely close this page.</p>
+          <p style="color: ${BRAND.ink2}; font-size: 14px;">You can safely close this page.</p>
         </div>
       `),
       { headers: { 'Content-Type': 'text/html' } }
@@ -427,32 +437,30 @@ export async function POST(
       await resend.emails.send({
         from: emailFrom,
         to: notifyEmail,
-        replyTo: process.env.FEEDBACK_EMAIL ?? 'feedback@remishowmanager.co.uk',
+        replyTo: FEEDBACK_REPLY_TO,
         subject: `Judge Declined — ${contract.judgeName} for ${show.name}`,
-        html: `
+        html: html`
 <!DOCTYPE html>
 <html>
 <head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
-<body style="margin: 0; padding: 0; background-color: #f5f3ef; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
+<body style="margin: 0; padding: 0; background-color: ${BRAND.paper}; font-family: 'Hanken Grotesk', -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
   <div style="max-width: 600px; margin: 0 auto; padding: 24px 16px;">
-    <div style="text-align: center; padding: 24px 0;">
-      <h1 style="margin: 0; font-family: Georgia, 'Times New Roman', serif; font-size: 28px; color: #2D5F3F;">Remi</h1>
-    </div>
-    <div style="background: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+    ${rawHtml(emailHeader())}
+    <div style="background: #ffffff; border: 1px solid ${BRAND.line}; border-radius: 14px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
       <div style="background: #dc2626; padding: 24px; text-align: center;">
-        <h2 style="margin: 0; color: #ffffff; font-size: 22px; font-weight: 700;">Judge Declined</h2>
+        <h2 style="margin: 0; color: ${BRAND.cream}; font-size: 22px; font-weight: 700;">Judge Declined</h2>
       </div>
       <div style="padding: 24px;">
-        <p style="font-size: 15px; color: #333; line-height: 1.6;">
+        <p style="font-size: 15px; color: ${BRAND.ink}; line-height: 1.6;">
           <strong>${contract.judgeName}</strong> has declined the invitation to judge at <strong>${show.name}</strong>.
         </p>
-        ${reason ? `<p style="font-size: 14px; color: #555; line-height: 1.6; padding: 12px; background: #fef2f2; border-radius: 8px; border-left: 3px solid #dc2626;"><strong>Reason:</strong> ${reason}</p>` : ''}
-        <p style="font-size: 15px; color: #333; line-height: 1.6;">
+        ${reason ? html`<p style="font-size: 14px; color: ${BRAND.ink2}; line-height: 1.6; padding: 12px; background: #fef2f2; border-radius: 8px; border-left: 3px solid #dc2626;"><strong>Reason:</strong> ${reason}</p>` : ''}
+        <p style="font-size: 15px; color: ${BRAND.ink}; line-height: 1.6;">
           You may need to find a replacement judge and send a new offer. All checklist items for this judge have been marked as not applicable.
         </p>
         <div style="text-align: center; margin: 24px 0;">
           <a href="${getBaseUrl()}/secretary/shows/${show.slug ?? show.id}/people"
-             style="display: inline-block; background: #2D5F3F; color: #ffffff; padding: 12px 24px; border-radius: 8px; font-size: 15px; font-weight: 600; text-decoration: none;">
+             style="display: inline-block; background: ${BRAND.green}; color: ${BRAND.cream}; padding: 12px 24px; border-radius: 13px; font-size: 15px; font-weight: 700; text-decoration: none;">
             View Judges in Remi
           </a>
         </div>
@@ -460,19 +468,19 @@ export async function POST(
     </div>
   </div>
 </body>
-</html>`,
+</html>`.toString(),
       });
     } catch (error) {
       console.error('[email] Failed to notify secretary of judge decline:', error);
     }
 
     return new NextResponse(
-      renderPage('Declined', `
+      renderPage('Declined', html`
         <div class="banner"><h2>Offer Declined</h2></div>
         <div class="body">
           <p>You have declined the invitation to judge at <strong>${show.name}</strong>.</p>
           <p>${orgName} has been notified.</p>
-          <p style="color: #666; font-size: 14px;">You can safely close this page.</p>
+          <p style="color: ${BRAND.ink2}; font-size: 14px;">You can safely close this page.</p>
         </div>
       `),
       { headers: { 'Content-Type': 'text/html' } }
@@ -480,7 +488,7 @@ export async function POST(
   }
 
   return new NextResponse(
-    renderPage('Invalid Action', `
+    renderPage('Invalid Action', html`
       <div class="banner"><h2>Invalid Action</h2></div>
       <div class="body"><p>The action you requested is not valid.</p></div>
     `),
