@@ -15,6 +15,55 @@
  */
 import { sql } from 'drizzle-orm';
 import { db } from './index';
+import type { Database } from './index';
+import { SUNDRY_KINDS, inferSundryKindFromName } from '@/lib/sundry-kind';
+
+/**
+ * 2026-10-15: sundry_items.kind - what each extra IS, said once by the
+ * secretary instead of guessed from its name in a dozen places (see
+ * src/lib/sundry-kind.ts). Steps, each safe to repeat and safe if two
+ * services (web + cron, same code) boot at the same moment:
+ *   1. create the enum type (CREATE TYPE has no IF NOT EXISTS, so a DO block
+ *      that swallows the duplicate error, which is also what the losing racer
+ *      gets);
+ *   2. add the column NULLABLE;
+ *   3. fill rows still NULL from their name; `AND kind IS NULL` means a kind a
+ *      secretary has chosen since is never overwritten by a re-run;
+ *   4. only when no NULLs remain, set the default and NOT NULL.
+ * Exported (taking the database) so the test can rehearse the real write.
+ */
+export async function migrateSundryKinds(database: NonNullable<Database>): Promise<number> {
+  const values = SUNDRY_KINDS.map((k) => `'${k}'`).join(', ');
+  await database.execute(sql.raw(`
+    DO $$ BEGIN
+      CREATE TYPE sundry_kind AS ENUM (${values});
+    EXCEPTION WHEN duplicate_object OR unique_violation THEN NULL;
+    END $$;
+  `));
+  await database.execute(sql`
+    ALTER TABLE sundry_items ADD COLUMN IF NOT EXISTS kind sundry_kind;
+  `);
+  const pending = await database.execute<{ id: string; name: string }>(sql`
+    SELECT id, name FROM sundry_items WHERE kind IS NULL;
+  `);
+  let filled = 0;
+  for (const row of pending) {
+    const kind = inferSundryKindFromName(row.name);
+    await database.execute(sql`
+      UPDATE sundry_items SET kind = ${kind}::sundry_kind
+       WHERE id = ${row.id} AND kind IS NULL;
+    `);
+    filled++;
+  }
+  const left = await database.execute<{ n: number }>(sql`
+    SELECT COUNT(*)::int AS n FROM sundry_items WHERE kind IS NULL;
+  `);
+  if (Number(left[0]?.n ?? 0) === 0) {
+    await database.execute(sql`ALTER TABLE sundry_items ALTER COLUMN kind SET DEFAULT 'other';`);
+    await database.execute(sql`ALTER TABLE sundry_items ALTER COLUMN kind SET NOT NULL;`);
+  }
+  return filled;
+}
 
 export async function runStartupMigrations() {
   if (!db) {
@@ -300,6 +349,10 @@ export async function runStartupMigrations() {
   await db.execute(sql`
     ALTER TABLE critique_documents ADD COLUMN IF NOT EXISTS reminder_sent_at TIMESTAMPTZ;
   `);
+
+  // -- 2026-10-15: sundry kind (see migrateSundryKinds above) --
+  const sundryFilled = await migrateSundryKinds(db);
+  if (sundryFilled > 0) console.log(`[startup-migrations] sundry kind backfilled on ${sundryFilled} row(s)`);
 
   console.log(`[startup-migrations] done in ${Date.now() - started}ms`);
 }

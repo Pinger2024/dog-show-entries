@@ -116,7 +116,7 @@ export {
   judgeContracts,
   judgeContractsRelations,
 } from './judge-contracts';
-export { sundryItems, sundryItemsRelations } from './sundry-items';
+export { sundryItems, sundryItemsRelations, sundryKindEnum } from './sundry-items';
 export {
   orderSundryItems,
   orderSundryItemsRelations,

@@ -10,6 +10,7 @@ import {
   sundryItems,
 } from '@/server/db/schema';
 import type { Database } from '@/server/db';
+import { isDonationKind, type SundryKind } from '@/lib/sundry-kind';
 import type { SettlementLine, SettlementSection, SettlementSnapshot } from '@/server/db/schema/invoices';
 
 /**
@@ -92,6 +93,7 @@ type WithdrawnEntryRow = {
 type SundryRow = {
   orderId: string;
   itemName: string;
+  kind: SundryKind;
   quantity: number;
   unitPrice: number;
 };
@@ -109,10 +111,6 @@ type SundryRow = {
  *  each descriptor in the total-entries line.
  */
 type TaggedEntry = ConfirmedEntryRow & { jhOrSacOnly: boolean; hasJhClass: boolean; hasClasses: boolean };
-
-function isDonationName(name: string): boolean {
-  return name.toLowerCase().includes('donation');
-}
 
 /**
  * Group fee-bearing rows by price into settlement lines: ≤3 distinct
@@ -327,6 +325,7 @@ export async function computeSettlementItemisation(
           .select({
             orderId: orderSundryItems.orderId,
             itemName: sundryItems.name,
+            kind: sundryItems.kind,
             quantity: orderSundryItems.quantity,
             unitPrice: orderSundryItems.unitPrice,
           })
@@ -419,8 +418,8 @@ export async function computeSettlementItemisation(
     // (Mandy 2026-08-18).
     lines.push(...buildPriceGroupedLines(channelWithdrawn.filter((e) => e.totalFee > 0), 'Withdrawn — fee kept'));
 
-    const donationSundries = channelSundries.filter((s) => isDonationName(s.itemName));
-    const otherSundries = channelSundries.filter((s) => !isDonationName(s.itemName));
+    const donationSundries = channelSundries.filter((s) => isDonationKind(s.kind));
+    const otherSundries = channelSundries.filter((s) => !isDonationKind(s.kind));
     lines.push(...buildSundryLines(otherSundries));
 
     const donationSundryTotal = donationSundries.reduce((s, r) => s + r.quantity * r.unitPrice, 0);

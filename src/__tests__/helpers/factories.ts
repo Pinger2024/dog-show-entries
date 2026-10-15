@@ -1,5 +1,6 @@
 import { eq } from 'drizzle-orm';
 import { testDb } from './db';
+import { inferSundryKindFromName, type SundryKind } from '@/lib/sundry-kind';
 import {
   users,
   organisations,
@@ -486,14 +487,18 @@ export async function makeSundryItem(opts: {
   showId: string;
   name?: string;
   priceInPence?: number;
+  /** Defaults to the guess from the name, like the startup backfill. */
+  kind?: SundryKind;
 }) {
   const n = seq();
+  const name = opts.name ?? `Sundry ${n}`;
   const [row] = await testDb
     .insert(sundryItems)
     .values({
       showId: opts.showId,
-      name: opts.name ?? `Sundry ${n}`,
+      name,
       priceInPence: opts.priceInPence ?? 400,
+      kind: opts.kind ?? inferSundryKindFromName(name),
     })
     .returning();
   return row;

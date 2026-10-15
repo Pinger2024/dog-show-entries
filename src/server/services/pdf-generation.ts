@@ -413,6 +413,7 @@ export async function generateSchedulePdf(showId: string): Promise<Buffer> {
       .filter((s) => s.enabled)
       .map((s) => ({
         name: s.name,
+        kind: s.kind,
         description: s.description,
         priceInPence: s.priceInPence,
       })),

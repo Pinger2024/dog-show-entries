@@ -28,7 +28,8 @@ import { publicOrgColumns } from '../public-org-columns';
 import { redactJudgeAssignmentForPublic } from '../public-judge-fields';
 import { toPublicScheduleData } from '../public-show-fields';
 import { isUuid, generateShowSlug } from '@/lib/slugify';
-import { hasUserPurchasedCatalogue, CATALOGUE_AVAILABLE_STATUSES, CATALOGUE_NAME_PATTERN } from '@/lib/catalogue-utils';
+import { hasUserPurchasedCatalogue, CATALOGUE_AVAILABLE_STATUSES } from '@/lib/catalogue-utils';
+import { ONLINE_CATALOGUE_ACCESS_KINDS } from '@/lib/sundry-kind';
 import { isShowDayReached } from '@/lib/date-utils';
 import { isCloseDateWithinFloor, entryCloseFloorMessage } from '@/lib/entry-close-rules';
 import { DEFAULT_REGIONAL_FEE_TIERS } from '@/lib/regional-fee-calc';
@@ -1096,7 +1097,7 @@ export const showsRouter = createTRPCRouter({
           and(
             eq(orders.exhibitorId, ctx.session.user.id),
             eq(orders.status, 'paid'),
-            ilike(sundryItems.name, CATALOGUE_NAME_PATTERN)
+            inArray(sundryItems.kind, [...ONLINE_CATALOGUE_ACCESS_KINDS])
           )
         )
         .groupBy(orders.showId, shows.status, shows.slug);

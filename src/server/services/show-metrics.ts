@@ -10,7 +10,7 @@ import {
   sundryItems,
 } from '@/server/db/schema';
 import type { Database } from '@/server/db';
-import { isCatalogueItem } from '@/lib/catalogue-utils';
+import { type SundryKind } from '@/lib/sundry-kind';
 
 /**
  * Materialise the list of paid-order IDs for a show. Callers use this to
@@ -241,6 +241,8 @@ export type EntryRow = {
 export type SundryLineRow = {
   orderId: string;
   itemName: string;
+  /** What the item IS (sundry_items.kind) - never guess it from itemName. */
+  kind: SundryKind;
   quantity: number;
   unitPrice: number;
 };
@@ -460,12 +462,10 @@ export function aggregateShowMetrics(data: {
     if (paidOrderIds.has(s.orderId)) {
       paidSundryRevenuePence += lineTotal;
       if (offlinePaidOrderIds.has(s.orderId)) offlineSundryRevenuePence += lineTotal;
-      if (isCatalogueItem(s.itemName)) {
-        if (s.itemName.toLowerCase().includes('print')) {
-          paidPrintedCatalogueCount += s.quantity;
-        } else {
-          paidOnlineCatalogueCount += s.quantity;
-        }
+      if (s.kind === 'printed_catalogue') {
+        paidPrintedCatalogueCount += s.quantity;
+      } else if (s.kind === 'online_catalogue') {
+        paidOnlineCatalogueCount += s.quantity;
       }
     } else if (livePendingOrderIds.has(s.orderId)) {
       pendingSundryRevenuePence += lineTotal;
@@ -684,6 +684,7 @@ export async function computeShowsMetrics(
           .select({
             orderId: orderSundryItems.orderId,
             itemName: sundryItems.name,
+            kind: sundryItems.kind,
             quantity: orderSundryItems.quantity,
             unitPrice: orderSundryItems.unitPrice,
           })

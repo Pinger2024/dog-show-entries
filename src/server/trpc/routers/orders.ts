@@ -53,7 +53,7 @@ import {
 import { entryRequirements, pedigreeRequirementsMissing, entryBlockedMessage } from '@/lib/entry-requirements';
 import { hasJudgingConflict } from '@/lib/judge-exhibitor-conflict';
 import { getCompetitionAgeError, isOldEnoughForNfc, nfcMinAgeMessage } from '@/lib/date-utils';
-import { isParkingSundry, PARKING_NAME_PATTERNS } from '@/lib/parking-utils';
+import { PARKING_KINDS } from '@/lib/sundry-kind';
 import { formatAtcNumber } from '@/lib/registration-flags';
 import { specialAwardClassFee } from '@/lib/class-labels';
 import { dogAccessCondition } from '@/server/dog-access';
@@ -1161,7 +1161,6 @@ export const ordersRouter = createTRPCRouter({
         orderId: orderSundryItems.orderId,
         showId: orders.showId,
         quantity: orderSundryItems.quantity,
-        sundryName: sundryItems.name,
       })
       .from(orderSundryItems)
       .innerJoin(sundryItems, eq(orderSundryItems.sundryItemId, sundryItems.id))
@@ -1170,15 +1169,13 @@ export const ordersRouter = createTRPCRouter({
         and(
           eq(orders.exhibitorId, ctx.session.user.id),
           eq(orders.status, 'paid'),
-          // Coarse SQL prefilter (same convention as getMyCataloguePurchases);
-          // isParkingSundry() below stays the authoritative word-boundary check.
-          or(...PARKING_NAME_PATTERNS.map((p) => ilike(sundryItems.name, p))),
+          // Parking is the secretary's choice of kind, never the item's name.
+          inArray(sundryItems.kind, [...PARKING_KINDS]),
         )
       );
 
     const byOrder = new Map<string, { orderId: string; showId: string; quantity: number }>();
     for (const row of rows) {
-      if (!isParkingSundry(row.sundryName)) continue;
       const existing = byOrder.get(row.orderId);
       if (existing) {
         existing.quantity += row.quantity;

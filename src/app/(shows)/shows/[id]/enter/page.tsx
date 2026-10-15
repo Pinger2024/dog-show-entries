@@ -72,7 +72,7 @@ import { StripeProvider, stripePromise } from '@/components/providers/stripe-pro
 import { PaymentForm } from './payment-form';
 import { cn } from '@/lib/utils';
 import { isGsdOnlyClass, isGsdBreed } from '@/lib/class-templates';
-import { isCatalogueItem } from '@/lib/catalogue-utils';
+import { isCatalogueKind, announcesOnlineCatalogue } from '@/lib/sundry-kind';
 import {
   useEntryCart,
   getPaymentKey,
@@ -2893,16 +2893,20 @@ export default function EnterShowPage() {
             {/* Catalogue note — adapt to whether a PRINTED (collect on the day)
                 or ONLINE catalogue was bought (Michael, 2026-06-25). */}
             {(() => {
-              const catalogueItems = cart.sundryItems.filter((s) => isCatalogueItem(s.name));
+              // Kind comes from the secretary's choice on the item (sundry-kind.ts),
+              // never from the name. Printed buyers are NOT told the online copy
+              // is included (Mandy, 15 Oct 2026) - only an online purchase says so.
+              const kindOf = (sundryItemId: string) =>
+                sundryItemsData?.find((d) => d.id === sundryItemId)?.kind;
+              const catalogueItems = cart.sundryItems.filter((s) => {
+                const kind = kindOf(s.sundryItemId);
+                return kind !== undefined && isCatalogueKind(kind);
+              });
               const hasCatalogue = catalogueItems.length > 0;
-              const catalogueIsOnline =
-                hasCatalogue &&
-                catalogueItems.some((s) => {
-                  const full = sundryItemsData?.find((d) => d.id === s.sundryItemId);
-                  return /\b(online|digital|pdf|download|e-?catalogue)\b/i.test(
-                    `${s.name} ${full?.description ?? ''}`
-                  );
-                });
+              const catalogueIsOnline = catalogueItems.some((s) => {
+                const kind = kindOf(s.sundryItemId);
+                return kind !== undefined && announcesOnlineCatalogue(kind);
+              });
               if (!hasCatalogue) return null;
               return (
                 <SECard className="mx-auto w-full max-w-md border-se-fresh-line bg-se-fresh-soft p-4 text-center">

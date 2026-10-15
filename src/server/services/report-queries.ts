@@ -23,10 +23,10 @@
  * (the whole-show roll-up) is false. `buildAbsenteeRow` in report-rows.ts
  * then lists only the classes she was actually absent from.
  */
-import { and, asc, eq, ilike, inArray, isNull, ne, sql } from 'drizzle-orm';
+import { and, asc, eq, inArray, isNull, ne, sql } from 'drizzle-orm';
 import { entries, dogOwners, orders, orderSundryItems, sundryItems, users, catalogueNumberAsc } from '@/server/db/schema';
 import type { Database } from '@/server/db';
-import { CATALOGUE_NAME_PATTERN } from '@/lib/catalogue-utils';
+import { CATALOGUE_KINDS } from '@/lib/sundry-kind';
 import { sortEntryClassesByShowClassOrder } from '@/lib/class-labels';
 import type { PrebookedCatalogueRow } from '@/components/reports/show-report-pdf';
 
@@ -164,14 +164,14 @@ export async function loadCatalogueOrdersSplit(
   const catalogueItems = await db
     .select({ id: sundryItems.id, name: sundryItems.name })
     .from(sundryItems)
-    .where(and(eq(sundryItems.showId, showId), ilike(sundryItems.name, CATALOGUE_NAME_PATTERN)));
+    .where(and(eq(sundryItems.showId, showId), inArray(sundryItems.kind, [...CATALOGUE_KINDS])));
 
   if (catalogueItems.length === 0) return { printed: [], online: [] };
   const catalogueItemIds = catalogueItems.map((i) => i.id);
 
   const catalogueOrders = await db
     .select({
-      itemName: sundryItems.name,
+      kind: sundryItems.kind,
       quantity: orderSundryItems.quantity,
       exhibitorName: users.name,
       exhibitorEmail: users.email,
@@ -186,7 +186,7 @@ export async function loadCatalogueOrdersSplit(
   const online: CatalogueOrderBuyer[] = [];
   for (const row of catalogueOrders) {
     const entry = { name: row.exhibitorName ?? '—', email: row.exhibitorEmail, quantity: row.quantity };
-    if (row.itemName.toLowerCase().includes('print')) printed.push(entry);
+    if (row.kind === 'printed_catalogue') printed.push(entry);
     else online.push(entry);
   }
   return { printed, online };
@@ -203,7 +203,7 @@ export async function loadPrebookedCatalogueRows(db: Database, showId: string): 
   const catalogueItems = await db
     .select({ id: sundryItems.id, name: sundryItems.name })
     .from(sundryItems)
-    .where(and(eq(sundryItems.showId, showId), ilike(sundryItems.name, CATALOGUE_NAME_PATTERN)));
+    .where(and(eq(sundryItems.showId, showId), inArray(sundryItems.kind, [...CATALOGUE_KINDS])));
 
   const rows: PrebookedCatalogueRow[] = [];
   if (catalogueItems.length === 0) return rows;
@@ -211,7 +211,7 @@ export async function loadPrebookedCatalogueRows(db: Database, showId: string): 
   const ids = catalogueItems.map((i) => i.id);
   const cats = await db
     .select({
-      itemName: sundryItems.name,
+      kind: sundryItems.kind,
       quantity: orderSundryItems.quantity,
       exhibitorName: users.name,
     })
@@ -224,7 +224,7 @@ export async function loadPrebookedCatalogueRows(db: Database, showId: string): 
   for (const o of cats) {
     rows.push({
       name: o.exhibitorName ?? '—',
-      type: o.itemName.toLowerCase().includes('print') ? 'Printed' : 'Online',
+      type: o.kind === 'printed_catalogue' ? 'Printed' : 'Online',
       quantity: o.quantity,
     });
   }

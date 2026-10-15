@@ -11,7 +11,7 @@ import { renderToBuffer } from '@react-pdf/renderer';
 import { db } from '@/server/db';
 import { orders } from '@/server/db/schema';
 import { publicOrgColumns } from '@/server/trpc/public-org-columns';
-import { isParkingSundry } from '@/lib/parking-utils';
+import { isParkingKind } from '@/lib/sundry-kind';
 import { sanitizeFilename } from '@/lib/slugify';
 import { stripUnembeddedBase14Fonts } from '@/lib/pdf-pad';
 import { ParkingPassPdf, type ParkingPassPdfData } from '@/components/parking-pass/parking-pass-pdf';
@@ -43,7 +43,7 @@ export async function generateParkingPassPdf(orderId: string): Promise<Generated
         },
       },
       orderSundryItems: {
-        with: { sundryItem: { columns: { name: true } } },
+        with: { sundryItem: { columns: { kind: true } } },
       },
     },
   });
@@ -52,10 +52,10 @@ export async function generateParkingPassPdf(orderId: string): Promise<Generated
 
   // Filter + sum inline against the already-loaded relation rows — the same
   // shape exists in orders.myParkingPasses over its own (multi-order, flat)
-  // query rows. isParkingSundry() is the one shared rule; the two-line sum
+  // query rows. isParkingKind() is the one shared rule; the two-line sum
   // is not worth a helper that both callers would have to adapt to.
   const quantity = (order.orderSundryItems ?? [])
-    .filter((osi) => osi.sundryItem?.name && isParkingSundry(osi.sundryItem.name))
+    .filter((osi) => osi.sundryItem?.kind && isParkingKind(osi.sundryItem.kind))
     .reduce((sum, osi) => sum + osi.quantity, 0);
 
   if (quantity <= 0) return null;

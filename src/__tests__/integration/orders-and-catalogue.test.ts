@@ -31,10 +31,11 @@ async function paidCatalogueOrder() {
     startDate: past,
     endDate: past,
   });
-  // Create a sundry item that matches the CATALOGUE_NAME_PATTERN ('catalog' / 'catalogue')
+  // A catalogue sundry - its KIND (not its name) is what grants access
   const [sundry] = await testDb.insert(sundryItems).values({
     showId: show.id,
     name: 'Show Catalogue',
+    kind: 'printed_catalogue',
     priceInPence: 1000,
     sortOrder: 0,
   }).returning();

@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { SUNDRY_KINDS } from '@/lib/sundry-kind';
 import { loadSvResultsData } from '@/server/services/sv-results-data';
 import { loadSvMeasurementSheet } from '@/server/services/sv-measurement';
 import { findPlacedWithoutGrade } from '@/lib/sv-results';
@@ -1134,6 +1135,7 @@ export const secretaryRouter = createTRPCRouter({
         ctx.db
           .select({
             orderId: orderSundryItems.orderId,
+            kind: sundryItems.kind,
             itemName: sundryItems.name,
             quantity: orderSundryItems.quantity,
             unitPrice: orderSundryItems.unitPrice,
@@ -5852,6 +5854,8 @@ export const secretaryRouter = createTRPCRouter({
       z.object({
         showId: z.string().uuid(),
         name: z.string().min(1).max(100),
+        // What this extra IS - required, never guessed from the name later.
+        kind: z.enum(SUNDRY_KINDS),
         description: z.string().max(500).optional(),
         priceInPence: z.number().int().min(0),
         maxPerOrder: z.number().int().min(1).optional(),
@@ -5873,6 +5877,7 @@ export const secretaryRouter = createTRPCRouter({
         .values({
           showId: input.showId,
           name: input.name,
+          kind: input.kind,
           description: input.description ?? null,
           priceInPence: input.priceInPence,
           maxPerOrder: input.maxPerOrder ?? null,
@@ -5889,6 +5894,7 @@ export const secretaryRouter = createTRPCRouter({
         id: z.string().uuid(),
         showId: z.string().uuid(),
         name: z.string().min(1).max(100).optional(),
+        kind: z.enum(SUNDRY_KINDS).optional(),
         description: z.string().max(500).nullable().optional(),
         priceInPence: z.number().int().min(0).optional(),
         maxPerOrder: z.number().int().min(1).nullable().optional(),
@@ -5948,6 +5954,7 @@ export const secretaryRouter = createTRPCRouter({
         items: z.array(
           z.object({
             name: z.string().min(1),
+            kind: z.enum(SUNDRY_KINDS),
             description: z.string().optional(),
             priceInPence: z.number().int().min(0),
             maxPerOrder: z.number().int().min(1).optional(),
@@ -5969,6 +5976,7 @@ export const secretaryRouter = createTRPCRouter({
       const values = input.items.map((item, idx) => ({
         showId: input.showId,
         name: item.name,
+        kind: item.kind,
         description: item.description ?? null,
         priceInPence: item.priceInPence,
         maxPerOrder: item.maxPerOrder ?? null,

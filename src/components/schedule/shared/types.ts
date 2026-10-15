@@ -1,4 +1,5 @@
 import type { ScheduleData, RegionalFeeConfig } from '@/server/db/schema/shows';
+import type { SundryKind } from '@/lib/sundry-kind';
 
 /**
  * Types shared by both the single-breed and multi-breed schedule renderers.
@@ -47,6 +48,8 @@ export interface ScheduleShowInfo {
    *  reflects what's actually on offer (Amanda 2026-05-22). */
   sundryItems?: Array<{
     name: string;
+    /** What the item IS (sundry_items.kind) - decides catalogue fee rows. */
+    kind: SundryKind;
     description: string | null;
     priceInPence: number;
   }>;

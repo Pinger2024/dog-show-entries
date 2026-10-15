@@ -1036,9 +1036,9 @@ export async function populateShowWithTestData(opts: PopulateOptions): Promise<P
 
   if (existingSundry.length === 0) {
     const sundryData = [
-      { name: 'Catalogue', description: 'Pre-order a show catalogue to collect on the day', priceInPence: 500, maxPerOrder: 5, sortOrder: 0 },
-      { name: 'Car Park Pass', description: 'Reserved parking space close to the showground', priceInPence: 300, maxPerOrder: 2, sortOrder: 1 },
-      { name: 'Rosette Pack', description: 'Set of 5 rosettes (1st-5th) for your dog\'s collection', priceInPence: 1000, maxPerOrder: 3, sortOrder: 2 },
+      { name: 'Catalogue', kind: 'printed_catalogue' as const, description: 'Pre-order a show catalogue to collect on the day', priceInPence: 500, maxPerOrder: 5, sortOrder: 0 },
+      { name: 'Car Park Pass', kind: 'parking' as const, description: 'Reserved parking space close to the showground', priceInPence: 300, maxPerOrder: 2, sortOrder: 1 },
+      { name: 'Rosette Pack', kind: 'other' as const, description: 'Set of 5 rosettes (1st-5th) for your dog\'s collection', priceInPence: 1000, maxPerOrder: 3, sortOrder: 2 },
     ];
 
     await db.insert(schema.sundryItems).values(

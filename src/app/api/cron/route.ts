@@ -2,12 +2,11 @@ import { NextResponse } from 'next/server';
 import { requireCronSecret } from '@/server/lib/cron-auth';
 import { db } from '@/server/db';
 import { shows, orders, orderSundryItems, sundryItems } from '@/server/db/schema';
-import { and, eq, ne, or, ilike, isNull, lte, gte, lt, isNotNull, sql } from 'drizzle-orm';
+import { and, eq, ne, or, inArray, isNull, lte, gte, lt, isNotNull, sql } from 'drizzle-orm';
 import { syncCatalogueNumbers } from '@/server/services/catalogue-numbering';
 import { refreshCatalogueJobs, scheduleCatalogueRefresh } from '@/server/services/catalogue-jobs';
 import { sendCatalogueReadyEmail, sendParkingPassEmail } from '@/server/services/email';
-import { CATALOGUE_NAME_PATTERN } from '@/lib/catalogue-utils';
-import { PARKING_NAME_PATTERNS } from '@/lib/parking-utils';
+import { ONLINE_CATALOGUE_ACCESS_KINDS, PARKING_KINDS } from '@/lib/sundry-kind';
 import { todayInLondon, londonDateOffset } from '@/lib/date-utils';
 import { runCritiqueAutoInvites, runCritiqueReminders } from '@/server/services/critique-invites';
 
@@ -176,7 +175,7 @@ export async function GET(request: Request) {
           // shows whose run includes today qualify.
           sql`COALESCE(${shows.endDate}, ${shows.startDate}) >= ${todayStr}`,
           isNull(orders.catalogueReadyEmailedAt),
-          ilike(sundryItems.name, CATALOGUE_NAME_PATTERN),
+          inArray(sundryItems.kind, [...ONLINE_CATALOGUE_ACCESS_KINDS]),
         ),
       );
 
@@ -207,12 +206,10 @@ export async function GET(request: Request) {
   if (isAfter830London) {
     const windowEnd = londonDateOffset(7);
 
-    // The ILIKE patterns are a coarse DB-level pre-filter only — they have
-    // no word-boundary support, so a club's "Sparking Wine" sundry could
-    // slip through here. sendParkingPassEmail re-derives the genuine
-    // parking quantity via isParkingSundry() (the authoritative matcher)
-    // before ever sending, so a false-positive candidate is a safe no-op:
-    // it's simply skipped below, not stamped, not counted.
+    // A sundry is parking when the secretary said so (kind = 'parking'),
+    // never by its name. sendParkingPassEmail re-derives the quantity from the
+    // same kind before sending, so a candidate with nothing to print is a safe
+    // no-op: skipped below, not stamped, not counted.
     const pendingParkingOrders = await db
       .selectDistinct({ orderId: orders.id })
       .from(orders)
@@ -228,7 +225,7 @@ export async function GET(request: Request) {
           gte(shows.startDate, todayStr),
           lte(shows.startDate, windowEnd),
           isNull(orders.parkingPassEmailedAt),
-          or(...PARKING_NAME_PATTERNS.map((pattern) => ilike(sundryItems.name, pattern))),
+          inArray(sundryItems.kind, [...PARKING_KINDS]),
         ),
       );
 

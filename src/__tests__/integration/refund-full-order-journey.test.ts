@@ -55,11 +55,11 @@ describe('refund a full order → every secretary surface zeroes', () => {
     // One printed catalogue + one sundry donation on the order
     const [catalogueItem] = await testDb
       .insert(sundryItems)
-      .values({ showId: show.id, name: 'Printed Catalogue', priceInPence: 400 })
+      .values({ showId: show.id, name: 'Printed Catalogue', kind: 'printed_catalogue', priceInPence: 400 })
       .returning();
     const [donationItem] = await testDb
       .insert(sundryItems)
-      .values({ showId: show.id, name: 'Donation', priceInPence: 500 })
+      .values({ showId: show.id, name: 'Donation', kind: 'donation', priceInPence: 500 })
       .returning();
     await testDb.insert(orderSundryItems).values([
       { orderId: order.id, sundryItemId: catalogueItem.id, quantity: 1, unitPrice: 400 },
