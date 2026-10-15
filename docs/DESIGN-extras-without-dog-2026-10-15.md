@@ -58,9 +58,21 @@ Today the kind of a sundry is guessed from its NAME in a dozen places, and they 
 - **Online catalogue access stays as it is today.** A printed OR online catalogue unlocks the online PDF and the
   show-morning email. That is `grantsOnlineCatalogueAccess`, the one place to change if Mandy decides otherwise (asked
   15 Oct).
-- **Backfill.** startup-migrations creates the type and adds the column nullable. It fills NULLs in TypeScript with
-  `inferSundryKindFromName`, then sets the default and NOT NULL. It is idempotent: later boots find no NULLs, so a
-  secretary's deliberate choice is never overwritten.
+- **Backfill.** startup-migrations creates the type (`CREATE TYPE` has no IF NOT EXISTS, so use a DO block) and adds
+  the column nullable. It fills NULLs in TypeScript with `inferSundryKindFromName`, then sets the default and NOT NULL.
+  - It is idempotent: later boots find no NULLs, so a secretary's deliberate choice is never overwritten.
+  - It must tolerate TWO services booting at once (web + cron run the same code): `UPDATE … WHERE id = $1 AND kind IS
+    NULL`, and `SET NOT NULL` only when no NULLs remain.
+  - Re-export the pgEnum from schema/index.ts.
+  - On the test DB, apply the startup-migration function itself to rehearse the prod write. Do NOT lean on
+    `db:push:test`, which can drop tables.
+- **Fixtures.** The golden fixture loader (`src/__tests__/helpers/show-fixture.ts` ~157) inserts sundry rows as they
+  are. It must fill a missing kind with `inferSundryKindFromName`, or every golden show's catalogue counts drop to 0.
+  Test factories: `makeSundryItem` takes a `kind`, inferred from the name when not given.
+- **Proof that real shows don't change.** For every golden fixture, before vs after: `paidPrintedCatalogueCount`,
+  `paidOnlineCatalogueCount`, `hasUserPurchasedCatalogue`, parking pass yes/no, and the settlement donation line.
+  - The ONLY expected difference is the synthetic fixture's bare "Catalogue" (online → printed).
+  - Write it as a test.
 - **Secretary.** Every preset carries its kind. The add/edit dialog has "What is this?", a select with the labels. It is
   suggested from the name as they type, and they can change it. createSundryItem and bulkCreateSundryItems require a
   kind; updateSundryItem accepts one.
@@ -82,6 +94,8 @@ few entry-keyed views listed below.
   - With no entries, the server ignores the entry-only fields: regionalMembership and number, firstTimeExhibitor,
     discountGroupId, donationPence (the regional donation box is part of the hidden entry block), catalogueRequested and
     withholdFromPublication.
+  - The **judge-conflict check** (orders.ts ~504-519) runs only when there are entries, like the dog checks. A judge
+    may buy a catalogue or sponsor a class.
   - The order total = the sundries. The platform fee is the usual `calculatePlatformFee`.
   - It still runs `entryWindowOpen` and `validateSundrySelection`.
   - The stale-order cleanup stays as it is (one pending checkout per person per show; a paid order is never touched).
@@ -101,7 +115,9 @@ few entry-keyed views listed below.
 
 ### Exhibitor pages
 
-- **My Entries** (`(dashboard)/entries/page.tsx`): a show where the user has a PAID extras-only order gets a card
+- **My Entries** (`(dashboard)/entries/page.tsx`): an "extras-only order" is one that is paid, has at least one sundry
+  line, and has NO entry with `deletedAt IS NULL` (a withdrawn dog keeps its normal card). A show where the user has
+  one gets a card
   (show name and date, the items, the online catalogue link and the parking pass when they apply). The empty state shows
   only when there are no entries AND no extras-only orders. The data comes from a new order-keyed query (e.g.
   `orders.myExtrasOnlyOrders`); entries.list is not bent to fit.
@@ -111,7 +127,8 @@ few entry-keyed views listed below.
 - **Extras-only is DERIVED, not a flag:** `isExtrasOnly = completeEntries.length === 0` while on review, payment or
   confirmation. One helper owns it.
 - **Step 1:**
-  - The third card shows when the show has at least one enabled sundry. `shows.getSundryItems` is enabled at
+  - The third card shows when the show has at least one enabled sundry AND `entryWindowOpen(show)` (the same owner the
+    server uses), so nobody hits "Show is not accepting entries" at the end. `shows.getSundryItems` is enabled at
     `entry_type`.
   - Clicking it goes to `cart_review`.
   - The auto-skip of step 1 now happens only when there is exactly ONE option (no JH classes AND no sundries).
@@ -119,7 +136,8 @@ few entry-keyed views listed below.
   - The heading is "Choose your extras". The entry cards, add-a-dog buttons, discount groups, regional membership and
     donation block, the RKC/BRG dog declaration and the withhold-from-catalogue card are all hidden.
   - The sundry panel is shown with the total and the booking fee.
-  - Proceed is disabled only while nothing at all is in the cart. Back goes to step 1.
+  - Proceed is disabled only while nothing at all is in the cart. `membershipNumberMissing` and the declaration ticks
+    never disable it here, because their block is hidden. Back goes to step 1.
 - **Step indicator, extras-only:** Type → Review → Payment → Confirmed.
 - **Profile gate** (name + address): applies only on the dog or JH path, never at step 1 or on the extras-only path.
 - **Persistence and 3DS:** `loadSavedState` and the payment-snapshot recovery accept a cart with sundries and no
@@ -129,11 +147,31 @@ few entry-keyed views listed below.
   parking note, then "View my entries and orders" and "Back to the show". No "You're entered", no share card, no "Enter
   more dogs".
 
+### Tests for slice 1 (each proven failing first)
+
+- Journey: an RKC show AND a regional show. Extras-only checkout → webhook → the order is paid with zero entries. The
+  order total and platform fee are right.
+- Both email variants (customer and secretary) for an order with no entries.
+- The payment report has a row for an extras-only order, with the ORDER status and the exhibitor.
+- show-metrics with a paid extras-only order: printed count, `clubReceivablePence`, platform fee. A pending one is in
+  the awaiting-payment figures.
+- `reconcileSettlement` is ok on a show containing an extras-only order. `refundOrder` works on one.
+- A judge with no dog can buy an extra.
+- The checkout refuses an empty cart (no entries, no sundries). With no entries it ignores donationPence, membership and
+  discount group.
+- Cart restore: `loadSavedState` keeps a cart with sundries and no entries (including the Stripe-return branch).
+- My Entries data: the extras-only orders query returns paid, zero-live-entry orders with sundries, and not a withdrawn
+  dog's order.
+- Also: tsc error count vs main (`next build` ignores type errors), and a 390px look at step 1 (three cards), the
+  extras-only review and the confirmation.
+
 ### Not in slice 1 (on purpose)
 
 - Signed-out buyers (slice 2). Adverts/sponsorship creating catalogue_adverts rows (slice 3).
 - Add-more-extras to an extras-only order: they just place another extras-only order.
 - The settlement line "0 via Remi + 0 direct = 0" on a show with ONLY extras orders is cosmetic and unrealistic.
+- Slice 1 already SELLS sponsorship and adverts (they are ordinary sundries in the same panel). Until slice 3, the
+  receipt carries no secretary email or artwork deadline. Tell Mandy this with the demo.
 
 ## Open question for Mandy (asked 15 Oct)
 
