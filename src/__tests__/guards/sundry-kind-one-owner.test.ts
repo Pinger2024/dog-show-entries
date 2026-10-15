@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
-import { readdirSync, readFileSync, statSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import path from 'node:path';
+import { findFiles } from '../helpers/static-scan';
 
 // GUARD (15 Oct 2026): what a sundry item IS lives in sundry_items.kind, and
 // src/lib/sundry-kind.ts is the only module that knows what a kind means.
@@ -12,17 +13,10 @@ import path from 'node:path';
 const SRC = path.join(__dirname, '..', '..');
 const OWNER = path.join('lib', 'sundry-kind.ts');
 
-function walk(dir: string, out: string[] = []): string[] {
-  for (const entry of readdirSync(dir)) {
-    const full = path.join(dir, entry);
-    if (statSync(full).isDirectory()) {
-      if (entry === 'node_modules' || entry === '__tests__') continue;
-      walk(full, out);
-    } else if (/\.(ts|tsx)$/.test(entry) && !/\.test\.(ts|tsx)$/.test(entry)) {
-      out.push(full);
-    }
-  }
-  return out;
+function sourceFiles(): string[] {
+  return findFiles('src', ['.ts', '.tsx']).filter(
+    (f) => !f.includes(`${path.sep}__tests__${path.sep}`) && !/\.test\.(ts|tsx)$/.test(f),
+  );
 }
 
 const FORBIDDEN: Array<{ label: string; re: RegExp }> = [
@@ -51,7 +45,7 @@ export function findSundryNameHeuristics(files: Array<{ file: string; text: stri
 
 describe('sundry kind has one owner', () => {
   it('no name heuristics for a sundry item outside lib/sundry-kind.ts', () => {
-    const files = walk(SRC).map((file) => ({ file, text: readFileSync(file, 'utf8') }));
+    const files = sourceFiles().map((file) => ({ file, text: readFileSync(file, 'utf8') }));
     expect(findSundryNameHeuristics(files)).toEqual([]);
   });
 
