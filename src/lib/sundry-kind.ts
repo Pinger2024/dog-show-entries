@@ -100,7 +100,7 @@ export function inferSundryKindFromName(name: string): SundryKind {
   const n = name.trim();
   if (/\badvert/i.test(n)) return 'advert';
   if (/sponsor|banner/i.test(n)) return 'sponsorship';
-  if (/\bparking\b/i.test(n) || /\bcar\s*(park\s*)?pass\b/i.test(n)) return 'parking';
+  if (/\bparking\b/i.test(n) || /\bcar\s*park/i.test(n) || /\bcar\s*pass\b/i.test(n)) return 'parking';
   if (/catalogue/i.test(n)) {
     return /online|digital|pdf|download|e-?catalogue/i.test(n) ? 'online_catalogue' : 'printed_catalogue';
   }

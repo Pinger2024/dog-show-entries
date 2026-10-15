@@ -26,7 +26,7 @@ import {
   makeOrderSundryItem,
 } from '../helpers/factories';
 import { testDb } from '../helpers/db';
-import { entries } from '@/server/db/schema';
+import { entries, orders } from '@/server/db/schema';
 import { eq } from 'drizzle-orm';
 
 beforeEach(() => resendMocks.send.mockClear());
@@ -76,6 +76,41 @@ describe('extras-only order emails', () => {
     expect(p.html).toContain('Printed Catalogue');
     expect(p.html).toContain('Parking Pass');
     expect(p.html).toContain('£13.00');
+  });
+
+  it('customer receipt: Total Paid is what the card was charged, booking fee included', async () => {
+    // Found walking the demo, 15 Oct 2026: the screen said "£21.20 paid" and
+    // the receipt said "Total Paid £20.00" — it left out the booking fee.
+    const { order } = await extrasOnlyOrder();
+    await testDb.update(orders).set({ platformFeePence: 113 }).where(eq(orders.id, order.id));
+    await sendEntryConfirmationEmail(order.id);
+    const html = sent().html;
+    expect(html).toContain('Booking fee');
+    expect(html).toContain('£1.13');
+    expect(html).toMatch(/Total Paid<\/td>\s*<td[^>]*>£14\.13</);
+    expect(html).toContain(`&middot; £14.13`);
+    expect(html).not.toMatch(/Total Paid<\/td>\s*<td[^>]*>£13\.00</);
+  });
+
+  it('secretary notice: the total is the club\'s money — no booking fee', async () => {
+    const { order } = await extrasOnlyOrder();
+    await testDb.update(orders).set({ platformFeePence: 113 }).where(eq(orders.id, order.id));
+    await sendSecretaryNotificationEmail(order.id);
+    expect(sent().html).toContain('Total: £13.00');
+    expect(sent().html).not.toContain('£14.13');
+  });
+
+  it('an order whose only dog entry was deleted counts as extras only (isExtrasOnlyOrder)', async () => {
+    const { exhibitor, show, order } = await extrasOnlyOrder();
+    const breed = await makeBreed();
+    const dog = await makeDog({ ownerId: exhibitor.id, breedId: breed.id, registeredName: 'Gone Away' });
+    const entry = await makeEntry({ showId: show.id, dogId: dog.id, exhibitorId: exhibitor.id, status: 'cancelled' });
+    await testDb.update(entries).set({ orderId: order.id, deletedAt: new Date() }).where(eq(entries.id, entry.id));
+    await sendEntryConfirmationEmail(order.id);
+    expect(sent().subject).toBe('Your order for Regional Show');
+    resendMocks.send.mockClear();
+    await sendSecretaryNotificationEmail(order.id);
+    expect(sent().subject).toBe('New order (extras, no dog) — Shirley Smith → Regional Show');
   });
 
   it('an order WITH entries still gets the ordinary entry emails', async () => {

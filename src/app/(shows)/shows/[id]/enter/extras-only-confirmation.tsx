@@ -24,7 +24,6 @@ export interface ExtrasOnlyConfirmationProps {
   /** What to tell them about a catalogue - from `catalogueNoteFor`
    *  (lib/sundry-kind.ts), the same answer the receipt email gives. */
   catalogueNote: ReturnType<typeof catalogueNoteFor>;
-  catalogueHref: string;
   /** Whether the order includes a parking pass (`includesParkingPass`). */
   hasParking: boolean;
 }
@@ -46,7 +45,6 @@ export function ExtrasOnlyConfirmation({
   paymentAmount,
   items,
   catalogueNote,
-  catalogueHref,
   hasParking,
 }: ExtrasOnlyConfirmationProps) {
   return (
@@ -115,7 +113,7 @@ export function ExtrasOnlyConfirmation({
           </div>
         </SECard>
 
-        <CatalogueNote note={catalogueNote} catalogueHref={catalogueHref} />
+        <CatalogueNote note={catalogueNote} />
 
         {hasParking && (
           <SECard className="mx-auto w-full max-w-md border-se-fresh-line bg-se-fresh-soft p-4 text-center">

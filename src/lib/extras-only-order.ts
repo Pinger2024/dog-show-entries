@@ -3,8 +3,9 @@
  * bought with NO dog or junior handler entered (Mandy, 15 Oct 2026)?
  *
  * The ONE definition. My Entries (orders.myExtrasOnlyOrders), the secretary's
- * payment report and show-metrics' "awaiting payment" each ask it, so they
- * can't disagree about which orders these are. Which ORDER STATUSES each of
+ * payment report, show-metrics' "awaiting payment" and the two order emails
+ * (receipt + secretary notice) each ask it, so they can't disagree about
+ * which orders these are. Which ORDER STATUSES each of
  * them cares about is their own business (My Entries wants paid orders, the
  * payment report paid and pending, show-metrics pending); this only answers
  * "no dog, but something bought".

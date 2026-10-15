@@ -7,6 +7,7 @@ import { orders, entries, memberships, users, printOrders, showClasses, sundryIt
 import { formatOrderRef, PRINT_PAYMENT_METHODS } from '@/lib/print-products';
 import { announcesOnlineCatalogue, catalogueNoteFor, includesParkingPass, type SundryKind } from '@/lib/sundry-kind';
 import { generateParkingPassPdf } from '@/server/services/parking-pass-pdf';
+import { isExtrasOnlyOrder } from '@/lib/extras-only-order';
 import { buildClassLabelMap } from '@/lib/class-labels';
 import { BRAND } from '@/lib/brand';
 import { FEEDBACK_REPLY_TO } from '@/lib/email-addresses';
@@ -120,9 +121,12 @@ export async function sendEntryConfirmationEmail(orderId: string) {
   const exhibitor = order.exhibitor;
   const entryRows = order.entries ?? [];
 
-  // An order with no entries is extras only (Mandy, 15 Oct 2026) — its own
-  // receipt, not "Entry Confirmed" over an empty table.
-  if (entryRows.length === 0) {
+  // An order with no dog or junior handler is extras only (Mandy, 15 Oct
+  // 2026) — its own receipt, not "Entry Confirmed" over an empty table.
+  if (isExtrasOnlyOrder({
+    liveEntryCount: entryRows.filter((e) => e.deletedAt === null).length,
+    sundryLineCount: order.orderSundryItems.length,
+  })) {
     return sendExtrasOnlyReceiptEmail({ ...order, exhibitor });
   }
 
@@ -502,8 +506,11 @@ export async function sendSecretaryNotificationEmail(orderId: string) {
   const exhibitor = order.exhibitor;
   const entryRows = order.entries ?? [];
 
-  // No entries = extras only (Mandy, 15 Oct 2026) — its own notice.
-  if (entryRows.length === 0) {
+  // No dog or junior handler = extras only (Mandy, 15 Oct 2026) — its own notice.
+  if (isExtrasOnlyOrder({
+    liveEntryCount: entryRows.filter((e) => e.deletedAt === null).length,
+    sundryLineCount: order.orderSundryItems.length,
+  })) {
     return sendExtrasOnlySecretaryEmail({ order, to: secretaryEmail });
   }
 
@@ -598,12 +605,16 @@ export async function sendSecretaryNotificationEmail(orderId: string) {
 // Mandy, 15 Oct 2026: a signed-in user can buy a catalogue, parking pass or
 // other extras without entering a dog, so an order can have ZERO entries. The
 // two functions below are the receipt for that order — called from
-// sendEntryConfirmationEmail / sendSecretaryNotificationEmail when the order
-// has no entries, so there is still one place that decides who gets told.
+// sendEntryConfirmationEmail / sendSecretaryNotificationEmail when
+// isExtrasOnlyOrder says so, so there is still one place that decides who
+// gets told.
 
 type ExtrasOnlyOrder = {
   id: string;
+  /** The club's money (the extras). */
   totalAmount: number;
+  /** Remi's booking fee, charged on top of totalAmount. */
+  platformFeePence: number;
   exhibitor: { name: string | null; email: string } | null;
   show: {
     id: string;
@@ -658,6 +669,10 @@ async function sendExtrasOnlyReceiptEmail(order: ExtrasOnlyOrder) {
   const catalogueNote = catalogueNoteFor(boughtKinds);
   const hasParking = includesParkingPass(boughtKinds);
 
+  // What the card was charged: the club's total plus Remi's booking fee —
+  // the confirmation screen's "£X paid", never the club's share alone.
+  const paidPence = order.totalAmount + order.platformFeePence;
+
   const html = `
 <!DOCTYPE html>
 <html>
@@ -673,7 +688,7 @@ async function sendExtrasOnlyReceiptEmail(order: ExtrasOnlyOrder) {
         <div style="display: inline-block; width: 40px; height: 40px; line-height: 40px; border-radius: 50%; background: rgba(243,236,220,0.2); font-size: 20px; color: ${BRAND.cream}; margin-bottom: 8px;">&#10003;</div>
         <h2 style="margin: 0; color: ${BRAND.cream}; font-size: 22px; font-weight: 700;">Thank you for your order${firstName ? `, ${escapeHtml(firstName)}` : ''}</h2>
         <p style="margin: 8px 0 0; color: rgba(243, 236, 220, 0.78); font-size: 14px;">
-          Order ${orderRef} &middot; ${formatFee(order.totalAmount)}
+          Order ${orderRef} &middot; ${formatFee(paidPence)}
         </p>
       </div>
       <div style="padding: 20px 24px; border-bottom: 1px solid ${BRAND.line};">
@@ -689,9 +704,13 @@ async function sendExtrasOnlyReceiptEmail(order: ExtrasOnlyOrder) {
       </div>
       <div style="padding: 16px 24px; background: ${BRAND.paper};">
         <table style="width: 100%;">
+          ${order.platformFeePence > 0 ? `<tr>
+            <td style="font-size: 14px; color: ${BRAND.ink2};">Booking fee</td>
+            <td style="text-align: right; font-size: 14px; color: ${BRAND.ink2};">${formatFee(order.platformFeePence)}</td>
+          </tr>` : ''}
           <tr>
             <td style="font-weight: 700; font-size: 16px; color: ${BRAND.ink};">Total Paid</td>
-            <td style="text-align: right; font-weight: 700; font-size: 16px; color: ${BRAND.green};">${formatFee(order.totalAmount)}</td>
+            <td style="text-align: right; font-weight: 700; font-size: 16px; color: ${BRAND.green};">${formatFee(paidPence)}</td>
           </tr>
         </table>
       </div>

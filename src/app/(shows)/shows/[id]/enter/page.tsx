@@ -2615,9 +2615,13 @@ export default function EnterShowPage() {
                 </>
               ) : (
                 <>
-                  {previewGrandTotal === 0
-                    ? (isExtrasOnly ? 'Confirm Order — Free' : 'Confirm Entry — Free')
-                    : <>Proceed to Payment &middot; {formatCurrency(previewGrandTotal)}</>}
+                  {/* Nothing ticked yet: say what to do, not "Free" — an empty
+                      order isn't a free one. */}
+                  {isExtrasOnly && cart.sundryItems.length === 0
+                    ? 'Choose an extra above'
+                    : previewGrandTotal === 0
+                      ? (isExtrasOnly ? 'Confirm Order — Free' : 'Confirm Entry — Free')
+                      : <>Proceed to Payment &middot; {formatCurrency(previewGrandTotal)}</>}
                 </>
               )}
             </SEButton>
@@ -2688,7 +2692,6 @@ export default function EnterShowPage() {
           paymentAmount={paymentAmount}
           items={cart.sundryItems}
           catalogueNote={catalogueNoteFor(cartSundryKinds)}
-          catalogueHref={`/shows/${show.slug ?? idOrSlug}/catalogue`}
           hasParking={includesParkingPass(cartSundryKinds)}
         />
       )}
@@ -3000,10 +3003,7 @@ export default function EnterShowPage() {
             {/* Catalogue note — printed (collect on the day) or online (Michael,
                 2026-06-25). One component and one rule (catalogueNoteFor) for
                 this screen, the no-dog confirmation and the receipt email. */}
-            <CatalogueNote
-              note={catalogueNoteFor(cartSundryKinds)}
-              catalogueHref={`/shows/${show?.slug ?? idOrSlug}/catalogue`}
-            />
+            <CatalogueNote note={catalogueNoteFor(cartSundryKinds)} />
           </div>
         </div>
         );
