@@ -80,7 +80,10 @@ export const ordersRouter = createTRPCRouter({
     .input(
       z.object({
         showId: z.string().uuid(),
-        entries: z.array(cartEntrySchema).min(1),
+        // May be empty: a signed-in user can buy extras (catalogue, parking
+        // pass...) with no dog at all — Mandy, 15 Oct 2026. The refine below
+        // keeps a cart with nothing in it out.
+        entries: z.array(cartEntrySchema),
         catalogueRequested: z.boolean().default(false),
         /** RKC F(1).11.b.(6)/(8) — exhibitor right to withhold name/address from catalogue */
         withholdFromPublication: z.boolean().default(false),
@@ -108,9 +111,33 @@ export const ordersRouter = createTRPCRouter({
          *  enables donations. */
         donationPence: z.number().int().min(0).max(100_000).default(0),
         donationAffix: z.string().max(120).optional(),
+      }).refine((v) => v.entries.length > 0 || v.sundryItems.length > 0, {
+        message: 'Choose a dog, a junior handler or at least one extra',
+        path: ['entries'],
       })
     )
-    .mutation(async ({ ctx, input }) => {
+    .mutation(async ({ ctx, input: rawInput }) => {
+      // An order with NO entries is "extras only" (Mandy, 15 Oct 2026). Every
+      // field that belongs to the dog side of the form — regional membership
+      // and first-timer ticks, the discount group, the regional donation box,
+      // the catalogue request and the withhold-from-catalogue tick — is
+      // dropped here, once, because the wizard hides that whole block and a
+      // direct API call must not be able to use it either.
+      const hasEntries = rawInput.entries.length > 0;
+      const input = hasEntries
+        ? rawInput
+        : {
+            ...rawInput,
+            regionalMembership: undefined,
+            regionalMembershipNumber: undefined,
+            regionalFirstTimeExhibitor: false,
+            discountGroupId: undefined,
+            donationPence: 0,
+            donationAffix: undefined,
+            catalogueRequested: false,
+            withholdFromPublication: false,
+          };
+
       // Validate show is accepting entries. Remi is merchant of record —
       // exhibitor entry fees land in Remi's Stripe balance and are paid
       // out to the club by BACS after the show. No need to fetch the
@@ -501,10 +528,14 @@ export const ordersRouter = createTRPCRouter({
       // Judge conflict check: a judge can't exhibit in classes they judge.
       // Junior Handling judges assess the handler, not the dog, so a JH-only
       // judge IS allowed to enter (Amanda 2026-06-01). See hasJudgingConflict.
-      const exhibitor = await ctx.db.query.users.findFirst({
-        where: eq(users.id, ctx.session.user.id),
-        columns: { name: true },
-      });
+      // Only when there are entries: a judge may buy a catalogue or sponsor a
+      // class (extras only, no dog — Mandy, 15 Oct 2026).
+      const exhibitor = hasEntries
+        ? await ctx.db.query.users.findFirst({
+            where: eq(users.id, ctx.session.user.id),
+            columns: { name: true },
+          })
+        : undefined;
       if (exhibitor?.name) {
         const assignedJudges = await ctx.db.query.judgeAssignments.findMany({
           where: eq(judgeAssignments.showId, input.showId),
@@ -599,10 +630,12 @@ export const ordersRouter = createTRPCRouter({
           firstTimeExhibitor: regionalFirstTime,
           firstTimeFeePence: regionalCfg.firstTimeFeePence ?? 0,
           juniorHandlerFeePence: show.juniorHandlerFee ?? 0,
-          priorPayingDogCount: await countPriorRegionalPayingDogs(ctx.db, {
-            showId: input.showId,
-            exhibitorId: ctx.session.user.id,
-          }),
+          priorPayingDogCount: hasEntries
+            ? await countPriorRegionalPayingDogs(ctx.db, {
+                showId: input.showId,
+                exhibitorId: ctx.session.user.id,
+              })
+            : 0,
         };
         // Regional dogs sit in exactly one class; a Baby Puppy class priced
         // away from the scale charges flat (Mandy 2026-07-10).
@@ -646,11 +679,13 @@ export const ordersRouter = createTRPCRouter({
           ? null
           : computeOrderFees(dogEntries, {
               ...feeCtx,
-              prior: await priorPackageStanding(ctx.db, {
-                showId: input.showId,
-                exhibitorId: ctx.session.user.id,
-                show,
-              }),
+              prior: hasEntries
+                ? await priorPackageStanding(ctx.db, {
+                    showId: input.showId,
+                    exhibitorId: ctx.session.user.id,
+                    show,
+                  })
+                : undefined,
             });
         if (feeResult) {
           entriesSubtotal = feeResult.total;
