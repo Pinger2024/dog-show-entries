@@ -1203,7 +1203,7 @@ export const ordersRouter = createTRPCRouter({
           with: { venue: { columns: { name: true } } },
         },
         entries: { columns: { id: true, deletedAt: true } },
-        orderSundryItems: { with: { sundryItem: { columns: { name: true, kind: true } } } },
+        orderSundryItems: { with: { sundryItem: { columns: { name: true } } } },
       },
       orderBy: [desc(orders.createdAt)],
     });
@@ -1222,7 +1222,6 @@ export const ordersRouter = createTRPCRouter({
         items: o.orderSundryItems.map((i) => ({
           id: i.id,
           name: i.sundryItem.name,
-          kind: i.sundryItem.kind,
           quantity: i.quantity,
           unitPrice: i.unitPrice,
         })),
