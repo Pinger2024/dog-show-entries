@@ -57,6 +57,12 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { isGsdOnlyClass, isGsdBreed } from '@/lib/class-templates';
+import {
+  DEFAULT_MANUAL_PAYMENT_METHOD,
+  MANUAL_PAYMENT_METHODS,
+  MANUAL_PAYMENT_METHOD_LABELS,
+  type ManualPaymentMethod,
+} from '@/lib/manual-payment-method';
 import { EmptyState } from '@/components/ui/empty-state';
 import { SECard, Eyebrow } from '@/components/show-experience/kit';
 import { SE_H } from '@/components/show-experience/tokens';
@@ -734,7 +740,7 @@ function AddEntryDialog({
   const [selectedDogBreedName, setSelectedDogBreedName] = useState<string | null>(null);
   const [exhibitorEmail, setExhibitorEmail] = useState('');
   const [selectedClassIds, setSelectedClassIds] = useState<string[]>([]);
-  const [paymentMethod, setPaymentMethod] = useState<string>('bank_transfer');
+  const [paymentMethod, setPaymentMethod] = useState<ManualPaymentMethod>(DEFAULT_MANUAL_PAYMENT_METHOD);
   const [isNfc, setIsNfc] = useState(false);
   // Member choice (Mandy, 30 Sept 2026: "yes add member now") — the same
   // options an exhibitor sees online: the show's RKC discount groups ("dg:<id>")
@@ -825,13 +831,18 @@ function AddEntryDialog({
       // and keep it on screen long enough to write down. The entries list
       // marks the row too, so it can be found again after the toast has gone.
       const missing = result.requirementWarnings ?? [];
+      // Whether the exhibitor was emailed their confirmation — only an email
+      // on Remi can be (secretary.createManualEntry says which).
+      const emailNote = result.confirmationEmailedTo
+        ? `We've emailed a confirmation to ${result.confirmationEmailedTo}.`
+        : `No confirmation email was sent: ${exhibitorEmail.trim()} isn't on Remi.`;
       if (missing.length > 0) {
         toast.warning(`Entry created — ${missing.length} detail${missing.length === 1 ? '' : 's'} still needed`, {
-          description: `Still to add: ${missing.join(', ')}. These print blank in the catalogue until filled in.`,
+          description: `Still to add: ${missing.join(', ')}. These print blank in the catalogue until filled in. ${emailNote}`,
           duration: 12000,
         });
       } else {
-        toast.success('Entry created successfully');
+        toast.success('Entry created', { description: emailNote, duration: 8000 });
       }
       utils.entries.getForShow.invalidate({ showId });
       utils.secretary.getShowStats.invalidate({ showId });
@@ -1060,22 +1071,21 @@ function AddEntryDialog({
                 onChange={(e) => setExhibitorEmail(e.target.value)}
               />
               <p className="text-xs text-muted-foreground">
-                If this matches a Remi account, the entry appears in their dashboard.
+                If this email is on Remi, we&apos;ll email them a confirmation and the entry shows in their My Entries.
               </p>
             </div>
 
             {/* Payment method */}
             <div className="space-y-1">
               <label className="text-sm font-medium">Payment Method</label>
-              <Select value={paymentMethod} onValueChange={setPaymentMethod}>
+              <Select value={paymentMethod} onValueChange={(v) => setPaymentMethod(v as ManualPaymentMethod)}>
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="bank_transfer">Bank Transfer</SelectItem>
-                  <SelectItem value="postal">Postal (cheque)</SelectItem>
-                  <SelectItem value="cash">Cash</SelectItem>
-                  <SelectItem value="online">Online (already paid)</SelectItem>
+                  {MANUAL_PAYMENT_METHODS.map((m) => (
+                    <SelectItem key={m} value={m}>{MANUAL_PAYMENT_METHOD_LABELS[m]}</SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>
@@ -1282,7 +1292,7 @@ function AddEntryDialog({
                     isNfc,
                     ...membershipInput,
                     regionalMembershipNumber: chosenRegional ? membershipNumber.trim() || undefined : undefined,
-                    paymentMethod: paymentMethod as 'postal' | 'cash' | 'bank_transfer' | 'online',
+                    paymentMethod,
                     sundryItems: sundryItems.length > 0 ? sundryItems : undefined,
                   });
                 }}

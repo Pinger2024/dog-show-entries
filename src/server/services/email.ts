@@ -9,6 +9,7 @@ import { announcesOnlineCatalogue, catalogueNoteFor, includesParkingPass, type S
 import { generateParkingPassPdf } from '@/server/services/parking-pass-pdf';
 import { isExtrasOnlyOrder } from '@/lib/extras-only-order';
 import { amountChargedPence, orderAmountChargedPence } from '@/lib/fee-calc';
+import { manualPaymentPhrase, type ManualPaymentMethod } from '@/lib/manual-payment-method';
 import { buildClassLabelMap } from '@/lib/class-labels';
 import { BRAND } from '@/lib/brand';
 import { FEEDBACK_REPLY_TO } from '@/lib/email-addresses';
@@ -74,30 +75,51 @@ function formatDeliveryAddress(order: {
 }
 
 /**
- * An order has just been paid — by card (the Stripe webhook) or, for a £0
- * order, by checkout itself. The ONE place that decides who is told: the
- * exhibitor gets their receipt and the show secretary gets a notice. Live bug
- * to 15 Oct 2026: only the webhook sent these, so a free order (mostly junior
- * handlers) was never confirmed to anyone. Never rejects — a failed email must
- * not fail the payment or the checkout. Guarded by
- * src/__tests__/guards/money-emails-catalogue-one-owner.test.ts.
+ * Who recorded the payment. The exhibitor, at online checkout (card, or a £0
+ * order); or the secretary, adding a postal / cash / bank-transfer entry by
+ * hand (Mandy, 15 Oct 2026).
  */
-export async function sendOrderPaidEmails(orderId: string): Promise<void> {
-  await Promise.all([
-    sendEntryConfirmationEmail(orderId).catch((err) =>
+export type OrderPaidSource =
+  | { recordedBy: 'exhibitor' }
+  | { recordedBy: 'secretary'; paymentMethod: ManualPaymentMethod };
+
+/**
+ * An order has just been paid — by card (the Stripe webhook), for a £0 order
+ * by checkout itself, or by hand by the secretary. The ONE place that decides
+ * who is told: the exhibitor gets their receipt, and the show secretary gets a
+ * notice unless she recorded it herself. Live bugs to 15 Oct 2026: only the
+ * webhook sent these, so a free order (mostly junior handlers) and every entry
+ * a secretary added were never confirmed to anyone. Never rejects — a failed
+ * email must not fail the payment, the checkout or the secretary's save.
+ * Guarded by src/__tests__/guards/money-emails-catalogue-one-owner.test.ts.
+ */
+export async function sendOrderPaidEmails(
+  orderId: string,
+  source: OrderPaidSource = { recordedBy: 'exhibitor' },
+): Promise<void> {
+  const sends = [
+    sendEntryConfirmationEmail(orderId, source).catch((err) =>
       console.error(`[email] Receipt failed for order ${orderId}:`, err)
     ),
-    sendSecretaryNotificationEmail(orderId).catch((err) =>
-      console.error(`[email] Secretary notification failed for order ${orderId}:`, err)
-    ),
-  ]);
+  ];
+  if (source.recordedBy === 'exhibitor') {
+    sends.push(
+      sendSecretaryNotificationEmail(orderId).catch((err) =>
+        console.error(`[email] Secretary notification failed for order ${orderId}:`, err)
+      ),
+    );
+  }
+  await Promise.all(sends);
 }
 
 /**
  * Send a confirmation email after a successful payment.
  * Fetches full order data including show, entries, dogs, and classes.
  */
-export async function sendEntryConfirmationEmail(orderId: string) {
+export async function sendEntryConfirmationEmail(
+  orderId: string,
+  source: OrderPaidSource = { recordedBy: 'exhibitor' },
+) {
   const order = await db.query.orders.findFirst({
     where: eq(orders.id, orderId),
     with: {
@@ -186,7 +208,7 @@ export async function sendEntryConfirmationEmail(orderId: string) {
           <td style="padding: 16px; border-bottom: 1px solid ${BRAND.line};">
             <strong style="color: ${BRAND.ink};">${name}</strong>
             ${breed ? `<br><span style="color: ${BRAND.ink2}; font-size: 14px;">${breed}</span>` : ''}
-            ${entry.isNfc ? '<br><span style="color: ${BRAND.ink2}; font-size: 12px; font-weight: 600;">NOT FOR COMPETITION</span>' : ''}
+            ${entry.isNfc ? `<br><span style="color: ${BRAND.ink2}; font-size: 12px; font-weight: 600;">NOT FOR COMPETITION</span>` : ''}
             <div style="margin-top: 8px; font-size: 14px;">
               ${classLines}
             </div>
@@ -239,6 +261,7 @@ export async function sendEntryConfirmationEmail(orderId: string) {
         <p style="margin: 8px 0 0; color: rgba(243, 236, 220, 0.78); font-size: 14px;">
           Order ${orderRef} &middot; ${formatFee(paidPence)}
         </p>
+        ${source.recordedBy === 'secretary' ? `<p style="margin: 6px 0 0; color: ${BRAND.cream}; font-size: 14px;">Entered for you by the show secretary</p>` : ''}
       </div>
 
       <!-- Show details -->
@@ -286,6 +309,9 @@ export async function sendEntryConfirmationEmail(orderId: string) {
             <td style="font-weight: 700; font-size: 16px; color: ${BRAND.ink};">Total Paid</td>
             <td style="text-align: right; font-weight: 700; font-size: 16px; color: ${BRAND.green};">${formatFee(paidPence)}</td>
           </tr>
+          ${source.recordedBy === 'secretary' ? `<tr>
+            <td colspan="2" style="padding-top: 4px; font-size: 14px; color: ${BRAND.ink2};">${manualPaymentPhrase(source.paymentMethod)}</td>
+          </tr>` : ''}
         </table>
       </div>
 
@@ -302,7 +328,7 @@ export async function sendEntryConfirmationEmail(orderId: string) {
       <div style="padding: 16px 24px; text-align: center; border-top: 1px solid ${BRAND.line}; background: #eaf7ee;">
         <p style="margin: 0 0 8px; font-size: 13px; font-weight: 600; color: ${BRAND.green};">Online Catalogue Purchased</p>
         <p style="margin: 0 0 12px; font-size: 13px; color: ${BRAND.ink2};">Your catalogue unlocks on the morning of the show — we&apos;ll email you the link first thing that day.</p>
-        ${btn(`${APP_URL}/shows/${show.slug ?? show.id}/catalogue`, 'View Catalogue', '${BRAND.green}')}
+        ${btn(`${APP_URL}/shows/${show.slug ?? show.id}/catalogue`, 'View Catalogue')}
       </div>` : ''}
 
       <!-- Share -->
@@ -557,7 +583,7 @@ export async function sendSecretaryNotificationEmail(orderId: string) {
       <tr>
         <td style="padding: 8px 16px; border-bottom: 1px solid ${BRAND.line}; font-size: 14px;">
           <strong>${name}</strong>${breed ? ` (${breed})` : ''}
-          ${entry.isNfc ? ' <span style="color: ${BRAND.ink2}; font-weight: 600;">NFC</span>' : ''}
+          ${entry.isNfc ? ` <span style="color: ${BRAND.ink2}; font-weight: 600;">NFC</span>` : ''}
         </td>
         <td style="padding: 8px 16px; border-bottom: 1px solid ${BRAND.line}; font-size: 14px;">${classes}</td>
         <td style="padding: 8px 16px; border-bottom: 1px solid ${BRAND.line}; font-size: 14px; text-align: right;">${formatFee(entry.totalFee)}</td>

@@ -17,6 +17,9 @@ import { findFiles } from '../helpers/static-scan';
 // 3. When exhibitors get the online catalogue (status AND the morning of the
 //    show) — lib/catalogue-utils.ts isCatalogueReleasedToExhibitors. My Entries
 //    checked the status alone and offered the catalogue from close.
+// 4. How a secretary-entered entry was paid, and how that reads — the list in
+//    lib/manual-payment-method.ts. The dialog, the router's input and the
+//    exhibitor's confirmation each wrote it out by hand (15 Oct 2026).
 
 const SRC = path.join(__dirname, '..', '..');
 
@@ -43,6 +46,11 @@ const RULES: Rule[] = [
     owner: path.join('lib', 'catalogue-utils.ts'),
     label: 'catalogue release decided outside catalogue-utils (use isCatalogueReleasedToExhibitors)',
     re: /\bCATALOGUE_AVAILABLE_STATUSES\b/,
+  },
+  {
+    owner: path.join('lib', 'manual-payment-method.ts'),
+    label: 'manual payment methods written out by hand (use MANUAL_PAYMENT_METHODS)',
+    re: /['"](postal|cash|bank_transfer)['"]/,
   },
 ];
 
@@ -76,6 +84,8 @@ describe('money, order emails and catalogue release each have one owner', () => 
       'sendEntryConfirmationEmail(orderId).catch(() => {});',
       'await sendSecretaryNotificationEmail(order.id);',
       'isAvailable: CATALOGUE_AVAILABLE_STATUSES.has(r.showStatus),',
+      "paymentMethod: z.enum(['postal', 'cash', 'bank_transfer', 'online']).default('bank_transfer'),",
+      '<SelectItem value="postal">Postal (cheque)</SelectItem>',
     ];
     for (const text of bad) {
       expect(findSecondCopies([{ file: path.join(SRC, 'x.ts'), text }]), text).not.toEqual([]);
@@ -83,6 +93,7 @@ describe('money, order emails and catalogue release each have one owner', () => 
     expect(findSecondCopies([{ file: path.join(SRC, 'lib', 'fee-calc.ts'), text: bad[0]! }])).toEqual([]);
     expect(findSecondCopies([{ file: path.join(SRC, 'server', 'services', 'email.ts'), text: bad[5]! }])).toEqual([]);
     expect(findSecondCopies([{ file: path.join(SRC, 'lib', 'catalogue-utils.ts'), text: bad[7]! }])).toEqual([]);
+    expect(findSecondCopies([{ file: path.join(SRC, 'lib', 'manual-payment-method.ts'), text: bad[8]! }])).toEqual([]);
     // Sums of fees alone are not the rule (admin income, metrics accumulators).
     expect(findSecondCopies([{ file: path.join(SRC, 'x.ts'), text: 'income: src.reduce((a, s) => a + s.platformFeePence, 0),' }])).toEqual([]);
   });

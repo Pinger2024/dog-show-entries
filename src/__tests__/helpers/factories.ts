@@ -423,6 +423,8 @@ export async function makeOrder(opts: {
   exhibitorId: string;
   status?: OrderStatus;
   totalAmount?: number;
+  /** Remi's booking fee on top of totalAmount (0 unless a test charges one). */
+  platformFeePence?: number;
   donationPence?: number;
   // Every real Stripe checkout has this set from the moment the
   // PaymentIntent is created — show-metrics treats "paid + no
@@ -444,6 +446,7 @@ export async function makeOrder(opts: {
       exhibitorId: opts.exhibitorId,
       status: opts.status ?? 'pending_payment',
       totalAmount: opts.totalAmount ?? 1000,
+      platformFeePence: opts.platformFeePence ?? 0,
       donationPence: opts.donationPence ?? 0,
       stripePaymentIntentId:
         opts.stripePaymentIntentId === null

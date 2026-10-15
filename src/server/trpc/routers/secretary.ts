@@ -23,6 +23,8 @@ import { computeOrderFees, type FeeContext } from '@/lib/fee-calc';
 import { computeRegionalOrderFees, regionalClassFlatFee } from '@/lib/regional-fee-calc';
 import { countPriorRegionalPayingDogs } from '@/server/services/regional-pricing';
 import { validateSundrySelection } from '@/server/services/sundry-selection';
+import { sendOrderPaidEmails } from '@/server/services/email';
+import { DEFAULT_MANUAL_PAYMENT_METHOD, MANUAL_PAYMENT_METHODS } from '@/lib/manual-payment-method';
 import { computeJudgeCoverage } from '@/server/services/judge-coverage';
 import { priceManualEntry } from '@/server/services/manual-entry-pricing';
 import { formatAtcNumber } from '@/lib/registration-flags';
@@ -111,21 +113,26 @@ import { championshipClassesComplete } from '@/lib/championship-class-requiremen
  * write path that touches judge contact details.
  */
 /**
- * The exhibitor a manual entry is for, by email — ONE lookup for
- * createManualEntry and previewManualEntryFee, so the preview counts the same
- * exhibitor's earlier dogs that the entry will. An unknown email falls back to
- * the secretary's own account (the entry's long-standing behaviour).
+ * The exhibitor a secretary is entering for, by email — ONE lookup for
+ * createManualEntry, previewManualEntryFee and registerDogForExhibitor, so the
+ * preview counts the same exhibitor's earlier dogs that the entry will and a
+ * dog registered here belongs to the same person its entry does. An email with
+ * no Remi account falls back to the secretary's own account (long-standing);
+ * `onRemi` says which happened, because only a real account can be emailed a
+ * confirmation or see the entry in My Entries.
  */
-async function manualEntryExhibitorId(
+async function manualEntryExhibitor(
   database: Database,
   email: string,
   fallbackUserId: string,
-): Promise<string> {
+): Promise<{ exhibitorId: string; onRemi: boolean }> {
   const exhibitor = await database.query.users.findFirst({
     where: eq(users.email, email.toLowerCase()),
     columns: { id: true },
   });
-  return exhibitor?.id ?? fallbackUserId;
+  return exhibitor
+    ? { exhibitorId: exhibitor.id, onRemi: true }
+    : { exhibitorId: fallbackUserId, onRemi: false };
 }
 
 async function judgeEngagedOutsideCallerOrgs(
@@ -3489,12 +3496,8 @@ export const secretaryRouter = createTRPCRouter({
     .mutation(async ({ ctx, input }) => {
       const { exhibitorEmail, ownerName, ownerAddress, ...dogData } = input;
 
-      // Look up the exhibitor by email — create a placeholder if not found
-      let exhibitor = await ctx.db.query.users.findFirst({
-        where: eq(users.email, exhibitorEmail.toLowerCase()),
-      });
-
-      const exhibitorId = exhibitor?.id ?? ctx.session.user.id;
+      // The exhibitor by email — the same lookup the entry itself uses.
+      const { exhibitorId, onRemi } = await manualEntryExhibitor(ctx.db, exhibitorEmail, ctx.session.user.id);
 
       // kc_reg_number is UNIQUE across every dog on every account. Without a
       // check here, entering a number already in use throws a raw Postgres
@@ -3539,7 +3542,7 @@ export const secretaryRouter = createTRPCRouter({
       // Create primary owner record
       await ctx.db.insert(dogOwners).values({
         dogId: dog!.id,
-        userId: exhibitor ? exhibitor.id : null,
+        userId: onRemi ? exhibitorId : null,
         ownerName,
         ownerAddress,
         ownerEmail: exhibitorEmail,
@@ -3583,7 +3586,7 @@ export const secretaryRouter = createTRPCRouter({
       const selectedClasses = input.classIds.map((id) => byId.get(id)).filter((c) => c != null);
       const email = input.exhibitorEmail?.trim() ?? '';
       const exhibitorId = z.string().email().safeParse(email).success
-        ? await manualEntryExhibitorId(ctx.db, email, ctx.session.user.id)
+        ? (await manualEntryExhibitor(ctx.db, email, ctx.session.user.id)).exhibitorId
         : null;
       const membership = await resolveEntryMembership(ctx.db, show, input);
       const { classFee } = await priceManualEntry(ctx.db, {
@@ -3610,7 +3613,7 @@ export const secretaryRouter = createTRPCRouter({
         taf: z.boolean().default(false),
         cnaf: z.boolean().default(false),
         atcNumber: z.string().max(32).optional(),
-        paymentMethod: z.enum(['postal', 'cash', 'bank_transfer', 'online']).default('bank_transfer'),
+        paymentMethod: z.enum(MANUAL_PAYMENT_METHODS).default(DEFAULT_MANUAL_PAYMENT_METHOD),
         /** The Add Entry dialog's member choice (Mandy, 30 Sept 2026) — an RKC
          *  discount group or a regional membership, priced by
          *  resolveEntryMembership exactly as online checkout does. */
@@ -3651,7 +3654,7 @@ export const secretaryRouter = createTRPCRouter({
       }
 
       // Find exhibitor by email — the same lookup the fee preview uses.
-      const exhibitorId = await manualEntryExhibitorId(ctx.db, input.exhibitorEmail, ctx.session.user.id);
+      const { exhibitorId, onRemi } = await manualEntryExhibitor(ctx.db, input.exhibitorEmail, ctx.session.user.id);
 
       // Validate classes belong to this show
       const selectedClasses = await ctx.db.query.showClasses.findMany({
@@ -3859,9 +3862,21 @@ export const secretaryRouter = createTRPCRouter({
         reason: `Entry created by secretary (${input.paymentMethod} payment)`,
       });
 
+      // The exhibitor's confirmation (Mandy, 15 Oct 2026: "so they know they
+      // have entered and what class") — last, once the classes and extras are
+      // all saved, so the email lists them. Through the one owner of who is
+      // told; the secretary typed it in, so she is not sent a notice. Only to
+      // a Remi account: with no account the order is filed under the
+      // secretary, so the receipt would land in HER inbox. The dialog says
+      // which happened.
+      const confirmationEmailedTo = onRemi ? input.exhibitorEmail.toLowerCase() : null;
+      if (onRemi) {
+        void sendOrderPaidEmails(order!.id, { recordedBy: 'secretary', paymentMethod: input.paymentMethod });
+      }
+
       // The warnings ride back with the entry so the secretary sees WHY it is
       // incomplete at the moment she saves it, not later in a report.
-      return { ...entry!, requirementWarnings };
+      return { ...entry!, requirementWarnings, confirmationEmailedTo };
     }),
 
   // ─── Show Requirements Checklist ───────────────────────
