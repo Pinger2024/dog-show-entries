@@ -398,6 +398,23 @@ export function aggregateShowMetrics(data: {
     }
   }
 
+  // An extras-only order (Mandy, 15 Oct 2026: catalogue / parking pass bought
+  // with no dog) has no entries, so the entry loop above can never mark it
+  // live. A pending order with sundries and no entry row at all IS a live
+  // checkout — it is exactly what "Awaiting payment" should show.
+  if (pendingOrderIds.size > 0) {
+    const orderIdsWithEntries = new Set<string>();
+    for (const e of data.entries) {
+      if (!e.deletedAt && e.orderId) orderIdsWithEntries.add(e.orderId);
+    }
+    const orderIdsWithSundries = new Set(data.sundries.map((s) => s.orderId));
+    for (const id of pendingOrderIds) {
+      if (!orderIdsWithEntries.has(id) && orderIdsWithSundries.has(id)) {
+        livePendingOrderIds.add(id);
+      }
+    }
+  }
+
   // Derived rather than tracked as its own accumulator — paidEntryFeesPence
   // already sums confirmed + withdrawn + cancelled fees on paid orders, and
   // the other two are tracked directly, so confirmed-only falls out for free.

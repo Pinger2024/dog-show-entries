@@ -173,7 +173,11 @@ few entry-keyed views listed below.
 - Slice 1 already SELLS sponsorship and adverts (they are ordinary sundries in the same panel). Until slice 3, the
   receipt carries no secretary email or artwork deadline. Tell Mandy this with the demo.
 
-## Open question for Mandy (asked 15 Oct)
+## Mandy's answer, 15 Oct 13:29Z: printed and online catalogues
 
-- Should a PRINTED catalogue also unlock the ONLINE one? Today it does, and the order email says "Online Catalogue
-  Purchased" to printed buyers.
+- A hard copy ALSO gets the online copy ("a nice touch"), but we don't broadcast it, otherwise people share it instead
+  of buying a hard copy.
+  - Access is unchanged: `grantsOnlineCatalogueAccess` = printed | online, and the show-morning email still goes.
+  - The order email's "Online Catalogue Purchased" box shows only for an online_catalogue purchase
+    (`announcesOnlineCatalogue`).
+  - Nothing shown at purchase time may say that printed includes online.

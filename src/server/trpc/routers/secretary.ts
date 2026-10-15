@@ -1215,6 +1215,31 @@ export const secretaryRouter = createTRPCRouter({
       const orderById = new Map(orderRows.map((o) => [o.id, o] as const));
       const rows: ReportRow[] = [];
 
+      // Extras-only orders (Mandy, 15 Oct 2026): a signed-in user bought a
+      // catalogue, parking pass etc. with NO dog, so the order has no entries
+      // and the entry-keyed loop above can't see it — yet the headline total
+      // below (aggregateShowMetrics) already counts it. Paid and still-pending
+      // orders get a row; cancelled / failed / refunded ones stay hidden, like
+      // the dead checkouts and refunds of dog orders. "No entries" means no
+      // entry row of ANY kind on the order (a withdrawn dog's order keeps its
+      // normal rows and is not extras-only).
+      const orderIdsWithEntries = new Set(
+        (
+          await ctx.db
+            .select({ orderId: entries.orderId })
+            .from(entries)
+            .where(and(eq(entries.showId, input.showId), isNotNull(entries.orderId)))
+        ).map((r) => r.orderId),
+      );
+      const extrasOnlyOrderIds = orderRows
+        .filter(
+          (o) =>
+            (o.status === 'paid' || o.status === 'pending_payment') &&
+            sundryTotalsByOrder.has(o.id) &&
+            !orderIdsWithEntries.has(o.id),
+        )
+        .map((o) => o.id);
+
       // Also include entries with no orderId (unusual) as their own
       // rows without grouping. Preserve the historical behaviour that
       // every non-deleted entry shows up.
@@ -1287,6 +1312,29 @@ export const secretaryRouter = createTRPCRouter({
             payments: orderPayments,
           });
         }
+      }
+
+      for (const orderId of extrasOnlyOrderIds) {
+        const order = orderById.get(orderId)!;
+        const sundryTotal = sundryTotalsByOrder.get(orderId) ?? 0;
+        rows.push({
+          kind: 'sundry',
+          id: `sundry-${orderId}`,
+          orderId,
+          // The buyer comes from the ORDER — there is no entry to ask.
+          exhibitor: order.exhibitor
+            ? { name: order.exhibitor.name, email: order.exhibitor.email }
+            : null,
+          itemLabel: 'Sundry items',
+          itemDetail: (sundryBreakdownByOrder.get(orderId) ?? []).join(', '),
+          entryFee: 0,
+          addons: sundryTotal,
+          total: sundryTotal,
+          // The ORDER's state, in the report's own words. NOT
+          // statusFromEntries([]), which says 'withdrawn' for no entries.
+          status: order.status === 'paid' ? 'confirmed' : 'pending',
+          payments: (order.payments ?? []).map((p) => ({ amount: p.amount, status: p.status })),
+        });
       }
 
       const metrics = aggregateShowMetrics({
