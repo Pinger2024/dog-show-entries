@@ -53,13 +53,13 @@ describe('catalogue access reads the kind', () => {
   it('"Programme" printed_catalogue unlocks catalogue access', async () => {
     const { show, exhibitor } = await paidOrderWith('Programme', 'printed_catalogue');
     expect(await hasUserPurchasedCatalogue(testDb, show.id, exhibitor.id)).toBe(true);
-    const list = await createTestCaller(exhibitor).shows.getMyCataloguePurchases();
+    const list = await createTestCaller(exhibitor as never).shows.getMyCataloguePurchases();
     expect(list.map((p) => p.showId)).toContain(show.id);
   });
   it('"Catalogue Advert" with kind advert does NOT unlock it', async () => {
     const { show, exhibitor } = await paidOrderWith('Catalogue Advert', 'advert');
     expect(await hasUserPurchasedCatalogue(testDb, show.id, exhibitor.id)).toBe(false);
-    expect(await createTestCaller(exhibitor).shows.getMyCataloguePurchases()).toEqual([]);
+    expect(await createTestCaller(exhibitor as never).shows.getMyCataloguePurchases()).toEqual([]);
   });
 });
 
@@ -86,7 +86,7 @@ describe('parking passes read the kind', () => {
     const { order, exhibitor } = await paidOrderWith('Voucher', 'parking', 2);
     const pass = await generateParkingPassPdf(order.id);
     expect(pass).not.toBeNull();
-    const mine = await createTestCaller(exhibitor).orders.myParkingPasses();
+    const mine = await createTestCaller(exhibitor as never).orders.myParkingPasses();
     expect(mine).toHaveLength(1);
     expect(mine[0]?.quantity).toBe(2);
   });
@@ -97,6 +97,6 @@ describe('parking passes read the kind', () => {
   it('an item NAMED "Parking" but with kind other produces nothing', async () => {
     const { order, exhibitor } = await paidOrderWith('Parking donation box', 'other');
     expect(await generateParkingPassPdf(order.id)).toBeNull();
-    expect(await createTestCaller(exhibitor).orders.myParkingPasses()).toEqual([]);
+    expect(await createTestCaller(exhibitor as never).orders.myParkingPasses()).toEqual([]);
   });
 });

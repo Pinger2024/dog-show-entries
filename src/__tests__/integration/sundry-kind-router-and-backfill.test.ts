@@ -11,7 +11,7 @@ describe('secretary sundry router: kind', () => {
     const { user, org } = await makeSecretaryWithOrg();
     const show = await makeShow({ organisationId: org.id });
     await expect(
-      createTestCaller(user).secretary.createSundryItem({
+      createTestCaller(user as never).secretary.createSundryItem({
         showId: show.id, name: 'Printed Catalogue', priceInPence: 500,
       } as never),
     ).rejects.toThrow(/kind/i);
@@ -20,7 +20,7 @@ describe('secretary sundry router: kind', () => {
   it('createSundryItem stores the chosen kind, even against the name', async () => {
     const { user, org } = await makeSecretaryWithOrg();
     const show = await makeShow({ organisationId: org.id });
-    const item = await createTestCaller(user).secretary.createSundryItem({
+    const item = await createTestCaller(user as never).secretary.createSundryItem({
       showId: show.id, name: 'Printed Catalogue', kind: 'other', priceInPence: 500,
     });
     expect(item!.kind).toBe('other');
@@ -29,7 +29,7 @@ describe('secretary sundry router: kind', () => {
   it('bulkCreateSundryItems requires and stores a kind per item', async () => {
     const { user, org } = await makeSecretaryWithOrg();
     const show = await makeShow({ organisationId: org.id });
-    const caller = createTestCaller(user);
+    const caller = createTestCaller(user as never);
     await expect(
       caller.secretary.bulkCreateSundryItems({
         showId: show.id, items: [{ name: 'Donation', priceInPence: 100 }],
@@ -46,7 +46,7 @@ describe('secretary sundry router: kind', () => {
   it('updateSundryItem changes the kind; public getSundryItems returns it', async () => {
     const { user, org } = await makeSecretaryWithOrg();
     const show = await makeShow({ organisationId: org.id });
-    const caller = createTestCaller(user);
+    const caller = createTestCaller(user as never);
     const item = await caller.secretary.createSundryItem({
       showId: show.id, name: 'Programme', kind: 'other', priceInPence: 500,
     });

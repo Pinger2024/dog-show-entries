@@ -28,7 +28,8 @@ async function confirmationHtml(name: string, kind: SundryKind) {
   await makeOrderSundryItem({ orderId: order.id, sundryItemId: item.id, quantity: 1, unitPrice: 500 });
   await sendEntryConfirmationEmail(order.id);
   expect(resendMocks.send).toHaveBeenCalledTimes(1);
-  const payload = resendMocks.send.mock.calls[0]?.[0] as Record<string, unknown>;
+  const calls = resendMocks.send.mock.calls as unknown as Array<[Record<string, unknown>]>;
+  const payload = calls[0]![0];
   return String(payload.html ?? '');
 }
 
