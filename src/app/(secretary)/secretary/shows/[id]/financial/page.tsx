@@ -756,8 +756,14 @@ export default function FinancialPage() {
                 return (
                   <>
                     This will return <strong>{formatCurrency(remaining)}</strong> to{' '}
-                    {orderToRefund.exhibitor?.name ?? 'the exhibitor'} via Stripe and
-                    cancel every entry on this order. The club&apos;s share, sundry
+                    {orderToRefund.exhibitor?.name ?? 'the exhibitor'} via Stripe
+                    {/* An extras-only order (catalogue / parking pass bought
+                        with no dog — Mandy, 15 Oct 2026) has no entries to
+                        cancel, so don't say it does. */}
+                    {orderToRefund.entries.length > 0
+                      ? ' and cancel every entry on this order. '
+                      : '. This order has no dog or junior handler entered, so no entries are affected. '}
+                    The club&apos;s share, sundry
                     items, and the platform fee all come back.
                   </>
                 );
@@ -999,8 +1005,9 @@ function OrderRefundCard({
           )}
           {refunded === 0 && (
             <span>
-              Entry fees {formatCurrency(entryFeesTotal)}
-              {sundryTotal > 0 && ` + sundries ${formatCurrency(sundryTotal)}`}
+              {order.entries.length > 0
+                ? `Entry fees ${formatCurrency(entryFeesTotal)}${sundryTotal > 0 ? ` + sundries ${formatCurrency(sundryTotal)}` : ''}`
+                : `Sundries ${formatCurrency(sundryTotal)}`}
               {' + platform fee'}
             </span>
           )}

@@ -427,7 +427,10 @@ export default function ShowManagementLayout({
       )}
 
       {/* Stats */}
-      {entryStats && entryStats.dogsEntered > 0 && (
+      {/* Also shown once there is a paid order with no dog on it — extras
+          bought on their own (Mandy, 15 Oct 2026) are money the secretary
+          needs to see. */}
+      {entryStats && (entryStats.dogsEntered > 0 || entryStats.paidOrders > 0) && (
         <div className="grid grid-cols-2 gap-2.5 lg:grid-cols-4">
           <SECard className="p-3.5">
             <div className="flex items-center gap-1.5 text-se-ink3">
