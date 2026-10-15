@@ -104,6 +104,7 @@ vi.mock('@/server/services/email', async (importOriginal) => {
   return {
     ...actual,
     sendEntryConfirmationEmail: vi.fn(async () => undefined),
+    sendOrderPaidEmails: vi.fn(async () => undefined),
     sendSecretaryNotificationEmail: vi.fn(async () => undefined),
     sendExtrasAddedEmail: vi.fn(async () => undefined),
     sendPrintOrderConfirmationEmail: vi.fn(async () => undefined),

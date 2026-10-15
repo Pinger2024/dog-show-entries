@@ -6,7 +6,8 @@
  * assert the order total, per-entry fees, and persisted declarations match the
  * BRG scale (1st £20, 2nd £20, 3rd £16, 4th+ free; member £17/£17/£11/free).
  */
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
+import * as emailService from '@/server/services/email';
 import { eq } from 'drizzle-orm';
 import { entries, orders } from '@/server/db/schema';
 import { testDb } from '../helpers/db';
@@ -158,6 +159,10 @@ describe('regional (SV/WUSV) entry fees — journey', () => {
     const order = await testDb.query.orders.findFirst({ where: eq(orders.id, result.orderId) });
     expect(order?.regionalFirstTimeExhibitor).toBe(true);
     expect(order?.status).toBe('paid');
+    // A free entry still gets its receipt and the secretary is still told —
+    // live bug to 15 Oct 2026: free orders (mostly junior handlers) got nothing,
+    // because only the Stripe webhook sent these and a £0 order never reaches it.
+    expect(vi.mocked(emailService.sendOrderPaidEmails)).toHaveBeenCalledWith(result.orderId);
   });
 
   it('first-time exhibitor with three dogs: only the first is free (£0 + £20 + £16 = £36)', async () => {

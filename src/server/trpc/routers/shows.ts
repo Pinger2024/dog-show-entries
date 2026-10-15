@@ -28,9 +28,8 @@ import { publicOrgColumns } from '../public-org-columns';
 import { redactJudgeAssignmentForPublic } from '../public-judge-fields';
 import { toPublicScheduleData } from '../public-show-fields';
 import { isUuid, generateShowSlug } from '@/lib/slugify';
-import { hasUserPurchasedCatalogue, CATALOGUE_AVAILABLE_STATUSES } from '@/lib/catalogue-utils';
+import { hasUserPurchasedCatalogue, isCatalogueReleasedToExhibitors } from '@/lib/catalogue-utils';
 import { ONLINE_CATALOGUE_ACCESS_KINDS } from '@/lib/sundry-kind';
-import { isShowDayReached } from '@/lib/date-utils';
 import { isCloseDateWithinFloor, entryCloseFloorMessage } from '@/lib/entry-close-rules';
 import { DEFAULT_REGIONAL_FEE_TIERS } from '@/lib/regional-fee-calc';
 import type { RegionalFeeConfig } from '@/server/db/schema/shows';
@@ -1073,11 +1072,8 @@ export const showsRouter = createTRPCRouter({
         startDate: show.startDate,
         hasPurchased,
         // Catalogue PDFs only unlock for exhibitors on the morning of the
-        // show (Amanda 2026-05-28). Even after entries close, exhibitors
-        // shouldn't see the field of competitors before show day.
-        isAvailable:
-          CATALOGUE_AVAILABLE_STATUSES.has(show.status) &&
-          isShowDayReached(show.startDate),
+        // show (Amanda 2026-05-28) — the one rule in lib/catalogue-utils.ts.
+        isAvailable: isCatalogueReleasedToExhibitors(show),
       };
     }),
 
@@ -1087,6 +1083,7 @@ export const showsRouter = createTRPCRouter({
         .select({
           showId: orders.showId,
           showStatus: shows.status,
+          showStartDate: shows.startDate,
           showSlug: shows.slug,
         })
         .from(orderSundryItems)
@@ -1100,12 +1097,15 @@ export const showsRouter = createTRPCRouter({
             inArray(sundryItems.kind, [...ONLINE_CATALOGUE_ACCESS_KINDS])
           )
         )
-        .groupBy(orders.showId, shows.status, shows.slug);
+        .groupBy(orders.showId, shows.status, shows.startDate, shows.slug);
 
       return rows.map((r) => ({
         showId: r.showId,
         showSlug: r.showSlug,
-        isAvailable: CATALOGUE_AVAILABLE_STATUSES.has(r.showStatus),
+        // The same rule as getCatalogueAccess — status AND the morning of the
+        // show. It used to check the status alone, so My Entries offered the
+        // catalogue from close while the download stayed locked (to 15 Oct 2026).
+        isAvailable: isCatalogueReleasedToExhibitors({ status: r.showStatus, startDate: r.showStartDate }),
       }));
     }),
 });

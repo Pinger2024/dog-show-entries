@@ -40,6 +40,7 @@ import {
 } from '../_lib/show-utils';
 import { useShowId } from '../_lib/show-context';
 import { computeClassBreakdown } from '@/lib/class-breakdown';
+import { orderAmountChargedPence } from '@/lib/fee-calc';
 import type { RouterOutputs } from '@/server/trpc/router';
 
 type RefundableOrder = RouterOutputs['secretary']['getRefundableOrders'][number];
@@ -889,7 +890,7 @@ function OrderRefundCard({
   // src/lib/order-payment-summary.ts for the full story and the £0-order /
   // no-Stripe-payment guards that used to live inline here.
   const { paid, refunded, remaining, fullyRefunded, hasRefundablePayment } =
-    orderPaymentSummary(order.payments, order.totalAmount + order.platformFeePence);
+    orderPaymentSummary(order.payments, orderAmountChargedPence(order));
 
   const entryFeesTotal = order.entries.reduce((s, e) => s + e.totalFee, 0);
   const sundryTotal = order.orderSundryItems.reduce(

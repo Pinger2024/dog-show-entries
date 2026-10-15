@@ -37,6 +37,7 @@ import {
   calculatePlatformFee,
 } from '@/server/services/stripe';
 import { executeStripeRefund } from '@/server/services/stripe-refunds';
+import { amountChargedPence } from '@/lib/fee-calc';
 import { entryRequirements, pedigreeRequirementsMissing, entryBlockedMessage } from '@/lib/entry-requirements';
 import { hasJudgingConflict } from '@/lib/judge-exhibitor-conflict';
 import { getCompetitionAgeError, isOldEnoughForNfc, nfcMinAgeMessage } from '@/lib/date-utils';
@@ -816,7 +817,7 @@ export const entriesRouter = createTRPCRouter({
         // an abandoned top-up leaves the entry exactly as it was (no free
         // upgrade, no overstated club revenue).
         const platformFeePence = calculatePlatformFee(feeDiff);
-        const grossAmount = feeDiff + platformFeePence;
+        const grossAmount = amountChargedPence(feeDiff, platformFeePence);
 
         // classIds + per-class fees travel in Stripe metadata (string values,
         // 500-char limit). Realistic entries are a handful of classes; refuse

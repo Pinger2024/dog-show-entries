@@ -4,7 +4,7 @@ import { getStripe } from '@/server/services/stripe';
 import { captureFeeForPaymentIntent } from '@/server/services/stripe-fee-heal';
 import { db } from '@/server/db';
 import { entries, entryClasses, entryAuditLog, orders, orderSundryItems, payments, organisations, plans, users, printOrders, printOrderItems } from '@/server/db/schema';
-import { sendEntryConfirmationEmail, sendSecretaryNotificationEmail, sendPrintOrderConfirmationEmail, sendPrintOrderAdminNotificationEmail, sendRefundFailedAlertEmail, sendExtrasAddedEmail } from '@/server/services/email';
+import { sendOrderPaidEmails, sendPrintOrderConfirmationEmail, sendPrintOrderAdminNotificationEmail, sendRefundFailedAlertEmail, sendExtrasAddedEmail } from '@/server/services/email';
 import { syncCatalogueNumbers } from '@/server/services/catalogue-numbering';
 import { formatOrderRef, isPrintOrderPaid } from '@/lib/print-products';
 import type Stripe from 'stripe';
@@ -456,15 +456,11 @@ export async function POST(request: NextRequest) {
       // confirmation that already happened.
       await captureStripeFeeDetails(paymentIntent.id);
 
-      // Send confirmation email (non-blocking — don't fail the webhook).
+      // Receipt + secretary notice (non-blocking — don't fail the webhook).
       // Gated on first-time transition so Stripe retries don't duplicate.
+      // sendOrderPaidEmails is the one owner; a £0 checkout calls it too.
       if (orderId && orderWasPreviouslyUnpaid) {
-        sendEntryConfirmationEmail(orderId).catch((err) =>
-          console.error('[webhook] Email send failed:', err)
-        );
-        sendSecretaryNotificationEmail(orderId).catch((err) =>
-          console.error('[webhook] Secretary notification failed:', err)
-        );
+        void sendOrderPaidEmails(orderId);
       }
 
       break;

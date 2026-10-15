@@ -35,6 +35,26 @@ export function calculatePlatformFee(subtotalPence: number): number {
   return 100 + Math.round(subtotalPence * 0.01);
 }
 
+/**
+ * What the exhibitor's card is charged: the club's money (entries + extras +
+ * donation) plus Remi's booking fee on top.
+ *
+ * SINGLE SOURCE OF TRUTH — checkout, the top-ups, the checkout preview, the
+ * secretary's refund card and every receipt's "Total Paid" ask this, so a
+ * receipt can never state a different figure from what Stripe took. Live bug
+ * to 15 Oct 2026: each did its own sum and the Entry Confirmed email left the
+ * fee out (order 570C11A8: charged £21.20, "Total Paid £20.00").
+ * Guarded by src/__tests__/guards/money-emails-catalogue-one-owner.test.ts.
+ */
+export function amountChargedPence(clubPence: number, platformFeePence: number): number {
+  return clubPence + platformFeePence;
+}
+
+/** amountChargedPence for an order row (totalAmount is the club's money). */
+export function orderAmountChargedPence(order: { totalAmount: number; platformFeePence: number }): number {
+  return amountChargedPence(order.totalAmount, order.platformFeePence);
+}
+
 export type DogEntryInput = {
   /** Stable id used as the key in the per-entry breakdown (typically entry.id). */
   key: string;

@@ -9,6 +9,9 @@
  * and that the dog + class actually appear in the body.
  */
 import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { eq } from 'drizzle-orm';
+import { orders } from '@/server/db/schema';
+import { testDb } from '../helpers/db';
 import { resendMocks } from '../helpers/resend-mocks';
 import {
   makeSecretaryWithOrg,
@@ -64,6 +67,30 @@ describe('entry confirmation email payload (TESTING_MAP #126)', () => {
     // Body actually names the dog and the class the exhibitor paid for.
     expect(payload.html).toContain('Hundark Bright Spark');
     expect(payload.html).toContain('Open');
+  });
+
+  it('Total Paid is what the card was charged: the booking fee is shown and included', async () => {
+    // Live bug to 15 Oct 2026: order 570C11A8 (Winter Spectacular) was charged
+    // £21.20 (£20.00 + £1.20 booking fee) and its email said "Total Paid £20.00".
+    const { org } = await makeSecretaryWithOrg();
+    const breed = await makeBreed();
+    const show = await makeShow({ organisationId: org.id, breedId: breed.id, name: 'Winter Show', status: 'entries_open' });
+    const exhibitor = await makeUser({ role: 'exhibitor', email: 'chris@test.local', name: 'Chris Exhibitor' });
+    const dog = await makeDog({ ownerId: exhibitor.id, breedId: breed.id, registeredName: 'Kytana Test' });
+    const showClass = await makeShowClass({ showId: show.id, breedId: breed.id });
+    const order = await makeOrder({ showId: show.id, exhibitorId: exhibitor.id, status: 'paid', totalAmount: 2000 });
+    await testDb.update(orders).set({ platformFeePence: 120 }).where(eq(orders.id, order.id));
+    const entry = await makeEntry({ showId: show.id, dogId: dog.id, exhibitorId: exhibitor.id, orderId: order.id, status: 'confirmed' });
+    await makeEntryClass({ entryId: entry.id, showClassId: showClass.id });
+
+    await sendEntryConfirmationEmail(order.id);
+
+    const html = (resendMocks.send.mock.calls as unknown as Array<[{ html: string }]>)[0]![0].html;
+    expect(html).toContain('Booking fee');
+    expect(html).toContain('£1.20');
+    expect(html).toMatch(/Total Paid<\/td>\s*<td[^>]*>£21\.20</);
+    expect(html).toContain('&middot; £21.20');
+    expect(html).not.toMatch(/Total Paid<\/td>\s*<td[^>]*>£20\.00</);
   });
 
   it('does not send when the order has no exhibitor email', async () => {

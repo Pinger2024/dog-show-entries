@@ -41,8 +41,7 @@ async function entryReadyForPayment() {
 }
 
 beforeEach(() => {
-  vi.mocked(emailService.sendEntryConfirmationEmail).mockClear();
-  vi.mocked(emailService.sendSecretaryNotificationEmail).mockClear();
+  vi.mocked(emailService.sendOrderPaidEmails).mockClear();
 });
 
 describe('POST /api/webhooks/stripe — payment_intent.succeeded', () => {
@@ -107,8 +106,9 @@ describe('POST /api/webhooks/stripe — payment_intent.succeeded', () => {
     const updatedOrder = await testDb.query.orders.findFirst({ where: eq(orders.id, order.id) });
     expect(updatedOrder?.status).toBe('paid');
 
-    expect(vi.mocked(emailService.sendEntryConfirmationEmail)).toHaveBeenCalledWith(order.id);
-    expect(vi.mocked(emailService.sendSecretaryNotificationEmail)).toHaveBeenCalledWith(order.id);
+    // The one owner of "who is told about a newly paid order" (receipt +
+    // secretary notice) — the free checkout calls the same function.
+    expect(vi.mocked(emailService.sendOrderPaidEmails)).toHaveBeenCalledWith(order.id);
   });
 
   // South Western GSD, 2026-07-26: 38 of 93 paid entries reached close night

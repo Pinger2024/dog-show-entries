@@ -7,6 +7,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { eq } from 'drizzle-orm';
 import * as stripeService from '@/server/services/stripe';
+import * as emailService from '@/server/services/email';
 import {
   entries,
   orders,
@@ -147,5 +148,31 @@ describe('extras-only checkout rules', () => {
       sundryItems: [{ sundryItemId: catalogue.id, quantity: 1 }],
     });
     expect(res.totalAmount).toBe(500);
+  });
+});
+
+describe('a FREE extras-only order (every item £0)', () => {
+  it('is paid without Stripe and still tells the buyer and the secretary', async () => {
+    // Live bug to 15 Oct 2026: a £0 order skipped Stripe, so the webhook that
+    // sends the receipt + secretary notice never ran — the order was silent.
+    const { exhibitor, show } = await setup('rkc');
+    const [free] = await testDb
+      .insert(sundryItemsTable)
+      .values({ showId: show.id, name: 'Members Parking', kind: 'parking', priceInPence: 0, sortOrder: 5, enabled: true })
+      .returning();
+    vi.mocked(emailService.sendOrderPaidEmails).mockClear();
+    vi.mocked(stripeService.createPaymentIntent).mockClear();
+
+    const result = await createTestCaller(exhibitor as never).orders.checkout({
+      showId: show.id,
+      entries: [],
+      sundryItems: [{ sundryItemId: free!.id, quantity: 1 }],
+    });
+
+    expect(result.freeEntry).toBe(true);
+    expect(vi.mocked(stripeService.createPaymentIntent)).not.toHaveBeenCalled();
+    const order = await testDb.query.orders.findFirst({ where: eq(orders.id, result.orderId) });
+    expect(order?.status).toBe('paid');
+    expect(vi.mocked(emailService.sendOrderPaidEmails)).toHaveBeenCalledWith(result.orderId);
   });
 });

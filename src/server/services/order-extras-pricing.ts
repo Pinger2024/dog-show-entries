@@ -24,7 +24,7 @@ import {
   type SundrySelectionInput,
   type ValidatedSundryItem,
 } from '@/server/services/sundry-selection';
-import { calculatePlatformFee } from '@/lib/fee-calc';
+import { calculatePlatformFee, amountChargedPence } from '@/lib/fee-calc';
 import { entryWindowOpen } from '@/lib/show-status';
 
 export type OrderExtrasPricing = {
@@ -131,7 +131,7 @@ export async function priceOrderExtras(
     0,
   );
   const platformFeePence = subtotalPence === 0 ? 0 : calculatePlatformFee(subtotalPence);
-  const grossPence = subtotalPence + platformFeePence;
+  const grossPence = amountChargedPence(subtotalPence, platformFeePence);
 
   return {
     order,

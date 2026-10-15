@@ -8,6 +8,7 @@ import { formatOrderRef, PRINT_PAYMENT_METHODS } from '@/lib/print-products';
 import { announcesOnlineCatalogue, catalogueNoteFor, includesParkingPass, type SundryKind } from '@/lib/sundry-kind';
 import { generateParkingPassPdf } from '@/server/services/parking-pass-pdf';
 import { isExtrasOnlyOrder } from '@/lib/extras-only-order';
+import { amountChargedPence, orderAmountChargedPence } from '@/lib/fee-calc';
 import { buildClassLabelMap } from '@/lib/class-labels';
 import { BRAND } from '@/lib/brand';
 import { FEEDBACK_REPLY_TO } from '@/lib/email-addresses';
@@ -70,6 +71,26 @@ function formatDeliveryAddress(order: {
   return [order.deliveryAddress1, order.deliveryAddress2, order.deliveryTown, order.deliveryPostcode]
     .filter(Boolean)
     .join(', ');
+}
+
+/**
+ * An order has just been paid — by card (the Stripe webhook) or, for a £0
+ * order, by checkout itself. The ONE place that decides who is told: the
+ * exhibitor gets their receipt and the show secretary gets a notice. Live bug
+ * to 15 Oct 2026: only the webhook sent these, so a free order (mostly junior
+ * handlers) was never confirmed to anyone. Never rejects — a failed email must
+ * not fail the payment or the checkout. Guarded by
+ * src/__tests__/guards/money-emails-catalogue-one-owner.test.ts.
+ */
+export async function sendOrderPaidEmails(orderId: string): Promise<void> {
+  await Promise.all([
+    sendEntryConfirmationEmail(orderId).catch((err) =>
+      console.error(`[email] Receipt failed for order ${orderId}:`, err)
+    ),
+    sendSecretaryNotificationEmail(orderId).catch((err) =>
+      console.error(`[email] Secretary notification failed for order ${orderId}:`, err)
+    ),
+  ]);
 }
 
 /**
@@ -190,6 +211,10 @@ export async function sendEntryConfirmationEmail(orderId: string) {
     : 'Venue TBC';
 
   const orderRef = order.id.slice(0, 8).toUpperCase();
+  // "Total Paid" is what the card was charged — the club's total plus the
+  // booking fee (lib/fee-calc.ts). It used to print the club's total alone,
+  // so every receipt was short by the fee (live bug to 15 Oct 2026).
+  const paidPence = orderAmountChargedPence(order);
 
   const html = `
 <!DOCTYPE html>
@@ -212,7 +237,7 @@ export async function sendEntryConfirmationEmail(orderId: string) {
         <div style="display: inline-block; width: 40px; height: 40px; line-height: 40px; border-radius: 50%; background: rgba(243,236,220,0.2); font-size: 20px; color: ${BRAND.cream}; margin-bottom: 8px;">&#10003;</div>
         <h2 style="margin: 0; color: ${BRAND.cream}; font-size: 22px; font-weight: 700;">Entry Confirmed</h2>
         <p style="margin: 8px 0 0; color: rgba(243, 236, 220, 0.78); font-size: 14px;">
-          Order ${orderRef} &middot; ${formatFee(order.totalAmount)}
+          Order ${orderRef} &middot; ${formatFee(paidPence)}
         </p>
       </div>
 
@@ -253,9 +278,13 @@ export async function sendEntryConfirmationEmail(orderId: string) {
       <!-- Total -->
       <div style="padding: 16px 24px; background: ${BRAND.paper};">
         <table style="width: 100%;">
+          ${order.platformFeePence > 0 ? `<tr>
+            <td style="font-size: 14px; color: ${BRAND.ink2};">Booking fee</td>
+            <td style="text-align: right; font-size: 14px; color: ${BRAND.ink2};">${formatFee(order.platformFeePence)}</td>
+          </tr>` : ''}
           <tr>
             <td style="font-weight: 700; font-size: 16px; color: ${BRAND.ink};">Total Paid</td>
-            <td style="text-align: right; font-weight: 700; font-size: 16px; color: ${BRAND.green};">${formatFee(order.totalAmount)}</td>
+            <td style="text-align: right; font-weight: 700; font-size: 16px; color: ${BRAND.green};">${formatFee(paidPence)}</td>
           </tr>
         </table>
       </div>
@@ -363,7 +392,7 @@ export async function sendExtrasAddedEmail(
   const nameById = new Map(itemRows.map((r) => [r.id, r.name]));
 
   const subtotalPence = items.reduce((sum, i) => sum + i.unitPrice * i.quantity, 0);
-  const grossPence = subtotalPence + platformFeePence;
+  const grossPence = amountChargedPence(subtotalPence, platformFeePence);
   const orderRef = order.id.slice(0, 8).toUpperCase();
 
   const itemLines = items
@@ -669,9 +698,9 @@ async function sendExtrasOnlyReceiptEmail(order: ExtrasOnlyOrder) {
   const catalogueNote = catalogueNoteFor(boughtKinds);
   const hasParking = includesParkingPass(boughtKinds);
 
-  // What the card was charged: the club's total plus Remi's booking fee —
-  // the confirmation screen's "£X paid", never the club's share alone.
-  const paidPence = order.totalAmount + order.platformFeePence;
+  // What the card was charged (lib/fee-calc.ts) — the confirmation screen's
+  // "£X paid", never the club's share alone.
+  const paidPence = orderAmountChargedPence(order);
 
   const html = `
 <!DOCTYPE html>

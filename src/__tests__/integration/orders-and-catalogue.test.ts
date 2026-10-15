@@ -133,6 +133,30 @@ describe('shows.getMyCataloguePurchases', () => {
     expect(list.map((p) => p.showId)).toContain(show.id);
   });
 
+  // Live bug to 15 Oct 2026: My Entries said "View Online Catalogue" from the
+  // day entries closed, while the download (and getCatalogueAccess) stayed
+  // locked until the morning of the show (Amanda 2026-05-28). One rule now.
+  it('a closed show before its day is not available yet — and agrees with getCatalogueAccess', async () => {
+    const { exhibitor, show } = await paidCatalogueOrder();
+    const future = (() => { const d = new Date(); d.setUTCDate(d.getUTCDate() + 10); return d.toISOString().slice(0, 10); })();
+    await testDb.update(shows).set({ status: 'entries_closed', startDate: future, endDate: future }).where(eq(shows.id, show.id));
+    const caller = createTestCaller(exhibitor as never);
+    const [mine] = await caller.shows.getMyCataloguePurchases();
+    const access = await caller.shows.getCatalogueAccess({ showId: show.id });
+    expect(mine?.isAvailable).toBe(false);
+    expect(access.isAvailable).toBe(false);
+  });
+
+  it('a closed show on or after its day is available — in both places', async () => {
+    const { exhibitor, show } = await paidCatalogueOrder();
+    await setShowStatus(show.id, 'entries_closed');
+    const caller = createTestCaller(exhibitor as never);
+    const [mine] = await caller.shows.getMyCataloguePurchases();
+    const access = await caller.shows.getCatalogueAccess({ showId: show.id });
+    expect(mine?.isAvailable).toBe(true);
+    expect(access.isAvailable).toBe(true);
+  });
+
   it('returns empty for a user with no purchases', async () => {
     const stranger = await makeUser({ role: 'exhibitor' });
     const list = await createTestCaller(stranger).shows.getMyCataloguePurchases();

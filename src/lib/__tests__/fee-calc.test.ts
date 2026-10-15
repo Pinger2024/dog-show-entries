@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { computeOrderFees, calculatePlatformFee, type FeeContext, type DogEntryInput } from '../fee-calc';
+import { computeOrderFees, calculatePlatformFee, amountChargedPence, orderAmountChargedPence, type FeeContext, type DogEntryInput } from '../fee-calc';
 
 // Locked with Amanda 2026-05-14. The live show her demo user described:
 //   non-member single class:  £20
@@ -399,5 +399,23 @@ describe('computeOrderFees — package counts dogs already entered at the show',
     expect(withZero).toEqual(without);
     expect(without.total).toBe(4000);
     expect(without.perEntry.map((e) => e.fee)).toEqual([1333, 1333, 1334]);
+  });
+});
+
+describe('amountChargedPence — what the card is charged', () => {
+  // Live bug to 15 Oct 2026: every Entry Confirmed email said "Total Paid"
+  // was the club's money alone — order 570C11A8 was charged £21.20 and its
+  // receipt said £20.00. One definition now, used by checkout and receipts.
+  it('is the club total plus the booking fee', () => {
+    expect(amountChargedPence(2000, 120)).toBe(2120);
+    expect(amountChargedPence(2000, calculatePlatformFee(2000))).toBe(2120);
+  });
+
+  it('a free order is charged nothing', () => {
+    expect(amountChargedPence(0, 0)).toBe(0);
+  });
+
+  it('orderAmountChargedPence reads an order row', () => {
+    expect(orderAmountChargedPence({ totalAmount: 2000, platformFeePence: 120 })).toBe(2120);
   });
 });

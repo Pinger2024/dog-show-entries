@@ -15,7 +15,7 @@ import { getLimitedShowEligibility } from '@/server/services/limited-show-eligib
 import { entryWindowOpen } from '@/lib/show-status';
 import { priceOrderExtras } from '@/server/services/order-extras-pricing';
 import { sundryViolationError } from '@/server/services/sundry-selection';
-import { sendExtrasAddedEmail } from '@/server/services/email';
+import { sendExtrasAddedEmail, sendOrderPaidEmails } from '@/server/services/email';
 import { priorPackageStanding } from '@/server/services/package-pricing';
 import {
   orders,
@@ -41,6 +41,7 @@ import {
 } from '@/server/services/stripe';
 import {
   computeOrderFees,
+  amountChargedPence,
   type DogEntryInput,
   type FeeContext,
 } from '@/lib/fee-calc';
@@ -898,6 +899,12 @@ export const ordersRouter = createTRPCRouter({
           console.error(`[orders] syncCatalogueNumbers failed for show ${input.showId}:`, err);
         }
 
+        // A free order never reaches the Stripe webhook, so tell the exhibitor
+        // and the secretary here — the same one owner the webhook calls. Until
+        // 15 Oct 2026 free orders (mostly junior handlers) got no email at all.
+        // Non-blocking: it never rejects and must not slow the checkout.
+        void sendOrderPaidEmails(order!.id);
+
         return {
           clientSecret: null,
           orderId: order!.id,
@@ -912,7 +919,7 @@ export const ordersRouter = createTRPCRouter({
       // subtotal is forwarded to the club by BACS after entries close.
       // The platformFeePence column on orders + the metadata below keep
       // the two components separable for reconciliation and payouts.
-      const grossAmount = totalAmount + platformFeePence;
+      const grossAmount = amountChargedPence(totalAmount, platformFeePence);
 
       const paymentIntent = await createPaymentIntent(grossAmount, {
         orderId: order!.id,

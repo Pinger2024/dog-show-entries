@@ -45,7 +45,7 @@ import { svCoatDisplayName, specialAwardClassFee, isSpecialAwardClass } from '@/
 import { trpc } from '@/lib/trpc/client';
 import { formatDogName } from '@/lib/utils';
 import { readReferralSource } from '@/lib/referral-source';
-import { computeOrderFees, calculatePlatformFee, type DogEntryInput, type FeeContext } from '@/lib/fee-calc';
+import { computeOrderFees, calculatePlatformFee, amountChargedPence, type DogEntryInput, type FeeContext } from '@/lib/fee-calc';
 import {
   computeRegionalOrderFees,
   regionalClassFlatFee,
@@ -615,7 +615,7 @@ export default function EnterShowPage() {
     (feePreview?.total ?? cart.entriesTotal) + cart.sundryTotal + donationPence;
   const previewPlatformFee =
     previewSubtotal === 0 ? 0 : calculatePlatformFee(previewSubtotal);
-  const previewGrandTotal = previewSubtotal + previewPlatformFee;
+  const previewGrandTotal = amountChargedPence(previewSubtotal, previewPlatformFee);
 
   // Sync cart sundry item prices/names with server data (handles secretary price changes)
   useEffect(() => {
