@@ -1,4 +1,5 @@
 import { useReducer, useCallback, useEffect } from 'react';
+import type { SundryKind } from '@/lib/sundry-kind';
 import { computeOrderFees } from '@/lib/fee-calc';
 
 export type EntryType = 'standard' | 'junior_handler';
@@ -32,6 +33,10 @@ export interface CartSundryItem {
   quantity: number;
   unitPrice: number; // pence
   maxPerOrder: number | null;
+  /** What the item IS (sundry_items.kind). Carried in the basket so the
+   *  confirmation still knows after a reload or a Stripe 3DS return, when the
+   *  item list isn't loaded. Optional: baskets saved before 15 Oct 2026. */
+  kind?: SundryKind;
 }
 
 export interface SelectedClassForPricing {

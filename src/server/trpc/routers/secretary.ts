@@ -1,4 +1,6 @@
 import { z } from 'zod';
+import { SUNDRY_KINDS } from '@/lib/sundry-kind';
+import { isExtrasOnlyOrder } from '@/lib/extras-only-order';
 import { loadSvResultsData } from '@/server/services/sv-results-data';
 import { loadSvMeasurementSheet } from '@/server/services/sv-measurement';
 import { findPlacedWithoutGrade } from '@/lib/sv-results';
@@ -1134,6 +1136,7 @@ export const secretaryRouter = createTRPCRouter({
         ctx.db
           .select({
             orderId: orderSundryItems.orderId,
+            kind: sundryItems.kind,
             itemName: sundryItems.name,
             quantity: orderSundryItems.quantity,
             unitPrice: orderSundryItems.unitPrice,
@@ -1216,27 +1219,28 @@ export const secretaryRouter = createTRPCRouter({
       const rows: ReportRow[] = [];
 
       // Extras-only orders (Mandy, 15 Oct 2026): a signed-in user bought a
-      // catalogue, parking pass etc. with NO dog, so the order has no entries
-      // and the entry-keyed loop above can't see it — yet the headline total
-      // below (aggregateShowMetrics) already counts it. Paid and still-pending
-      // orders get a row; cancelled / failed / refunded ones stay hidden, like
-      // the dead checkouts and refunds of dog orders. "No entries" means no
-      // entry row of ANY kind on the order (a withdrawn dog's order keeps its
-      // normal rows and is not extras-only).
-      const orderIdsWithEntries = new Set(
-        (
-          await ctx.db
-            .select({ orderId: entries.orderId })
-            .from(entries)
-            .where(and(eq(entries.showId, input.showId), isNotNull(entries.orderId)))
-        ).map((r) => r.orderId),
-      );
+      // catalogue, parking pass etc. with NO dog, so the order has no live
+      // entries and the entry-keyed loop above can't see it, yet the headline
+      // total below (aggregateShowMetrics) already counts it. Which orders are
+      // "extras only" is isExtrasOnlyOrder's call (lib/extras-only-order.ts),
+      // the same rule My Entries and show-metrics use. Paid and still-pending
+      // ones get a row; cancelled / failed / refunded ones stay hidden, like
+      // the dead checkouts and refunds of dog orders.
+      const liveEntryCountByOrder = new Map<string, number>();
+      for (const r of await ctx.db
+        .select({ orderId: entries.orderId })
+        .from(entries)
+        .where(and(eq(entries.showId, input.showId), isNotNull(entries.orderId), isNull(entries.deletedAt)))) {
+        if (r.orderId) liveEntryCountByOrder.set(r.orderId, (liveEntryCountByOrder.get(r.orderId) ?? 0) + 1);
+      }
       const extrasOnlyOrderIds = orderRows
         .filter(
           (o) =>
             (o.status === 'paid' || o.status === 'pending_payment') &&
-            sundryTotalsByOrder.has(o.id) &&
-            !orderIdsWithEntries.has(o.id),
+            isExtrasOnlyOrder({
+              liveEntryCount: liveEntryCountByOrder.get(o.id) ?? 0,
+              sundryLineCount: sundryBreakdownByOrder.get(o.id)?.length ?? 0,
+            }),
         )
         .map((o) => o.id);
 
@@ -5900,6 +5904,8 @@ export const secretaryRouter = createTRPCRouter({
       z.object({
         showId: z.string().uuid(),
         name: z.string().min(1).max(100),
+        // What this extra IS - required, never guessed from the name later.
+        kind: z.enum(SUNDRY_KINDS),
         description: z.string().max(500).optional(),
         priceInPence: z.number().int().min(0),
         maxPerOrder: z.number().int().min(1).optional(),
@@ -5921,6 +5927,7 @@ export const secretaryRouter = createTRPCRouter({
         .values({
           showId: input.showId,
           name: input.name,
+          kind: input.kind,
           description: input.description ?? null,
           priceInPence: input.priceInPence,
           maxPerOrder: input.maxPerOrder ?? null,
@@ -5937,6 +5944,7 @@ export const secretaryRouter = createTRPCRouter({
         id: z.string().uuid(),
         showId: z.string().uuid(),
         name: z.string().min(1).max(100).optional(),
+        kind: z.enum(SUNDRY_KINDS).optional(),
         description: z.string().max(500).nullable().optional(),
         priceInPence: z.number().int().min(0).optional(),
         maxPerOrder: z.number().int().min(1).nullable().optional(),
@@ -5996,6 +6004,7 @@ export const secretaryRouter = createTRPCRouter({
         items: z.array(
           z.object({
             name: z.string().min(1),
+            kind: z.enum(SUNDRY_KINDS),
             description: z.string().optional(),
             priceInPence: z.number().int().min(0),
             maxPerOrder: z.number().int().min(1).optional(),
@@ -6017,6 +6026,7 @@ export const secretaryRouter = createTRPCRouter({
       const values = input.items.map((item, idx) => ({
         showId: input.showId,
         name: item.name,
+        kind: item.kind,
         description: item.description ?? null,
         priceInPence: item.priceInPence,
         maxPerOrder: item.maxPerOrder ?? null,

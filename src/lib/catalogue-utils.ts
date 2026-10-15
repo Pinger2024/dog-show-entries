@@ -1,14 +1,7 @@
-import { and, eq, ilike } from 'drizzle-orm';
+import { and, eq, inArray } from 'drizzle-orm';
+import { ONLINE_CATALOGUE_ACCESS_KINDS } from '@/lib/sundry-kind';
 import { orders, orderSundryItems, sundryItems } from '@/server/db/schema';
 import type { Database } from '@/server/db';
-
-/** SQL ILIKE pattern for matching catalogue sundry items by name */
-export const CATALOGUE_NAME_PATTERN = '%catalogue%';
-
-/** Check if a sundry item name refers to a catalogue (client-side equivalent of CATALOGUE_NAME_PATTERN) */
-export function isCatalogueItem(name: string): boolean {
-  return name.toLowerCase().includes('catalogue');
-}
 
 /** Show statuses where the catalogue PDF is available to exhibitors */
 export const CATALOGUE_AVAILABLE_STATUSES: ReadonlySet<string> = new Set([
@@ -32,7 +25,8 @@ export const SECRETARY_ONLY_FORMATS = new Set([
   'judge-copy',
 ]);
 
-/** Check if a user has a paid order with a catalogue sundry item for a given show */
+/** Check if a user has a paid order with a catalogue-access sundry item for a given show
+ *  (kind decided by the secretary - see lib/sundry-kind.ts). */
 export async function hasUserPurchasedCatalogue(
   db: Database,
   showId: string,
@@ -48,7 +42,7 @@ export async function hasUserPurchasedCatalogue(
         eq(orders.showId, showId),
         eq(orders.exhibitorId, userId),
         eq(orders.status, 'paid'),
-        ilike(sundryItems.name, CATALOGUE_NAME_PATTERN)
+        inArray(sundryItems.kind, [...ONLINE_CATALOGUE_ACCESS_KINDS])
       )
     )
     .limit(1);

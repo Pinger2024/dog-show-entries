@@ -3,7 +3,7 @@ import { dogAlreadyOnRegional } from '@/server/services/regional-entry';
 import { resolveEntryMembership } from '@/server/services/entry-membership';
 import { SHOW_COLUMNS_FOR_PUBLIC_INCLUDE } from '../public-show-fields';
 import { TRPCError } from '@trpc/server';
-import { and, eq, isNull, isNotNull, inArray, notInArray, desc, sql, asc, ilike, or } from 'drizzle-orm';
+import { and, eq, isNull, inArray, desc, sql, asc } from 'drizzle-orm';
 import { differenceInWeeks } from 'date-fns';
 import { protectedProcedure } from '../procedures';
 import { createTRPCRouter } from '../init';
@@ -53,7 +53,8 @@ import {
 import { entryRequirements, pedigreeRequirementsMissing, entryBlockedMessage } from '@/lib/entry-requirements';
 import { hasJudgingConflict } from '@/lib/judge-exhibitor-conflict';
 import { getCompetitionAgeError, isOldEnoughForNfc, nfcMinAgeMessage } from '@/lib/date-utils';
-import { isParkingSundry, PARKING_NAME_PATTERNS } from '@/lib/parking-utils';
+import { PARKING_KINDS } from '@/lib/sundry-kind';
+import { isExtrasOnlyOrder } from '@/lib/extras-only-order';
 import { formatAtcNumber } from '@/lib/registration-flags';
 import { specialAwardClassFee } from '@/lib/class-labels';
 import { dogAccessCondition } from '@/server/dog-access';
@@ -1194,40 +1195,38 @@ export const ordersRouter = createTRPCRouter({
   // listed here. Scoped to the caller; the show is the public-column subset,
   // never the organisation.
   myExtrasOnlyOrders: protectedProcedure.query(async ({ ctx }) => {
-    const rows = await ctx.db.query.orders.findMany({
-      where: and(
-        eq(orders.exhibitorId, ctx.session.user.id),
-        eq(orders.status, 'paid'),
-        inArray(orders.id, ctx.db.select({ id: orderSundryItems.orderId }).from(orderSundryItems)),
-        notInArray(
-          orders.id,
-          ctx.db
-            .select({ id: entries.orderId })
-            .from(entries)
-            .where(and(isNotNull(entries.orderId), isNull(entries.deletedAt))),
-        ),
-      ),
+    const paidOrders = await ctx.db.query.orders.findMany({
+      where: and(eq(orders.exhibitorId, ctx.session.user.id), eq(orders.status, 'paid')),
       with: {
         show: {
           columns: SHOW_COLUMNS_FOR_PUBLIC_INCLUDE,
           with: { venue: { columns: { name: true } } },
         },
-        orderSundryItems: { with: { sundryItem: { columns: { name: true } } } },
+        entries: { columns: { id: true, deletedAt: true } },
+        orderSundryItems: { with: { sundryItem: { columns: { name: true, kind: true } } } },
       },
       orderBy: [desc(orders.createdAt)],
     });
-    return rows.map((o) => ({
-      id: o.id,
-      totalAmount: o.totalAmount,
-      createdAt: o.createdAt,
-      show: o.show,
-      items: o.orderSundryItems.map((i) => ({
-        id: i.id,
-        name: i.sundryItem.name,
-        quantity: i.quantity,
-        unitPrice: i.unitPrice,
-      })),
-    }));
+    return paidOrders
+      .filter((o) =>
+        isExtrasOnlyOrder({
+          liveEntryCount: o.entries.filter((e) => e.deletedAt === null).length,
+          sundryLineCount: o.orderSundryItems.length,
+        }),
+      )
+      .map((o) => ({
+        id: o.id,
+        totalAmount: o.totalAmount,
+        createdAt: o.createdAt,
+        show: o.show,
+        items: o.orderSundryItems.map((i) => ({
+          id: i.id,
+          name: i.sundryItem.name,
+          kind: i.sundryItem.kind,
+          quantity: i.quantity,
+          unitPrice: i.unitPrice,
+        })),
+      }));
   }),
 
   // Parking passes the calling exhibitor has purchased, for the entries
@@ -1242,7 +1241,6 @@ export const ordersRouter = createTRPCRouter({
         orderId: orderSundryItems.orderId,
         showId: orders.showId,
         quantity: orderSundryItems.quantity,
-        sundryName: sundryItems.name,
       })
       .from(orderSundryItems)
       .innerJoin(sundryItems, eq(orderSundryItems.sundryItemId, sundryItems.id))
@@ -1251,15 +1249,13 @@ export const ordersRouter = createTRPCRouter({
         and(
           eq(orders.exhibitorId, ctx.session.user.id),
           eq(orders.status, 'paid'),
-          // Coarse SQL prefilter (same convention as getMyCataloguePurchases);
-          // isParkingSundry() below stays the authoritative word-boundary check.
-          or(...PARKING_NAME_PATTERNS.map((p) => ilike(sundryItems.name, p))),
+          // Parking is the secretary's choice of kind, never the item's name.
+          inArray(sundryItems.kind, [...PARKING_KINDS]),
         )
       );
 
     const byOrder = new Map<string, { orderId: string; showId: string; quantity: number }>();
     for (const row of rows) {
-      if (!isParkingSundry(row.sundryName)) continue;
       const existing = byOrder.get(row.orderId);
       if (existing) {
         existing.quantity += row.quantity;

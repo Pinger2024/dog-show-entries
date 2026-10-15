@@ -245,7 +245,7 @@ async function main() {
     .insert(schema.showDiscountGroups)
     .values({ showId: show.id, label: 'Members', firstEntryFeePence: 400, displayOrder: 0 })
     .returning();
-  await testDb.insert(schema.sundryItems).values({ showId: show.id, name: 'Catalogue', priceInPence: 300, sortOrder: 0 });
+  await testDb.insert(schema.sundryItems).values({ showId: show.id, name: 'Catalogue', kind: 'printed_catalogue', priceInPence: 300, sortOrder: 0 });
 
   // ── Entries: 2 dogs per breed class (36), one exhibitor per dog ─────────
   const allBreedClasses = [

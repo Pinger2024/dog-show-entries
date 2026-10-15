@@ -53,6 +53,7 @@ import {
 import { SV_RULES } from '@/lib/sv-rules';
 import { formatLondonLongDate, formatLondonAbbrevDate } from '@/lib/date-utils';
 import { what3wordsAddress } from '@/lib/what3words';
+import { isCatalogueKind } from '@/lib/sundry-kind';
 
 // ── Formatting helpers ─────────────────────────────────────────────────────
 //
@@ -423,17 +424,12 @@ function SvOverview({
   //
   // Items already represented in the hardcoded fee rows are filtered out
   // so they don't show twice (catalogue prints as a fee row above).
-  const sundryExtras = (show.sundryItems ?? []).filter((s) => {
-    const name = s.name.toLowerCase();
-    return !name.includes('catalogue');
-  });
-  // Catalogue prices come from sundry items named "… Catalogue" (Printed /
-  // Online). Render them as fee rows from the real configured prices rather
+  const sundryExtras = (show.sundryItems ?? []).filter((s) => !isCatalogueKind(s.kind));
+  // Catalogue prices come from sundry items whose kind is a catalogue
+  // (Printed / Online). Render them as fee rows from the real configured prices rather
   // than a hardcoded placeholder, so e.g. the Online Catalogue price actually
   // shows on the schedule (Mandy 2026-06-18).
-  const catalogueItems = (show.sundryItems ?? []).filter((s) =>
-    s.name.toLowerCase().includes('catalogue'),
-  );
+  const catalogueItems = (show.sundryItems ?? []).filter((s) => isCatalogueKind(s.kind));
 
   return (
     <Page size="A5" style={ss.page}>

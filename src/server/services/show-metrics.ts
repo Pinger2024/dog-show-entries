@@ -10,7 +10,8 @@ import {
   sundryItems,
 } from '@/server/db/schema';
 import type { Database } from '@/server/db';
-import { isCatalogueItem } from '@/lib/catalogue-utils';
+import { type SundryKind } from '@/lib/sundry-kind';
+import { isExtrasOnlyOrder } from '@/lib/extras-only-order';
 
 /**
  * Materialise the list of paid-order IDs for a show. Callers use this to
@@ -241,6 +242,8 @@ export type EntryRow = {
 export type SundryLineRow = {
   orderId: string;
   itemName: string;
+  /** What the item IS (sundry_items.kind) - never guess it from itemName. */
+  kind: SundryKind;
   quantity: number;
   unitPrice: number;
 };
@@ -400,16 +403,28 @@ export function aggregateShowMetrics(data: {
 
   // An extras-only order (Mandy, 15 Oct 2026: catalogue / parking pass bought
   // with no dog) has no entries, so the entry loop above can never mark it
-  // live. A pending order with sundries and no entry row at all IS a live
-  // checkout — it is exactly what "Awaiting payment" should show.
+  // live. A pending one IS a live checkout, exactly what "Awaiting payment"
+  // should show. Which orders are extras only is isExtrasOnlyOrder's call
+  // (lib/extras-only-order.ts), the same rule My Entries and the payment
+  // report use.
   if (pendingOrderIds.size > 0) {
-    const orderIdsWithEntries = new Set<string>();
+    const liveEntryCountByOrder = new Map<string, number>();
     for (const e of data.entries) {
-      if (!e.deletedAt && e.orderId) orderIdsWithEntries.add(e.orderId);
+      if (!e.deletedAt && e.orderId) {
+        liveEntryCountByOrder.set(e.orderId, (liveEntryCountByOrder.get(e.orderId) ?? 0) + 1);
+      }
     }
-    const orderIdsWithSundries = new Set(data.sundries.map((s) => s.orderId));
+    const sundryLineCountByOrder = new Map<string, number>();
+    for (const sl of data.sundries) {
+      sundryLineCountByOrder.set(sl.orderId, (sundryLineCountByOrder.get(sl.orderId) ?? 0) + 1);
+    }
     for (const id of pendingOrderIds) {
-      if (!orderIdsWithEntries.has(id) && orderIdsWithSundries.has(id)) {
+      if (
+        isExtrasOnlyOrder({
+          liveEntryCount: liveEntryCountByOrder.get(id) ?? 0,
+          sundryLineCount: sundryLineCountByOrder.get(id) ?? 0,
+        })
+      ) {
         livePendingOrderIds.add(id);
       }
     }
@@ -477,12 +492,10 @@ export function aggregateShowMetrics(data: {
     if (paidOrderIds.has(s.orderId)) {
       paidSundryRevenuePence += lineTotal;
       if (offlinePaidOrderIds.has(s.orderId)) offlineSundryRevenuePence += lineTotal;
-      if (isCatalogueItem(s.itemName)) {
-        if (s.itemName.toLowerCase().includes('print')) {
-          paidPrintedCatalogueCount += s.quantity;
-        } else {
-          paidOnlineCatalogueCount += s.quantity;
-        }
+      if (s.kind === 'printed_catalogue') {
+        paidPrintedCatalogueCount += s.quantity;
+      } else if (s.kind === 'online_catalogue') {
+        paidOnlineCatalogueCount += s.quantity;
       }
     } else if (livePendingOrderIds.has(s.orderId)) {
       pendingSundryRevenuePence += lineTotal;
@@ -701,6 +714,7 @@ export async function computeShowsMetrics(
           .select({
             orderId: orderSundryItems.orderId,
             itemName: sundryItems.name,
+            kind: sundryItems.kind,
             quantity: orderSundryItems.quantity,
             unitPrice: orderSundryItems.unitPrice,
           })

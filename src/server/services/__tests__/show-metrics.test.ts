@@ -46,15 +46,15 @@ const BAGSD_ENTRIES: EntryRow[] = [
 ];
 
 const BAGSD_SUNDRIES: SundryLineRow[] = [
-  { orderId: 'order-cancelled', itemName: 'Printed Catalogue', quantity: 1, unitPrice: 400 },
-  { orderId: 'order-cancelled', itemName: 'Donation', quantity: 1, unitPrice: 500 },
-  { orderId: 'order-cancelled', itemName: 'Sponsorship - Banners', quantity: 1, unitPrice: 2000 },
-  { orderId: 'order-paid', itemName: 'Printed Catalogue', quantity: 1, unitPrice: 400 },
-  { orderId: 'order-paid', itemName: 'Donation', quantity: 1, unitPrice: 500 },
-  { orderId: 'order-paid', itemName: 'Sponsorship - Banners', quantity: 1, unitPrice: 2000 },
-  { orderId: 'order-pending', itemName: 'Printed Catalogue', quantity: 1, unitPrice: 400 },
-  { orderId: 'order-pending', itemName: 'Donation', quantity: 1, unitPrice: 500 },
-  { orderId: 'order-pending', itemName: 'Sponsorship - Banners', quantity: 1, unitPrice: 2000 },
+  { orderId: 'order-cancelled', itemName: 'Printed Catalogue', kind: 'printed_catalogue', quantity: 1, unitPrice: 400 },
+  { orderId: 'order-cancelled', itemName: 'Donation', kind: 'donation', quantity: 1, unitPrice: 500 },
+  { orderId: 'order-cancelled', itemName: 'Sponsorship - Banners', kind: 'sponsorship', quantity: 1, unitPrice: 2000 },
+  { orderId: 'order-paid', itemName: 'Printed Catalogue', kind: 'printed_catalogue', quantity: 1, unitPrice: 400 },
+  { orderId: 'order-paid', itemName: 'Donation', kind: 'donation', quantity: 1, unitPrice: 500 },
+  { orderId: 'order-paid', itemName: 'Sponsorship - Banners', kind: 'sponsorship', quantity: 1, unitPrice: 2000 },
+  { orderId: 'order-pending', itemName: 'Printed Catalogue', kind: 'printed_catalogue', quantity: 1, unitPrice: 400 },
+  { orderId: 'order-pending', itemName: 'Donation', kind: 'donation', quantity: 1, unitPrice: 500 },
+  { orderId: 'order-pending', itemName: 'Sponsorship - Banners', kind: 'sponsorship', quantity: 1, unitPrice: 2000 },
 ];
 
 const BAGSD_PAYMENTS: PaymentRefundRow[] = [];
@@ -134,9 +134,9 @@ describe('aggregateShowMetrics — refund accounting', () => {
         { id: 'e2', orderId: 'o1', status: 'cancelled', totalFee: 0, deletedAt: null, isNfc: false, entryType: 'standard' },
       ],
       sundries: [
-        { orderId: 'o1', itemName: 'Printed Catalogue', quantity: 1, unitPrice: 400 },
-        { orderId: 'o1', itemName: 'Donation', quantity: 1, unitPrice: 500 },
-        { orderId: 'o1', itemName: 'Sponsorship - Banners', quantity: 1, unitPrice: 2000 },
+        { orderId: 'o1', itemName: 'Printed Catalogue', kind: 'printed_catalogue', quantity: 1, unitPrice: 400 },
+        { orderId: 'o1', itemName: 'Donation', kind: 'donation', quantity: 1, unitPrice: 500 },
+        { orderId: 'o1', itemName: 'Sponsorship - Banners', kind: 'sponsorship', quantity: 1, unitPrice: 2000 },
       ],
       payments: [{ orderId: 'o1', refundAmount: 4847 }],
     });
@@ -196,8 +196,8 @@ describe('aggregateShowMetrics — online catalogue splitting', () => {
       orders: [{ id: 'o1', status: 'paid', totalAmount: 1000, platformFeePence: 30, stripePaymentIntentId: 'pi_catalogue' }],
       entries: [],
       sundries: [
-        { orderId: 'o1', itemName: 'Printed Catalogue', quantity: 2, unitPrice: 400 },
-        { orderId: 'o1', itemName: 'Online Catalogue', quantity: 3, unitPrice: 200 },
+        { orderId: 'o1', itemName: 'Printed Catalogue', kind: 'printed_catalogue', quantity: 2, unitPrice: 400 },
+        { orderId: 'o1', itemName: 'Online Catalogue', kind: 'online_catalogue', quantity: 3, unitPrice: 200 },
       ],
       payments: [],
     });
@@ -346,7 +346,7 @@ describe('aggregateShowMetrics — "dogs entered" breakdown', () => {
         entryRow({ id: 'manual-1', totalFee: 1200 }),
       ],
       sundries: [
-        { orderId: 'o1', itemName: 'Donation', quantity: 1, unitPrice: 900 },
+        { orderId: 'o1', itemName: 'Donation', kind: 'donation', quantity: 1, unitPrice: 900 },
       ],
       payments: [],
     });
@@ -472,8 +472,8 @@ describe('aggregateShowMetrics — offline (manual/postal/cash) paid orders', ()
         entryRow({ id: 'offline-entry', orderId: 'offline-order', status: 'confirmed', totalFee: 0 }),
       ],
       sundries: [
-        { orderId: 'stripe-order', itemName: 'Donation', quantity: 1, unitPrice: 400 },
-        { orderId: 'offline-order', itemName: 'Printed Catalogue', quantity: 1, unitPrice: 500 },
+        { orderId: 'stripe-order', itemName: 'Donation', kind: 'donation', quantity: 1, unitPrice: 400 },
+        { orderId: 'offline-order', itemName: 'Printed Catalogue', kind: 'printed_catalogue', quantity: 1, unitPrice: 500 },
       ],
       payments: [],
     });
@@ -603,7 +603,7 @@ describe('aggregateShowMetrics — donation accounting (orders.donationPence)', 
       entries: [
         { id: 'e1', orderId: 'o1', status: 'confirmed', totalFee: 1000, deletedAt: null, isNfc: false, entryType: 'standard', dogId: 'dog-1' },
       ],
-      sundries: [{ orderId: 'o1', itemName: 'Donation', quantity: 1, unitPrice: 500 }],
+      sundries: [{ orderId: 'o1', itemName: 'Donation', kind: 'donation', quantity: 1, unitPrice: 500 }],
       payments: [],
     });
 

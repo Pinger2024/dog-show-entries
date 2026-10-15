@@ -105,11 +105,11 @@ const richRegionalShow: ScheduleShowInfo = {
   discountGroups: [],
   acceptsPostalEntries: false,
   sundryItems: [
-    { name: 'Printed Catalogue', description: null, priceInPence: 500 },
-    { name: 'Online Catalogue', description: null, priceInPence: 350 },
-    { name: 'Donation', description: null, priceInPence: 500 },
-    { name: 'Class Sponsorship', description: null, priceInPence: 1000 },
-    { name: 'Colour Advert', description: null, priceInPence: 1000 },
+    { name: 'Printed Catalogue', kind: 'printed_catalogue', description: null, priceInPence: 500 },
+    { name: 'Online Catalogue', kind: 'online_catalogue', description: null, priceInPence: 350 },
+    { name: 'Donation', kind: 'donation', description: null, priceInPence: 500 },
+    { name: 'Class Sponsorship', kind: 'sponsorship', description: null, priceInPence: 1000 },
+    { name: 'Colour Advert', kind: 'advert', description: null, priceInPence: 1000 },
   ],
   showRuleset: 'wusv',
   breedName: 'German Shepherd Dog',
@@ -240,10 +240,10 @@ describe('SV schedule pagination', () => {
       },
       sundryItems: [
         ...(richRegionalShow.sundryItems ?? []),
-        { name: 'Raffle ticket', description: null, priceInPence: 100 },
-        { name: 'Ringside lunch', description: null, priceInPence: 800 },
-        { name: 'Car pass', description: null, priceInPence: 300 },
-        { name: 'Commemorative pin', description: null, priceInPence: 450 },
+        { name: 'Raffle ticket', kind: 'other', description: null, priceInPence: 100 },
+        { name: 'Ringside lunch', kind: 'other', description: null, priceInPence: 800 },
+        { name: 'Car pass', kind: 'parking', description: null, priceInPence: 300 },
+        { name: 'Commemorative pin', kind: 'other', description: null, priceInPence: 450 },
       ],
     };
     const props = {

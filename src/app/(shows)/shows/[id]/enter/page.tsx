@@ -70,10 +70,10 @@ import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
 import { StripeProvider, stripePromise } from '@/components/providers/stripe-provider';
 import { PaymentForm } from './payment-form';
+import { CatalogueNote } from './catalogue-note';
 import { cn } from '@/lib/utils';
 import { isGsdOnlyClass, isGsdBreed } from '@/lib/class-templates';
-import { isCatalogueItem } from '@/lib/catalogue-utils';
-import { isParkingSundry } from '@/lib/parking-utils';
+import { catalogueNoteFor, includesParkingPass } from '@/lib/sundry-kind';
 import { entryWindowOpen } from '@/lib/show-status';
 import {
   useEntryCart,
@@ -626,18 +626,27 @@ export default function EnterShowPage() {
       if (
         serverItem.priceInPence !== cartItem.unitPrice ||
         serverItem.name !== cartItem.name ||
-        serverItem.maxPerOrder !== cartItem.maxPerOrder
+        serverItem.maxPerOrder !== cartItem.maxPerOrder ||
+        serverItem.kind !== cartItem.kind
       ) {
         cart.setSundryItem({
           ...cartItem,
           unitPrice: serverItem.priceInPence,
           name: serverItem.name,
           maxPerOrder: serverItem.maxPerOrder,
+          kind: serverItem.kind,
         });
       }
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sundryItemsData]);
+
+  // What each item in the basket IS. The basket carries the kind (so this
+  // still works after a reload or a Stripe 3DS return, when the item list
+  // isn't loaded); a basket saved before 15 Oct 2026 falls back to the list.
+  const cartSundryKinds = cart.sundryItems.map(
+    (s) => s.kind ?? sundryItemsData?.find((d) => d.id === s.sundryItemId)?.kind,
+  );
 
   // Warn user before leaving the page if they have entries in the cart
   useEffect(() => {
@@ -2139,6 +2148,7 @@ export default function EnterShowPage() {
                               quantity: 1,
                               unitPrice: item.priceInPence,
                               maxPerOrder: item.maxPerOrder,
+                              kind: item.kind,
                             });
                           } else {
                             cart.removeSundryItem(item.id);
@@ -2191,6 +2201,7 @@ export default function EnterShowPage() {
                               quantity: qty - 1,
                               unitPrice: item.priceInPence,
                               maxPerOrder: item.maxPerOrder,
+                              kind: item.kind,
                             });
                           }
                         }}
@@ -2210,6 +2221,7 @@ export default function EnterShowPage() {
                             quantity: qty + 1,
                             unitPrice: item.priceInPence,
                             maxPerOrder: item.maxPerOrder,
+                            kind: item.kind,
                           });
                         }}
                       >
@@ -2675,8 +2687,9 @@ export default function EnterShowPage() {
           orderId={orderId}
           paymentAmount={paymentAmount}
           items={cart.sundryItems}
-          hasCatalogue={cart.sundryItems.some((s) => isCatalogueItem(s.name))}
-          hasParking={cart.sundryItems.some((s) => isParkingSundry(s.name))}
+          catalogueNote={catalogueNoteFor(cartSundryKinds)}
+          catalogueHref={`/shows/${show.slug ?? idOrSlug}/catalogue`}
+          hasParking={includesParkingPass(cartSundryKinds)}
         />
       )}
       {cart.step === 'confirmation' && !isExtrasOnly && (() => {
@@ -2984,44 +2997,13 @@ export default function EnterShowPage() {
               </SEButton>
             </div>
 
-            {/* Catalogue note — adapt to whether a PRINTED (collect on the day)
-                or ONLINE catalogue was bought (Michael, 2026-06-25). */}
-            {(() => {
-              const catalogueItems = cart.sundryItems.filter((s) => isCatalogueItem(s.name));
-              const hasCatalogue = catalogueItems.length > 0;
-              const catalogueIsOnline =
-                hasCatalogue &&
-                catalogueItems.some((s) => {
-                  const full = sundryItemsData?.find((d) => d.id === s.sundryItemId);
-                  return /\b(online|digital|pdf|download|e-?catalogue)\b/i.test(
-                    `${s.name} ${full?.description ?? ''}`
-                  );
-                });
-              if (!hasCatalogue) return null;
-              return (
-                <SECard className="mx-auto w-full max-w-md border-se-fresh-line bg-se-fresh-soft p-4 text-center">
-                  <p className="text-sm font-semibold text-se-fresh-deep">
-                    {catalogueIsOnline ? 'Online Catalogue Purchased' : 'Catalogue Pre-ordered'}
-                  </p>
-                  <p className="mt-1 text-xs text-se-ink2">
-                    {catalogueIsOnline ? (
-                      <>
-                        Your catalogue will be available at{' '}
-                        <Link
-                          href={`/shows/${show?.slug ?? idOrSlug}/catalogue`}
-                          className="underline font-medium text-se-fresh-deep"
-                        >
-                          this link
-                        </Link>{' '}
-                        once entries close.
-                      </>
-                    ) : (
-                      <>Collect your printed catalogue from the secretary&apos;s table on the day.</>
-                    )}
-                  </p>
-                </SECard>
-              );
-            })()}
+            {/* Catalogue note — printed (collect on the day) or online (Michael,
+                2026-06-25). One component and one rule (catalogueNoteFor) for
+                this screen, the no-dog confirmation and the receipt email. */}
+            <CatalogueNote
+              note={catalogueNoteFor(cartSundryKinds)}
+              catalogueHref={`/shows/${show?.slug ?? idOrSlug}/catalogue`}
+            />
           </div>
         </div>
         );

@@ -5,8 +5,7 @@ import { db } from '@/server/db';
 import { and, eq, inArray } from 'drizzle-orm';
 import { orders, entries, memberships, users, printOrders, showClasses, sundryItems } from '@/server/db/schema';
 import { formatOrderRef, PRINT_PAYMENT_METHODS } from '@/lib/print-products';
-import { isCatalogueItem } from '@/lib/catalogue-utils';
-import { isParkingSundry } from '@/lib/parking-utils';
+import { announcesOnlineCatalogue, catalogueNoteFor, includesParkingPass, type SundryKind } from '@/lib/sundry-kind';
 import { generateParkingPassPdf } from '@/server/services/parking-pass-pdf';
 import { buildClassLabelMap } from '@/lib/class-labels';
 import { BRAND } from '@/lib/brand';
@@ -265,8 +264,8 @@ export async function sendEntryConfirmationEmail(orderId: string) {
         </p>
       </div>
 
-      ${(order.orderSundryItems ?? []).some((osi) => osi.sundryItem?.name && isCatalogueItem(osi.sundryItem.name)) ? `
-      <!-- Online Catalogue -->
+      ${(order.orderSundryItems ?? []).some((osi) => osi.sundryItem?.kind && announcesOnlineCatalogue(osi.sundryItem.kind)) ? `
+      <!-- Online Catalogue: only for an ONLINE purchase - a printed buyer is not told the online copy is included (Mandy, 15 Oct 2026) -->
       <div style="padding: 16px 24px; text-align: center; border-top: 1px solid ${BRAND.line}; background: #eaf7ee;">
         <p style="margin: 0 0 8px; font-size: 13px; font-weight: 600; color: ${BRAND.green};">Online Catalogue Purchased</p>
         <p style="margin: 0 0 12px; font-size: 13px; color: ${BRAND.ink2};">Your catalogue unlocks on the morning of the show — we&apos;ll email you the link first thing that day.</p>
@@ -617,7 +616,7 @@ type ExtrasOnlyOrder = {
   orderSundryItems: {
     quantity: number;
     unitPrice: number;
-    sundryItem: { name: string } | null;
+    sundryItem: { name: string; kind: SundryKind } | null;
   }[];
 };
 
@@ -652,12 +651,12 @@ async function sendExtrasOnlyReceiptEmail(order: ExtrasOnlyOrder) {
     ? `${show.venue.name}${show.venue.postcode ? `, ${show.venue.postcode}` : ''}`
     : '';
 
-  const hasCatalogue = order.orderSundryItems.some(
-    (osi) => osi.sundryItem?.name && isCatalogueItem(osi.sundryItem.name),
-  );
-  const hasParking = order.orderSundryItems.some(
-    (osi) => osi.sundryItem?.name && isParkingSundry(osi.sundryItem.name),
-  );
+  // The same answer the confirmation screen gives (lib/sundry-kind.ts).
+  // A printed catalogue is collected on the day; nothing here says the
+  // online copy comes with it (Mandy, 15 Oct 2026).
+  const boughtKinds = order.orderSundryItems.map((osi) => osi.sundryItem?.kind);
+  const catalogueNote = catalogueNoteFor(boughtKinds);
+  const hasParking = includesParkingPass(boughtKinds);
 
   const html = `
 <!DOCTYPE html>
@@ -696,10 +695,15 @@ async function sendExtrasOnlyReceiptEmail(order: ExtrasOnlyOrder) {
           </tr>
         </table>
       </div>
-      ${hasCatalogue ? `
+      ${catalogueNote === 'online' ? `
       <div style="padding: 16px 24px; text-align: center; border-top: 1px solid ${BRAND.line}; background: #eaf7ee;">
-        <p style="margin: 0 0 8px; font-size: 13px; font-weight: 600; color: ${BRAND.green};">Your catalogue</p>
+        <p style="margin: 0 0 8px; font-size: 13px; font-weight: 600; color: ${BRAND.green};">Online Catalogue Purchased</p>
         <p style="margin: 0; font-size: 13px; color: ${BRAND.ink2};">The online catalogue unlocks on the morning of the show &mdash; we&apos;ll email you the link first thing that day. You can also find it under My entries and orders.</p>
+      </div>` : ''}
+      ${catalogueNote === 'printed' ? `
+      <div style="padding: 16px 24px; text-align: center; border-top: 1px solid ${BRAND.line}; background: #eaf7ee;">
+        <p style="margin: 0 0 8px; font-size: 13px; font-weight: 600; color: ${BRAND.green};">Your printed catalogue</p>
+        <p style="margin: 0; font-size: 13px; color: ${BRAND.ink2};">Collect your printed catalogue from the secretary&apos;s table on the day.</p>
       </div>` : ''}
       ${hasParking ? `
       <div style="padding: 16px 24px; text-align: center; border-top: 1px solid ${BRAND.line}; background: #eaf7ee;">

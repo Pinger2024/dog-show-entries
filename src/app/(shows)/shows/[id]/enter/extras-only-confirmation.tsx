@@ -8,6 +8,8 @@ import { cn } from '@/lib/utils';
 import { SecLabel, SEButton, SECard, SEDarkPanel } from '@/components/show-experience/kit';
 import { SE_H } from '@/components/show-experience/tokens';
 import { Confetti } from '@/components/show-experience/confetti';
+import type { catalogueNoteFor } from '@/lib/sundry-kind';
+import { CatalogueNote } from './catalogue-note';
 
 export interface ExtrasOnlyConfirmationProps {
   firstName?: string | null;
@@ -19,10 +21,11 @@ export interface ExtrasOnlyConfirmationProps {
   orderId: string | null;
   paymentAmount: number;
   items: { sundryItemId: string; name: string; quantity: number; unitPrice: number }[];
-  /** Whether the order includes a catalogue / a parking pass. Decided by the
-   *  page with the existing helpers (isCatalogueItem / isParkingSundry), so
-   *  this component holds no guess of its own about what a name means. */
-  hasCatalogue: boolean;
+  /** What to tell them about a catalogue - from `catalogueNoteFor`
+   *  (lib/sundry-kind.ts), the same answer the receipt email gives. */
+  catalogueNote: ReturnType<typeof catalogueNoteFor>;
+  catalogueHref: string;
+  /** Whether the order includes a parking pass (`includesParkingPass`). */
   hasParking: boolean;
 }
 
@@ -42,7 +45,8 @@ export function ExtrasOnlyConfirmation({
   orderId,
   paymentAmount,
   items,
-  hasCatalogue,
+  catalogueNote,
+  catalogueHref,
   hasParking,
 }: ExtrasOnlyConfirmationProps) {
   return (
@@ -111,19 +115,7 @@ export function ExtrasOnlyConfirmation({
           </div>
         </SECard>
 
-        {hasCatalogue && (
-          <SECard className="mx-auto w-full max-w-md border-se-fresh-line bg-se-fresh-soft p-4 text-center">
-            <p className="text-sm font-semibold text-se-fresh-deep">Catalogue ordered</p>
-            <p className="mt-1 text-xs text-se-ink2">
-              The online catalogue link will be waiting for you under{' '}
-              <Link href="/entries" className="font-medium text-se-fresh-deep underline">
-                My entries and orders
-              </Link>{' '}
-              once entries close. A printed catalogue is collected from the secretary&apos;s
-              table on the day.
-            </p>
-          </SECard>
-        )}
+        <CatalogueNote note={catalogueNote} catalogueHref={catalogueHref} />
 
         {hasParking && (
           <SECard className="mx-auto w-full max-w-md border-se-fresh-line bg-se-fresh-soft p-4 text-center">

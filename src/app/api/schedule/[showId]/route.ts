@@ -333,6 +333,7 @@ export async function GET(
       .filter((s) => s.enabled)
       .map((s) => ({
         name: s.name,
+        kind: s.kind,
         description: s.description,
         priceInPence: s.priceInPence,
       })),

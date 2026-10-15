@@ -25,6 +25,7 @@
  * complete (showDiscountGroups is queried by showId, the same scope every
  * order referencing one belongs to) — this was purely an insert-order bug.
  */
+import { inferSundryKindFromName } from '@/lib/sundry-kind';
 import type { Database } from '@/server/db';
 import * as schema from '@/server/db/schema';
 import type { ShowFixture } from '../../../scripts/lib/export-show-fixture-core';
@@ -154,7 +155,13 @@ export async function loadShowFixture(db: Database, rawFixture: ShowFixture): Pr
   await insertAll(db, schema.results, 'results', t.results);
   await insertAll(db, schema.achievements, 'achievements', t.achievements);
   await insertAll(db, schema.stewardAssignments, 'stewardAssignments', t.stewardAssignments);
-  await insertAll(db, schema.sundryItems, 'sundryItems', t.sundryItems);
+  // Fixtures exported before sundry_items.kind existed carry no kind: fill it
+  // the way the startup backfill does, or every catalogue count drops to 0.
+  const sundryRows = t.sundryItems.map((row) => {
+    const r = row as Record<string, unknown>;
+    return r.kind ? r : { ...r, kind: inferSundryKindFromName(String(r.name ?? '')) };
+  });
+  await insertAll(db, schema.sundryItems, 'sundryItems', sundryRows);
   await insertAll(db, schema.sponsors, 'sponsors', t.sponsors);
   await insertAll(db, schema.showSponsors, 'showSponsors', t.showSponsors);
   await insertAll(db, schema.classSponsorships, 'classSponsorships', t.classSponsorships);
