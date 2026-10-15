@@ -3,7 +3,7 @@ import { dogAlreadyOnRegional } from '@/server/services/regional-entry';
 import { resolveEntryMembership } from '@/server/services/entry-membership';
 import { SHOW_COLUMNS_FOR_PUBLIC_INCLUDE } from '../public-show-fields';
 import { TRPCError } from '@trpc/server';
-import { and, eq, isNull, inArray, desc, sql, asc, ilike, or } from 'drizzle-orm';
+import { and, eq, isNull, isNotNull, inArray, notInArray, desc, sql, asc, ilike, or } from 'drizzle-orm';
 import { differenceInWeeks } from 'date-fns';
 import { protectedProcedure } from '../procedures';
 import { createTRPCRouter } from '../init';
@@ -1183,6 +1183,52 @@ export const ordersRouter = createTRPCRouter({
             : null,
       };
     }),
+
+  // Orders the calling exhibitor placed for extras ONLY — a catalogue, parking
+  // pass etc. bought with no dog (Mandy, 15 Oct 2026). My Entries is built
+  // from entries, so without this an extras-only buyer would see "No entries
+  // yet" and could never reach their catalogue link or parking pass. An
+  // "extras-only order" is: paid, at least one sundry line, and NO entry with
+  // deletedAt IS NULL. A withdrawn dog keeps its entry row (status
+  // 'withdrawn', deletedAt NULL), so its order keeps its dog card and is NOT
+  // listed here. Scoped to the caller; the show is the public-column subset,
+  // never the organisation.
+  myExtrasOnlyOrders: protectedProcedure.query(async ({ ctx }) => {
+    const rows = await ctx.db.query.orders.findMany({
+      where: and(
+        eq(orders.exhibitorId, ctx.session.user.id),
+        eq(orders.status, 'paid'),
+        inArray(orders.id, ctx.db.select({ id: orderSundryItems.orderId }).from(orderSundryItems)),
+        notInArray(
+          orders.id,
+          ctx.db
+            .select({ id: entries.orderId })
+            .from(entries)
+            .where(and(isNotNull(entries.orderId), isNull(entries.deletedAt))),
+        ),
+      ),
+      with: {
+        show: {
+          columns: SHOW_COLUMNS_FOR_PUBLIC_INCLUDE,
+          with: { venue: { columns: { name: true } } },
+        },
+        orderSundryItems: { with: { sundryItem: { columns: { name: true } } } },
+      },
+      orderBy: [desc(orders.createdAt)],
+    });
+    return rows.map((o) => ({
+      id: o.id,
+      totalAmount: o.totalAmount,
+      createdAt: o.createdAt,
+      show: o.show,
+      items: o.orderSundryItems.map((i) => ({
+        id: i.id,
+        name: i.sundryItem.name,
+        quantity: i.quantity,
+        unitPrice: i.unitPrice,
+      })),
+    }));
+  }),
 
   // Parking passes the calling exhibitor has purchased, for the entries
   // page's "Extras" row (Mandy 2026-08-04). Scoped to ctx.session.user.id —

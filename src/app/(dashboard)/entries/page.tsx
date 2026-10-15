@@ -26,6 +26,7 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { PageHeader, PageTitle, PageDescription } from '@/components/ui/page-header';
 import { EmptyState } from '@/components/ui/empty-state';
+import { ExtrasOnlyOrderCard } from './extras-only-order-card';
 
 const statusConfig: Record<
   string,
@@ -89,15 +90,23 @@ export default function EntriesPage() {
     [cataloguePurchases]
   );
   const { data: parkingPasses } = trpc.orders.myParkingPasses.useQuery();
+  // Orders with extras but no dog (Mandy, 15 Oct 2026). They get their own
+  // card; their parking passes are shown there, not on a dog card.
+  const { data: extrasOnlyOrders } = trpc.orders.myExtrasOnlyOrders.useQuery();
+  const extrasOnlyOrderIds = useMemo(
+    () => new Set((extrasOnlyOrders ?? []).map((o) => o.id)),
+    [extrasOnlyOrders]
+  );
   const parkingMap = useMemo(() => {
     const map = new Map<string, ParkingPass[]>();
     for (const pass of parkingPasses ?? []) {
+      if (extrasOnlyOrderIds.has(pass.orderId)) continue;
       const existing = map.get(pass.showId);
       if (existing) existing.push(pass);
       else map.set(pass.showId, [pass]);
     }
     return map;
-  }, [parkingPasses]);
+  }, [parkingPasses, extrasOnlyOrderIds]);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
   const [collapsedPast, setCollapsedPast] = useState(true);
 
@@ -142,7 +151,10 @@ export default function EntriesPage() {
     );
   }
 
-  if (allEntries.length === 0 && unfinished.length === 0) {
+  const extrasOrders = extrasOnlyOrders ?? [];
+  const showsWithDogCard = new Set(allEntries.map((e) => e.show.id));
+
+  if (allEntries.length === 0 && unfinished.length === 0 && extrasOrders.length === 0) {
     return (
       <div className="space-y-4">
         <PageHeader>
@@ -153,7 +165,7 @@ export default function EntriesPage() {
         <EmptyState
           icon={Ticket}
           title="No entries yet"
-          description="Browse upcoming shows and enter your dog."
+          description="Browse upcoming shows and enter your dog, or buy a catalogue or parking pass."
           variant="card"
           action={<Button asChild className="min-h-[2.75rem]"><Link href="/browse">Find Shows</Link></Button>}
         />
@@ -212,7 +224,31 @@ export default function EntriesPage() {
         </div>
       )}
 
+      {/* Extras bought with no dog (Mandy, 15 Oct 2026) */}
+      {extrasOrders.length > 0 && (
+        <section>
+          <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold uppercase tracking-wider text-muted-foreground">
+            <div className="size-2 rounded-full bg-se-fresh" />
+            Extras (no dog entered)
+          </h2>
+          <div className="space-y-4">
+            {extrasOrders.map((order) => (
+              <ExtrasOnlyOrderCard
+                key={order.id}
+                order={order}
+                isPast={isPast(parseISO(order.show.endDate))}
+                // A show that also has a dog card already shows the
+                // catalogue link there.
+                catalogue={showsWithDogCard.has(order.show.id) ? undefined : catalogueMap.get(order.show.id)}
+                parkingPasses={(parkingPasses ?? []).filter((p) => p.orderId === order.id)}
+              />
+            ))}
+          </div>
+        </section>
+      )}
+
       {/* Status filter pills */}
+      {allEntries.length > 0 && (
       <div className="flex flex-wrap gap-2">
         {filterOptions.map((opt) => {
           const count = opt.value === 'all'
@@ -238,6 +274,7 @@ export default function EntriesPage() {
           );
         })}
       </div>
+      )}
 
       {entries.length === 0 && statusFilter !== 'all' && (
         <div className="py-12 text-center text-sm text-muted-foreground">
