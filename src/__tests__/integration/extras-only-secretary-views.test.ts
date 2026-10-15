@@ -28,7 +28,7 @@ async function showWithExtrasOrder(opts: { settle: boolean }) {
     .values({ showId: show.id, name: 'Printed Catalogue', priceInPence: 500, enabled: true })
     .returning();
   const buyer = await makeUser({ role: 'exhibitor', name: 'Shirley Buyer', email: 'shirley.buyer@example.test' });
-  const res = await createTestCaller(buyer).orders.checkout({
+  const res = await createTestCaller(buyer as never).orders.checkout({
     showId: show.id,
     entries: [],
     sundryItems: [{ sundryItemId: cat!.id, quantity: 2 }],
@@ -44,7 +44,7 @@ async function showWithExtrasOrder(opts: { settle: boolean }) {
 describe('extras-only order — secretary views', () => {
   it('the payment report has a row for it, with the buyer and the ORDER status', async () => {
     const { secretary, show, buyer, orderId } = await showWithExtrasOrder({ settle: true });
-    const report = await createTestCaller(secretary).secretary.getPaymentReport({ showId: show.id });
+    const report = await createTestCaller(secretary as never).secretary.getPaymentReport({ showId: show.id });
     const row = report.rows.find((r) => r.orderId === orderId);
     expect(row).toBeDefined();
     expect(row!.kind).toBe('sundry');
@@ -58,14 +58,14 @@ describe('extras-only order — secretary views', () => {
 
   it('a pending extras-only order shows as pending, not withdrawn', async () => {
     const { secretary, show, orderId } = await showWithExtrasOrder({ settle: false });
-    const report = await createTestCaller(secretary).secretary.getPaymentReport({ showId: show.id });
+    const report = await createTestCaller(secretary as never).secretary.getPaymentReport({ showId: show.id });
     expect(report.rows.find((r) => r.orderId === orderId)?.status).toBe('pending');
   });
 
   it('a cancelled or refunded extras-only order leaves no ghost row', async () => {
     const { secretary, show, orderId } = await showWithExtrasOrder({ settle: false });
     await testDb.update(orders).set({ status: 'cancelled' }).where(eq(orders.id, orderId));
-    const report = await createTestCaller(secretary).secretary.getPaymentReport({ showId: show.id });
+    const report = await createTestCaller(secretary as never).secretary.getPaymentReport({ showId: show.id });
     expect(report.rows.find((r) => r.orderId === orderId)).toBeUndefined();
   });
 
@@ -100,7 +100,7 @@ describe('extras-only order — secretary views', () => {
 
   it('a secretary can refund an extras-only order in full', async () => {
     const { secretary, show, orderId } = await showWithExtrasOrder({ settle: true });
-    const res = await createTestCaller(secretary).secretary.refundOrder({ orderId });
+    const res = await createTestCaller(secretary as never).secretary.refundOrder({ orderId });
     expect(res.refunded).toBe(true);
     const order = await testDb.query.orders.findFirst({ where: eq(orders.id, orderId) });
     expect(order?.status).toBe('refunded');

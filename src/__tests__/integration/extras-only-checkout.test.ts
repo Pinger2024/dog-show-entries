@@ -65,7 +65,7 @@ describe.each(['rkc', 'regional'] as const)('extras-only checkout journey (%s sh
     const { exhibitor, show, catalogue, parking } = await setup(kind);
     vi.mocked(stripeService.createPaymentIntent).mockClear();
 
-    const result = await createTestCaller(exhibitor).orders.checkout({
+    const result = await createTestCaller(exhibitor as never).orders.checkout({
       showId: show.id,
       entries: [],
       sundryItems: [
@@ -107,13 +107,13 @@ describe('extras-only checkout rules', () => {
   it('refuses a cart with no entries and no extras', async () => {
     const { exhibitor, show } = await setup('rkc');
     await expect(
-      createTestCaller(exhibitor).orders.checkout({ showId: show.id, entries: [], sundryItems: [] }),
+      createTestCaller(exhibitor as never).orders.checkout({ showId: show.id, entries: [], sundryItems: [] }),
     ).rejects.toThrow(/Choose a dog, a junior handler or at least one extra/);
   });
 
   it('ignores donation, regional membership and discount group when there are no entries', async () => {
     const { exhibitor, show, catalogue } = await setup('regional');
-    const res = await createTestCaller(exhibitor).orders.checkout({
+    const res = await createTestCaller(exhibitor as never).orders.checkout({
       showId: show.id,
       entries: [],
       sundryItems: [{ sundryItemId: catalogue.id, quantity: 1 }],
@@ -141,7 +141,7 @@ describe('extras-only checkout rules', () => {
     await makeJudgeAssignment({ showId: show.id, judgeId: judge!.id, breedId: breed.id });
     const judgeUser = await makeUser({ role: 'exhibitor', name: 'Judge Judy Judgington' });
     void exhibitor;
-    const res = await createTestCaller(judgeUser).orders.checkout({
+    const res = await createTestCaller(judgeUser as never).orders.checkout({
       showId: show.id,
       entries: [],
       sundryItems: [{ sundryItemId: catalogue.id, quantity: 1 }],

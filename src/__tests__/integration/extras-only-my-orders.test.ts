@@ -38,7 +38,7 @@ describe('orders.myExtrasOnlyOrders', () => {
     const order = await makeOrder({ showId: show.id, exhibitorId: user.id, status: 'paid', totalAmount: 1000 });
     await makeOrderSundryItem({ orderId: order.id, sundryItemId: item.id, quantity: 2, unitPrice: 500 });
 
-    const res = await createTestCaller(user).orders.myExtrasOnlyOrders();
+    const res = await createTestCaller(user as never).orders.myExtrasOnlyOrders();
     expect(res).toHaveLength(1);
     expect(res[0]!.id).toBe(order.id);
     expect(res[0]!.show.name).toBe('Midland Regional');
@@ -54,7 +54,7 @@ describe('orders.myExtrasOnlyOrders', () => {
     const entry = await makeEntry({ showId: show.id, dogId: dog.id, exhibitorId: user.id, orderId: order.id, status: 'confirmed' });
     await testDb.update(entries).set({ status: 'withdrawn' }).where(eq(entries.id, entry.id));
 
-    expect(await createTestCaller(user).orders.myExtrasOnlyOrders()).toEqual([]);
+    expect(await createTestCaller(user as never).orders.myExtrasOnlyOrders()).toEqual([]);
   });
 
   it("does not return someone else's order, an unpaid order, or a paid order with no extras", async () => {
@@ -66,8 +66,8 @@ describe('orders.myExtrasOnlyOrders', () => {
     await makeOrderSundryItem({ orderId: unpaid.id, sundryItemId: item.id, unitPrice: 500 });
     await makeOrder({ showId: show.id, exhibitorId: user.id, status: 'paid' }); // no sundry lines
 
-    expect(await createTestCaller(user).orders.myExtrasOnlyOrders()).toEqual([]);
-    const theirsList = await createTestCaller(other).orders.myExtrasOnlyOrders();
+    expect(await createTestCaller(user as never).orders.myExtrasOnlyOrders()).toEqual([]);
+    const theirsList = await createTestCaller(other as never).orders.myExtrasOnlyOrders();
     expect(theirsList.map((o) => o.id)).toEqual([theirs.id]);
   });
 });

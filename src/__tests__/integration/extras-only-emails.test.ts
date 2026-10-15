@@ -45,7 +45,7 @@ async function extrasOnlyOrder() {
 }
 
 function sent() {
-  return resendMocks.send.mock.calls[0]?.[0] as unknown as { to: string; subject: string; html: string };
+  return (resendMocks.send.mock.calls as unknown as unknown[][])[0]?.[0] as unknown as { to: string; subject: string; html: string };
 }
 
 describe('extras-only order emails', () => {

@@ -73,14 +73,20 @@ import { PaymentForm } from './payment-form';
 import { cn } from '@/lib/utils';
 import { isGsdOnlyClass, isGsdBreed } from '@/lib/class-templates';
 import { isCatalogueItem } from '@/lib/catalogue-utils';
+import { isParkingSundry } from '@/lib/parking-utils';
+import { entryWindowOpen } from '@/lib/show-status';
 import {
   useEntryCart,
   getPaymentKey,
   restoreActionForStatus,
   computeClassSelectionTotal,
   validateDiscountGroupId,
+  isCompleteEntry,
+  isExtrasOnlyCart,
+  entryTypeOptionCount,
   type WizardStep,
 } from './use-entry-cart';
+import { ExtrasOnlyConfirmation } from './extras-only-confirmation';
 import { SecLabel, Chip, Eyebrow, SEButton, SECard, SEDarkPanel } from '@/components/show-experience/kit';
 import { SE_H } from '@/components/show-experience/tokens';
 import { Confetti } from '@/components/show-experience/confetti';
@@ -193,6 +199,10 @@ export default function EnterShowPage() {
   const idOrSlug = params.id as string;
 
   const cart = useEntryCart(idOrSlug);
+  // Buying extras with no dog (Mandy, 15 Oct 2026): DERIVED from the cart, not
+  // a flag — on review / payment / confirmation, a cart with no complete entry
+  // is an extras-only order. ONE owner: isExtrasOnlyCart (use-entry-cart.ts).
+  const isExtrasOnly = isExtrasOnlyCart(cart.entries, cart.step);
   const { data: session } = useSession();
   // Rehydrate the payment screen after a payment-step reload. loadSavedState
   // keeps step:'payment' when this snapshot exists, so seeding these from it
@@ -298,7 +308,8 @@ export default function EnterShowPage() {
   // PaymentIntent: if it already succeeded (or is processing), jump straight to
   // confirmation. Otherwise leave them where they are to carry on / retry.
   useEffect(() => {
-    if (cart.entries.length === 0) return;
+    // A cart of extras with no dog has no entries but IS a real payment.
+    if (cart.entries.length === 0 && cart.sundryItems.length === 0) return;
     const snap = loadPaymentSnapshot(idOrSlug);
     if (!snap) return;
     let cancelled = false;
@@ -402,12 +413,30 @@ export default function EnterShowPage() {
     (sc) => sc.classDefinition.type === 'junior_handler'
   ) ?? false;
 
-  // Auto-skip entry type step when there's only one option (standard)
+  // The show's extras — fetched from step 1 now, because whether the "Just
+  // extras, no dog" card exists depends on whether the show sells any.
+  const { data: sundryItemsData, isLoading: sundryItemsLoading } = trpc.shows.getSundryItems.useQuery(
+    { showId },
+    { enabled: !!showId && (cart.step === 'entry_type' || cart.step === 'select_classes' || cart.step === 'cart_review') }
+  );
+  // Extras can be bought on their own while entries are open (the same
+  // entryWindowOpen the server checks, so nobody reaches "Show is not
+  // accepting entries" at the end) and the show sells at least one.
+  const extrasAvailable =
+    !!show && entryWindowOpen(show) && (sundryItemsData?.length ?? 0) > 0;
+
+  // Auto-skip entry type step only when there is exactly ONE option (standard
+  // dog). With junior handling or extras on offer, the exhibitor chooses.
   useEffect(() => {
-    if (cart.step === 'entry_type' && allShowClasses && !hasJhClasses) {
+    if (
+      cart.step === 'entry_type' &&
+      allShowClasses &&
+      !sundryItemsLoading &&
+      entryTypeOptionCount({ hasJhClasses, extrasAvailable }) === 1
+    ) {
       cart.setEntryType('standard');
     }
-  }, [cart.step, allShowClasses, hasJhClasses]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [cart.step, allShowClasses, hasJhClasses, extrasAvailable, sundryItemsLoading]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const addDogsButtons = (
     <div className="flex flex-col gap-2 sm:flex-row">
@@ -436,11 +465,6 @@ export default function EnterShowPage() {
   const { data: packagePriorStanding } = trpc.entries.packagePriorStanding.useQuery(
     { showId: showId as string },
     { enabled: !!showId && show?.showRuleset !== 'wusv' && show?.multiDogThreshold != null },
-  );
-
-  const { data: sundryItemsData } = trpc.shows.getSundryItems.useQuery(
-    { showId },
-    { enabled: !!showId && (cart.step === 'select_classes' || cart.step === 'cart_review') }
   );
 
   // Show's discount groups (Members, Pensioners, etc.) — exhibitor declares
@@ -477,7 +501,9 @@ export default function EnterShowPage() {
   // startled by a higher number here (Amanda 2026-07-18).
   const regionalDiscountsAvailable =
     !!regionalCfg && (regionalMemberships.length > 0 || !!regionalCfg.firstTimeEnabled);
-  const donationPence = regionalCfg?.donationsEnabled
+  // No donation box on an extras-only order — the box is part of the hidden
+  // dog block, and the server ignores it too.
+  const donationPence = regionalCfg?.donationsEnabled && !isExtrasOnly
     ? Math.round((parseFloat(donationPounds) || 0) * 100)
     : 0;
   // A membership that asks for a number must have one before checkout —
@@ -486,7 +512,7 @@ export default function EnterShowPage() {
     ? regionalMemberships.find((m) => m.label === regionalMembership)
     : undefined;
   const membershipNumberMissing =
-    !!selectedMembership?.requiresNumber && !regionalMembershipNumber.trim();
+    !isExtrasOnly && !!selectedMembership?.requiresNumber && !regionalMembershipNumber.trim();
 
   // Live fee preview — mirrors server-side computation so the exhibitor sees
   // the right total before paying. The server recomputes authoritatively at
@@ -615,13 +641,13 @@ export default function EnterShowPage() {
 
   // Warn user before leaving the page if they have entries in the cart
   useEffect(() => {
-    if (cart.entries.length === 0 || cart.step === 'confirmation') return;
+    if ((cart.entries.length === 0 && cart.sundryItems.length === 0) || cart.step === 'confirmation') return;
     function handleBeforeUnload(e: BeforeUnloadEvent) {
       e.preventDefault();
     }
     window.addEventListener('beforeunload', handleBeforeUnload);
     return () => window.removeEventListener('beforeunload', handleBeforeUnload);
-  }, [cart.entries.length, cart.step]);
+  }, [cart.entries.length, cart.sundryItems.length, cart.step]);
 
   // Win summary for smart class recommendations — pass showId so suggestions
   // are filtered to classes actually in this show's schedule
@@ -911,9 +937,10 @@ export default function EnterShowPage() {
       const result = await checkoutMutation.mutateAsync({
         showId,
         catalogueRequested: false,
-        withholdFromPublication,
+        withholdFromPublication: isExtrasOnly ? false : withholdFromPublication,
+        // No dog = no entries: just the extras (Mandy, 15 Oct 2026).
         entries: cart.entries
-          .filter((e) => e.classIds.length > 0 || e.isNfc)
+          .filter((e) => isCompleteEntry(e))
           .map((e) => ({
             entryType: e.entryType,
             dogId: e.dogId,
@@ -932,12 +959,12 @@ export default function EnterShowPage() {
           quantity: s.quantity,
         })),
         referralSource,
-        discountGroupId: cart.discountGroupId ?? undefined,
-        regionalMembership: regionalMembership ?? undefined,
-        regionalMembershipNumber: regionalMembership
+        discountGroupId: isExtrasOnly ? undefined : (cart.discountGroupId ?? undefined),
+        regionalMembership: isExtrasOnly ? undefined : (regionalMembership ?? undefined),
+        regionalMembershipNumber: !isExtrasOnly && regionalMembership
           ? regionalMembershipNumber.trim() || undefined
           : undefined,
-        regionalFirstTimeExhibitor: regionalFirstTime,
+        regionalFirstTimeExhibitor: isExtrasOnly ? false : regionalFirstTime,
         donationPence,
         donationAffix: donationPence > 0 ? donationAffix.trim() || undefined : undefined,
       });
@@ -989,6 +1016,8 @@ export default function EnterShowPage() {
   // Find step index for indicator (skip JH step from display)
   const displaySteps = STEPS.filter((s) => {
     if (s.key === 'select_dog' && cart.activeEntry?.entryType === 'junior_handler') return false;
+    // Extras only: Type → Review → Payment → Confirmed (no dog, no classes).
+    if (isExtrasOnly && (s.key === 'select_dog' || s.key === 'select_classes')) return false;
     return true;
   });
   const stepIndex = displaySteps.findIndex((s) => s.key === cart.step);
@@ -1010,7 +1039,10 @@ export default function EnterShowPage() {
   }
 
   // Profile completeness gate
-  if (profileCheck && !profileCheck.valid) {
+  // Only on the dog / junior-handler path — not at step 1, and not for extras
+  // only (Mandy, 15 Oct 2026): someone buying a catalogue shouldn't be asked
+  // for a dog owner's name and address first.
+  if (profileCheck && !profileCheck.valid && cart.step !== 'entry_type' && !isExtrasOnly) {
     return (
       <div className="container mx-auto max-w-lg px-4 py-8">
         <Card>
@@ -1085,7 +1117,7 @@ export default function EnterShowPage() {
           <ChevronLeft className="size-4" />
           Back to show
         </Link>
-        <h1 className="mt-2 text-balance text-lg font-bold text-se-ink sm:text-xl lg:text-2xl">Enter {show.name}</h1>
+        <h1 className="mt-2 text-balance text-lg font-bold text-se-ink sm:text-xl lg:text-2xl">{isExtrasOnly ? 'Extras for' : 'Enter'} {show.name}</h1>
         <p className="text-xs text-se-ink3 sm:text-sm">
           {format(parseISO(show.startDate), 'd MMMM yyyy')} &middot; {show.venue?.name ?? 'Venue TBC'}
         </p>
@@ -1126,13 +1158,16 @@ export default function EnterShowPage() {
       </nav>
 
       {/* Cart badge */}
-      {cart.entries.length > 0 && cart.step !== 'cart_review' && cart.step !== 'payment' && cart.step !== 'confirmation' && (
+      {(cart.entries.some(isCompleteEntry) || cart.sundryItems.length > 0) && cart.step !== 'cart_review' && cart.step !== 'payment' && cart.step !== 'confirmation' && (
         <div className="mb-4 flex items-center justify-between rounded-[13px] border border-se-line bg-se-surface px-3 py-2 sm:px-4">
           <div className="flex items-center gap-2 text-xs text-se-ink2 sm:text-sm">
             <ShoppingCart className="size-4" />
             <span>
-              {cart.entries.filter((e) => e.classIds.length > 0 || e.isNfc).length} entr
-              {cart.entries.filter((e) => e.classIds.length > 0 || e.isNfc).length !== 1 ? 'ies' : 'y'} in cart
+              {cart.entries.filter(isCompleteEntry).length} entr
+              {cart.entries.filter(isCompleteEntry).length !== 1 ? 'ies' : 'y'}
+              {cart.sundryItems.length > 0 &&
+                ` + ${cart.sundryItems.length} extra${cart.sundryItems.length !== 1 ? 's' : ''}`}{' '}
+              in cart
             </span>
             {cart.grandTotal > 0 && (
               <Chip tone="fresh">{formatCurrency(cart.grandTotal)}</Chip>
@@ -1141,7 +1176,7 @@ export default function EnterShowPage() {
           <button
             type="button"
             onClick={() => cart.setStep('cart_review')}
-            disabled={cart.entries.filter((e) => e.classIds.length > 0 || e.isNfc).length === 0}
+            disabled={!cart.entries.some(isCompleteEntry) && cart.sundryItems.length === 0}
             className="text-xs font-semibold text-se-fresh-deep hover:underline disabled:opacity-40"
           >
             View Cart
@@ -1184,6 +1219,26 @@ export default function EnterShowPage() {
                   <p className="text-[15px] font-semibold text-se-ink">Junior Handler</p>
                   <p className="text-[13px] text-se-ink3">
                     Young handler entry — judged on handling skill, not the dog.
+                  </p>
+                </div>
+              </button>
+            )}
+
+            {/* Extras with no dog — a catalogue, parking pass etc. (Mandy,
+                15 Oct 2026, from Shirley at GSDL-BRG). Straight to Review. */}
+            {extrasAvailable && (
+              <button
+                type="button"
+                onClick={() => cart.setStep('cart_review')}
+                className="flex min-h-[44px] items-start gap-3 rounded-[18px] border border-se-line bg-se-surface p-4 text-left shadow-[0_1px_2px_rgba(27,36,29,0.04)] transition-colors hover:border-se-fresh-line"
+              >
+                <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-se-paper2">
+                  <ShoppingCart className="size-5 text-se-ink2" />
+                </div>
+                <div>
+                  <p className="text-[15px] font-semibold text-se-ink">Just extras, no dog</p>
+                  <p className="text-[13px] text-se-ink3">
+                    Buy a catalogue, parking pass or other extras without entering a dog.
                   </p>
                 </div>
               </button>
@@ -1928,7 +1983,7 @@ export default function EnterShowPage() {
       {/* Step: Cart Review */}
       {cart.step === 'cart_review' && (
         <div key={cart.step} className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-[160ms] motion-reduce:animate-none">
-          <StepHeading>Review your entries</StepHeading>
+          <StepHeading>{isExtrasOnly ? 'Choose your extras' : 'Review your entries'}</StepHeading>
 
           {/* Show info — rich summary */}
           <SECard className="p-4">
@@ -2048,17 +2103,24 @@ export default function EnterShowPage() {
               </SECard>
             ))}
 
-          {/* Add another */}
-          {addDogsButtons}
+          {/* Add another — not when buying extras with no dog */}
+          {!isExtrasOnly && addDogsButtons}
 
           {/* Sundry items (catalogues, memberships, donations, etc.) — shown BEFORE total.
               Wrapped in an accent panel so the add-ons (esp. the catalogue) aren't
               missed in the entry flow (Mandy/Michael, 2026-06-25). */}
+          {isExtrasOnly && sundryItemsData && sundryItemsData.length === 0 && (
+            <SECard className="p-4 text-sm text-se-ink2">
+              There are no extras on sale for this show at the moment.
+            </SECard>
+          )}
           {sundryItemsData && sundryItemsData.length > 0 && (
             <div className="space-y-3 rounded-[14px] border-2 border-se-fresh-line bg-se-fresh-soft p-4 shadow-sm">
-              <h3 className="text-base font-bold text-se-ink">Add to your entry</h3>
+              <h3 className="text-base font-bold text-se-ink">{isExtrasOnly ? 'Extras for this show' : 'Add to your entry'}</h3>
               <p className="-mt-1 text-xs text-se-ink3">
-                Optional extras for this show — don&apos;t forget to pre-order your catalogue. You won&apos;t be able to add these after you&apos;ve paid.
+                {isExtrasOnly
+                  ? 'Tick what you would like, or use the + and − buttons to choose how many.'
+                  : "Optional extras for this show — don't forget to pre-order your catalogue. You won't be able to add these after you've paid."}
               </p>
               {sundryItemsData.map((item) => {
                 const inCart = cart.sundryItems.find((s) => s.sundryItemId === item.id);
@@ -2161,7 +2223,7 @@ export default function EnterShowPage() {
           )}
 
           {/* Discount group declaration — only when the show offers groups */}
-          {!regionalCfg && discountGroups && discountGroups.length > 0 && (
+          {!isExtrasOnly && !regionalCfg && discountGroups && discountGroups.length > 0 && (
             <SECard className="p-4">
               <div className="space-y-1">
                 <p className="text-sm font-semibold text-se-ink">Are you eligible for a discount?</p>
@@ -2204,7 +2266,7 @@ export default function EnterShowPage() {
           {/* Regional (SV/WUSV) membership + first-time + donation. The tiered
               per-dog fees are applied automatically; these switches choose the
               member column / free first-time entry and add a donation. */}
-          {regionalCfg && (
+          {regionalCfg && !isExtrasOnly && (
             <div className="space-y-4 rounded-lg border bg-card p-4">
               <div className="space-y-1">
                 <p className="text-sm font-semibold">Membership &amp; extras</p>
@@ -2338,6 +2400,7 @@ export default function EnterShowPage() {
           {/* Grand total with breakdown */}
           <div className="rounded-[16px] border border-se-line bg-se-paper2 p-3 sm:p-4">
             <div className="space-y-1.5">
+              {!isExtrasOnly && (
               <div className="flex justify-between text-sm text-se-ink3">
                 <span>
                   {cart.entries.filter((e) => e.classIds.length > 0 || e.isNfc).length} entr
@@ -2345,12 +2408,13 @@ export default function EnterShowPage() {
                 </span>
                 <span>{formatCurrency(feePreview?.total ?? cart.entriesTotal)}</span>
               </div>
+              )}
               {/* Visible rate — Paula Ingham ticked "I am a Member" but her
                   order still charged the standard rate (28 Aug) and nothing
                   on screen would have told her. Only shown when the show
                   actually offers discount groups, matching the tick-box
                   above. Calm, no nagging — a plain statement either way. */}
-              {!regionalCfg && discountGroups && discountGroups.length > 0 && (
+              {!isExtrasOnly && !regionalCfg && discountGroups && discountGroups.length > 0 && (
                 <div className="flex justify-between text-sm">
                   {cart.discountGroupId ? (
                     <span className="font-medium text-se-green">
@@ -2365,7 +2429,7 @@ export default function EnterShowPage() {
               )}
               {cart.sundryTotal > 0 && (
                 <div className="flex justify-between text-sm text-se-ink3">
-                  <span>Add-ons</span>
+                  <span>{isExtrasOnly ? 'Extras' : 'Add-ons'}</span>
                   <span>{formatCurrency(cart.sundryTotal)}</span>
                 </div>
               )}
@@ -2391,12 +2455,13 @@ export default function EnterShowPage() {
           </div>
 
           {/* Second add-dog button — easier to find after scrolling through entries */}
-          {cart.entries.length >= 2 && addDogsButtons}
+          {!isExtrasOnly && cart.entries.length >= 2 && addDogsButtons}
 
           {/* Declaration — RKC wording for RKC shows, GSDL/WUSV placeholder
               wording for SV shows. Amanda 2026-05-20 will source the
               official SV declaration; until then a sensible placeholder
               that names the right ruleset. */}
+          {!isExtrasOnly && (
           <div className="space-y-3">
             <h3 className="text-sm font-semibold text-se-ink">
               {show?.showRuleset === 'wusv' ? 'GSDL-BRG Declaration' : 'RKC Declaration'}
@@ -2450,8 +2515,11 @@ export default function EnterShowPage() {
               </span>
             </label>
           </div>
+          )}
 
-          {/* Privacy: right to withhold from catalogue — RKC F(1).11.b.(6)/(8) */}
+          {/* Privacy: right to withhold from catalogue — RKC F(1).11.b.(6)/(8).
+              Not for extras only: no dog, so no catalogue entry to withhold. */}
+          {!isExtrasOnly && (
           <SECard className="p-4">
             <label className="flex cursor-pointer items-start gap-3">
               <Checkbox
@@ -2468,6 +2536,7 @@ export default function EnterShowPage() {
               </span>
             </label>
           </SECard>
+          )}
 
           {checkoutMutation.error && (
             <div className="rounded-[14px] bg-destructive/10 p-3 text-sm text-destructive">
@@ -2477,7 +2546,7 @@ export default function EnterShowPage() {
 
           {/* Tell the user why the payment button is greyed out, so it never
               reads as a dead end (green review 2026-07-13). */}
-          {(!termsAccepted || membershipNumberMissing) && (
+          {!isExtrasOnly && (!termsAccepted || membershipNumberMissing) && (
             <p className="text-center text-xs text-se-ink3">
               {membershipNumberMissing
                 ? 'Enter your membership number above to continue.'
@@ -2490,6 +2559,12 @@ export default function EnterShowPage() {
               variant="ghost"
               className="text-sm sm:text-base"
               onClick={() => {
+                // Extras only: there is no dog to go back to — back to the
+                // "What type of entry?" choice.
+                if (isExtrasOnly) {
+                  cart.setStep('entry_type');
+                  return;
+                }
                 const lastEntry = cart.entries.filter((e) => e.classIds.length > 0 || e.isNfc).pop();
                 if (lastEntry) {
                   cart.editEntry(lastEntry.id);
@@ -2504,17 +2579,21 @@ export default function EnterShowPage() {
               className="flex-1 text-sm sm:text-base"
               onClick={handleProceedToPayment}
               disabled={
-                !healthDeclared ||
-                !termsAccepted ||
                 checkoutMutation.isPending ||
-                // A membership that asks for a number must have one (regional).
-                membershipNumberMissing ||
-                // An entry is submittable if it has at least one class OR it's
-                // an NFC ("not for competition") entry — those deliberately have
-                // no classes. Mirrors the filter in handleProceedToPayment's
-                // mutation payload; previously they diverged and NFC-only carts
-                // were silently blocked here.
-                cart.entries.filter((e) => e.classIds.length > 0 || e.isNfc).length === 0
+                (isExtrasOnly
+                  // Extras only: nothing to declare (no dog), so the only thing
+                  // missing can be the extras themselves.
+                  ? cart.sundryItems.length === 0
+                  : !healthDeclared ||
+                    !termsAccepted ||
+                    // A membership that asks for a number must have one (regional).
+                    membershipNumberMissing ||
+                    // An entry is submittable if it has at least one class OR it's
+                    // an NFC ("not for competition") entry — those deliberately have
+                    // no classes. Mirrors the filter in handleProceedToPayment's
+                    // mutation payload; previously they diverged and NFC-only carts
+                    // were silently blocked here.
+                    cart.entries.filter((e) => e.classIds.length > 0 || e.isNfc).length === 0)
               }
             >
               {checkoutMutation.isPending ? (
@@ -2525,7 +2604,7 @@ export default function EnterShowPage() {
               ) : (
                 <>
                   {previewGrandTotal === 0
-                    ? 'Confirm Entry — Free'
+                    ? (isExtrasOnly ? 'Confirm Order — Free' : 'Confirm Entry — Free')
                     : <>Proceed to Payment &middot; {formatCurrency(previewGrandTotal)}</>}
                 </>
               )}
@@ -2551,7 +2630,7 @@ export default function EnterShowPage() {
               {platformFeePence > 0 && (
                 <div className="rounded-lg border bg-muted/30 p-3 text-sm">
                   <div className="flex justify-between text-muted-foreground">
-                    <span>Entry fees</span>
+                    <span>{isExtrasOnly ? 'Extras' : 'Entry fees'}</span>
                     <span>{formatCurrency(subtotalAmount)}</span>
                   </div>
                   <div className="mt-1 flex justify-between text-muted-foreground">
@@ -2585,7 +2664,22 @@ export default function EnterShowPage() {
       )}
 
       {/* Step: Confirmation */}
-      {cart.step === 'confirmation' && (() => {
+      {cart.step === 'confirmation' && isExtrasOnly && (
+        <ExtrasOnlyConfirmation
+          firstName={session?.user?.name?.split(' ')[0]}
+          userEmail={session?.user?.email}
+          showName={show.name}
+          showSlugOrId={show.slug ?? idOrSlug}
+          startDate={show.startDate}
+          venueName={show.venue?.name}
+          orderId={orderId}
+          paymentAmount={paymentAmount}
+          items={cart.sundryItems}
+          hasCatalogue={cart.sundryItems.some((s) => isCatalogueItem(s.name))}
+          hasParking={cart.sundryItems.some((s) => isParkingSundry(s.name))}
+        />
+      )}
+      {cart.step === 'confirmation' && !isExtrasOnly && (() => {
         const confirmedEntries = cart.entries.filter((e) => e.classIds.length > 0 || e.isNfc);
         // First name / email come straight from the session, same pattern as
         // dashboard/page.tsx (`session?.user?.name?.split(' ')[0]`) — skipped
