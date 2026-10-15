@@ -460,8 +460,13 @@ export function loadSavedState(showId: string): CartState {
       (e) => e.classIds.length > 0 || e.isNfc
     );
 
+    // A cart of extras with NO dog is a real order (Mandy, 15 Oct 2026), so
+    // "has something to restore" means entries OR extras — otherwise a reload
+    // or a 3-D Secure return would throw an extras-only cart away.
+    const hasContent = completeEntries.length > 0 || (parsed?.sundryItems ?? []).length > 0;
+
     if (returningFromStripe) {
-      if (!parsed || completeEntries.length === 0) return initialState;
+      if (!parsed || !hasContent) return initialState;
       const step: WizardStep =
         redirectStatus === 'succeeded' ? 'confirmation' : 'cart_review';
       if (step === 'confirmation') localStorage.removeItem(getStorageKey(showId));
@@ -471,7 +476,7 @@ export function loadSavedState(showId: string): CartState {
     if (!parsed) return initialState;
     // A stale 'confirmation' step means they already finished — start fresh.
     if (parsed.step === 'confirmation') return initialState;
-    if (completeEntries.length === 0) return initialState;
+    if (!hasContent) return initialState;
 
     // A 'payment' step reloaded WITHOUT Stripe redirect params is the real-world
     // bounce: mobile Safari evicts the backgrounded tab during a 3-D Secure

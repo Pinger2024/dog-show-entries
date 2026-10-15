@@ -432,3 +432,49 @@ describe('validateDiscountGroupId — a stored group the secretary deleted is dr
     expect(validateDiscountGroupId('grp-members', [])).toBeNull();
   });
 });
+
+// Extras with no dog (Mandy, 15 Oct 2026). A cart holding sundries and NO
+// complete entry is a real order now (catalogue / parking pass on their own),
+// so a reload — or the return from a 3-D Secure bank page — must keep it
+// instead of throwing it away as "nothing in the cart" (the same bug class as
+// the April BAGSD 3DS bounce).
+describe('loadSavedState — a cart of extras with no dog is kept', () => {
+  const extrasCart: CartState = {
+    entries: [],
+    sundryItems: [{ sundryItemId: 's1', name: 'Printed Catalogue', quantity: 1, unitPrice: 500, maxPerOrder: null }],
+    activeEntryId: null,
+    step: 'cart_review',
+    editingExisting: false,
+  };
+
+  it('bare reload on the review step → still review, extras kept', () => {
+    stub('', extrasCart);
+    const s = loadSavedState('SHOW');
+    expect(s.step).toBe('cart_review');
+    expect(s.sundryItems).toHaveLength(1);
+  });
+
+  it('payment step with a saved payment snapshot → payment screen restored', () => {
+    stub('', { ...extrasCart, step: 'payment' }, true);
+    expect(loadSavedState('SHOW').step).toBe('payment');
+  });
+
+  it('3DS SUCCESS return → confirmation, extras kept', () => {
+    stub('?payment_intent=pi_x&payment_intent_client_secret=pi_x_secret&redirect_status=succeeded', { ...extrasCart, step: 'payment' });
+    const s = loadSavedState('SHOW');
+    expect(s.step).toBe('confirmation');
+    expect(s.sundryItems).toHaveLength(1);
+  });
+
+  it('3DS FAILED return → back to review to retry, extras kept', () => {
+    stub('?payment_intent=pi_x&payment_intent_client_secret=pi_x_secret&redirect_status=failed', { ...extrasCart, step: 'payment' });
+    const s = loadSavedState('SHOW');
+    expect(s.step).toBe('cart_review');
+    expect(s.sundryItems).toHaveLength(1);
+  });
+
+  it('a cart with neither entries nor extras is still reset', () => {
+    stub('', { ...extrasCart, sundryItems: [] });
+    expect(loadSavedState('SHOW').step).toBe('entry_type');
+  });
+});
