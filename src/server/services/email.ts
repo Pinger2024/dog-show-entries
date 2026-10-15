@@ -6,6 +6,7 @@ import { and, eq, inArray } from 'drizzle-orm';
 import { orders, entries, memberships, users, printOrders, showClasses, sundryItems } from '@/server/db/schema';
 import { formatOrderRef, PRINT_PAYMENT_METHODS } from '@/lib/print-products';
 import { isCatalogueItem } from '@/lib/catalogue-utils';
+import { isParkingSundry } from '@/lib/parking-utils';
 import { generateParkingPassPdf } from '@/server/services/parking-pass-pdf';
 import { buildClassLabelMap } from '@/lib/class-labels';
 import { BRAND } from '@/lib/brand';
@@ -119,6 +120,12 @@ export async function sendEntryConfirmationEmail(orderId: string) {
   const show = order.show;
   const exhibitor = order.exhibitor;
   const entryRows = order.entries ?? [];
+
+  // An order with no entries is extras only (Mandy, 15 Oct 2026) — its own
+  // receipt, not "Entry Confirmed" over an empty table.
+  if (entryRows.length === 0) {
+    return sendExtrasOnlyReceiptEmail({ ...order, exhibitor });
+  }
 
   // Pre-compute class labels so JH classes render as JHA/JHB rather than
   // a blank numeric prefix (RKC licences don't count JH in the numbered
@@ -496,6 +503,11 @@ export async function sendSecretaryNotificationEmail(orderId: string) {
   const exhibitor = order.exhibitor;
   const entryRows = order.entries ?? [];
 
+  // No entries = extras only (Mandy, 15 Oct 2026) — its own notice.
+  if (entryRows.length === 0) {
+    return sendExtrasOnlySecretaryEmail({ order, to: secretaryEmail });
+  }
+
   const entrySummary = entryRows.map((entry) => {
     const isJH = entry.entryType === 'junior_handler';
     const name = isJH
@@ -580,6 +592,210 @@ export async function sendSecretaryNotificationEmail(orderId: string) {
     return result;
   } catch (error) {
     console.error(`[email] Failed to send secretary notification:`, error);
+  }
+}
+
+// ── Extras-only orders (no dog) ──────────────────────────────────────────────
+// Mandy, 15 Oct 2026: a signed-in user can buy a catalogue, parking pass or
+// other extras without entering a dog, so an order can have ZERO entries. The
+// two functions below are the receipt for that order — called from
+// sendEntryConfirmationEmail / sendSecretaryNotificationEmail when the order
+// has no entries, so there is still one place that decides who gets told.
+
+type ExtrasOnlyOrder = {
+  id: string;
+  totalAmount: number;
+  exhibitor: { name: string | null; email: string } | null;
+  show: {
+    id: string;
+    slug: string | null;
+    name: string;
+    startDate: string | Date | null;
+    organisation?: { name: string | null } | null;
+    venue?: { name: string; postcode: string | null } | null;
+  };
+  orderSundryItems: {
+    quantity: number;
+    unitPrice: number;
+    sundryItem: { name: string } | null;
+  }[];
+};
+
+function extrasItemLines(order: ExtrasOnlyOrder): string {
+  return order.orderSundryItems
+    .map(
+      (osi) => `
+        <div style="display: flex; justify-content: space-between; padding: 6px 0; font-size: 15px;">
+          <span style="color: ${BRAND.ink};">${escapeHtml(osi.sundryItem?.name ?? 'Item')}${osi.quantity > 1 ? ` x${osi.quantity}` : ''}</span>
+          <span style="font-weight: 600;">${formatFee(osi.unitPrice * osi.quantity)}</span>
+        </div>`,
+    )
+    .join('');
+}
+
+async function sendExtrasOnlyReceiptEmail(order: ExtrasOnlyOrder) {
+  const exhibitor = order.exhibitor;
+  if (!exhibitor?.email) return;
+  const show = order.show;
+  const orderRef = order.id.slice(0, 8).toUpperCase();
+  const firstName = exhibitor.name ? exhibitor.name.split(' ')[0] : null;
+
+  const showDate = show.startDate
+    ? new Date(show.startDate).toLocaleDateString('en-GB', {
+        weekday: 'long',
+        day: 'numeric',
+        month: 'long',
+        year: 'numeric',
+      })
+    : 'TBC';
+  const venue = show.venue
+    ? `${show.venue.name}${show.venue.postcode ? `, ${show.venue.postcode}` : ''}`
+    : '';
+
+  const hasCatalogue = order.orderSundryItems.some(
+    (osi) => osi.sundryItem?.name && isCatalogueItem(osi.sundryItem.name),
+  );
+  const hasParking = order.orderSundryItems.some(
+    (osi) => osi.sundryItem?.name && isParkingSundry(osi.sundryItem.name),
+  );
+
+  const html = `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+</head>
+<body style="margin: 0; padding: 0; background-color: ${BRAND.paper}; font-family: 'Hanken Grotesk', -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
+  <div style="max-width: 600px; margin: 0 auto; padding: 24px 16px;">
+    ${emailHeader()}
+    <div style="background: #ffffff; border: 1px solid ${BRAND.line}; border-radius: 14px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+      <div style="background: ${BRAND.deep}; padding: 24px 24px 20px; text-align: center;">
+        <div style="display: inline-block; width: 40px; height: 40px; line-height: 40px; border-radius: 50%; background: rgba(243,236,220,0.2); font-size: 20px; color: ${BRAND.cream}; margin-bottom: 8px;">&#10003;</div>
+        <h2 style="margin: 0; color: ${BRAND.cream}; font-size: 22px; font-weight: 700;">Thank you for your order${firstName ? `, ${escapeHtml(firstName)}` : ''}</h2>
+        <p style="margin: 8px 0 0; color: rgba(243, 236, 220, 0.78); font-size: 14px;">
+          Order ${orderRef} &middot; ${formatFee(order.totalAmount)}
+        </p>
+      </div>
+      <div style="padding: 20px 24px; border-bottom: 1px solid ${BRAND.line};">
+        <h3 style="margin: 0 0 4px; font-size: 18px; color: ${BRAND.ink};">${escapeHtml(show.name)}</h3>
+        <p style="margin: 0; font-size: 14px; color: ${BRAND.ink2};">
+          ${showDate}${venue ? `<br>${escapeHtml(venue)}` : ''}
+        </p>
+        ${show.organisation?.name ? `<p style="margin: 4px 0 0; font-size: 13px; color: ${BRAND.ink2};">${escapeHtml(show.organisation.name)}</p>` : ''}
+      </div>
+      <div style="padding: 16px 24px;">
+        <p style="margin: 0 0 8px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: ${BRAND.ink2};">What you bought</p>
+        ${extrasItemLines(order)}
+      </div>
+      <div style="padding: 16px 24px; background: ${BRAND.paper};">
+        <table style="width: 100%;">
+          <tr>
+            <td style="font-weight: 700; font-size: 16px; color: ${BRAND.ink};">Total Paid</td>
+            <td style="text-align: right; font-weight: 700; font-size: 16px; color: ${BRAND.green};">${formatFee(order.totalAmount)}</td>
+          </tr>
+        </table>
+      </div>
+      ${hasCatalogue ? `
+      <div style="padding: 16px 24px; text-align: center; border-top: 1px solid ${BRAND.line}; background: #eaf7ee;">
+        <p style="margin: 0 0 8px; font-size: 13px; font-weight: 600; color: ${BRAND.green};">Your catalogue</p>
+        <p style="margin: 0; font-size: 13px; color: ${BRAND.ink2};">The online catalogue unlocks on the morning of the show &mdash; we&apos;ll email you the link first thing that day. You can also find it under My entries and orders.</p>
+      </div>` : ''}
+      ${hasParking ? `
+      <div style="padding: 16px 24px; text-align: center; border-top: 1px solid ${BRAND.line}; background: #eaf7ee;">
+        <p style="margin: 0 0 8px; font-size: 13px; font-weight: 600; color: ${BRAND.green};">Your parking pass</p>
+        <p style="margin: 0; font-size: 13px; color: ${BRAND.ink2};">We&apos;ll email your parking pass about a week before the show. You can also download it from My entries and orders.</p>
+      </div>` : ''}
+      <div style="padding: 20px 24px; text-align: center; border-top: 1px solid ${BRAND.line};">
+        ${btn(`${APP_URL}/entries`, 'View my entries and orders')}
+      </div>
+    </div>
+    <div style="text-align: center; padding: 24px 16px; font-size: 12px; color: ${BRAND.ink2};">
+      <p style="margin: 0;">
+        This receipt was sent by <a href="${APP_URL}" style="color: ${BRAND.green}; text-decoration: none; font-weight: 600;">Remi</a> on behalf of ${escapeHtml(show.organisation?.name ?? 'the show society')}.
+      </p>
+      <p style="margin: 8px 0 0;">If you have questions about this order, please reply to this email.</p>
+    </div>
+  </div>
+</body>
+</html>`;
+
+  try {
+    const result = await resend.emails.send({
+      from: FROM,
+      to: exhibitor.email,
+      replyTo: FEEDBACK_REPLY_TO,
+      subject: `Your order for ${show.name}`,
+      html,
+    });
+    if (result.error) {
+      console.error(`[email] Resend rejected extras-only receipt for order ${orderRef} to ${exhibitor.email}:`, result.error);
+      return result;
+    }
+    console.log(`[email] Extras-only receipt sent for order ${orderRef} to ${exhibitor.email}`, result);
+    return result;
+  } catch (error) {
+    console.error(`[email] Failed to send extras-only receipt for order ${orderRef}:`, error);
+  }
+}
+
+async function sendExtrasOnlySecretaryEmail({
+  order,
+  to,
+}: {
+  order: ExtrasOnlyOrder;
+  to: string;
+}) {
+  const show = order.show;
+  const exhibitor = order.exhibitor;
+  const buyer = exhibitor?.name ?? exhibitor?.email ?? 'Someone';
+
+  const html = `
+<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"></head>
+<body style="margin: 0; padding: 0; background-color: ${BRAND.paper}; font-family: 'Hanken Grotesk', -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
+  <div style="max-width: 600px; margin: 0 auto; padding: 24px 16px;">
+    ${emailHeader(24)}
+    <div style="background: #fff; border: 1px solid ${BRAND.line}; border-radius: 14px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+      <div style="background: ${BRAND.deep}; padding: 16px 24px; text-align: center;">
+        <h2 style="margin: 0; color: ${BRAND.cream}; font-size: 18px; font-weight: 700;">New order (extras, no dog)</h2>
+      </div>
+      <div style="padding: 20px 24px;">
+        <p style="margin: 0 0 4px; font-size: 16px; font-weight: 600;">${escapeHtml(show.name)}</p>
+        <p style="margin: 0 0 16px; font-size: 14px; color: ${BRAND.ink2};">
+          Bought by: <strong>${escapeHtml(buyer)}</strong>${exhibitor?.email && exhibitor.name ? ` (${escapeHtml(exhibitor.email)})` : ''}<br>
+          No dog or junior handler has been entered with this order.
+        </p>
+        <p style="margin: 0 0 4px; font-size: 11px; text-transform: uppercase; color: ${BRAND.ink2};">Items</p>
+        ${extrasItemLines(order)}
+        <div style="margin-top: 16px; padding: 12px 16px; background: #eaf7ee; border-radius: 8px;">
+          <p style="margin: 0; font-size: 14px; font-weight: 600;">Total: ${formatFee(order.totalAmount)}</p>
+        </div>
+        <div style="margin-top: 20px; text-align: center;">
+          ${btn(`${APP_URL}/secretary/shows/${show.slug ?? show.id}/financial`, 'View payments')}
+        </div>
+      </div>
+    </div>
+    ${emailFooter(show.organisation?.name ?? 'your organisation')}
+  </div>
+</body>
+</html>`;
+
+  try {
+    const result = await resend.emails.send({
+      from: FROM,
+      to,
+      replyTo: FEEDBACK_REPLY_TO,
+      subject: `New order (extras, no dog) — ${buyer} → ${show.name}`,
+      html,
+    });
+    if (result.error) {
+      console.error(`[email] Resend rejected extras-only secretary notice to ${to}:`, result.error);
+    }
+    return result;
+  } catch (error) {
+    console.error(`[email] Failed to send extras-only secretary notice:`, error);
   }
 }
 
@@ -1360,10 +1576,10 @@ export async function sendParkingPassEmail(orderId: string): Promise<boolean> {
           Print it out or just show it on your phone at the gate.
         </p>
         <div style="margin: 0 0 16px;">
-          ${btn(entriesUrl, 'View Your Entries')}
+          ${btn(entriesUrl, 'View my entries and orders')}
         </div>
         <p style="margin: 0; font-size: 13px; color: ${BRAND.ink2};">
-          You can download the pass again any time from your entries page.
+          You can download the pass again any time from My entries and orders.
         </p>
       </div>
     </div>
