@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { TRPCError } from '@trpc/server';
-import { and, eq, gte, lte, sql, asc, isNull, or, inArray, isNotNull, exists, ilike, count } from 'drizzle-orm';
+import { and, eq, gte, lte, sql, asc, isNull, or, inArray, isNotNull, exists, count } from 'drizzle-orm';
 import {
   publicProcedure,
   protectedProcedure,

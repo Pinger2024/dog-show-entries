@@ -3,7 +3,7 @@ import { dogAlreadyOnRegional } from '@/server/services/regional-entry';
 import { resolveEntryMembership } from '@/server/services/entry-membership';
 import { SHOW_COLUMNS_FOR_PUBLIC_INCLUDE } from '../public-show-fields';
 import { TRPCError } from '@trpc/server';
-import { and, eq, isNull, inArray, desc, sql, asc, ilike, or } from 'drizzle-orm';
+import { and, eq, isNull, inArray, desc, sql, asc } from 'drizzle-orm';
 import { differenceInWeeks } from 'date-fns';
 import { protectedProcedure } from '../procedures';
 import { createTRPCRouter } from '../init';
