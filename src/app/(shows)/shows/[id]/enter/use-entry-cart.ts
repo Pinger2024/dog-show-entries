@@ -389,6 +389,41 @@ export function validateDiscountGroupId(
   return discountGroups.some((g) => g.id === discountGroupId) ? discountGroupId : null;
 }
 
+/** An entry is ready to be ordered once it has a class — or is NFC, which
+ *  deliberately has none. ONE definition for "complete". */
+export function isCompleteEntry(e: Pick<CartEntry, 'classIds' | 'isNfc'>): boolean {
+  return e.classIds.length > 0 || e.isNfc;
+}
+
+/**
+ * "Extras only" — buying a catalogue, parking pass etc. with NO dog (Mandy,
+ * 15 Oct 2026). DERIVED from the cart, never stored as a flag: the review,
+ * payment and confirmation screens are extras-only exactly when the cart has no
+ * complete entry. On the dog steps (type, dog, handler, classes) the exhibitor
+ * is by definition on the dog path. ONE owner for this rule.
+ */
+export function isExtrasOnlyCart(
+  entries: Pick<CartEntry, 'classIds' | 'isNfc'>[],
+  step: WizardStep,
+): boolean {
+  if (step !== 'cart_review' && step !== 'payment' && step !== 'confirmation') return false;
+  return !entries.some(isCompleteEntry);
+}
+
+/**
+ * How many cards step 1 ("What type of entry?") offers: Enter a Dog is always
+ * there, Junior Handler when the show has JH classes, and "Just extras, no dog"
+ * when the show sells extras and entries are open. The step is skipped ONLY when
+ * the answer is exactly one — it used to be skipped whenever there were no JH
+ * classes, which would now hide the extras card.
+ */
+export function entryTypeOptionCount(opts: {
+  hasJhClasses: boolean;
+  extrasAvailable: boolean;
+}): number {
+  return 1 + (opts.hasJhClasses ? 1 : 0) + (opts.extrasAvailable ? 1 : 0);
+}
+
 function getStorageKey(showId: string) {
   return `remi-entry-cart-${showId}`;
 }

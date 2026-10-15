@@ -6,6 +6,8 @@ import {
   cartReducer,
   computeClassSelectionTotal,
   validateDiscountGroupId,
+  isExtrasOnlyCart,
+  entryTypeOptionCount,
   type CartState,
 } from './use-entry-cart';
 
@@ -476,5 +478,38 @@ describe('loadSavedState — a cart of extras with no dog is kept', () => {
   it('a cart with neither entries nor extras is still reset', () => {
     stub('', { ...extrasCart, sundryItems: [] });
     expect(loadSavedState('SHOW').step).toBe('entry_type');
+  });
+});
+
+// Extras with no dog (Mandy, 15 Oct 2026): "extras only" is DERIVED from the
+// cart, never a flag that can go stale — one helper owns it.
+describe('isExtrasOnlyCart / entryTypeOptionCount — the derived rules', () => {
+  const complete = { classIds: ['c1'], isNfc: false };
+  const nfc = { classIds: [], isNfc: true };
+  const blank = { classIds: [], isNfc: false };
+
+  it('no complete entry on review / payment / confirmation = extras only', () => {
+    for (const step of ['cart_review', 'payment', 'confirmation'] as const) {
+      expect(isExtrasOnlyCart([], step)).toBe(true);
+      expect(isExtrasOnlyCart([blank], step)).toBe(true); // a half-built dog is not a dog
+    }
+  });
+
+  it('a complete or NFC entry means it is a dog order', () => {
+    expect(isExtrasOnlyCart([complete], 'cart_review')).toBe(false);
+    expect(isExtrasOnlyCart([nfc], 'cart_review')).toBe(false);
+  });
+
+  it('is never extras-only on the dog steps, whatever the cart holds', () => {
+    for (const step of ['entry_type', 'select_dog', 'junior_handler', 'select_classes'] as const) {
+      expect(isExtrasOnlyCart([], step)).toBe(false);
+    }
+  });
+
+  it('step 1 is skipped only when there is exactly ONE option', () => {
+    expect(entryTypeOptionCount({ hasJhClasses: false, extrasAvailable: false })).toBe(1);
+    expect(entryTypeOptionCount({ hasJhClasses: true, extrasAvailable: false })).toBe(2);
+    expect(entryTypeOptionCount({ hasJhClasses: false, extrasAvailable: true })).toBe(2);
+    expect(entryTypeOptionCount({ hasJhClasses: true, extrasAvailable: true })).toBe(3);
   });
 });
