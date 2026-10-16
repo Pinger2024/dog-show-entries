@@ -241,8 +241,10 @@ that row. So a signed-out buyer gets a users row, found or created by email. The
   show. On the guest path the user is whoever owns the typed email, so anyone could cancel someone else's open payment
   by typing their address. Instead, the guest path cancels only an order it can PROVE is its own.
   - The browser sends back the `orderId` and `clientSecret` from its last checkout.
-  - The server requires that order to be pending, for this show and this person, and requires
-    `stripe.paymentIntents.retrieve(pi).client_secret === clientSecret`.
+  - The server requires that order to be pending and for this show, and requires
+    `stripe.paymentIntents.retrieve(pi).client_secret === clientSecret`. It does NOT require the same person: a guest
+    who goes Back and retypes a different email is a different person, but the secret still proves this browser made
+    the order, and the old payment must still be cancelled (advisor, 16 Oct).
   - It then cancels through the same helper the stale cleanup uses: one owner for "cancel an abandoned order".
 - PaymentIntent metadata gains `buyer: 'guest'`. The response has the same shape whether the email was new or already
   had an account, so it can't be used to discover accounts.
@@ -251,7 +253,9 @@ that row. So a signed-out buyer gets a users row, found or created by email. The
 ### Wizard
 
 - **middleware:** `/shows/[id]/enter` leaves `authRequiredPatterns`. The entry-edit route stays there.
-- **Signed out** (`useSession` status `unauthenticated`; nothing happens while `loading`):
+- While `useSession` is `loading`, Proceed is disabled and no redirect fires. Otherwise a signed-in user on a slow
+  session load could be sent down the guest path and refused.
+- **Signed out** (`useSession` status `unauthenticated`):
   - Step 1 shows the three cards. Enter a Dog and Junior Handler carry the line "You'll sign in first" and go to
     `/login?callbackUrl=/shows/{id}/enter`.
   - If the show has no extras on sale (no enabled sundry, or the window is shut), or the saved cart holds a dog or
@@ -284,6 +288,7 @@ that row. So a signed-out buyer gets a users row, found or created by email. The
   - It will send the existing set-password email (`requestPasswordReset`, which already works for a passwordless row)
     and say "This email is already on Remi. We've emailed you a link to set your password."
   - Rows with a password keep the 409.
+  - The email is worded for a FIRST password ("Set your Remi password"), not "Resetting password for…".
   - Register already reveals that an account exists, so this reveals nothing new.
 
 ### Tests (each proven failing first)
@@ -293,8 +298,8 @@ that row. So a signed-out buyer gets a users row, found or created by email. The
 - An existing email typed in another case: the order is filed under that account, its name is unchanged, and the
   response is the same shape.
 - The schema refuses entries and an empty cart. A signed-in caller is refused.
-- previousOrder: a correct proof cancels it; a wrong secret, another person's order, or a signed-in user's pending dog
-  order on the same email are all untouched.
+- previousOrder: a correct proof cancels it, including after the email was changed between attempts. A wrong secret,
+  another show's order, or a signed-in user's pending dog order on the same email are all untouched.
 - Rate limit by IP and by email.
 - people.ts: the race, the trim, `_` not a wildcard. The guard test for a second copy. Credentials sign-in,
   password-reset, register, invitations and add-steward still work through it.
@@ -302,6 +307,18 @@ that row. So a signed-out buyer gets a users row, found or created by email. The
   sign-in.
 - 390px walk on the demo, signed out: three cards → extras → details → Stripe test card → confirmation → receipt →
   sign in by link → My Entries.
+
+### Checks on 16 Oct (advisor)
+
+- The tRPC route has no edge runtime, so it is one Node process and the in-memory limiter holds.
+- The My Entries extras card shows the items' total without the booking fee. The dog cards do the same (entry fees
+  only), and the receipt carries the fee. Consistent, so NOT a money bug.
+- **To check on the demo:** an abandoned guest checkout leaves a `pending_payment` order, which counts in the secretary's
+  "Awaiting payment" tile. Signed-in users who never come back do this already, but guests will do it more often. Abandon
+  one, look at the overview as the secretary, and if the tile moves, raise an age cutoff with Michael rather than adding
+  it quietly.
+- The demo sends REAL emails: the new-email walk uses an alias of Michael's inbox. Mandy's test steps start with "sign
+  out first" (or a private window).
 
 ### Not in slice 2
 
