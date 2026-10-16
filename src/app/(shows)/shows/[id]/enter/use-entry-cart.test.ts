@@ -8,6 +8,7 @@ import {
   validateDiscountGroupId,
   isExtrasOnlyCart,
   entryTypeOptionCount,
+  buyerDetailsValid,
   type CartState,
 } from './use-entry-cart';
 
@@ -511,5 +512,83 @@ describe('isExtrasOnlyCart / entryTypeOptionCount — the derived rules', () => 
     expect(entryTypeOptionCount({ hasJhClasses: true, extrasAvailable: false })).toBe(2);
     expect(entryTypeOptionCount({ hasJhClasses: false, extrasAvailable: true })).toBe(2);
     expect(entryTypeOptionCount({ hasJhClasses: true, extrasAvailable: true })).toBe(3);
+  });
+});
+
+// Extras for someone who is NOT signed in (slice 2, 16 Oct 2026): their name +
+// email and the last guest checkout's proof ride in the cart.
+describe('guest buyer details live in the cart and survive a reload / 3DS return', () => {
+  const guestCart: CartState = {
+    entries: [],
+    sundryItems: [{ sundryItemId: 's1', name: 'Printed Catalogue', quantity: 1, unitPrice: 500, maxPerOrder: null }],
+    activeEntryId: null,
+    step: 'payment',
+    editingExisting: false,
+    buyer: { name: 'Jane Smith', email: 'jane@example.com' },
+    lastCheckout: { orderId: 'o1', clientSecret: 'pi_x_secret_abc' },
+  };
+
+  it('bare reload on payment keeps buyer and lastCheckout', () => {
+    stub('', guestCart, true);
+    const s = loadSavedState('SHOW');
+    expect(s.buyer).toEqual({ name: 'Jane Smith', email: 'jane@example.com' });
+    expect(s.lastCheckout).toEqual({ orderId: 'o1', clientSecret: 'pi_x_secret_abc' });
+  });
+
+  it('3DS SUCCESS return → confirmation still knows the buyer; nothing left to cancel', () => {
+    stub('?payment_intent=pi_x&payment_intent_client_secret=pi_x_secret&redirect_status=succeeded', guestCart);
+    const s = loadSavedState('SHOW');
+    expect(s.step).toBe('confirmation');
+    expect(s.buyer?.email).toBe('jane@example.com');
+    expect(s.lastCheckout).toBeNull();
+  });
+
+  it('3DS FAILED return → review with buyer and lastCheckout kept for the retry', () => {
+    stub('?payment_intent=pi_x&payment_intent_client_secret=pi_x_secret&redirect_status=failed', guestCart);
+    const s = loadSavedState('SHOW');
+    expect(s.step).toBe('cart_review');
+    expect(s.buyer?.name).toBe('Jane Smith');
+    expect(s.lastCheckout?.orderId).toBe('o1');
+  });
+
+  it('a cart saved before these fields existed loads with nulls', () => {
+    const { buyer: _b, lastCheckout: _l, ...old } = guestCart;
+    stub('', { ...old, step: 'cart_review' });
+    const s = loadSavedState('SHOW');
+    expect(s.buyer).toBeNull();
+    expect(s.lastCheckout).toBeNull();
+  });
+
+  it('reducer: SET_BUYER / SET_LAST_CHECKOUT store; payment Back (SET_STEP) keeps them; CHECKOUT_SUCCESS clears the proof; RESET clears all', () => {
+    let st: CartState = { ...guestCart, buyer: null, lastCheckout: null, step: 'cart_review' };
+    st = cartReducer(st, { type: 'SET_BUYER', buyer: { name: 'Jo', email: 'jo@example.com' } });
+    st = cartReducer(st, { type: 'SET_LAST_CHECKOUT', lastCheckout: { orderId: 'o2', clientSecret: 's' } });
+    st = cartReducer(st, { type: 'SET_STEP', step: 'payment' });
+    st = cartReducer(st, { type: 'SET_STEP', step: 'cart_review' });
+    expect(st.buyer?.email).toBe('jo@example.com');
+    expect(st.lastCheckout?.orderId).toBe('o2');
+    st = cartReducer(st, { type: 'CHECKOUT_SUCCESS' });
+    expect(st.lastCheckout).toBeNull();
+    expect(st.buyer?.email).toBe('jo@example.com');
+    const reset = cartReducer(st, { type: 'RESET' });
+    expect(reset.buyer).toBeNull();
+    expect(reset.lastCheckout).toBeNull();
+  });
+});
+
+describe('buyerDetailsValid — the one rule for "can this guest place the order"', () => {
+  it('accepts a name and an email', () => {
+    expect(buyerDetailsValid({ name: 'Jane Smith', email: 'jane@example.com' })).toBe(true);
+    expect(buyerDetailsValid({ name: '  Jo ', email: ' jo@mail.co.uk ' })).toBe(true);
+  });
+  it('rejects missing, short or blank names', () => {
+    expect(buyerDetailsValid({ name: '', email: 'a@b.co' })).toBe(false);
+    expect(buyerDetailsValid({ name: ' J ', email: 'a@b.co' })).toBe(false);
+    expect(buyerDetailsValid(null)).toBe(false);
+  });
+  it('rejects things that are not email addresses', () => {
+    for (const email of ['', 'jane', 'jane@', '@example.com', 'jane@example', 'ja ne@example.com', 'a@b@c.com']) {
+      expect(buyerDetailsValid({ name: 'Jane', email })).toBe(false);
+    }
   });
 });
