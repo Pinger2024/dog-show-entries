@@ -48,6 +48,20 @@ export async function cancelPaymentIntent(paymentIntentId: string): Promise<void
 }
 
 /**
+ * Read a PaymentIntent back from Stripe — the guest checkout uses it to check
+ * that a browser asking to cancel its earlier checkout really holds that
+ * payment's client secret. Null when Stripe can't find or return it.
+ */
+export async function retrievePaymentIntent(paymentIntentId: string) {
+  try {
+    return await getStripe().paymentIntents.retrieve(paymentIntentId);
+  } catch (err) {
+    console.warn(`[stripe] could not retrieve PaymentIntent ${paymentIntentId}:`, err);
+    return null;
+  }
+}
+
+/**
  * Remi's handling fee model — £1 flat + 1% of the order subtotal, applied
  * per order and paid by the exhibitor (visible line at checkout).
  *

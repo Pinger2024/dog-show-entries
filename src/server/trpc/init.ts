@@ -5,6 +5,7 @@ import { db } from '@/server/db';
 import type { Database } from '@/server/db';
 import { getImpersonatedUserId } from '@/lib/impersonation';
 import * as schema from '@/server/db/schema';
+import { clientIpFrom } from '@/server/services/rate-limit';
 
 export interface Session {
   user: {
@@ -26,6 +27,9 @@ export interface TRPCContext {
   } | null;
   /** True when the real (non-impersonated) caller is an admin — survives session swap in middleware */
   callerIsAdmin: boolean;
+  /** The caller's address, for the public endpoints' rate limits. Absent in
+   *  server-side and test callers. */
+  clientIp?: string | null;
 }
 
 export async function createTRPCContext(opts: {
@@ -89,6 +93,7 @@ export async function createTRPCContext(opts: {
     session,
     impersonating,
     callerIsAdmin: session?.user.role === 'admin',
+    clientIp: clientIpFrom(opts.headers),
   };
 }
 
