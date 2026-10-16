@@ -137,7 +137,7 @@ export function ExtrasOnlyConfirmation({
 
         <div className="flex flex-col gap-3 sm:flex-row sm:justify-center">
           <SEButton asChild variant="fresh" size="sm">
-            <Link href="/entries">View my entries and orders</Link>
+            <Link href="/entries">{signedIn ? 'View my entries and orders' : 'View my order'}</Link>
           </SEButton>
           <SEButton asChild variant="ghost" size="sm">
             <Link href={`/shows/${showSlugOrId}`}>Back to the show</Link>

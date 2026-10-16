@@ -21,9 +21,11 @@ describe('extras-only confirmation tells a signed-out buyer how to see the order
     const html = renderToStaticMarkup(<ExtrasOnlyConfirmation {...base} signedIn={false} />);
     expect(html.replace(/&#x27;|&#39;/g, "'")).toContain(seeOrderLaterCopy('jane@example.com'));
     expect(html).toContain('Receipt sent to');
+    expect(html).toContain('>View my order<');
   });
   it('does not show it when signed in', () => {
     const html = renderToStaticMarkup(<ExtrasOnlyConfirmation {...base} signedIn />);
     expect(html).not.toContain('To see your order on Remi later');
+    expect(html).toContain('>View my entries and orders<');
   });
 });
