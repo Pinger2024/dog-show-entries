@@ -9,6 +9,7 @@ import {
   isExtrasOnlyCart,
   entryTypeOptionCount,
   buyerDetailsValid,
+  signedOutNeedsSignIn,
   type CartState,
 } from './use-entry-cart';
 
@@ -589,6 +590,35 @@ describe('buyerDetailsValid — the one rule for "can this guest place the order
   it('rejects things that are not email addresses', () => {
     for (const email of ['', 'jane', 'jane@', '@example.com', 'jane@example', 'ja ne@example.com', 'a@b@c.com']) {
       expect(buyerDetailsValid({ name: 'Jane', email })).toBe(false);
+    }
+  });
+});
+
+describe('signedOutNeedsSignIn — when a signed-out visitor is sent to sign in', () => {
+  const base = { signedOut: true, step: 'entry_type' as const, entries: [], showLoaded: true, extrasLoaded: true, extrasAvailable: true };
+  it('never while signed in or while the session is still loading', () => {
+    expect(signedOutNeedsSignIn({ ...base, signedOut: false, extrasAvailable: false })).toBe(false);
+    expect(signedOutNeedsSignIn({ ...base, signedOut: false, step: 'select_dog' })).toBe(false);
+  });
+  it('stays put when extras are on sale (step 1 and review)', () => {
+    expect(signedOutNeedsSignIn(base)).toBe(false);
+    expect(signedOutNeedsSignIn({ ...base, step: 'cart_review' })).toBe(false);
+  });
+  it('goes to sign in when no extras are on sale, but only once the show and extras have loaded', () => {
+    expect(signedOutNeedsSignIn({ ...base, extrasAvailable: false })).toBe(true);
+    expect(signedOutNeedsSignIn({ ...base, extrasAvailable: false, extrasLoaded: false })).toBe(false);
+    expect(signedOutNeedsSignIn({ ...base, extrasAvailable: false, showLoaded: false })).toBe(false);
+  });
+  it('goes to sign in for a dog step or a restored dog / handler / NFC entry', () => {
+    for (const step of ['select_dog', 'junior_handler', 'select_classes'] as const) {
+      expect(signedOutNeedsSignIn({ ...base, step })).toBe(true);
+    }
+    expect(signedOutNeedsSignIn({ ...base, step: 'cart_review', entries: [{ classIds: ['c1'], isNfc: false }] })).toBe(true);
+    expect(signedOutNeedsSignIn({ ...base, step: 'cart_review', entries: [{ classIds: [], isNfc: true }] })).toBe(true);
+  });
+  it('does not misread a disabled extras query as "none on sale" on payment / confirmation', () => {
+    for (const step of ['payment', 'confirmation'] as const) {
+      expect(signedOutNeedsSignIn({ ...base, step, extrasLoaded: false, extrasAvailable: false })).toBe(false);
     }
   });
 });

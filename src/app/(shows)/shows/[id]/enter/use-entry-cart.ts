@@ -481,6 +481,32 @@ export function entryTypeOptionCount(opts: {
   return 1 + (opts.hasJhClasses ? 1 : 0) + (opts.extrasAvailable ? 1 : 0);
 }
 
+/**
+ * Signed out, should the wizard send them to sign in? ONE owner for the rule
+ * (extras without a dog, slice 2): a signed-out visitor can only buy extras, so
+ * any dog step, a dog or handler in the restored cart, or a show with no extras
+ * on sale means "sign in" - exactly what the page did for everyone before.
+ * Never true while the session is loading (`signedOut` is false then).
+ */
+export function signedOutNeedsSignIn(opts: {
+  signedOut: boolean;
+  step: WizardStep;
+  entries: Pick<CartEntry, 'classIds' | 'isNfc'>[];
+  showLoaded: boolean;
+  extrasLoaded: boolean;
+  extrasAvailable: boolean;
+}): boolean {
+  if (!opts.signedOut) return false;
+  if (opts.step === 'select_dog' || opts.step === 'junior_handler' || opts.step === 'select_classes') return true;
+  if (opts.entries.some(isCompleteEntry)) return true;
+  // The extras list is only fetched on these two steps; on payment and
+  // confirmation a disabled query would read as "none on sale".
+  if (opts.step === 'entry_type' || opts.step === 'cart_review') {
+    return opts.showLoaded && opts.extrasLoaded && !opts.extrasAvailable;
+  }
+  return false;
+}
+
 function getStorageKey(showId: string) {
   return `remi-entry-cart-${showId}`;
 }
