@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { config, isPublicRoute } from '@/middleware';
+import { config, isPublicRoute, pathRequiresSignIn } from '@/middleware';
 
 /**
  * Regression guard: paths that must reach Next.js untouched by the auth middleware.
@@ -161,4 +161,14 @@ describe('every token-gated API route is public', () => {
       expect(isPublicRoute(concrete)).toBe(true);
     });
   }
+});
+
+describe('entry wizard is reachable signed out; entry edit is not', () => {
+  it('lets a signed-out visitor reach /shows/[id]/enter', () => {
+    expect(isPublicRoute('/shows/abc-123/enter')).toBe(true);
+    expect(pathRequiresSignIn('/shows/abc-123/enter')).toBe(false);
+  });
+  it('still requires sign-in to edit an entry', () => {
+    expect(pathRequiresSignIn('/shows/abc-123/entries/e1/edit')).toBe(true);
+  });
 });
