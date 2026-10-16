@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Template for the demo document-render worker's launchd agent — mirrors
+  co.remishowmanager.demo.plist (the Next.js demo web service), which is
+  NOT committed to the repo either (both live in ~/Library/LaunchAgents/,
+  outside version control, since they're per-machine launchd config).
+
+  One-time setup:
+    cp co.remishowmanager.demo-worker.plist.example \
+      ~/Library/LaunchAgents/co.remishowmanager.demo-worker.plist
+    npm run demo:worker:start
+
+  This is the "separate OS process" the render-job architecture depends on
+  (2026-08-15 outage: a heavy catalogue render OOM-killed the single prod
+  web instance) — a render that exhausts memory kills THIS process, never
+  the one serving exhibitors.
+-->
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>co.remishowmanager.demo-worker</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/bin/bash</string>
+        <string>/Users/michaeljames/Projects/dog-show-entries/scripts/demo-worker-service.sh</string>
+    </array>
+
+    <key>WorkingDirectory</key>
+    <string>/Users/michaeljames/Projects/dog-show-entries</string>
+
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>HOME</key>
+        <string>/Users/michaeljames</string>
+        <key>PATH</key>
+        <string>/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+    </dict>
+
+    <!-- Same rationale as the web service's plist: KeepAlive=true so a
+         crash mid-render (or the machine sleeping) always relaunches the
+         worker rather than leaving demo catalogue jobs stuck "Preparing…"
+         forever. `npm run demo:worker:stop` (launchctl unload) is the real
+         stop — `launchctl stop` alone just gets relaunched. -->
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <true/>
+
+    <!-- Wait 10s before restarting after a crash -->
+    <key>ThrottleInterval</key>
+    <integer>10</integer>
+
+    <key>StandardOutPath</key>
+    <string>/Users/michaeljames/Library/Logs/remi-demo-worker.log</string>
+    <key>StandardErrorPath</key>
+    <string>/Users/michaeljames/Library/Logs/remi-demo-worker.log</string>
+</dict>
+</plist>

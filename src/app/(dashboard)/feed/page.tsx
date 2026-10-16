@@ -63,13 +63,14 @@ export default function FeedPage() {
                   <div className="mx-auto max-w-sm space-y-2 text-left">
                     <p className="text-xs font-medium text-muted-foreground">How to discover dogs:</p>
                     <div className="space-y-1.5 text-xs text-muted-foreground">
-                      <p>1. Browse a <Link href="/shows" className="font-medium text-primary hover:underline">show&apos;s results page</Link> to see placed dogs</p>
-                      <p>2. Tap any dog&apos;s name to view their profile</p>
+                      <p>1. Look a dog up on <Link href="/dog" className="font-medium text-primary hover:underline">Find a Dog</Link>, or browse a <Link href="/shows" className="font-medium text-primary hover:underline">show&apos;s results page</Link></p>
+                      <p>2. Tap the dog&apos;s name to view their profile</p>
                       <p>3. Hit <strong className="text-foreground">Follow</strong> to add them to your feed</p>
                     </div>
                   </div>
                   <div className="flex flex-wrap gap-2 justify-center">
-                    <Link href="/shows"><Button size="sm">Browse Shows</Button></Link>
+                    <Link href="/dog"><Button size="sm">Find a Dog</Button></Link>
+                    <Link href="/shows"><Button variant="outline" size="sm">Browse Shows</Button></Link>
                     <Link href="/dogs"><Button variant="outline" size="sm">My Dogs</Button></Link>
                   </div>
                 </div>
@@ -287,10 +288,10 @@ function FeedItem({ item }: { item: FeedItemData }) {
 
       {/* Show result content */}
       {item.itemType === 'show_result' && item.show && (
-        <div className="rounded-md border border-amber-200/40 bg-amber-50/20 p-3">
+        <div className="rounded-md border border-se-honey-line/60 bg-se-honey-soft/40 p-3">
           <div className="flex items-start gap-2.5">
-            <div className="flex size-7 shrink-0 items-center justify-center rounded-full bg-amber-100">
-              <Trophy className="size-3.5 text-amber-600" />
+            <div className="flex size-7 shrink-0 items-center justify-center rounded-full bg-se-honey-soft">
+              <Trophy className="size-3.5 text-se-honey-deep" />
             </div>
             <div className="min-w-0 flex-1">
               <Link
@@ -319,7 +320,7 @@ function FeedItem({ item }: { item: FeedItemData }) {
                         </Badge>
                       )}
                       {cls.specialAward && (
-                        <span className="inline-flex items-center gap-0.5 text-[9px] font-medium text-amber-700">
+                        <span className="inline-flex items-center gap-0.5 text-[9px] font-medium text-se-honey-deep">
                           <Award className="size-2" />
                           {cls.specialAward}
                         </span>

@@ -1,0 +1,134 @@
+/**
+ * Deterministic, seeded PII scrubbing for show-fixture exports.
+ *
+ * Golden-document fixtures (src/__tests__/golden/fixtures/*.json) are
+ * committed to the repo, so nothing here may ever write a real exhibitor's
+ * name, address, email, phone, or a dog's registered name to disk — see
+ * export-show-fixture.ts and the golden test plan (2026-09-01).
+ *
+ * Design: every pseudonym is derived by hashing the REAL value with a fixed
+ * salt (sha256), then walking the value character-by-character and shifting
+ * each alphanumeric character by a hash-derived amount within its own class
+ * (lowercase→lowercase, uppercase→uppercase, digit→digit). Everything else
+ * (spaces, punctuation, word breaks) passes through unchanged. This gives us,
+ * for free:
+ *  - length-preserving (one output char per input char)
+ *  - capitalisation-preserving (case never changes)
+ *  - word-break-preserving (non-alnum separators untouched)
+ *  - stable per real value (same input, same salt ⇒ same output, always —
+ *    no in-memory map needed, and it's stable across separate export runs)
+ *
+ * This is NOT cryptographically secure pseudonymisation (a per-position
+ * substitution cipher is reversible with enough known plaintext) — it does
+ * not need to be. The threat this defends against is "a real name sitting in
+ * a committed JSON fixture", not a targeted attacker with the salt.
+ */
+import { createHash } from 'node:crypto';
+
+/** Fixed, non-secret salt — deliberately committed. Its only job is to give
+ *  every run of this script (dev machine, CI, another engineer's laptop) the
+ *  identical mapping for the identical input, so a fixture regenerated later
+ *  diffs cleanly against the one already committed. */
+const FIXED_SALT = 'remi-golden-fixture-anonymiser-v1';
+
+function hashBytes(value: string, context: string): Buffer {
+  return createHash('sha256').update(`${FIXED_SALT}|${context}|${value}`).digest();
+}
+
+const LOWER_A = 'a'.charCodeAt(0);
+const UPPER_A = 'A'.charCodeAt(0);
+const ZERO = '0'.charCodeAt(0);
+
+/**
+ * Shift every letter/digit in `value` by a hash-derived amount, preserving
+ * case, digit-ness, and every non-alphanumeric character verbatim (spaces,
+ * hyphens, apostrophes, commas, newlines, @ signs, etc.).
+ *
+ * `context` scopes the hash so, e.g., the same literal string used as both a
+ * dog name and a postcode doesn't coincidentally anonymise identically —
+ * pass a short fixed tag per call site (e.g. 'person-name', 'postcode').
+ */
+export function pseudonymiseText(value: string, context: string): string {
+  if (!value) return value;
+  const bytes = hashBytes(value, context);
+  let out = '';
+  for (let i = 0; i < value.length; i++) {
+    const ch = value[i];
+    const code = value.charCodeAt(i);
+    const shift = bytes[i % bytes.length];
+    if (code >= LOWER_A && code <= LOWER_A + 25) {
+      out += String.fromCharCode(LOWER_A + ((code - LOWER_A + shift) % 26));
+    } else if (code >= UPPER_A && code <= UPPER_A + 25) {
+      out += String.fromCharCode(UPPER_A + ((code - UPPER_A + shift) % 26));
+    } else if (code >= ZERO && code <= ZERO + 9) {
+      out += String.fromCharCode(ZERO + ((code - ZERO + shift) % 10));
+    } else {
+      out += ch;
+    }
+  }
+  return out;
+}
+
+/** A person's display name (owner, exhibitor, judge, steward, secretary,
+ *  schedule official). Word breaks (spaces, hyphens, apostrophes) preserved
+ *  so "Mary-Jane O'Brien" stays a two-word, apostrophe'd name shape. */
+export function anonPersonName(name: string | null | undefined): string | null | undefined {
+  if (name == null) return name;
+  return pseudonymiseText(name, 'person-name');
+}
+
+/** `<pseudonym-of-local-part>@example.com` — the real domain never survives,
+ *  since a real domain (a work email, a club's own domain) is itself PII. */
+export function anonEmail(email: string | null | undefined): string | null | undefined {
+  if (!email) return email;
+  const at = email.indexOf('@');
+  const local = at === -1 ? email : email.slice(0, at);
+  const pseudLocal = pseudonymiseText(local, 'email-local');
+  return `${pseudLocal}@example.com`;
+}
+
+/** UK-shaped phone numbers — digits shift, structural characters (+, spaces,
+ *  parens, hyphens) pass through untouched. */
+export function anonPhone(phone: string | null | undefined): string | null | undefined {
+  if (!phone) return phone;
+  return pseudonymiseText(phone, 'phone');
+}
+
+/** Free-text address / venue-adjacent personal address block. */
+export function anonAddress(address: string | null | undefined): string | null | undefined {
+  if (!address) return address;
+  return pseudonymiseText(address, 'address');
+}
+
+/** UK postcode shape (e.g. "SW1A 1AA") — letters and digits shift, the
+ *  space stays put. */
+export function anonPostcode(postcode: string | null | undefined): string | null | undefined {
+  if (!postcode) return postcode;
+  return pseudonymiseText(postcode, 'postcode');
+}
+
+/** Kennel/affix name (e.g. "Hundark", "Robasdan") — appears standalone and
+ *  appended to dog/owner names; anonymised the same way everywhere it's used
+ *  so the same real affix always maps to the same fake one. */
+export function anonAffix(affix: string | null | undefined): string | null | undefined {
+  if (!affix) return affix;
+  return pseudonymiseText(affix, 'affix');
+}
+
+/**
+ * A dog's registered name. RKC/KC-style names are often multiple words with
+ * a kennel prefix/suffix ("Sadira's Yokko For Ellroost") — word breaks and
+ * apostrophes are preserved so the shape a catalogue renders (wrapping,
+ * letter-count) stays representative.
+ */
+export function anonDogName(name: string | null | undefined): string | null | undefined {
+  if (!name) return name;
+  return pseudonymiseText(name, 'dog-name');
+}
+
+/** Same-format fake registration/microchip number — every digit/letter
+ *  shifts, punctuation (dots, hyphens) stays. */
+export function anonRegNumber(value: string | null | undefined): string | null | undefined {
+  if (!value) return value;
+  return pseudonymiseText(value, 'reg-number');
+}

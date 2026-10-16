@@ -1,0 +1,62 @@
+Proof this bug was REAL and nondeterministic (2026-09-01), captured while
+building src/__tests__/integration/report-entry-classes-order.test.ts
+against the UNFIXED code (before src/lib/class-labels.ts's
+sortEntryClassesByShowClassOrder existed and before the three query sites
+called it). Command run twice, back to back, no code or data changes
+between runs:
+
+  DATABASE_URL=postgresql://localhost:5432/remi_test npx vitest run \
+    src/__tests__/integration/report-entry-classes-order.test.ts
+
+=== RUN 1 — 3 of 3 failed ================================================
+
+ ❯ src/__tests__/integration/report-entry-classes-order.test.ts (3 tests | 3 failed) 314ms
+   × Reports — a multi-class dog prints its classes in show running order, not DB return order > Exhibitor List (catalogue-order-xlsx) lists classes in running order regardless of insertion order 165ms
+     → expected '10, 1' to be '1, 10' // Object.is equality
+   × Reports — a multi-class dog prints its classes in show running order, not DB return order > Absentee report (absentee-report-xlsx) lists classes in running order regardless of insertion order 73ms
+     → expected '10. Open; 1. Minor Puppy' to be '1. Minor Puppy; 10. Open' // Object.is equality
+   × Reports — a multi-class dog prints its classes in show running order, not DB return order > Financial Statement (financial-statement-xlsx) lists classes in running order regardless of insertion order 73ms
+     → expected 'Open; Minor Puppy' to be 'Minor Puppy; Open' // Object.is equality
+
+ Test Files  1 failed (1)
+      Tests  3 failed (3)
+
+=== RUN 2 (immediately after, same data/code) — 2 of 3 failed ============
+
+   × Reports — a multi-class dog prints its classes in show running order, not DB return order > Exhibitor List (catalogue-order-xlsx) lists classes in running order regardless of insertion order 163ms
+   × Reports — a multi-class dog prints its classes in show running order, not DB return order > Absentee report (absentee-report-xlsx) lists classes in running order regardless of insertion order 78ms
+   ✓ Reports — a multi-class dog prints its classes in show running order, not DB return order > Financial Statement (financial-statement-xlsx) lists classes in running order regardless of insertion order 67ms
+
+ Test Files  1 failed (1)
+      Tests  2 failed | 1 passed (3)
+
+=== Why two different results matter =====================================
+
+The SAME test, against the SAME unfixed code and the SAME kind of fixture
+data (each test builds its own show), produced a DIFFERENT pass/fail
+pattern across two consecutive runs. That is the whole bug in one
+observation: Drizzle's relational query for entries.entryClasses carries
+no ORDER BY on a joined table's column, so Postgres's return order for that
+relation is genuinely undefined — sometimes it happens to match show
+running order (a false green), sometimes it doesn't (a red that would look
+like a real regression to anyone bisecting it).
+
+=== After the fix ==========================================================
+
+Same command, 5 consecutive runs, all green:
+
+ ✓ src/__tests__/integration/report-entry-classes-order.test.ts (3 tests) 347ms
+ Test Files  1 passed (1)
+      Tests  3 passed (3)
+
+ Test Files  1 passed (1)
+      Tests  3 passed (3)
+
+ Test Files  1 passed (1)
+      Tests  3 passed (3)
+
+ Test Files  1 passed (1)
+      Tests  3 passed (3)
+
+ Test Files  1 passed (1)
+      Tests  3 passed (3)

@@ -1,0 +1,52 @@
+# Dockerfile.worker — the document-render worker (scripts/run-render-worker.ts).
+#
+# Render's native Node runtime can't install system packages, and the
+# catalogue preflight (src/lib/catalogue-preflight.ts) shells out to
+# poppler-utils (pdftotext/pdffonts/pdftoppm) — so this worker runs as a
+# Render Background Worker on the Docker runtime instead. The web app stays
+# on Render's native Node runtime; only this worker needs Docker.
+#
+# No .node-version/.nvmrc is pinned in the repo — node:22 matches what the
+# rest of the fleet (web service, ops/db-backup cron) already runs on.
+FROM node:22-bookworm-slim
+
+# poppler-utils gives us pdftotext/pdffonts/pdftoppm for the catalogue
+# preflight; ca-certificates so outbound HTTPS (R2 upload, Postgres TLS,
+# npm registry during build) has a trust store.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends poppler-utils ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# Copy only the manifest first so `npm ci` is cached across rebuilds that
+# don't touch dependencies. `patches/` MUST come along with it: `npm ci`
+# below runs the root "postinstall": "patch-package" script, and
+# patch-package silently no-ops if patches/ isn't present yet — it does NOT
+# fail the build, so a missing patches/ here would leave this image's
+# fontkit unpatched with no error (see
+# research/evidence-fontkit-codepoints-2026-09-02/README.md for why fontkit
+# needs the patch at all).
+COPY package.json package-lock.json ./
+COPY patches ./patches
+
+# IMPORTANT: NODE_ENV must NOT be "production" yet. npm derives its default
+# --omit list from NODE_ENV, and "production" makes `npm ci` skip
+# devDependencies — which is exactly where `tsx` lives (the worker has no
+# build step; it runs TypeScript directly via `npx tsx`, see package.json's
+# "worker:render" script). Skipping devDependencies here would make `npx
+# tsx` fall back to an on-the-fly download at container start, which this
+# image must not depend on. Run the install with the default (development)
+# NODE_ENV, THEN switch to production for everything that follows.
+RUN npm ci
+
+# Now copy the rest of the source and flip to production for runtime.
+COPY . .
+ENV NODE_ENV=production
+
+# The worker reads its own fonts/templates straight off disk at render time
+# (src/lib/pdf-fonts.ts, src/lib/pdf-pad.ts, src/server/services/
+# pdf-generation.ts all resolve public/fonts, public/branding, and
+# public/prize-cards via process.cwd()) — `COPY . .` above brings all of
+# `public/` in since .dockerignore never excludes it.
+CMD ["npm", "run", "worker:render"]

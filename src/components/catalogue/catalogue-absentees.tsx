@@ -2,7 +2,8 @@ import { Document, Page, View, Text } from '@react-pdf/renderer';
 import { styles } from './catalogue-styles';
 import { CatalogueHeader } from './catalogue-header';
 import type { CatalogueEntry, CatalogueShowInfo } from './catalogue-types';
-import { uppercaseName } from './catalogue-utils';
+import { uppercaseName, sortEntries } from './catalogue-utils';
+import { sexLetter } from '@/lib/class-labels';
 
 interface Props {
   show: CatalogueShowInfo;
@@ -35,6 +36,15 @@ function Cell({ width, children }: { width: string; children: string }) {
 }
 
 export function CatalogueAbsentees({ show, entries }: Props) {
+  // Defense-in-depth, not just the query-level fix (schema/entries.ts's
+  // catalogueNumberAsc): this is the one catalogue renderer that never
+  // sorted its own entries at all — every other one (catalogue-marked,
+  // catalogue-by-class, catalogue-by-breed, catalogue-front-matter's
+  // NFC page) re-sorts locally with this same numeric-aware compare so
+  // it never has to trust the caller's order. BAGSD's absentee Cat.
+  // column ran 12, 15, 18 … 48, 5, 51 (coordinator's review, 2026-09-02)
+  // because this component was the one that didn't.
+  entries = sortEntries(entries);
   return (
     <Document>
       <Page size="A5" style={styles.page} wrap>
@@ -78,14 +88,14 @@ export function CatalogueAbsentees({ show, entries }: Props) {
                   {entry.breed ?? '—'}
                 </Cell>
                 <Cell width={colWidths.sex}>
-                  {entry.sex === 'dog' ? 'D' : entry.sex === 'bitch' ? 'B' : '—'}
+                  {sexLetter(entry.sex) || '—'}
                 </Cell>
                 <Cell width={colWidths.exhibitor}>
                   {entry.exhibitor ?? '—'}
                 </Cell>
                 <Cell width={colWidths.classes}>
                   {entry.classes
-                    .map((c) => c.classNumber ? `${c.classNumber}` : c.name)
+                    .map((c) => c.classLabel || (c.classNumber != null ? String(c.classNumber) : c.name))
                     .filter(Boolean)
                     .join(', ')}
                 </Cell>

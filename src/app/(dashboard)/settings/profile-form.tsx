@@ -5,7 +5,6 @@ import { trpc } from '@/lib/trpc';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { PostcodeLookup, formatAddress } from '@/components/postcode-lookup';
 import {
   Card,
   CardContent,
@@ -86,20 +85,13 @@ export function ProfileForm() {
               className="h-11"
             />
           </div>
-          <PostcodeLookup
-            compact
-            onSelect={(result) => {
-              setAddress(formatAddress(result));
-              setPostcode(result.postcode);
-            }}
-          />
           <div className="space-y-2">
             <Label htmlFor="address">Address</Label>
             <Input
               id="address"
               value={address}
               onChange={(e) => setAddress(e.target.value)}
-              placeholder="Your address"
+              placeholder="House/flat, street, town"
               className="h-11"
             />
           </div>

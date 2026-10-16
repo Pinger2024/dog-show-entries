@@ -122,7 +122,7 @@ function CreatePost({
     return (
       <button
         onClick={() => setExpanded(true)}
-        className="flex w-full items-center gap-3 rounded-sm border border-stone-200 bg-white px-4 py-3 text-left text-sm text-stone-400 transition-colors hover:border-stone-300 hover:text-stone-500"
+        className="flex w-full items-center gap-3 rounded-sm border border-se-line bg-white px-4 py-3 text-left text-sm text-se-ink3 transition-colors hover:border-se-line2 hover:text-se-ink2"
       >
         <PenLine className="size-4" />
         Share a moment...
@@ -131,7 +131,7 @@ function CreatePost({
   }
 
   return (
-    <div className="rounded-sm border border-stone-200 bg-white p-4">
+    <div className="rounded-sm border border-se-line bg-white p-4">
       <Textarea
         value={caption}
         onChange={(e) => setCaption(e.target.value)}
@@ -149,11 +149,11 @@ function CreatePost({
           <img
             src={imagePreview}
             alt="Preview"
-            className="max-h-48 w-full object-contain bg-stone-50"
+            className="max-h-48 w-full object-contain bg-se-paper2"
           />
           {uploading && (
             <div className="absolute inset-0 flex items-center justify-center bg-white/60">
-              <Loader2 className="size-5 animate-spin text-stone-500" />
+              <Loader2 className="size-5 animate-spin text-se-ink3" />
             </div>
           )}
           <button
@@ -173,11 +173,11 @@ function CreatePost({
             value={videoUrl}
             onChange={(e) => setVideoUrl(e.target.value)}
             placeholder="Paste YouTube or Vimeo link"
-            className="flex-1 rounded-sm border border-stone-200 bg-white px-2.5 py-1.5 text-sm text-stone-700 placeholder:text-stone-300 focus:border-stone-400 focus:outline-none"
+            className="flex-1 rounded-sm border border-se-line bg-white px-2.5 py-1.5 text-sm text-se-ink2 placeholder:text-se-ink3 focus:border-se-line2 focus:outline-none"
           />
           <button
             onClick={() => { setShowVideoInput(false); setVideoUrl(''); }}
-            className="flex size-6 min-h-[2.75rem] min-w-[2.75rem] items-center justify-center rounded-full text-stone-300 hover:text-stone-500"
+            className="flex size-6 min-h-[2.75rem] min-w-[2.75rem] items-center justify-center rounded-full text-se-ink3 hover:text-se-ink2"
           >
             <X className="size-3.5" />
           </button>
@@ -185,12 +185,12 @@ function CreatePost({
       )}
 
       {/* Actions */}
-      <div className="mt-3 flex items-center justify-between border-t border-stone-100 pt-3">
+      <div className="mt-3 flex items-center justify-between border-t border-se-line pt-3">
         <div className="flex gap-2">
           <button
             type="button"
             onClick={() => fileInputRef.current?.click()}
-            className="inline-flex items-center gap-1.5 rounded-sm px-2.5 py-1.5 text-xs text-stone-500 transition-colors hover:bg-stone-50 hover:text-stone-700"
+            className="inline-flex items-center gap-1.5 rounded-sm px-2.5 py-1.5 text-xs text-se-ink3 transition-colors hover:bg-se-paper2 hover:text-se-ink2"
           >
             <ImagePlus className="size-3.5" />
             Photo
@@ -198,7 +198,7 @@ function CreatePost({
           <button
             type="button"
             onClick={() => setShowVideoInput(!showVideoInput)}
-            className="inline-flex items-center gap-1.5 rounded-sm px-2.5 py-1.5 text-xs text-stone-500 transition-colors hover:bg-stone-50 hover:text-stone-700"
+            className="inline-flex items-center gap-1.5 rounded-sm px-2.5 py-1.5 text-xs text-se-ink3 transition-colors hover:bg-se-paper2 hover:text-se-ink2"
           >
             <Video className="size-3.5" />
             Video
@@ -294,15 +294,15 @@ export function DogTimeline({
       {/* Loading state */}
       {isLoading && (
         <div className="flex justify-center py-12">
-          <Loader2 className="size-5 animate-spin text-stone-300" />
+          <Loader2 className="size-5 animate-spin text-se-ink3" />
         </div>
       )}
 
       {/* Empty state */}
       {!isLoading && items.length === 0 && (
         <div className="py-12 text-center">
-          <PenLine className="mx-auto size-8 text-stone-200" />
-          <p className="mt-3 font-serif text-sm italic text-stone-400">
+          <PenLine className="mx-auto size-8 text-se-ink3" />
+          <p className="mt-3 font-serif text-sm italic text-se-ink3">
             {isOwner
               ? 'Share your first moment — show results will appear here automatically'
               : 'No timeline posts yet. Show results will appear here as they come in.'}
@@ -343,7 +343,7 @@ export function DogTimeline({
             size="sm"
             onClick={() => fetchNextPage()}
             disabled={isFetchingNextPage}
-            className="h-9 gap-1.5 text-xs text-stone-500"
+            className="h-9 gap-1.5 text-xs text-se-ink3"
           >
             {isFetchingNextPage ? (
               <Loader2 className="size-3.5 animate-spin" />
@@ -394,26 +394,26 @@ interface UserPostItem {
 
 function ShowResultCard({ item }: { item: ShowResultItem }) {
   return (
-    <div className="rounded-sm border border-amber-200/40 bg-gradient-to-b from-amber-50/30 to-transparent p-4">
+    <div className="rounded-sm border border-se-honey/40 bg-gradient-to-b from-se-honey-soft/30 to-transparent p-4">
       <div className="flex items-start gap-3">
-        <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-amber-100">
-          <Trophy className="size-4 text-amber-600" />
+        <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-se-honey-soft">
+          <Trophy className="size-4 text-se-honey-deep" />
         </div>
         <div className="min-w-0 flex-1">
           <Link
             href={`/shows/${item.show.slug ?? item.show.id}/results`}
-            className="font-serif text-[0.9375rem] font-bold text-stone-800 hover:text-stone-600"
+            className="font-serif text-[0.9375rem] font-bold text-se-ink hover:text-se-ink2"
           >
             {item.show.name}
           </Link>
-          <p className="text-xs text-stone-400">
+          <p className="text-xs text-se-ink3">
             {format(new Date(item.show.date), 'd MMMM yyyy')}
           </p>
 
           <div className="mt-2.5 space-y-1">
             {item.classes.map((cls, i) => (
               <div key={i} className="flex flex-wrap items-center gap-1.5 text-sm">
-                <span className="text-stone-600">{cls.className}</span>
+                <span className="text-se-ink2">{cls.className}</span>
                 {cls.placement && (
                   <Badge
                     variant="outline"
@@ -423,7 +423,7 @@ function ShowResultCard({ item }: { item: ShowResultItem }) {
                   </Badge>
                 )}
                 {cls.specialAward && (
-                  <span className="inline-flex items-center gap-0.5 text-xs font-medium text-amber-700">
+                  <span className="inline-flex items-center gap-0.5 text-xs font-medium text-se-honey-deep">
                     <Award className="size-2.5" />
                     {cls.specialAward}
                   </span>
@@ -433,7 +433,7 @@ function ShowResultCard({ item }: { item: ShowResultItem }) {
           </div>
         </div>
       </div>
-      <p className="mt-2 text-right text-[0.6875rem] text-stone-300">
+      <p className="mt-2 text-right text-[0.6875rem] text-se-ink3">
         {formatRelativeDate(new Date(item.show.date))}
       </p>
     </div>
@@ -454,9 +454,9 @@ function UserPostCard({
   deleting: boolean;
 }) {
   return (
-    <div className="group rounded-sm border border-stone-100 bg-white p-4">
+    <div className="group rounded-sm border border-se-line bg-white p-4">
       {item.caption && (
-        <p className="text-[0.9375rem] leading-relaxed text-stone-700">
+        <p className="text-[0.9375rem] leading-relaxed text-se-ink2">
           {item.caption}
         </p>
       )}
@@ -466,15 +466,15 @@ function UserPostCard({
           <img
             src={item.imageUrl}
             alt={item.caption || 'Timeline photo'}
-            className="max-h-80 w-full object-contain bg-stone-50"
+            className="max-h-80 w-full object-contain bg-se-paper2"
           />
         </div>
       )}
       {item.videoUrl && <VideoEmbed url={item.videoUrl} />}
       <div className="mt-2.5 flex items-center justify-between">
-        <p className="text-[0.6875rem] text-stone-300">
+        <p className="text-[0.6875rem] text-se-ink3">
           {item.author?.name && (
-            <span className="text-stone-400">{item.author.name} &middot; </span>
+            <span className="text-se-ink3">{item.author.name} &middot; </span>
           )}
           {formatRelativeDate(new Date(item.createdAt))}
         </p>
@@ -482,7 +482,7 @@ function UserPostCard({
           <button
             onClick={onDelete}
             disabled={deleting}
-            className="flex size-6 min-h-[2.75rem] min-w-[2.75rem] items-center justify-center rounded-full text-stone-300 opacity-100 transition-all hover:bg-stone-50 hover:text-stone-500 sm:opacity-0 sm:group-hover:opacity-100"
+            className="flex size-6 min-h-[2.75rem] min-w-[2.75rem] items-center justify-center rounded-full text-se-ink3 opacity-100 transition-all hover:bg-se-paper2 hover:text-se-ink2 sm:opacity-0 sm:group-hover:opacity-100"
             title="Delete post"
           >
             <Trash2 className="size-3" />
@@ -504,7 +504,7 @@ function VideoEmbed({ url }: { url: string }) {
         href={url}
         target="_blank"
         rel="noopener noreferrer"
-        className="mt-3 flex items-center gap-2 rounded-sm border border-stone-100 bg-stone-50 px-3 py-2.5 text-xs text-stone-500 transition-colors hover:border-stone-200 hover:text-stone-700"
+        className="mt-3 flex items-center gap-2 rounded-sm border border-se-line bg-se-paper2 px-3 py-2.5 text-xs text-se-ink3 transition-colors hover:border-se-line2 hover:text-se-ink2"
       >
         <svg className="size-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
           <polygon points="5 3 19 12 5 21 5 3" />
@@ -515,7 +515,7 @@ function VideoEmbed({ url }: { url: string }) {
   }
 
   return (
-    <div className="mt-3 aspect-video overflow-hidden rounded-sm bg-stone-50">
+    <div className="mt-3 aspect-video overflow-hidden rounded-sm bg-se-paper2">
       <iframe
         src={embedUrl}
         allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
