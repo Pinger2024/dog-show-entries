@@ -10,10 +10,14 @@ import { SE_H } from '@/components/show-experience/tokens';
 import { Confetti } from '@/components/show-experience/confetti';
 import type { catalogueNoteFor } from '@/lib/sundry-kind';
 import { CatalogueNote } from './catalogue-note';
+import { seeOrderLaterCopy } from '@/lib/sign-in';
 
 export interface ExtrasOnlyConfirmationProps {
   firstName?: string | null;
   userEmail?: string | null;
+  /** Signed in. When false the buyer never made an account, so we tell them
+   *  how to see the order later. */
+  signedIn?: boolean;
   showName: string;
   showSlugOrId: string;
   startDate: string;
@@ -37,6 +41,7 @@ export interface ExtrasOnlyConfirmationProps {
 export function ExtrasOnlyConfirmation({
   firstName,
   userEmail,
+  signedIn = true,
   showName,
   showSlugOrId,
   startDate,
@@ -71,6 +76,11 @@ export function ExtrasOnlyConfirmation({
           <p className="relative mt-3 inline-flex items-center gap-1.5 text-xs text-se-cream/75">
             <Mail className="size-3.5" />
             Receipt sent to {userEmail}
+          </p>
+        )}
+        {userEmail && !signedIn && (
+          <p className="relative mx-auto mt-2 max-w-sm text-balance text-xs text-se-cream/75">
+            {seeOrderLaterCopy(userEmail)}
           </p>
         )}
       </SEDarkPanel>

@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useMemo, useEffect, useRef } from 'react';
-import { useParams } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import Link from 'next/link';
 import {
@@ -83,9 +83,12 @@ import {
   validateDiscountGroupId,
   isCompleteEntry,
   isExtrasOnlyCart,
+  buyerDetailsValid,
+  signedOutNeedsSignIn,
   entryTypeOptionCount,
   type WizardStep,
 } from './use-entry-cart';
+import { signInHref } from '@/lib/sign-in';
 import { ExtrasOnlyConfirmation } from './extras-only-confirmation';
 import { SecLabel, Chip, Eyebrow, SEButton, SECard, SEDarkPanel } from '@/components/show-experience/kit';
 import { SE_H } from '@/components/show-experience/tokens';
@@ -203,7 +206,16 @@ export default function EnterShowPage() {
   // a flag — on review / payment / confirmation, a cart with no complete entry
   // is an extras-only order. ONE owner: isExtrasOnlyCart (use-entry-cart.ts).
   const isExtrasOnly = isExtrasOnlyCart(cart.entries, cart.step);
-  const { data: session } = useSession();
+  const { data: session, status: sessionStatus } = useSession();
+  // Three states, never two: while the session is still loading we are NOT
+  // signed out - a signed-in person on a slow load must never be sent down the
+  // guest path (extras without a dog, slice 2).
+  const signedIn = sessionStatus === 'authenticated';
+  const signedOut = sessionStatus === 'unauthenticated';
+  const sessionLoading = sessionStatus === 'loading';
+  const router = useRouter();
+  // Where "sign in" sends them, and back to this page afterwards.
+  const loginHref = signInHref(`/shows/${idOrSlug}/enter`);
   // Rehydrate the payment screen after a payment-step reload. loadSavedState
   // keeps step:'payment' when this snapshot exists, so seeding these from it
   // means the card form, amount and fee breakdown all come back intact and the
@@ -353,14 +365,15 @@ export default function EnterShowPage() {
   // Resolved UUID for tRPC calls that require it
   const showId = show?.id ?? '';
 
-  const { data: dogs, isLoading: dogsLoading } = trpc.dogs.list.useQuery();
+  const { data: dogs, isLoading: dogsLoading } = trpc.dogs.list.useQuery(undefined, { enabled: signedIn });
 
   // Refetch dogs list when user returns to this tab (e.g. after adding a new dog in another tab)
   useEffect(() => {
+    if (!signedIn) return;
     function handleFocus() { utils.dogs.list.invalidate(); }
     window.addEventListener('focus', handleFocus);
     return () => window.removeEventListener('focus', handleFocus);
-  }, [utils]);
+  }, [utils, signedIn]);
 
   // For single-breed shows, determine the allowed breed(s) from show classes or judge assignments
   const showBreedIds = useMemo(() => {
@@ -391,7 +404,7 @@ export default function EnterShowPage() {
   // before the user gets all the way to checkout (Amanda 2026-05-21).
   const { data: selectedDogSvProfile } = trpc.dogs.getSvProfile.useQuery(
     { dogId: cart.activeEntry?.dogId ?? '' },
-    { enabled: !!cart.activeEntry?.dogId && show?.showRuleset === 'wusv' },
+    { enabled: signedIn && !!cart.activeEntry?.dogId && show?.showRuleset === 'wusv' },
   );
   const selectedDogSex = selectedDog?.sex as 'dog' | 'bitch' | undefined;
 
@@ -429,6 +442,7 @@ export default function EnterShowPage() {
   // dog). With junior handling or extras on offer, the exhibitor chooses.
   useEffect(() => {
     if (
+      signedIn &&
       cart.step === 'entry_type' &&
       allShowClasses &&
       !sundryItemsLoading &&
@@ -436,7 +450,23 @@ export default function EnterShowPage() {
     ) {
       cart.setEntryType('standard');
     }
-  }, [cart.step, allShowClasses, hasJhClasses, extrasAvailable, sundryItemsLoading]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [signedIn, cart.step, allShowClasses, hasJhClasses, extrasAvailable, sundryItemsLoading]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Signed out: the only thing they can do here is buy extras. Anything that
+  // needs a dog (a dog step, a dog in the restored cart) or a show with no
+  // extras on sale goes to sign in - exactly what the page did for everyone
+  // before slice 2. Never runs while the session is loading.
+  const signedOutNeedsLogin = signedOutNeedsSignIn({
+    signedOut,
+    step: cart.step,
+    entries: cart.entries,
+    showLoaded: !!show,
+    extrasLoaded: sundryItemsData !== undefined,
+    extrasAvailable,
+  });
+  useEffect(() => {
+    if (signedOutNeedsLogin) router.replace(loginHref);
+  }, [signedOutNeedsLogin, loginHref, router]);
 
   const addDogsButtons = (
     <div className="flex flex-col gap-2 sm:flex-row">
@@ -458,13 +488,13 @@ export default function EnterShowPage() {
   // the quoted price matches what checkout charges (Mandy 2026-09-16).
   const { data: regionalPriorDogCount } = trpc.entries.regionalPriorDogCount.useQuery(
     { showId: showId as string },
-    { enabled: !!showId && show?.showRuleset === 'wusv' },
+    { enabled: signedIn && !!showId && show?.showRuleset === 'wusv' },
   );
   // Same for an RKC multi-dog package: dogs already entered in earlier paid
   // baskets count toward it, and what they cost comes off it (Mandy 2026-09-28).
   const { data: packagePriorStanding } = trpc.entries.packagePriorStanding.useQuery(
     { showId: showId as string },
-    { enabled: !!showId && show?.showRuleset !== 'wusv' && show?.multiDogThreshold != null },
+    { enabled: signedIn && !!showId && show?.showRuleset !== 'wusv' && show?.multiDogThreshold != null },
   );
 
   // Show's discount groups (Members, Pensioners, etc.) — exhibitor declares
@@ -662,12 +692,12 @@ export default function EnterShowPage() {
   // are filtered to classes actually in this show's schedule
   const { data: winSummary } = trpc.dogs.getWinSummary.useQuery(
     { dogId: cart.activeEntry?.dogId ?? '', showId },
-    { enabled: !!showId && !!cart.activeEntry?.dogId && cart.step === 'select_classes' }
+    { enabled: signedIn && !!showId && !!cart.activeEntry?.dogId && cart.step === 'select_classes' }
   );
 
   // Profile completeness check
   const { data: profileCheck, refetch: refetchProfile } =
-    trpc.entries.validateExhibitorForEntry.useQuery();
+    trpc.entries.validateExhibitorForEntry.useQuery(undefined, { enabled: signedIn });
   const updateProfileMutation = trpc.users.updateProfile.useMutation({
     onSuccess: () => refetchProfile(),
   });
@@ -675,6 +705,11 @@ export default function EnterShowPage() {
   const [profileAddress, setProfileAddress] = useState('');
 
   const checkoutMutation = trpc.orders.checkout.useMutation();
+  // Signed-out extras-only buyers go through guestCheckout (name + email, no
+  // dog entries at all). Signed-in users keep `checkout`, unchanged.
+  const guestCheckoutMutation = trpc.orders.guestCheckout.useMutation();
+  const checkoutError = checkoutMutation.error ?? guestCheckoutMutation.error;
+  const checkoutPending = checkoutMutation.isPending || guestCheckoutMutation.isPending;
 
   // Pre-populate class selection when editing
   useEffect(() => {
@@ -943,7 +978,24 @@ export default function EnterShowPage() {
       // resulting order row carries its provenance.
       const referralSource = readReferralSource(idOrSlug) ?? undefined;
 
-      const result = await checkoutMutation.mutateAsync({
+      // Signed out + extras only: the guest path. No dog entries exist on it.
+      // `showId` is the show's uuid (not the URL slug).
+      const guest = signedOut && isExtrasOnly;
+      if (guest && !buyerDetailsValid(cart.buyer)) return;
+      const result = guest
+        ? await guestCheckoutMutation.mutateAsync({
+            showId,
+            sundryItems: cart.sundryItems.map((s) => ({
+              sundryItemId: s.sundryItemId,
+              quantity: s.quantity,
+            })),
+            referralSource,
+            buyer: { name: cart.buyer!.name.trim(), email: cart.buyer!.email.trim() },
+            // Proof of this browser's last attempt, so the server can cancel
+            // the abandoned payment (never someone else's).
+            previousOrder: cart.lastCheckout ?? undefined,
+          })
+        : await checkoutMutation.mutateAsync({
         showId,
         catalogueRequested: false,
         withholdFromPublication: isExtrasOnly ? false : withholdFromPublication,
@@ -985,6 +1037,9 @@ export default function EnterShowPage() {
         return;
       }
 
+      // Guest: remember this attempt's proof so the next one can cancel it.
+      // Kept when they press Back from payment; cleared on confirmation.
+      if (guest) cart.setLastCheckout({ orderId: result.orderId, clientSecret: result.clientSecret });
       setClientSecret(result.clientSecret);
       setOrderId(result.orderId);
       // Paid branch of orders.checkout always returns totalAmount +
@@ -1201,8 +1256,9 @@ export default function EnterShowPage() {
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <button
               type="button"
-              onClick={() => cart.setEntryType('standard')}
-              className="flex min-h-[44px] items-start gap-3 rounded-[18px] border border-se-line bg-se-surface p-4 text-left shadow-[0_1px_2px_rgba(27,36,29,0.04)] transition-colors hover:border-se-fresh-line"
+              onClick={() => (signedOut ? router.push(loginHref) : cart.setEntryType('standard'))}
+              disabled={sessionLoading}
+              className="flex min-h-[44px] items-start gap-3 rounded-[18px] border border-se-line bg-se-surface p-4 text-left shadow-[0_1px_2px_rgba(27,36,29,0.04)] transition-colors hover:border-se-fresh-line disabled:opacity-60"
             >
               <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-se-fresh-soft">
                 <Dog className="size-5 text-se-fresh-deep" />
@@ -1212,14 +1268,16 @@ export default function EnterShowPage() {
                 <p className="text-[13px] text-se-ink3">
                   Standard breed class entry for your registered dog.
                 </p>
+                {signedOut && <p className="mt-1 text-[13px] font-medium text-se-ink2">You&apos;ll sign in first</p>}
               </div>
             </button>
 
             {hasJhClasses && (
               <button
                 type="button"
-                onClick={() => cart.setEntryType('junior_handler')}
-                className="flex min-h-[44px] items-start gap-3 rounded-[18px] border border-se-line bg-se-surface p-4 text-left shadow-[0_1px_2px_rgba(27,36,29,0.04)] transition-colors hover:border-se-fresh-line"
+                onClick={() => (signedOut ? router.push(loginHref) : cart.setEntryType('junior_handler'))}
+                disabled={sessionLoading}
+                className="flex min-h-[44px] items-start gap-3 rounded-[18px] border border-se-line bg-se-surface p-4 text-left shadow-[0_1px_2px_rgba(27,36,29,0.04)] transition-colors hover:border-se-fresh-line disabled:opacity-60"
               >
                 <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-se-honey-soft">
                   <Users className="size-5 text-se-honey-deep" />
@@ -1229,6 +1287,7 @@ export default function EnterShowPage() {
                   <p className="text-[13px] text-se-ink3">
                     Young handler entry — judged on handling skill, not the dog.
                   </p>
+                  {signedOut && <p className="mt-1 text-[13px] font-medium text-se-ink2">You&apos;ll sign in first</p>}
                 </div>
               </button>
             )}
@@ -2466,6 +2525,49 @@ export default function EnterShowPage() {
             </div>
           </div>
 
+          {/* Signed out, buying extras only: who to send the receipt to. Name
+              and email, no password (slice 2, Mandy 15 Oct 2026). */}
+          {isExtrasOnly && signedOut && (
+            <SECard className="space-y-3 p-4">
+              <div>
+                <h3 className="text-base font-bold text-se-ink">Your details</h3>
+                <p className="mt-0.5 text-sm text-se-ink3">We&apos;ll email your receipt here.</p>
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="buyer-name">Your name</Label>
+                <Input
+                  id="buyer-name"
+                  name="name"
+                  type="text"
+                  autoComplete="name"
+                  value={cart.buyer?.name ?? ''}
+                  onChange={(e) => cart.setBuyer({ name: e.target.value, email: cart.buyer?.email ?? '' })}
+                  className="h-11 text-base"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="buyer-email">Your email</Label>
+                <Input
+                  id="buyer-email"
+                  name="email"
+                  type="email"
+                  inputMode="email"
+                  autoComplete="email"
+                  autoCapitalize="none"
+                  value={cart.buyer?.email ?? ''}
+                  onChange={(e) => cart.setBuyer({ name: cart.buyer?.name ?? '', email: e.target.value })}
+                  className="h-11 text-base"
+                />
+              </div>
+              <p className="text-sm text-se-ink2">
+                Already on Remi?{' '}
+                <Link href={loginHref} className="font-semibold text-se-fresh-deep underline underline-offset-2">
+                  Sign in
+                </Link>
+              </p>
+            </SECard>
+          )}
+
           {/* Second add-dog button — easier to find after scrolling through entries */}
           {!isExtrasOnly && cart.entries.length >= 2 && addDogsButtons}
 
@@ -2550,9 +2652,9 @@ export default function EnterShowPage() {
           </SECard>
           )}
 
-          {checkoutMutation.error && (
+          {checkoutError && (
             <div className="rounded-[14px] bg-destructive/10 p-3 text-sm text-destructive">
-              {checkoutMutation.error.message}
+              {checkoutError.message}
             </div>
           )}
 
@@ -2591,7 +2693,13 @@ export default function EnterShowPage() {
               className="flex-1 text-sm sm:text-base"
               onClick={handleProceedToPayment}
               disabled={
-                checkoutMutation.isPending ||
+                checkoutPending ||
+                // Session still loading: don't guess which path we're on.
+                sessionLoading ||
+                // Signed out can only ever buy extras (the redirect effect
+                // sends everything else to sign in).
+                (signedOut && !isExtrasOnly) ||
+                (signedOut && isExtrasOnly && !buyerDetailsValid(cart.buyer)) ||
                 (isExtrasOnly
                   // Extras only: nothing to declare (no dog), so the only thing
                   // missing can be the extras themselves.
@@ -2608,7 +2716,7 @@ export default function EnterShowPage() {
                     cart.entries.filter((e) => e.classIds.length > 0 || e.isNfc).length === 0)
               }
             >
-              {checkoutMutation.isPending ? (
+              {checkoutPending ? (
                 <>
                   <Loader2 className="size-4 animate-spin" />
                   Processing...
@@ -2619,7 +2727,9 @@ export default function EnterShowPage() {
                       order isn't a free one. */}
                   {isExtrasOnly && cart.sundryItems.length === 0
                     ? 'Choose an extra above'
-                    : previewGrandTotal === 0
+                    : signedOut && isExtrasOnly && !buyerDetailsValid(cart.buyer)
+                      ? 'Add your name and email above'
+                      : previewGrandTotal === 0
                       ? (isExtrasOnly ? 'Confirm Order — Free' : 'Confirm Entry — Free')
                       : <>Proceed to Payment &middot; {formatCurrency(previewGrandTotal)}</>}
                 </>
@@ -2682,8 +2792,9 @@ export default function EnterShowPage() {
       {/* Step: Confirmation */}
       {cart.step === 'confirmation' && isExtrasOnly && (
         <ExtrasOnlyConfirmation
-          firstName={session?.user?.name?.split(' ')[0]}
-          userEmail={session?.user?.email}
+          firstName={(session?.user?.name ?? cart.buyer?.name)?.trim().split(' ')[0]}
+          userEmail={session?.user?.email ?? cart.buyer?.email?.trim()}
+          signedIn={signedIn}
           showName={show.name}
           showSlugOrId={show.slug ?? idOrSlug}
           startDate={show.startDate}
@@ -3245,9 +3356,10 @@ function ClassGroup({
 
 // ── Limited show eligibility warning ──────────────────────────
 function LimitedShowDogWarning({ dogId }: { dogId: string }) {
+  const { status } = useSession();
   const { data } = trpc.dogs.checkLimitedShowEligibility.useQuery(
     { dogId },
-    { enabled: !!dogId }
+    { enabled: status === 'authenticated' && !!dogId }
   );
 
   if (!data?.ineligible) return null;

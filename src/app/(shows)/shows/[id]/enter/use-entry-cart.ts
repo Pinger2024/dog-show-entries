@@ -126,6 +126,44 @@ export interface CartState {
    * directly), which defaults a missing/undefined value to null.
    */
   discountGroupId?: string | null;
+  /**
+   * Who is buying, when nobody is signed in (extras without a dog, slice 2).
+   * Name + email only. Persisted with the cart so the Stripe 3DS return can
+   * still say "we've emailed your receipt to …". Optional: carts saved before
+   * 16 Oct 2026 don't have it — read it via the hook's normalised `buyer`.
+   */
+  buyer?: BuyerDetails | null;
+  /**
+   * The order + PaymentIntent secret from this browser's last GUEST checkout.
+   * Sent back as `previousOrder` so the server can cancel the abandoned payment
+   * (the secret proves this browser made it). Survives payment Back; cleared on
+   * confirmation and reset. Optional, as `buyer`.
+   */
+  lastCheckout?: LastCheckout | null;
+}
+
+export interface BuyerDetails {
+  name: string;
+  email: string;
+}
+
+export interface LastCheckout {
+  orderId: string;
+  clientSecret: string;
+}
+
+/**
+ * ONE owner for "are these buyer details good enough to place an order":
+ * a name of at least 2 characters (trimmed) and an email of a sane shape.
+ * The server re-checks with zod; this only decides whether the button is on.
+ */
+export function buyerDetailsValid(buyer: { name?: string | null; email?: string | null } | null | undefined): boolean {
+  if (!buyer) return false;
+  const name = (buyer.name ?? '').trim();
+  const email = (buyer.email ?? '').trim();
+  if (name.length < 2 || name.length > 120) return false;
+  if (email.length > 254) return false;
+  return /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email);
 }
 
 export type CartAction =
@@ -141,6 +179,8 @@ export type CartAction =
   | { type: 'SET_SUNDRY_ITEM'; item: CartSundryItem }
   | { type: 'REMOVE_SUNDRY_ITEM'; sundryItemId: string }
   | { type: 'SET_STEP'; step: WizardStep }
+  | { type: 'SET_BUYER'; buyer: BuyerDetails | null }
+  | { type: 'SET_LAST_CHECKOUT'; lastCheckout: LastCheckout | null }
   | { type: 'CHECKOUT_SUCCESS' }
   | { type: 'RESET' };
 
@@ -348,11 +388,21 @@ export function cartReducer(state: CartState, action: CartAction): CartState {
       return { ...state, step: action.step };
     }
 
+    case 'SET_BUYER': {
+      return { ...state, buyer: action.buyer };
+    }
+
+    case 'SET_LAST_CHECKOUT': {
+      return { ...state, lastCheckout: action.lastCheckout };
+    }
+
     case 'CHECKOUT_SUCCESS': {
       // A completed order's discount group must never leak into whatever the
       // exhibitor does next in the same browser session (e.g. "Enter Another
       // Dog" straight after paying).
-      return { ...state, step: 'confirmation', discountGroupId: null };
+      // `buyer` stays in memory for the confirmation line; the stored cart is
+      // removed at confirmation, and the paid order is no longer cancellable.
+      return { ...state, step: 'confirmation', discountGroupId: null, lastCheckout: null };
     }
 
     case 'RESET': {
@@ -371,6 +421,8 @@ export const initialState: CartState = {
   step: 'entry_type',
   editingExisting: false,
   discountGroupId: null,
+  buyer: null,
+  lastCheckout: null,
 };
 
 /**
@@ -427,6 +479,32 @@ export function entryTypeOptionCount(opts: {
   extrasAvailable: boolean;
 }): number {
   return 1 + (opts.hasJhClasses ? 1 : 0) + (opts.extrasAvailable ? 1 : 0);
+}
+
+/**
+ * Signed out, should the wizard send them to sign in? ONE owner for the rule
+ * (extras without a dog, slice 2): a signed-out visitor can only buy extras, so
+ * any dog step, a dog or handler in the restored cart, or a show with no extras
+ * on sale means "sign in" - exactly what the page did for everyone before.
+ * Never true while the session is loading (`signedOut` is false then).
+ */
+export function signedOutNeedsSignIn(opts: {
+  signedOut: boolean;
+  step: WizardStep;
+  entries: Pick<CartEntry, 'classIds' | 'isNfc'>[];
+  showLoaded: boolean;
+  extrasLoaded: boolean;
+  extrasAvailable: boolean;
+}): boolean {
+  if (!opts.signedOut) return false;
+  if (opts.step === 'select_dog' || opts.step === 'junior_handler' || opts.step === 'select_classes') return true;
+  if (opts.entries.some(isCompleteEntry)) return true;
+  // The extras list is only fetched on these two steps; on payment and
+  // confirmation a disabled query would read as "none on sale".
+  if (opts.step === 'entry_type' || opts.step === 'cart_review') {
+    return opts.showLoaded && opts.extrasLoaded && !opts.extrasAvailable;
+  }
+  return false;
 }
 
 function getStorageKey(showId: string) {
@@ -510,7 +588,16 @@ export function loadSavedState(showId: string): CartState {
       const step: WizardStep =
         redirectStatus === 'succeeded' ? 'confirmation' : 'cart_review';
       if (step === 'confirmation') localStorage.removeItem(getStorageKey(showId));
-      return { ...parsed, entries: completeEntries, step, activeEntryId: null, editingExisting: false };
+      return {
+        ...parsed,
+        entries: completeEntries,
+        step,
+        activeEntryId: null,
+        editingExisting: false,
+        buyer: parsed.buyer ?? null,
+        // A paid order can't be cancelled; a failed return keeps its proof.
+        lastCheckout: step === 'confirmation' ? null : (parsed.lastCheckout ?? null),
+      };
     }
 
     if (!parsed) return initialState;
@@ -540,6 +627,8 @@ export function loadSavedState(showId: string): CartState {
       step,
       activeEntryId: null,
       editingExisting: false,
+      buyer: parsed.buyer ?? null,
+      lastCheckout: parsed.lastCheckout ?? null,
     };
   } catch {
     return initialState;
@@ -640,6 +729,14 @@ export function useEntryCart(showId?: string) {
     (sundryItemId: string) => dispatch({ type: 'REMOVE_SUNDRY_ITEM', sundryItemId }),
     []
   );
+  const setBuyer = useCallback(
+    (buyer: BuyerDetails | null) => dispatch({ type: 'SET_BUYER', buyer }),
+    []
+  );
+  const setLastCheckout = useCallback(
+    (lastCheckout: LastCheckout | null) => dispatch({ type: 'SET_LAST_CHECKOUT', lastCheckout }),
+    []
+  );
   const reset = useCallback(() => {
     if (showId) localStorage.removeItem(getStorageKey(showId));
     dispatch({ type: 'RESET' });
@@ -651,6 +748,8 @@ export function useEntryCart(showId?: string) {
     // persisted before this field existed (loadSavedState just spreads
     // whatever was saved). Overrides the `...state` spread above.
     discountGroupId: state.discountGroupId ?? null,
+    buyer: state.buyer ?? null,
+    lastCheckout: state.lastCheckout ?? null,
     activeEntry,
     entriesTotal,
     grandTotal,
@@ -669,6 +768,8 @@ export function useEntryCart(showId?: string) {
     setSundryItem,
     removeSundryItem,
     setStep,
+    setBuyer,
+    setLastCheckout,
     checkoutSuccess,
     reset,
   };

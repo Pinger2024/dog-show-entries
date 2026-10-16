@@ -1,7 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
-import { loginErrorMessage, MAGIC_LINK_BUTTON_LABEL } from '@/lib/login-errors';
+import { loginErrorMessage } from '@/lib/login-errors';
+import { MAGIC_LINK_BUTTON_LABEL } from '@/lib/sign-in';
 
 describe('loginErrorMessage', () => {
   it('Google on an address that already has an account points to the emailed link, naming the real button', () => {

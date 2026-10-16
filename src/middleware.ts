@@ -10,11 +10,17 @@ const publicRoutes = ['/', '/login', '/register', '/forgot-password', '/reset-pa
 // middleware-public-paths.test.ts fails if any `[token]` API route is missing.
 const publicPrefixes = ['/shows', '/results', '/dog', '/api/auth', '/api/trpc', '/api/upload', '/api/webhooks', '/api/catalogue', '/api/schedule', '/api/judge-contract', '/api/critique-upload', '/api/results-approval', '/api/share-events', '/api/shares', '/api/cron', '/api/health', '/about', '/help', '/privacy', '/terms', '/invite', '/critiques', '/pricing', '/promo', '/features', '/for-secretaries', '/reviews'];
 
-// Routes that match a public prefix but require authentication
+// Routes that match a public prefix but require authentication.
+// /shows/[id]/enter is deliberately NOT here: someone who is signed out can
+// buy extras (catalogue, parking...) with just a name and email; the wizard
+// itself sends them to sign in for a dog entry (extras without a dog, slice 2).
 const authRequiredPatterns = [
-  /^\/shows\/[^/]+\/enter(\/|$)/,
   /^\/shows\/[^/]+\/entries\/[^/]+\/edit(\/|$)/,
 ];
+
+export function pathRequiresSignIn(pathname: string) {
+  return authRequiredPatterns.some((p) => p.test(pathname));
+}
 
 export function isPublicRoute(pathname: string) {
   if (publicRoutes.includes(pathname)) return true;
@@ -33,7 +39,7 @@ export default auth((req) => {
   }
 
   // Check routes that require auth even if they match a public prefix
-  if (!isAuthenticated && authRequiredPatterns.some((p) => p.test(pathname))) {
+  if (!isAuthenticated && pathRequiresSignIn(pathname)) {
     const loginUrl = new URL('/login', req.url);
     loginUrl.searchParams.set('callbackUrl', pathname);
     return NextResponse.redirect(loginUrl);

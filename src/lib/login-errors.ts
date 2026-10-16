@@ -1,9 +1,10 @@
 /**
  * What the login page says when NextAuth sends someone back with ?error=…
- * Pure, so it can be tested. The magic-link button's label lives here too, so
- * the message always names the button exactly as the form shows it.
+ * Pure, so it can be tested. The magic-link button's label comes from
+ * lib/sign-in.ts (its one owner), so the message names the button exactly as
+ * the form shows it.
  */
-export const MAGIC_LINK_BUTTON_LABEL = 'Send sign-in link';
+import { MAGIC_LINK_BUTTON_LABEL } from '@/lib/sign-in';
 
 const GENERIC = 'Sign-in failed. Please try again, or use a different sign-in method.';
 

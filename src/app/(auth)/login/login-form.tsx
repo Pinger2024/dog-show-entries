@@ -6,7 +6,8 @@ import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { Mail, Eye, EyeOff } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { loginErrorMessage, MAGIC_LINK_BUTTON_LABEL } from '@/lib/login-errors';
+import { loginErrorMessage } from '@/lib/login-errors';
+import { MAGIC_LINK_BUTTON_LABEL } from '@/lib/sign-in';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import {

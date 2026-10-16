@@ -10,6 +10,7 @@ vi.mock('@/server/services/email', async () => {
   return await vi.importActual<typeof import('@/server/services/email')>('@/server/services/email');
 });
 
+import { MAGIC_LINK_BUTTON_LABEL } from '@/lib/sign-in';
 import { resendMocks } from '../helpers/resend-mocks';
 import { sendEntryConfirmationEmail, sendSecretaryNotificationEmail } from '@/server/services/email';
 import {
@@ -61,7 +62,11 @@ describe('extras-only order emails', () => {
     expect(p.html).toContain('x2');
     expect(p.html).toContain('Parking Pass');
     expect(p.html).toContain('£13.00');
-    expect(p.html).toContain('View my entries and orders');
+    expect(p.html).toContain('View my order');
+    expect(p.html).not.toContain('View my entries and orders');
+    // Someone with no password can still see their order: sign in by emailed link.
+    expect(p.html).toContain(`sign in with ${exhibitor.email}`);
+    expect(p.html).toContain(`\u201C${MAGIC_LINK_BUTTON_LABEL}\u201D`);
     expect(p.html).not.toContain('Entry Confirmed');
     expect(p.html).not.toContain('Tell your breed group');
   });
