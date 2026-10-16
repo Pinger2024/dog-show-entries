@@ -6,6 +6,7 @@ import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { Mail, Eye, EyeOff } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { loginErrorMessage, MAGIC_LINK_BUTTON_LABEL } from '@/lib/login-errors';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import {
@@ -56,9 +57,7 @@ export function LoginForm() {
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
   const [emailSent, setEmailSent] = useState(!!verify);
-  const [error, setError] = useState(
-    authError ? 'Sign-in failed. Please try again, or use a different sign-in method.' : ''
-  );
+  const [error, setError] = useState(loginErrorMessage(authError));
   const [showPasswordVisible, setShowPasswordVisible] = useState(false);
   const hiddenPasswordRef = useRef<HTMLInputElement>(null);
 
@@ -286,7 +285,7 @@ export function LoginForm() {
               <Button type="submit" className="h-11 sm:h-12 w-full text-sm sm:text-[0.9375rem]" disabled={loading}>
                 {loading
                   ? (showPasswordField && password ? 'Signing in...' : 'Sending link...')
-                  : (showPasswordField && password ? 'Sign in' : 'Send sign-in link')
+                  : (showPasswordField && password ? 'Sign in' : MAGIC_LINK_BUTTON_LABEL)
                 }
               </Button>
 
