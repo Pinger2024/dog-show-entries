@@ -23,7 +23,7 @@ function req(body: unknown) {
 }
 
 type SendArgs = { to: string; subject: string; text: string; html: string };
-const sent = () => resendMocks.send.mock.calls.map((c) => c[0] as unknown as SendArgs);
+const sent = () => (resendMocks.send.mock.calls as unknown as Array<[SendArgs]>).map((c) => c[0]);
 
 describe('POST /api/auth/register on an existing address', () => {
   beforeEach(() => resendMocks.send.mockClear());
