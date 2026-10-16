@@ -181,3 +181,131 @@ few entry-keyed views listed below.
   - The order email's "Online Catalogue Purchased" box shows only for an online_catalogue purchase
     (`announcesOnlineCatalogue`).
   - Nothing shown at purchase time may say that printed includes online.
+
+## Slice 2 — buying extras without signing in (design, 16 Oct 2026)
+
+Mandy's ruling (15 Oct): someone who isn't signed in sees the three cards first. "Just extras, no dog" asks only for a
+name and an email, with no password. Enter a Dog and Junior Handler still need a sign-in.
+
+Mapped on 16 Oct by four read-only workers: the wizard, the checkout server, sign-in and register, and what a buyer can
+reach afterwards. Prod facts on 16 Oct:
+- every users.email is already lower-case and trimmed, with no case duplicates;
+- 101 of 174 live users have no password (they sign in by emailed link or Google);
+- no enabled extra costs £0;
+- 0 orders are pending payment.
+
+### The person behind the order: one owner
+
+`orders.exhibitor_id` is NOT NULL → users, and every email, the payment report and the parking pass read the buyer from
+that row. So a signed-out buyer gets a users row, found or created by email. They are **never signed in** by it.
+
+- NEW `src/server/services/people.ts` holds all of it:
+  - `normaliseEmail()`: trim + lower-case.
+  - `findPersonByEmail(db, email)`: `lower(users.email) = normaliseEmail(email)`. Not `ilike`, where `_` and `%` are
+    wildcards.
+  - `findOrCreatePersonByEmail(db, { email, name })`:
+    - It never changes a row that already exists, so a typed name can't rename someone's account.
+    - A new row gets the normalised email, the typed name and `onboardingCompletedAt = now()`. The last one is so that
+      signing in later, to see the order, lands on My Entries and not on the welcome wizard, which demands an address.
+      `passwordHash` and `emailVerified` stay null.
+    - It re-selects on a 23505 race.
+- **Every existing lookup moves onto it.** Today there are six copies:
+  - the credentials `authorize` in lib/auth.ts (`ilike`);
+  - password-reset (`ilike`);
+  - the register route (`eq`, already lower-cased);
+  - `manualEntryExhibitor` (`eq(lower)`, no trim);
+  - invitations (`eq(lower)`);
+  - the secretary's add-steward (`eq(lower)`).
+  - Guard test: no `eq(users.email` / `ilike(users.email` outside people.ts (scripts and tests excepted).
+  - On prod data the change in behaviour is nil (everything is lower-case), apart from the wildcard fix.
+
+### Server: `orders.guestCheckout` (publicProcedure)
+
+- **Input:** showId, sundryItems (min 1), referralSource, `buyer { name, email }`, and optional
+  `previousOrder { orderId, clientSecret }`. There is **no entries field at all**, so the guest path can't buy a dog
+  entry even from a hand-made API call.
+- It refuses a caller who IS signed in (BAD_REQUEST). One path per state: signed-in users use `checkout`.
+- **Rate limit** (none exists today). NEW `lib/rate-limit.ts`, an in-memory sliding window; prod runs one web instance.
+  - Keyed on the client IP (`cf-connecting-ip`, then the first `x-forwarded-for`) at 10 per 10 minutes, and on the
+    email at 5 per hour.
+  - The tRPC context gains `clientIp`.
+  - Error: TOO_MANY_REQUESTS, "Too many tries. Please wait a few minutes and try again."
+  - Note: a card-tester can already register with any email and use `checkout`, so this matches the existing exposure
+    rather than adding a new one.
+- **The checkout body has ONE owner.** The `checkout` mutation's body moves verbatim into
+  `placeOrder(db, exhibitorId, input, { cancelStaleOrders })` in orders.ts. `ctx.session.user.id` becomes
+  `exhibitorId` (8 places, the only other ctx use besides db). `checkout` calls it with the session user and
+  `cancelStaleOrders: true`. `guestCheckout` builds its input through the same zod schema (`entries: []`), so every
+  default and the extras-only blanking apply, then calls it with the person's id and `cancelStaleOrders: false`.
+- **Why the guest path can't use the stale cleanup:** it cancels every pending or failed order of that user at that
+  show. On the guest path the user is whoever owns the typed email, so anyone could cancel someone else's open payment
+  by typing their address. Instead, the guest path cancels only an order it can PROVE is its own.
+  - The browser sends back the `orderId` and `clientSecret` from its last checkout.
+  - The server requires that order to be pending, for this show and this person, and requires
+    `stripe.paymentIntents.retrieve(pi).client_secret === clientSecret`.
+  - It then cancels through the same helper the stale cleanup uses: one owner for "cancel an abandoned order".
+- PaymentIntent metadata gains `buyer: 'guest'`. The response has the same shape whether the email was new or already
+  had an account, so it can't be used to discover accounts.
+- The webhook, `sendOrderPaidEmails`, show-metrics and the reports are unchanged (all keyed on the order).
+
+### Wizard
+
+- **middleware:** `/shows/[id]/enter` leaves `authRequiredPatterns`. The entry-edit route stays there.
+- **Signed out** (`useSession` status `unauthenticated`; nothing happens while `loading`):
+  - Step 1 shows the three cards. Enter a Dog and Junior Handler carry the line "You'll sign in first" and go to
+    `/login?callbackUrl=/shows/{id}/enter`.
+  - If the show has no extras on sale (no enabled sundry, or the window is shut), or the saved cart holds a dog or
+    handler, the page sends them to sign in. That is exactly today's behaviour.
+  - The protected queries (dogs.list, validateExhibitorForEntry, regionalPriorDogCount, packagePriorStanding, …) get
+    `enabled: signedIn`, so no UNAUTHORIZED calls fire.
+- **Review, signed out:** under the extras and the total sits a "Your details" card.
+  - Fields: "Your name" and "Your email", with the help line "We'll email your receipt here."
+  - A link: "Already on Remi? Sign in".
+  - Proceed stays disabled until both are filled in (a valid email). It calls `guestCheckout`.
+  - The details are saved in the cart (localStorage) so the 3DS return works. The cart is removed on confirmation, as
+    today.
+  - The last checkout's `{orderId, clientSecret}` is kept in the cart until confirmation (payment Back no longer
+    forgets it), so it can be sent as `previousOrder`.
+- **Confirmation:** firstName and email come from the typed details when signed out ("We've emailed your receipt to …").
+
+### After paying, for someone who never signed in
+
+- The receipt and the parking pass (a PDF attachment) arrive by email, so the pass needs no sign-in.
+- **Extras-only receipt copy (every buyer, one owner):** "To see your order on Remi, sign in with {email}. We'll email
+  you a link, no password needed." The CTA "View my order" goes to /entries, then /login, then the emailed link, then
+  My Entries.
+- **Catalogue page, signed out:** today it's a dead end ("Please sign in to view your catalogue" + Browse Shows). It
+  gets a "Sign in" button with `callbackUrl` back to the catalogue. The show-morning email links there.
+- **Login:** OAuthAccountNotLinked (Google on an email that already has a row without Google) today says "Sign-in
+  failed". It will say "This email is already on Remi. Use 'Email me a sign-in link' instead." The same happens today
+  to password users who try Google. Turning on Google email-linking is a security setting for Michael, not done here.
+- **Register on an email that already has a row with NO password:**
+  - Today it's 409 "Try signing in instead".
+  - It will send the existing set-password email (`requestPasswordReset`, which already works for a passwordless row)
+    and say "This email is already on Remi. We've emailed you a link to set your password."
+  - Rows with a password keep the 409.
+  - Register already reveals that an account exists, so this reveals nothing new.
+
+### Tests (each proven failing first)
+
+- Journey: guestCheckout with a new email creates one lower-cased row (named, onboarded, no password), then the
+  webhook, then the order is paid and the receipt goes to that email.
+- An existing email typed in another case: the order is filed under that account, its name is unchanged, and the
+  response is the same shape.
+- The schema refuses entries and an empty cart. A signed-in caller is refused.
+- previousOrder: a correct proof cancels it; a wrong secret, another person's order, or a signed-in user's pending dog
+  order on the same email are all untouched.
+- Rate limit by IP and by email.
+- people.ts: the race, the trim, `_` not a wildcard. The guard test for a second copy. Credentials sign-in,
+  password-reset, register, invitations and add-steward still work through it.
+- Register on a passwordless row sends the set-password email. Middleware: enter is public, edit still needs a
+  sign-in.
+- 390px walk on the demo, signed out: three cards → extras → details → Stripe test card → confirmation → receipt →
+  sign in by link → My Entries.
+
+### Not in slice 2
+
+- Adverts and sponsorship creating catalogue_adverts rows, and the artwork email (slice 3).
+- A token link that opens the catalogue without a sign-in (forwardable, which Mandy wants avoided).
+- Pre-existing blank-name fallbacks (`name ?? '—'` doesn't catch ''; 9 prod users have a blank name). Guest rows
+  always carry a name.
