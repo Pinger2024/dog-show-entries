@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { hash } from 'bcryptjs';
 import { db } from '@/server/db';
 import { users } from '@/server/db/schema';
+import { requestPasswordReset } from '@/server/services/password-reset';
 import { findPersonByEmail, normaliseEmail } from '@/server/services/people';
 
 export async function POST(request: Request) {
@@ -34,6 +35,14 @@ export async function POST(request: Request) {
 
     // Check if user already exists
     const existing = await findPersonByEmail(db, normalizedEmail);
+
+    if (existing && !existing.passwordHash) {
+      // On Remi already, but never had a password (bought without signing up,
+      // or uses emailed links / Google). Email them a link to set their first
+      // one rather than turning them away.
+      await requestPasswordReset(normalizedEmail, { firstPassword: true });
+      return NextResponse.json({ ok: true, setPasswordEmailed: true });
+    }
 
     if (existing) {
       // Don't reveal that the account exists — generic error

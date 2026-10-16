@@ -18,6 +18,8 @@ import { SECard, Wordmark } from '@/components/show-experience/kit';
 function ResetPasswordForm() {
   const searchParams = useSearchParams();
   const token = searchParams.get('token');
+  // The set-your-first-password email adds &first=1 to the link.
+  const isFirstPassword = searchParams.get('first') === '1';
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showPasswordVisible, setShowPasswordVisible] = useState(false);
@@ -59,9 +61,9 @@ function ResetPasswordForm() {
             <div className="mx-auto mb-3 flex size-12 items-center justify-center rounded-full bg-se-fresh-soft">
               <CheckCircle2 className="size-6 text-se-fresh-deep" />
             </div>
-            <CardTitle className="font-serif text-lg sm:text-xl">Password Reset</CardTitle>
+            <CardTitle className="font-serif text-lg sm:text-xl">{isFirstPassword ? 'Password set' : 'Password Reset'}</CardTitle>
             <p className="mt-2 text-sm sm:text-[0.9375rem] text-muted-foreground">
-              Your password has been reset successfully. You can now sign in with your new password.
+              {isFirstPassword ? 'Your password is set. You can now sign in with it.' : 'Your password has been reset successfully. You can now sign in with your new password.'}
             </p>
           </CardHeader>
           <CardFooter className="justify-center">
@@ -120,9 +122,9 @@ function ResetPasswordForm() {
 
         <SECard className="flex flex-col gap-6">
           <CardHeader className="text-center">
-            <CardTitle className="font-serif text-lg sm:text-xl">Set a new password</CardTitle>
+            <CardTitle className="font-serif text-lg sm:text-xl">{isFirstPassword ? 'Set your password' : 'Set a new password'}</CardTitle>
             <p className="mt-2 text-sm sm:text-[0.9375rem] text-muted-foreground">
-              Choose a new password for your account. Must be at least 8 characters.
+              {isFirstPassword ? 'Choose a password for your account.' : 'Choose a new password for your account.'} Must be at least 8 characters.
             </p>
           </CardHeader>
           <CardContent>
@@ -175,7 +177,7 @@ function ResetPasswordForm() {
               )}
 
               <Button type="submit" className="h-11 sm:h-12 w-full text-sm sm:text-[0.9375rem]" disabled={loading}>
-                {loading ? 'Resetting...' : 'Reset password'}
+                {loading ? (isFirstPassword ? 'Saving...' : 'Resetting...') : (isFirstPassword ? 'Set password' : 'Reset password')}
               </Button>
             </form>
           </CardContent>
