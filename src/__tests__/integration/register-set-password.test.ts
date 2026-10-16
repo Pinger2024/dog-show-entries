@@ -12,7 +12,7 @@ import { testDb } from '../helpers/db';
 import { makeUser } from '../helpers/factories';
 import { resendMocks } from '../helpers/resend-mocks';
 import { POST as registerPOST } from '@/app/api/auth/register/route';
-import { passwordEmailCopy } from '@/server/services/password-reset';
+import { passwordEmailCopy, requestPasswordReset } from '@/server/services/password-reset';
 
 function req(body: unknown) {
   return new Request('http://localhost/api/auth/register', {
@@ -62,6 +62,23 @@ describe('POST /api/auth/register on an existing address', () => {
     const res = await registerPOST(req({ email: 'fresh@test.local', password: 'a-good-password' }));
     expect(res.status).toBe(201);
     expect(sent()).toHaveLength(0);
+  });
+
+  it('both emails are finished words — no ${…} left in as text (the 15 Oct receipt-button bug class)', async () => {
+    for (const first of [true, false]) {
+      for (const value of Object.values(passwordEmailCopy(first))) expect(value).not.toContain('${');
+    }
+    await makeUser({ email: 'forgot@test.local' });
+    await requestPasswordReset('forgot@test.local');
+    await makeUser({ email: 'first@test.local', passwordHash: null });
+    await requestPasswordReset('first@test.local', { firstPassword: true });
+    const [reset, first] = sent();
+    expect(reset.html).toContain('Click the button below to set a new password.');
+    expect(first.html).toContain('Click the button below to set your password.');
+    for (const mail of [reset, first]) {
+      expect(mail.html).not.toContain('${');
+      expect(mail.text).not.toContain('${');
+    }
   });
 
   it('the ordinary reset email keeps its reset wording', () => {

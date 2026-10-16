@@ -38,7 +38,7 @@ export function passwordEmailCopy(firstPassword: boolean) {
         heading: 'Reset Your Password',
         textHeading: 'Reset your password',
         textLead: 'Click the link below to reset your Remi password:',
-        intro: '${copy.intro}',
+        intro: 'Click the button below to set a new password. This link will expire in 1 hour.',
         forLine: 'Resetting password for',
         button: 'Reset Password',
         notRequested: 'If you did not request this email, you can safely ignore it.',
@@ -129,7 +129,7 @@ export async function requestPasswordReset(email: string, opts: { firstPassword?
 
       <div style="padding: 28px 24px; text-align: center;">
         <p style="margin: 0 0 8px; font-size: 15px; color: ${BRAND.ink}; line-height: 1.5;">
-          Click the button below to set a new password. This link will expire in 1 hour.
+          ${copy.intro}
         </p>
         <p style="margin: 0 0 24px; font-size: 13px; color: ${BRAND.ink2};">
           ${copy.forLine} <strong style="color: ${BRAND.ink};">${user.email}</strong>
