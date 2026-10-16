@@ -5,6 +5,7 @@ import { db } from '@/server/db';
 import { and, eq, inArray } from 'drizzle-orm';
 import { orders, entries, memberships, users, printOrders, showClasses, sundryItems } from '@/server/db/schema';
 import { formatOrderRef, PRINT_PAYMENT_METHODS } from '@/lib/print-products';
+import { seeOrderInEmailCopy } from '@/lib/sign-in';
 import { announcesOnlineCatalogue, catalogueNoteFor, includesParkingPass, type SundryKind } from '@/lib/sundry-kind';
 import { generateParkingPassPdf } from '@/server/services/parking-pass-pdf';
 import { isExtrasOnlyOrder } from '@/lib/extras-only-order';
@@ -785,7 +786,8 @@ async function sendExtrasOnlyReceiptEmail(order: ExtrasOnlyOrder) {
         <p style="margin: 0; font-size: 13px; color: ${BRAND.ink2};">We&apos;ll email your parking pass about a week before the show. You can also download it from My entries and orders.</p>
       </div>` : ''}
       <div style="padding: 20px 24px; text-align: center; border-top: 1px solid ${BRAND.line};">
-        ${btn(`${APP_URL}/entries`, 'View my entries and orders')}
+        <p style="margin: 0 0 14px; font-size: 13px; color: ${BRAND.ink2};">${escapeHtml(seeOrderInEmailCopy(exhibitor.email))}</p>
+        ${btn(`${APP_URL}/entries`, 'View my order')}
       </div>
     </div>
     <div style="text-align: center; padding: 24px 16px; font-size: 12px; color: ${BRAND.ink2};">
