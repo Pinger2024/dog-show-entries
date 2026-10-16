@@ -3,8 +3,9 @@ import Google from 'next-auth/providers/google';
 import Resend from 'next-auth/providers/resend';
 import Credentials from 'next-auth/providers/credentials';
 import { DrizzleAdapter } from '@auth/drizzle-adapter';
-import { eq, ilike } from 'drizzle-orm';
+import { eq } from 'drizzle-orm';
 import { db } from '@/server/db';
+import { verifyPasswordSignIn } from '@/server/services/password-sign-in';
 import * as schema from '@/server/db/schema';
 import { Resend as ResendClient } from 'resend';
 import { BRAND } from '@/lib/brand';
@@ -120,27 +121,11 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       },
       async authorize(credentials) {
         if (!credentials?.email || !credentials?.password || !db) return null;
-        const email = (credentials.email as string).toLowerCase().trim();
-        const password = credentials.password as string;
-
-        const [user] = await db
-          .select()
-          .from(schema.users)
-          .where(ilike(schema.users.email, email))
-          .limit(1);
-
-        if (!user?.passwordHash) return null;
-
-        const { compare } = await import('bcryptjs');
-        const valid = await compare(password, user.passwordHash);
-        if (!valid) return null;
-
-        return {
-          id: user.id,
-          email: user.email,
-          name: user.name,
-          role: user.role,
-        };
+        return verifyPasswordSignIn(
+          db,
+          credentials.email as string,
+          credentials.password as string,
+        );
       },
     }),
     Google({

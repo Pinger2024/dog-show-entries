@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { SUNDRY_KINDS } from '@/lib/sundry-kind';
 import { isExtrasOnlyOrder } from '@/lib/extras-only-order';
+import { findPersonByEmail } from '@/server/services/people';
 import { loadSvResultsData } from '@/server/services/sv-results-data';
 import { loadSvMeasurementSheet } from '@/server/services/sv-measurement';
 import { findPlacedWithoutGrade } from '@/lib/sv-results';
@@ -126,10 +127,7 @@ async function manualEntryExhibitor(
   email: string,
   fallbackUserId: string,
 ): Promise<{ exhibitorId: string; onRemi: boolean }> {
-  const exhibitor = await database.query.users.findFirst({
-    where: eq(users.email, email.toLowerCase()),
-    columns: { id: true },
-  });
+  const exhibitor = await findPersonByEmail(database, email);
   return exhibitor
     ? { exhibitorId: exhibitor.id, onRemi: true }
     : { exhibitorId: fallbackUserId, onRemi: false };
@@ -2539,9 +2537,7 @@ export const secretaryRouter = createTRPCRouter({
       await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId, { callerIsAdmin: ctx.callerIsAdmin });
 
       // Find user by email
-      const user = await ctx.db.query.users.findFirst({
-        where: eq(users.email, input.email.toLowerCase()),
-      });
+      const user = await findPersonByEmail(ctx.db, input.email);
 
       if (!user) {
         throw new TRPCError({

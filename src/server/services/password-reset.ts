@@ -1,10 +1,11 @@
 import crypto from 'crypto';
-import { eq, and, isNull, gt, ilike } from 'drizzle-orm';
+import { eq, and, isNull, gt } from 'drizzle-orm';
 import { hash } from 'bcryptjs';
 import { Resend } from 'resend';
 import { db } from '@/server/db';
 import { users, passwordResetTokens } from '@/server/db/schema';
 import { emailHeader } from './email';
+import { findPersonByEmail } from './people';
 import { BRAND } from '@/lib/brand';
 import { FEEDBACK_REPLY_TO } from '@/lib/email-addresses';
 
@@ -13,17 +14,49 @@ const FROM = process.env.EMAIL_FROM ?? 'Remi <noreply@remishowmanager.co.uk>';
 const APP_URL = process.env.NEXTAUTH_URL ?? 'https://remishowmanager.co.uk';
 
 /**
+ * The words of the email. A person who has never had a password (they bought
+ * from Remi without signing up, or use emailed links or Google) is setting a
+ * FIRST password, so the email must not say "reset".
+ */
+export function passwordEmailCopy(firstPassword: boolean) {
+  return firstPassword
+    ? {
+        subject: 'Set your Remi password',
+        heading: 'Set your password',
+        textHeading: 'Set your password',
+        textLead: 'Click the link below to set a password for your Remi account:',
+        intro: 'Click the button below to set your password. This link will expire in 1 hour.',
+        forLine: 'Set a password for',
+        button: 'Set Password',
+        notRequested: 'If you did not ask for this, you can safely ignore this email.',
+        unchanged: 'Nothing will change on your account.',
+        pagePath: '/reset-password',
+        pageFlag: '&first=1',
+      }
+    : {
+        subject: 'Reset your Remi password',
+        heading: 'Reset Your Password',
+        textHeading: 'Reset your password',
+        textLead: 'Click the link below to reset your Remi password:',
+        intro: 'Click the button below to set a new password. This link will expire in 1 hour.',
+        forLine: 'Resetting password for',
+        button: 'Reset Password',
+        notRequested: 'If you did not request this email, you can safely ignore it.',
+        unchanged: 'Your password will not be changed.',
+        pagePath: '/reset-password',
+        pageFlag: '',
+      };
+}
+
+/**
  * Generate a password reset token and send the reset email.
  * Always returns success to prevent user enumeration.
+ * `firstPassword` words the email as setting a first password (register page,
+ * for an address that is on Remi with no password yet).
  */
-export async function requestPasswordReset(email: string) {
-  const normalizedEmail = email.toLowerCase().trim();
-
-  const [user] = await db
-    .select({ id: users.id, email: users.email })
-    .from(users)
-    .where(ilike(users.email, normalizedEmail))
-    .limit(1);
+export async function requestPasswordReset(email: string, opts: { firstPassword?: boolean } = {}) {
+  const copy = passwordEmailCopy(opts.firstPassword === true);
+  const user = await findPersonByEmail(db, email);
 
   // Don't reveal whether the account exists
   if (!user) return;
@@ -61,17 +94,17 @@ export async function requestPasswordReset(email: string) {
     expiresAt,
   });
 
-  const resetUrl = `${APP_URL}/reset-password?token=${token}`;
+  const resetUrl = `${APP_URL}${copy.pagePath}?token=${token}${copy.pageFlag}`;
 
   const result = await resend.emails.send({
     from: FROM,
     to: user.email,
     replyTo: FEEDBACK_REPLY_TO,
-    subject: 'Reset your Remi password',
+    subject: copy.subject,
     text: [
-      'Reset your password',
+      copy.textHeading,
       '',
-      'Click the link below to reset your Remi password:',
+      copy.textLead,
       '',
       resetUrl,
       '',
@@ -91,18 +124,18 @@ export async function requestPasswordReset(email: string) {
 
     <div style="background: #ffffff; border: 1px solid ${BRAND.line}; border-radius: 14px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
       <div style="background: ${BRAND.deep}; padding: 24px; text-align: center;">
-        <h2 style="margin: 0; color: ${BRAND.cream}; font-size: 20px; font-weight: 700;">Reset Your Password</h2>
+        <h2 style="margin: 0; color: ${BRAND.cream}; font-size: 20px; font-weight: 700;">${copy.heading}</h2>
       </div>
 
       <div style="padding: 28px 24px; text-align: center;">
         <p style="margin: 0 0 8px; font-size: 15px; color: ${BRAND.ink}; line-height: 1.5;">
-          Click the button below to set a new password. This link will expire in 1 hour.
+          ${copy.intro}
         </p>
         <p style="margin: 0 0 24px; font-size: 13px; color: ${BRAND.ink2};">
-          Resetting password for <strong style="color: ${BRAND.ink};">${user.email}</strong>
+          ${copy.forLine} <strong style="color: ${BRAND.ink};">${user.email}</strong>
         </p>
 
-        <a href="${resetUrl}" style="display: inline-block; padding: 14px 36px; background: ${BRAND.green}; color: ${BRAND.cream}; text-decoration: none; border-radius: 13px; font-size: 15px; font-weight: 700;">Reset Password</a>
+        <a href="${resetUrl}" style="display: inline-block; padding: 14px 36px; background: ${BRAND.green}; color: ${BRAND.cream}; text-decoration: none; border-radius: 13px; font-size: 15px; font-weight: 700;">${copy.button}</a>
 
         <p style="margin: 24px 0 0; font-size: 12px; color: ${BRAND.ink2}; line-height: 1.5;">
           If the button doesn\u2019t work, copy and paste this link into your browser:<br>
@@ -112,8 +145,8 @@ export async function requestPasswordReset(email: string) {
 
       <div style="padding: 16px 24px; border-top: 1px solid ${BRAND.line}; text-align: center;">
         <p style="margin: 0; font-size: 12px; color: ${BRAND.ink2}; line-height: 1.5;">
-          If you did not request this email, you can safely ignore it.
-          <br>Your password will not be changed.
+          ${copy.notRequested}
+          <br>${copy.unchanged}
         </p>
       </div>
     </div>

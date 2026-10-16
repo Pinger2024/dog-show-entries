@@ -50,6 +50,7 @@ export default function RegisterPage() {
   const [googleLoading, setGoogleLoading] = useState(false);
   const [emailSent, setEmailSent] = useState(false);
   const [error, setError] = useState('');
+  const [notice, setNotice] = useState('');
 
   async function handleGoogleSignIn() {
     setGoogleLoading(true);
@@ -59,6 +60,7 @@ export default function RegisterPage() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError('');
+    setNotice('');
     setLoading(true);
 
     if (wantsPassword) {
@@ -84,6 +86,15 @@ export default function RegisterPage() {
         if (!res.ok) {
           const data = await res.json();
           setError(data.error ?? 'Unable to create account');
+          setLoading(false);
+          return;
+        }
+
+        const created = await res.json();
+        if (created?.setPasswordEmailed) {
+          // Already on Remi without a password: a link to set one is on its
+          // way. Do not try to sign in.
+          setNotice("This email is already on Remi. We've emailed you a link to set your password.");
           setLoading(false);
           return;
         }
@@ -268,6 +279,12 @@ export default function RegisterPage() {
                       className="h-11 sm:h-12 text-sm sm:text-[0.9375rem]"
                     />
                   </div>
+                </div>
+              )}
+
+              {notice && (
+                <div role="status" className="rounded-lg border border-primary/20 bg-primary/10 px-4 py-3 text-sm">
+                  {notice}
                 </div>
               )}
 
