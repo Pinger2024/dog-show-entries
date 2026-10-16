@@ -19,6 +19,7 @@ import {
 } from '@/components/ui/card';
 import { SE_H } from '@/components/show-experience/tokens';
 import { cn } from '@/lib/utils';
+import { CatalogueSignIn } from './catalogue-sign-in';
 import { CatalogueJobButton } from '@/components/catalogue/catalogue-job-button';
 
 export default function CataloguePage() {
@@ -37,14 +38,18 @@ export default function CataloguePage() {
     );
   }
 
+  if (error?.message === 'UNAUTHORIZED') {
+    return (
+      <div className="mx-auto max-w-md px-4 py-16 text-center">
+        <CatalogueSignIn idOrSlug={idOrSlug} />
+      </div>
+    );
+  }
+
   if (error || !data) {
     return (
       <div className="mx-auto max-w-md px-4 py-16 text-center">
-        <p className="text-muted-foreground">
-          {error?.message === 'UNAUTHORIZED'
-            ? 'Please sign in to view your catalogue.'
-            : 'Show not found.'}
-        </p>
+        <p className="text-muted-foreground">Show not found.</p>
         <Button asChild className="mt-4 min-h-[2.75rem]">
           <Link href="/browse">Browse Shows</Link>
         </Button>
