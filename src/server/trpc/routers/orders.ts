@@ -5,7 +5,7 @@ import { SHOW_COLUMNS_FOR_PUBLIC_INCLUDE } from '../public-show-fields';
 import { TRPCError } from '@trpc/server';
 import { and, eq, isNull, inArray, desc, sql, asc } from 'drizzle-orm';
 import { differenceInWeeks } from 'date-fns';
-import { protectedProcedure } from '../procedures';
+import { protectedProcedure, publicProcedure } from '../procedures';
 import { createTRPCRouter } from '../init';
 import { publicOrgColumns } from '../public-org-columns';
 import { syncCatalogueNumbers } from '@/server/services/catalogue-numbering';
@@ -78,6 +78,21 @@ const cartEntrySchema = z.object({
 });
 
 export const ordersRouter = createTRPCRouter({
+  // STUB: replaced by the real procedure on merge.
+  guestCheckout: publicProcedure
+    .input(
+      z.object({
+        showId: z.string().uuid(),
+        sundryItems: z.array(z.object({ sundryItemId: z.string().uuid(), quantity: z.number().int().min(1) })).min(1),
+        referralSource: z.string().regex(/^[a-z0-9_-]+$/i).max(32).optional(),
+        buyer: z.object({ name: z.string().trim().min(2).max(120), email: z.string().trim().email().max(254) }),
+        previousOrder: z.object({ orderId: z.string().uuid(), clientSecret: z.string().min(1).max(500) }).optional(),
+      }),
+    )
+    .mutation(async (): Promise<{ clientSecret: string | null; orderId: string; totalAmount: number; platformFeePence?: number; grossAmount?: number; entryCount: number; freeEntry: boolean }> => {
+      throw new TRPCError({ code: 'NOT_IMPLEMENTED', message: 'stub' });
+    }),
+
   checkout: protectedProcedure
     .input(
       z.object({
