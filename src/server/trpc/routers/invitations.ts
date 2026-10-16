@@ -11,6 +11,7 @@ import {
 import { invitations, users, organisations, memberships } from '@/server/db/schema';
 import { generateToken, getBaseUrl, assignRole } from '@/server/lib/utils';
 import { verifyOrgAccess } from '@/server/trpc/verify-org-access';
+import { findPersonByEmail, normaliseEmail } from '@/server/services/people';
 import { BRAND } from '@/lib/brand';
 import { FEEDBACK_REPLY_TO } from '@/lib/email-addresses';
 
@@ -45,9 +46,7 @@ export const invitationsRouter = createTRPCRouter({
         input.role.charAt(0).toUpperCase() + input.role.slice(1);
 
       // Check if a user with this email already exists
-      const existingUser = await ctx.db.query.users.findFirst({
-        where: eq(users.email, input.email.toLowerCase()),
-      });
+      const existingUser = await findPersonByEmail(ctx.db, input.email);
 
       if (existingUser) {
         // User exists — assign role directly, no acceptance needed
@@ -237,7 +236,7 @@ export const invitationsRouter = createTRPCRouter({
       }
 
       // Verify the logged-in user's email matches the invitation
-      if (invitation.email.toLowerCase() !== ctx.session.user.email?.toLowerCase()) {
+      if (normaliseEmail(invitation.email) !== normaliseEmail(ctx.session.user.email ?? '')) {
         throw new TRPCError({
           code: 'FORBIDDEN',
           message: 'This invitation was sent to a different email address',

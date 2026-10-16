@@ -1,10 +1,11 @@
 import crypto from 'crypto';
-import { eq, and, isNull, gt, ilike } from 'drizzle-orm';
+import { eq, and, isNull, gt } from 'drizzle-orm';
 import { hash } from 'bcryptjs';
 import { Resend } from 'resend';
 import { db } from '@/server/db';
 import { users, passwordResetTokens } from '@/server/db/schema';
 import { emailHeader } from './email';
+import { findPersonByEmail } from './people';
 import { BRAND } from '@/lib/brand';
 import { FEEDBACK_REPLY_TO } from '@/lib/email-addresses';
 
@@ -17,13 +18,7 @@ const APP_URL = process.env.NEXTAUTH_URL ?? 'https://remishowmanager.co.uk';
  * Always returns success to prevent user enumeration.
  */
 export async function requestPasswordReset(email: string) {
-  const normalizedEmail = email.toLowerCase().trim();
-
-  const [user] = await db
-    .select({ id: users.id, email: users.email })
-    .from(users)
-    .where(ilike(users.email, normalizedEmail))
-    .limit(1);
+  const user = await findPersonByEmail(db, email);
 
   // Don't reveal whether the account exists
   if (!user) return;

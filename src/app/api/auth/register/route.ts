@@ -1,8 +1,8 @@
 import { NextResponse } from 'next/server';
 import { hash } from 'bcryptjs';
-import { eq } from 'drizzle-orm';
 import { db } from '@/server/db';
 import { users } from '@/server/db/schema';
+import { findPersonByEmail, normaliseEmail } from '@/server/services/people';
 
 export async function POST(request: Request) {
   try {
@@ -30,14 +30,10 @@ export async function POST(request: Request) {
       );
     }
 
-    const normalizedEmail = email.toLowerCase().trim();
+    const normalizedEmail = normaliseEmail(email);
 
     // Check if user already exists
-    const [existing] = await db
-      .select({ id: users.id })
-      .from(users)
-      .where(eq(users.email, normalizedEmail))
-      .limit(1);
+    const existing = await findPersonByEmail(db, normalizedEmail);
 
     if (existing) {
       // Don't reveal that the account exists — generic error
