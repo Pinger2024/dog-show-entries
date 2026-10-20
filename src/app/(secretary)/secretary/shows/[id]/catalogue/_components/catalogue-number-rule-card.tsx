@@ -96,7 +96,10 @@ export function CatalogueNumberRuleCard({
               inputMode="numeric"
               autoComplete="off"
               value={start}
-              onChange={(e) => setStart(e.target.value)}
+              onChange={(e) => {
+                setStart(e.target.value);
+                setError(null);
+              }}
               className="min-h-[2.75rem] max-w-[8rem] text-base"
             />
           </div>
@@ -108,7 +111,10 @@ export function CatalogueNumberRuleCard({
               autoComplete="off"
               placeholder="For example 197, 212, 216"
               value={skip}
-              onChange={(e) => setSkip(e.target.value)}
+              onChange={(e) => {
+                setSkip(e.target.value);
+                setError(null);
+              }}
               className="min-h-[2.75rem] text-base"
             />
             <p className="text-muted-foreground">
