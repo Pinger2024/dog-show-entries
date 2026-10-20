@@ -85,6 +85,7 @@ import { penceToPoundsString } from '@/lib/date-utils';
 import { Resend } from 'resend';
 import { searchKcJudges, fetchKcJudgeProfile } from '@/server/services/kc-judges';
 import { syncCatalogueNumbers, resortCatalogueNumbers, renumberAfterRemoval } from '@/server/services/catalogue-numbering';
+import { parseCatalogueNumberRule } from '@/lib/catalogue-number-rule';
 import { resolveEntryMembership } from '@/server/services/entry-membership';
 import { entryWindowOpen } from '@/lib/show-status';
 import { scheduleCatalogueRefresh } from '@/server/services/catalogue-jobs';
@@ -834,6 +835,49 @@ export const secretaryRouter = createTRPCRouter({
         .set({ catalogueNumbersLockedAt: new Date(), updatedAt: new Date() })
         .where(eq(shows.id, input.showId));
       return { locked: true };
+    }),
+
+  // Where this show's catalogue numbers start and which are left out — the
+  // club's bibs (Mandy 2026-10-20: from 141, with 197, 212 and 216 missing).
+  // The rule itself is lib/catalogue-number-rule.ts. Refused while the numbers
+  // are locked: a locked show appends after its highest number, so a new start
+  // would silently mix two sequences in one printed catalogue. Otherwise the
+  // show is re-sorted at once, so the page shows the new numbers straight away.
+  setCatalogueNumberRule: secretaryProcedure
+    .input(
+      z.object({
+        showId: z.string().uuid(),
+        start: z.string().max(20),
+        skip: z.string().max(4000),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId, { callerIsAdmin: ctx.callerIsAdmin });
+      const show = await ctx.db.query.shows.findFirst({
+        where: eq(shows.id, input.showId),
+        columns: { catalogueNumbersLockedAt: true },
+      });
+      if (!show) throw new TRPCError({ code: 'NOT_FOUND', message: 'Show not found' });
+      if (show.catalogueNumbersLockedAt) {
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: 'The numbers are locked for printing. Unlock them first, then change where they start.',
+        });
+      }
+
+      const parsed = parseCatalogueNumberRule({ start: input.start, skip: input.skip });
+      if (!parsed.ok) throw new TRPCError({ code: 'BAD_REQUEST', message: parsed.error });
+
+      await ctx.db
+        .update(shows)
+        .set({
+          catalogueNumberStart: parsed.rule.start,
+          catalogueNumberSkip: parsed.rule.skip,
+          updatedAt: new Date(),
+        })
+        .where(eq(shows.id, input.showId));
+      await resortCatalogueNumbers(ctx.db, input.showId);
+      return { rule: parsed.rule };
     }),
 
   // Unlock catalogue numbers and re-sort, so any entries that were appended

@@ -8,7 +8,7 @@
  *   entries slot into their class instead of piling up at the end.
  *
  *   LOCKED (lockedAt set) — the secretary has locked the numbers for printing.
- *   Existing numbers never shift; new entries append at max+1.
+ *   Existing numbers never shift; new entries append after the highest.
  *
  * Every path that confirms an entry — the Stripe webhook, the £0 free-entry
  * shortcut, the secretary's manual add — and the close-entries transition go
@@ -24,11 +24,22 @@
  *   tier 2  NFC / no class    → last, by date
  * JH classes carry no classNumber and NFC entries carry no classes, so a flat
  * `classNumber ?? sortOrder` sort used to interleave them (BAGSD 2026-06-19).
+ *
+ * WHICH numbers are issued — where they start, which are left out — is the
+ * show's rule, owned by lib/catalogue-number-rule.ts (Mandy 2026-10-20: the
+ * club's bibs run from 141 with three missing). This file never counts on its
+ * own.
  */
 import { and, asc, eq, isNull } from 'drizzle-orm';
 import type { db as dbType } from '@/server/db';
 import * as schema from '@/server/db/schema';
 import { entryWindowOpen } from '@/lib/show-status';
+import {
+  catalogueNumberRule,
+  expectedCatalogueNumbers,
+  nextCatalogueNumber,
+  type CatalogueNumberRule,
+} from '@/lib/catalogue-number-rule';
 
 type Db = NonNullable<typeof dbType>;
 
@@ -101,6 +112,15 @@ const NUMBERING_WITH = {
   entryClasses: { with: { showClass: { with: { classDefinition: true } } } },
 } as const;
 
+/** The show's numbering rule (start + left-out numbers). */
+async function loadNumberRule(db: Db, showId: string): Promise<CatalogueNumberRule> {
+  const show = await db.query.shows.findFirst({
+    where: eq(schema.shows.id, showId),
+    columns: { catalogueNumberStart: true, catalogueNumberSkip: true },
+  });
+  return catalogueNumberRule(show ?? {});
+}
+
 async function fetchConfirmed(db: Db, showId: string) {
   return db.query.entries.findMany({
     where: and(
@@ -114,7 +134,8 @@ async function fetchConfirmed(db: Db, showId: string) {
 }
 
 /**
- * Number the ordered entries 1..N, but ONE NUMBER PER DOG.
+ * Number the ordered entries from the show's rule (1..N by default), but ONE
+ * NUMBER PER DOG.
  *
  * Mandy, 2026-07-27: "they should always keep the same catalogue number
  * throughout the show." A dog can hold two entry rows — buy a class, come back
@@ -123,14 +144,16 @@ async function fetchConfirmed(db: Db, showId: string) {
  * it were two dogs and the handler wouldn't know which number to wear.
  *
  * The dog takes the number of its FIRST appearance in catalogue order (its
- * earliest class), and later rows reuse it. The counter only advances when a
- * number is actually issued, so the sequence stays 1..N with no gaps. Junior
- * Handler entries carry no dog and are always numbered individually.
+ * earliest class), and later rows reuse it. A number is only taken from the
+ * rule when one is actually issued, so the sequence has no gaps beyond the
+ * numbers the show leaves out. Junior Handler entries carry no dog and are
+ * always numbered individually.
  */
-function assignNumbers(ordered: NumberingEntry[]): { id: string; number: string }[] {
+function assignNumbers(ordered: NumberingEntry[], rule: CatalogueNumberRule): { id: string; number: string }[] {
   const numberByDog = new Map<string, string>();
   const assignments: { id: string; number: string }[] = [];
-  let next = 1;
+  const issuable = expectedCatalogueNumbers(rule, ordered.length);
+  let issued = 0;
 
   for (const e of ordered) {
     const existing = e.dogId ? numberByDog.get(e.dogId) : undefined;
@@ -138,15 +161,16 @@ function assignNumbers(ordered: NumberingEntry[]): { id: string; number: string 
       assignments.push({ id: e.id, number: existing });
       continue;
     }
-    const number = String(next++);
+    const number = String(issuable[issued]);
+    issued += 1;
     if (e.dogId) numberByDog.set(e.dogId, number);
     assignments.push({ id: e.id, number });
   }
   return assignments;
 }
 
-async function writeSequential(db: Db, ordered: NumberingEntry[]) {
-  const assignments = assignNumbers(ordered);
+async function writeSequential(db: Db, ordered: NumberingEntry[], rule: CatalogueNumberRule) {
+  const assignments = assignNumbers(ordered, rule);
   await db.transaction(async (tx) => {
     for (const a of assignments) {
       await tx
@@ -158,21 +182,23 @@ async function writeSequential(db: Db, ordered: NumberingEntry[]) {
 }
 
 /**
- * Full re-sort: renumber every confirmed entry 1..N in catalogue order. Safe to
- * call while numbers are PROVISIONAL (show not locked). Callers that must not
- * shift a locked catalogue should check `shows.catalogueNumbersLockedAt` first.
+ * Full re-sort: renumber every confirmed entry in catalogue order, from the
+ * show's rule. Safe to call while numbers are PROVISIONAL (show not locked).
+ * Callers that must not shift a locked catalogue should check
+ * `shows.catalogueNumbersLockedAt` first.
  */
 export async function resortCatalogueNumbers(db: Db, showId: string): Promise<{ assigned: number }> {
   const confirmed = await fetchConfirmed(db, showId);
   if (confirmed.length === 0) return { assigned: 0 };
   const ordered = sortForCatalogue(confirmed as unknown as NumberingEntry[]);
-  await writeSequential(db, ordered);
+  await writeSequential(db, ordered, await loadNumberRule(db, showId));
   return { assigned: ordered.length };
 }
 
 /**
- * Number the confirmed entries that don't have a number yet, appending them at
- * max+1 in catalogue order. Existing numbers never move.
+ * Number the confirmed entries that don't have a number yet, appending them
+ * after the highest number in catalogue order — the rule's next number, so a
+ * left-out number is stepped over. Existing numbers never move.
  *
  * Dog-aware, same rule as the full re-sort: if the dog already holds a number
  * on another entry, this row joins it rather than taking a new one. Otherwise
@@ -198,11 +224,13 @@ async function appendMissingNumbers(db: Db, showId: string): Promise<{ assigned:
   }
 
   const ordered = sortForCatalogue(unnumbered as unknown as NumberingEntry[]);
-  let next = highest + 1;
+  const rule = await loadNumberRule(db, showId);
+  let last = highest;
   const assignments = ordered.map((e) => {
     const existing = e.dogId ? numberByDog.get(e.dogId) : undefined;
     if (existing) return { id: e.id, number: existing };
-    const number = String(next++);
+    last = nextCatalogueNumber(rule, last);
+    const number = String(last);
     if (e.dogId) numberByDog.set(e.dogId, number);
     return { id: e.id, number };
   });
@@ -224,7 +252,7 @@ async function appendMissingNumbers(db: Db, showId: string): Promise<{ assigned:
  * confirmed entry is ever left without a number.
  *
  *   provisional + allowResort → full class-order re-sort
- *   locked, or allowResort=false → append the blanks at max+1, shift nothing
+ *   locked, or allowResort=false → append the blanks after the highest, shift nothing
  *
  * `allowResort` is false on render paths (catalogue, judges book, ring numbers,
  * reports): opening a document must never renumber a show mid-print, but it

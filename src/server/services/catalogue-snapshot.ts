@@ -70,6 +70,7 @@ import type {
   ShowClassInfo,
 } from '@/components/catalogue/catalogue-types';
 import type { MarkedResult, MarkedAchievement } from '@/components/catalogue/catalogue-marked';
+import { catalogueNumberRule } from '@/lib/catalogue-number-rule';
 
 // 'judge-copy' — the SV/WUSV regional catalogue re-rendered post-results
 // with the write-in placings/grading grid filled in with the real result,
@@ -614,6 +615,7 @@ export async function buildCatalogueSnapshot(db: Database, showId: string): Prom
       capturedAt: new Date().toISOString(),
       rendererGitSha: getRendererGitSha(),
       showRuleset: show.showRuleset ?? null,
+      numberRule: catalogueNumberRule(show),
       ...buildExpectedNumbersAndNames(entries),
     },
   };
@@ -622,7 +624,8 @@ export async function buildCatalogueSnapshot(db: Database, showId: string): Prom
 /** Every catalogue number that should exist, deduped per dog exactly as
  *  assignNumbers() in catalogue-numbering.ts dedupes, plus a number->name
  *  lookup (with NFC/Junior-Handler flags) for every confirmed entry that
- *  has one — the preflight module's gapless-1..N, every-entry-printed, and
+ *  has one — the preflight module's number-sequence (against the show's
+ *  rule), every-entry-printed, and
  *  format-aware completeness checks. */
 function buildExpectedNumbersAndNames(
   entries: Array<{

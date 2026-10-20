@@ -9,7 +9,7 @@ import {
   timestamp,
   uuid,
 } from 'drizzle-orm/pg-core';
-import { relations } from 'drizzle-orm';
+import { relations, sql } from 'drizzle-orm';
 import { showTypeEnum, showScopeEnum, showStatusEnum, classSexArrangementEnum, showRulesetEnum } from './enums';
 
 // ── Schedule data stored as JSONB on each show ──
@@ -206,6 +206,11 @@ export const shows = pgTable(
     // order is placed). While null, numbers are provisional and re-sort on every
     // entry add/remove; once set, late entries append at the end instead.
     catalogueNumbersLockedAt: timestamp('catalogue_numbers_locked_at', { withTimezone: true }),
+    // Where the catalogue numbers start and which are never issued — the
+    // club's bibs (Mandy 2026-10-20: from 141, with 197, 212 and 216 missing).
+    // Read only through lib/catalogue-number-rule.ts.
+    catalogueNumberStart: integer('catalogue_number_start').notNull().default(1),
+    catalogueNumberSkip: integer('catalogue_number_skip').array().notNull().default(sql`'{}'::integer[]`),
     updatedAt: timestamp('updated_at', { withTimezone: true })
       .defaultNow()
       .notNull()

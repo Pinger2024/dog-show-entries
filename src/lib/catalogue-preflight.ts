@@ -5,6 +5,12 @@ import { tmpdir } from 'os';
 import path from 'path';
 import { PDFDocument } from 'pdf-lib';
 import sharp from 'sharp';
+import {
+  DEFAULT_CATALOGUE_NUMBER_RULE,
+  describeCatalogueNumberRule,
+  expectedCatalogueNumbers,
+  type CatalogueNumberRule,
+} from './catalogue-number-rule';
 
 /**
  * Machine-readable catalogue print preflight.
@@ -54,8 +60,12 @@ export interface CatalogueSnapshotMeta {
   /** `shows.showRuleset` at capture time — optional because rows persisted
    *  before 2026-08-28 don't carry it; undefined is treated as non-WUSV. */
   showRuleset?: string | null;
-  /** Every confirmed entry's catalogue number, in any order — used to prove the 1..N sequence has no gaps. */
+  /** Every confirmed entry's catalogue number, in any order — checked against the show's numbering rule. */
   expectedNumbers: number[];
+  /** The show's numbering rule (start + left-out numbers) at capture time —
+   *  optional because snapshots stored before 2026-10-20 don't carry it;
+   *  undefined means the default 1, 2, 3 … */
+  numberRule?: CatalogueNumberRule;
   /** Catalogue number + display name for every confirmed entry, used to prove each one actually printed. */
   entryNames: CatalogueEntryNameRef[];
 }
@@ -354,30 +364,43 @@ function checkPostCloseSnapshot(snapshot: CatalogueSnapshotMeta): Check {
 
 // ─── Check 2: catalogue-number-completeness ────────────────────────────────
 
-function describeNumberSequence(numbers: number[]): { ok: boolean; detail: string } {
+/**
+ * Do the printed numbers match what the show's rule issues for this many
+ * entries? The rule is lib/catalogue-number-rule.ts — the same one
+ * catalogue-numbering.ts issued them from — so a show whose bibs start at 141
+ * with some left out passes, and a real gap, a duplicate or a left-out number
+ * that got printed still fails.
+ */
+export function checkCatalogueNumberSequence(
+  numbers: number[],
+  numberRule: CatalogueNumberRule | undefined,
+): { ok: boolean; detail: string } {
   if (numbers.length === 0) {
     return { ok: false, detail: 'expectedNumbers is empty — no confirmed entries to check' };
   }
+  const rule = numberRule ?? DEFAULT_CATALOGUE_NUMBER_RULE;
+  const ruleText = describeCatalogueNumberRule(rule);
   const sorted = [...numbers].sort((a, b) => a - b);
   const dupes = [...new Set(sorted.filter((n, i) => i > 0 && n === sorted[i - 1]))];
   if (dupes.length > 0) {
     return { ok: false, detail: `duplicate catalogue number(s): ${dupes.join(', ')}` };
   }
   const n = sorted.length;
-  if (sorted[0] !== 1 || sorted[n - 1] !== n) {
+  const expected = expectedCatalogueNumbers(rule, n);
+  const expectedSet = new Set(expected);
+  const unexpected = sorted.filter((num) => !expectedSet.has(num));
+  if (unexpected.length > 0) {
+    const printed = new Set(sorted);
+    const missing = expected.filter((num) => !printed.has(num));
     return {
       ok: false,
-      detail: `catalogue numbers run ${sorted[0]}–${sorted[n - 1]} across ${n} entries — not a gapless 1..${n} sequence`,
+      detail:
+        `catalogue numbers run ${sorted[0]}–${sorted[n - 1]} across ${n} entries — not the show's sequence (${ruleText})` +
+        `; unexpected: ${unexpected.slice(0, 10).join(', ')}${unexpected.length > 10 ? ', …' : ''}` +
+        (missing.length > 0 ? `; gap(s) at: ${missing.slice(0, 10).join(', ')}${missing.length > 10 ? ', …' : ''}` : ''),
     };
   }
-  const gaps: number[] = [];
-  for (let i = 0; i < n; i++) {
-    if (sorted[i] !== i + 1) gaps.push(i + 1);
-  }
-  if (gaps.length > 0) {
-    return { ok: false, detail: `gap(s) in the catalogue number sequence at: ${gaps.join(', ')}` };
-  }
-  return { ok: true, detail: `catalogue numbers form a gapless 1..${n} sequence` };
+  return { ok: true, detail: `catalogue numbers follow the show's sequence without a gap (${ruleText} ${n} entries, ${sorted[0]}–${sorted[n - 1]})` };
 }
 
 /**
@@ -412,7 +435,7 @@ function checkCatalogueNumberCompleteness(
   contract: PreflightContract,
 ): Check {
   const id = 'catalogue-number-completeness';
-  const seq = describeNumberSequence(meta.expectedNumbers);
+  const seq = checkCatalogueNumberSequence(meta.expectedNumbers, meta.numberRule);
 
   const foldedLayout = fold(layoutText);
   const foldedRaw = fold(rawText);

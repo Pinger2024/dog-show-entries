@@ -350,6 +350,15 @@ export async function runStartupMigrations() {
     ALTER TABLE critique_documents ADD COLUMN IF NOT EXISTS reminder_sent_at TIMESTAMPTZ;
   `);
 
+  // ── 2026-10-20: where a show's catalogue numbers start and which are left
+  // out — the club's bibs (Mandy: from 141, with 197, 212 and 216 missing).
+  // Defaults keep every existing show numbering 1, 2, 3 … ──
+  await db.execute(sql`
+    ALTER TABLE shows
+      ADD COLUMN IF NOT EXISTS catalogue_number_start INTEGER NOT NULL DEFAULT 1,
+      ADD COLUMN IF NOT EXISTS catalogue_number_skip INTEGER[] NOT NULL DEFAULT '{}'::integer[];
+  `);
+
   // -- 2026-10-15: sundry kind (see migrateSundryKinds above) --
   const sundryFilled = await migrateSundryKinds(db);
   if (sundryFilled > 0) console.log(`[startup-migrations] sundry kind backfilled on ${sundryFilled} row(s)`);

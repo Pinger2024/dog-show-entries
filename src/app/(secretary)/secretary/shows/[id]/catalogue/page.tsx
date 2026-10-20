@@ -35,6 +35,8 @@ import { EmptyState } from '@/components/ui/empty-state';
 import { StatCard } from '@/components/ui/stat-card';
 import { useShowId } from '../_lib/show-context';
 import { DataChecksCard } from './_components/data-checks-card';
+import { CatalogueNumberRuleCard } from './_components/catalogue-number-rule-card';
+import { catalogueNumberRule } from '@/lib/catalogue-number-rule';
 
 export default function CataloguePage() {
   const showId = useShowId();
@@ -131,6 +133,16 @@ export default function CataloguePage() {
       {/* Check before print — a glance-list of owner records worth a second
           look, shown before the secretary heads off to print or order. */}
       {entries.length > 0 && <DataChecksCard showId={showId} />}
+
+      {/* Where the numbers start and which are left out (the club's bibs).
+          Shown before any entry arrives, so it can be set up front. */}
+      {catalogueData?.show && (
+        <CatalogueNumberRuleCard
+          showId={showId}
+          rule={catalogueNumberRule(catalogueData.show)}
+          locked={numbersLocked}
+        />
+      )}
 
       {/* Catalogue numbers — provisional (auto-resort on every add) vs locked
           for printing (late entries append so printed numbers never shift). */}
