@@ -29,6 +29,7 @@ import { buildClassLabelMap, svDisplayAge } from '@/lib/class-labels';
 import { publicOrgColumns } from '../public-org-columns';
 import { sendJudgeApprovalRequestEmail } from '@/server/services/email';
 import { isLiveEntry } from '@/lib/entry-counts';
+import { sortEntries } from '@/components/catalogue/catalogue-utils';
 import { classResultsPublishState } from '@/lib/class-results-publish-state';
 import { recordTopAward, removeTopAwardHolder } from '@/server/services/achievements';
 import { recordSvMeasurement } from '@/server/services/sv-measurement';
@@ -1126,6 +1127,14 @@ export const stewardRouter = createTRPCRouter({
             // Sept 2026: class 6b vanished and she couldn't tell which case
             // it was).
             allAbsent: boolean;
+            // Who was absent from THIS class, in catalogue-number order
+            // (Mandy 8076, 21 Oct 2026). Rides on the class card, so it is
+            // visible exactly when the card is and never on its own.
+            absentees: {
+              entryClassId: string;
+              catalogueNumber: string | null;
+              dogName: string;
+            }[];
             results: {
               entryClassId: string;
               placement: number | null;
@@ -1142,6 +1151,15 @@ export const stewardRouter = createTRPCRouter({
           }[];
         }
       >();
+
+      // The name a results line shows: the handler for a Junior Handling
+      // entry, the dog for everything else. Placings and absentees both
+      // print it, so they cannot name the same entry two ways.
+      type LiveEntry = (typeof classes)[number]['entryClasses'][number]['entry'];
+      const entryDisplayName = (entry: LiveEntry) =>
+        entry.entryType === 'junior_handler'
+          ? (entry.juniorHandlerDetails?.handlerName ?? entry.exhibitor?.name ?? 'Unknown Handler')
+          : (entry.dog?.registeredName ?? 'Unknown');
 
       for (const sc of classes) {
         const breedName = sc.breed?.name ?? 'Any Breed';
@@ -1185,9 +1203,7 @@ export const stewardRouter = createTRPCRouter({
             winnerPhotoUrl: ec.result!.winnerPhotoUrl,
             catalogueNumber: ec.entry.catalogueNumber,
             dogId: ec.entry.dog?.id ?? null,
-            dogName: ec.entry.entryType === 'junior_handler'
-              ? (ec.entry.juniorHandlerDetails?.handlerName ?? ec.entry.exhibitor?.name ?? 'Unknown Handler')
-              : (ec.entry.dog?.registeredName ?? 'Unknown'),
+            dogName: entryDisplayName(ec.entry),
             dogSex: ec.entry.dog?.sex ?? null,
             dogDateOfBirth: ec.entry.dog?.dateOfBirth ?? null,
             exhibitorName: ec.entry.exhibitor?.name ?? '',
@@ -1222,10 +1238,24 @@ export const stewardRouter = createTRPCRouter({
           show.status === 'in_progress' || show.status === 'completed' || show.resultsPublishedAt !== null;
         const allAbsentVisible = allAbsent && (isPrivileged || showHasStarted);
 
+        // The same confirmed entries `dogsForward` counts, so "5 presented /
+        // 8 entered" and three absentees can never disagree. Numeric-aware
+        // sort: catalogue numbers are text, and "10" must follow "9".
+        const absentees = sortEntries(
+          confirmedEntries
+            .filter((ec) => ec.absent)
+            .map((ec) => ({
+              entryClassId: ec.id,
+              catalogueNumber: ec.entry.catalogueNumber,
+              dogName: entryDisplayName(ec.entry),
+            })),
+        );
+
         if (classResults.length > 0 || allAbsentVisible) {
           breedGroups.get(breedName)!.classes.push({
             classId: sc.id,
             allAbsent,
+            absentees,
             // Strip the "SV " disambiguation prefix some sv_age defs carry
             // ("SV Yearling", "SV Junior") — the catalogue/schedule/judges-
             // book already do this via the same helper; results were the one

@@ -35,6 +35,7 @@ import { SE_H } from '@/components/show-experience/tokens';
 import { resolveTopAwards, buildPlacementIndex, eligibleCandidates, isPuppyOnShowDate, awardFilter } from '@/lib/top-awards';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { ClassAbsentees } from '@/components/shows/class-absentees';
 import { Progress } from '@/components/ui/progress';
 import {
   Select,
@@ -1098,6 +1099,7 @@ export default function SecretaryResultsPage() {
                         ))}
                       </div>
                     )}
+                    <ClassAbsentees absentees={cls.absentees} className="mt-1" />
                   </div>
                 ))}
               </div>

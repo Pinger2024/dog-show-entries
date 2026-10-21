@@ -24,6 +24,7 @@ import { computeSvClassRatings } from '@/lib/sv-grading';
 import { svCoatDisplayName } from '@/lib/class-labels';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { ClassAbsentees } from '@/components/shows/class-absentees';
 import { SE_H } from '@/components/show-experience/tokens';
 import { cn } from '@/lib/utils';
 import { isShowLive } from '@/lib/show-status';
@@ -608,6 +609,7 @@ export default function LiveResultsPage({
                           ))}
                         </div>
                         )}
+                        <ClassAbsentees absentees={cls.absentees} className="mt-1.5" />
                       </div>
                       );
                     })}
