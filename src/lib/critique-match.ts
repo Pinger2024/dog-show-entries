@@ -1,0 +1,157 @@
+/**
+ * Matches parsed critique blocks (critique-parse.ts) against the show's
+ * results graph — class+placement is the primary key, cleaned-dog-name
+ * similarity is a confidence signal, not a match key. Pure — no DB imports;
+ * the caller resolves show_classes → entry_classes → entries → dogs →
+ * results into the narrow ResultsGraph shape below.
+ *
+ * See research/DESIGN-judge-critique-upload-2026-07-31.md.
+ */
+import type { ParsedBlock, ParsedCritiqueDocument } from './critique-parse';
+
+export type ResultsGraphEntry = {
+  entryClassId: string;
+  placement: number;
+  registeredName: string;
+  /** Non-empty when a steward already typed a critique on the day. */
+  existingCritiqueText: string | null;
+};
+
+export type ResultsGraphShowClass = {
+  showClassId: string;
+  className: string;
+  sex: 'dog' | 'bitch';
+  entries: ResultsGraphEntry[];
+};
+
+export type BlockConfidence = 'exact' | 'check' | 'unmatched';
+
+export type MatchedBlock = ParsedBlock & {
+  matchedEntryClassId: string | null;
+  confidence: BlockConfidence;
+  /** Steward already wrote a critique for this dog — both versions kept for an explicit choice. */
+  conflict: { existingText: string } | null;
+  resolution: 'document' | 'existing' | null;
+  include: boolean;
+  /** Award mentions detected in the critique prose — review hints only, never drive matching. */
+  hints: string[];
+};
+
+export type MatchedCritiqueDocument = {
+  v: 1;
+  blocks: MatchedBlock[];
+};
+
+const AWARD_PHRASES = ['Dog CC', 'Bitch CC', 'Challenge Certificate', 'Reserve CC', 'Best Puppy'];
+
+function detectAwardMentions(text: string): string[] {
+  const found: string[] = [];
+  for (const phrase of AWARD_PHRASES) {
+    const re = new RegExp(`\\b${phrase.replace(/\s+/g, '\\s+')}\\b`, 'i');
+    if (re.test(text)) found.push(phrase);
+  }
+  return found;
+}
+
+// Trim/case/punctuation-insensitive comparison, with a token-order-
+// insensitive fallback (registered names in the DB have case variants and
+// trailing spaces; a judge's transcription can reorder nothing but we
+// normalise defensively anyway).
+//
+// Judges write a dog's name the way people say it, not the way it's
+// registered (Hugh De Zutter, South Western 2026: half his 50 came up amber).
+// These are the SAME dog, so they match exactly:
+//   - an import tag or award in brackets — "BENZES VOM AMUR (IMP DEU)", "(VW)"
+//   - apostrophes — "Wakematt's Luco" / "WAKEMATTS LUCO"
+//   - "v" / "von" for "vom" — "Billie v Huhnegrab"
+//   - titles in front — "Ch", "Int Ch.", "IR CH Multi International CH"
+// A misspelling ("Kleenhugel" / "KLEEHUEGEL") is still amber: the secretary
+// confirms it by eye.
+const NAME_TITLE_TOKENS = new Set(['ch', 'sh', 'int', 'ir', 'multi', 'international', 'champion']);
+const NAME_VOM_TOKENS = new Set(['v', 'vom', 'von']);
+
+// Also the Find a Dog search's notion of a name (services/public-dog-summary.ts),
+// so "wakematts luco" or "billie v huhnegrab" finds the dog it would match here.
+export function normalizeName(name: string): string {
+  const tokens = name
+    .toLowerCase()
+    .replace(/\([^()]*\)/g, ' ')
+    .replace(/['’‘`]/g, '')
+    .replace(/[^a-z0-9\s]/gi, ' ')
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((t) => (NAME_VOM_TOKENS.has(t) ? 'vom' : t));
+  while (tokens.length > 1 && NAME_TITLE_TOKENS.has(tokens[0]!)) tokens.shift();
+  return tokens.join(' ');
+}
+
+export function namesMatch(a: string, b: string): boolean {
+  const na = normalizeName(a);
+  const nb = normalizeName(b);
+  if (!na || !nb) return false;
+  if (na === nb) return true;
+  const ta = na.split(' ').filter(Boolean).sort().join(' ');
+  const tb = nb.split(' ').filter(Boolean).sort().join(' ');
+  return ta === tb;
+}
+
+export function matchCritiqueBlocks(
+  parsed: ParsedCritiqueDocument,
+  resultsGraph: ResultsGraphShowClass[],
+): MatchedCritiqueDocument {
+  const showClassById = new Map(resultsGraph.map((sc) => [sc.showClassId, sc]));
+
+  const blocks: MatchedBlock[] = parsed.blocks.map((block) => {
+    const hints = detectAwardMentions(block.critiqueText);
+
+    if (block.kind !== 'critique') {
+      return {
+        ...block,
+        matchedEntryClassId: null,
+        confidence: 'unmatched' as const,
+        conflict: null,
+        resolution: null,
+        // A text-less unmatched block (an unrecognised class header on its
+        // own) carries nothing publishable — defaulting it to excluded keeps
+        // it visible in review without blocking the publish gate.
+        include: block.kind === 'overview' || block.critiqueText.trim().length > 0,
+        hints,
+      };
+    }
+
+    const showClass = block.matchedShowClassId ? showClassById.get(block.matchedShowClassId) : undefined;
+    const entry = showClass?.entries.find((e) => e.placement === block.position);
+
+    if (!entry) {
+      return {
+        ...block,
+        matchedEntryClassId: null,
+        confidence: 'unmatched',
+        conflict: null,
+        resolution: null,
+        include: true,
+        hints,
+      };
+    }
+
+    const confidence: BlockConfidence = namesMatch(block.dogNameCleaned ?? '', entry.registeredName)
+      ? 'exact'
+      : 'check';
+
+    const existingText = entry.existingCritiqueText?.trim() ?? '';
+    const conflict =
+      existingText && existingText !== block.critiqueText.trim() ? { existingText: entry.existingCritiqueText! } : null;
+
+    return {
+      ...block,
+      matchedEntryClassId: entry.entryClassId,
+      confidence,
+      conflict,
+      resolution: null,
+      include: true,
+      hints,
+    };
+  });
+
+  return { v: 1, blocks };
+}

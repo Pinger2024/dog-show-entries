@@ -93,6 +93,7 @@ async function seed() {
     .values([
       // Global sortOrder — determines class order within each sex group
       // SLC variants interleave with their standard counterparts; Veteran is always last breed class
+      { name: 'Baby Puppy', type: 'age' as const, sortOrder: 5, minAgeMonths: 4, maxAgeMonths: 6, description: 'For dogs of 4 and not exceeding 6 calendar months of age on the first day of the show.' },
       { name: 'Minor Puppy', type: 'age' as const, sortOrder: 10, minAgeMonths: 6, maxAgeMonths: 9, description: 'For dogs of 6 and not exceeding 9 calendar months of age on the first day of the show.' },
       { name: 'Puppy', type: 'age' as const, sortOrder: 20, minAgeMonths: 6, maxAgeMonths: 12, description: 'For dogs of 6 and not exceeding 12 calendar months of age on the first day of the show.' },
       { name: 'Junior', type: 'age' as const, sortOrder: 30, minAgeMonths: 6, maxAgeMonths: 18, description: 'For dogs of 6 and not exceeding 18 calendar months of age on the first day of the show.' },
@@ -115,6 +116,14 @@ async function seed() {
       // Special
       { name: 'Good Citizen Dog Scheme', type: 'special' as const, sortOrder: 150, description: 'For dogs that have passed any level of the Royal Kennel Club Good Citizen Dog Scheme.' },
       { name: 'Special Beginners', type: 'special' as const, sortOrder: 140, description: 'For dogs whose owners/handlers have never won a CC or Reserve CC at Championship Shows.' },
+      // Special Award Classes — same wording as the standard age/achievement
+      // class they shadow, plus a CC-eligibility line per Amanda 2026-05-19.
+      { name: 'Special Award Class - Puppy', type: 'special' as const, sortOrder: 200, description: 'For dogs of 6 and not exceeding 12 calendar months of age on the first day of the show. They are not eligible for Challenge Certificates.' },
+      { name: 'Special Award Class - Junior', type: 'special' as const, sortOrder: 210, description: 'For dogs of 6 and not exceeding 18 calendar months of age on the first day of the show. They are not eligible for Challenge Certificates.' },
+      { name: 'Special Award Class - Special Yearling', type: 'special' as const, sortOrder: 215, description: 'For dogs of 6 and not exceeding 24 calendar months of age on the first day of the show. They are not eligible for Challenge Certificates.' },
+      { name: 'Special Award Class - Post Graduate', type: 'special' as const, sortOrder: 220, description: 'For dogs which have not won a Challenge Certificate/CACIB/CAC/Green Star or five or more First Prizes at Championship Shows in Post Graduate, Minor Limit, Mid Limit, Limit and Open classes, whether restricted or not, where Challenge Certificates were offered for the breed. They are not eligible for Challenge Certificates.' },
+      { name: 'Special Award Class - Open', type: 'special' as const, sortOrder: 230, description: 'For all dogs of the breed for which the class is provided and eligible for entry at the Show. They are not eligible for Challenge Certificates.' },
+      { name: 'Special Award Class - Veteran', type: 'special' as const, sortOrder: 240, description: 'For dogs of not less than 7 years of age on the first day of the show. They are not eligible for Challenge Certificates.' },
       // Junior Handler classes (legacy — kept for existing entries)
       { name: 'Junior Handler (6-11)', type: 'junior_handler' as const, sortOrder: 310, minAgeMonths: 72, maxAgeMonths: 143, description: 'For handlers aged 6-11 years on the day of the show. Judged on handling skill, not the dog.' },
       { name: 'Junior Handler (12-16)', type: 'junior_handler' as const, sortOrder: 320, minAgeMonths: 144, maxAgeMonths: 203, description: 'For handlers aged 12-16 years on the day of the show. Judged on handling skill, not the dog.' },

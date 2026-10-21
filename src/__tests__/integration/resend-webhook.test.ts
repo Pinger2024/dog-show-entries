@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { eq } from 'drizzle-orm';
 import { feedback } from '@/server/db/schema';
 import { testDb } from '../helpers/db';
+import { resendMocks } from '../helpers/resend-mocks';
 
 // Mock svix's Webhook class so the route's signature verification is bypassed.
 // `verify` returns whatever payload the test injects.
@@ -144,5 +145,108 @@ describe('POST /api/webhooks/resend', () => {
     // No feedback row inserted
     const rows = await testDb.query.feedback.findMany();
     expect(rows).toHaveLength(0);
+  });
+
+  // The Resend account is shared with Lettiva — its email.received webhook
+  // fires for every recipient on the account, not just Remi's. Without a
+  // recipient filter, Lettiva's holiday-let enquiries land in Remi's
+  // feedback table.
+  describe('recipient filtering (shared Resend account)', () => {
+    it('ignores mail addressed to another project on the shared Resend account', async () => {
+      svixPayload = {
+        type: 'email.received',
+        data: {
+          email_id: 'em_test_lettiva',
+          from: 'michael@prometheus-it.com',
+          to: ['enquiries-bhhl-bcac@inbound.lettiva.com'],
+          subject: 'Fwd: Email re Forest House',
+          text: 'body', html: '',
+          created_at: new Date().toISOString(),
+        },
+      };
+      const res = await resendWebhookPOST(svixRequest() as never);
+      expect(res.status).toBe(200);
+      const json = await res.json();
+      expect(json).toEqual({ ignored: true, reason: 'recipient not ours' });
+
+      const rows = await testDb.query.feedback.findMany();
+      expect(rows).toHaveLength(0);
+    });
+
+    it('inserts mail addressed to our inbound domain', async () => {
+      svixPayload = {
+        type: 'email.received',
+        data: {
+          email_id: 'em_test_ours_to',
+          from: 'mandy@hundarkgsd.co.uk',
+          to: ['feedback@inbound.remishowmanager.co.uk'],
+          subject: 'A note',
+          text: 'body', html: '',
+          created_at: new Date().toISOString(),
+        },
+      };
+      const res = await resendWebhookPOST(svixRequest() as never);
+      expect(res.status).toBe(200);
+
+      const row = await testDb.query.feedback.findFirst({
+        where: eq(feedback.resendEmailId, 'em_test_ours_to'),
+      });
+      expect(row).toBeDefined();
+    });
+
+    it('inserts mail with our inbound domain only in cc', async () => {
+      svixPayload = {
+        type: 'email.received',
+        data: {
+          email_id: 'em_test_ours_cc',
+          from: 'someone@example.test',
+          to: ['someone-else@example.test'],
+          cc: ['feedback@inbound.remishowmanager.co.uk'],
+          subject: 'A cc note',
+          text: 'body', html: '',
+          created_at: new Date().toISOString(),
+        },
+      };
+      const res = await resendWebhookPOST(svixRequest() as never);
+      expect(res.status).toBe(200);
+
+      const row = await testDb.query.feedback.findFirst({
+        where: eq(feedback.resendEmailId, 'em_test_ours_cc'),
+      });
+      expect(row).toBeDefined();
+    });
+  });
+
+  // Live 29 Sept 10:05–(fix): the XSS fix (fe392f50) swapped the route's local
+  // `esc` for the shared escapeHtml but missed the Subject line, so building
+  // the "new feedback" notification threw `esc is not defined` — the feedback
+  // row was stored, the webhook answered 500, and Resend's redelivery found the
+  // row already there and skipped the notification. No existing test set
+  // FEEDBACK_NOTIFY_EMAIL, so the notification path never ran.
+  it('notifies once for new feedback, with every sender-supplied value escaped', async () => {
+    process.env.FEEDBACK_NOTIFY_EMAIL = 'founders@example.com';
+    resendMocks.send.mockClear();
+    try {
+      svixPayload = {
+        type: 'email.received',
+        data: {
+          email_id: 'em_test_notify_escape',
+          from: 'Eve <script>x</script> <eve@example.com>',
+          to: ['feedback@inbound.remishowmanager.co.uk'],
+          subject: 'Hello <img src=x onerror=alert(1)>',
+          text: 'Body with <b>tags</b>',
+          html: '<p>Body</p>',
+          created_at: new Date().toISOString(),
+        },
+      };
+      const res = await resendWebhookPOST(svixRequest() as never);
+      expect(res.status).toBe(200);
+      expect(resendMocks.send).toHaveBeenCalledTimes(1);
+      const html = String(resendMocks.send.mock.calls[0]![0].html);
+      expect(html).toContain('&lt;img src=x onerror=alert(1)&gt;');
+      expect(html).not.toMatch(/<img|<script|<b>/);
+    } finally {
+      delete process.env.FEEDBACK_NOTIFY_EMAIL;
+    }
   });
 });

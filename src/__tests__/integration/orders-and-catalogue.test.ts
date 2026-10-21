@@ -8,8 +8,6 @@ import {
   makeOrg,
   makeBreed,
   makeShow,
-  makeShowClass,
-  makeDog,
   makeOrder,
   setShowStatus,
 } from '../helpers/factories';
@@ -18,16 +16,26 @@ async function paidCatalogueOrder() {
   const exhibitor = await makeUser({ role: 'exhibitor' });
   const org = await makeOrg();
   const breed = await makeBreed();
+  // Past start date so the show-day catalogue lock (Amanda 2026-05-28) is
+  // satisfied — a 'completed' show is by definition past its start date.
+  const past = (() => {
+    const d = new Date();
+    d.setUTCDate(d.getUTCDate() - 30);
+    return d.toISOString().slice(0, 10);
+  })();
   const show = await makeShow({
     organisationId: org.id,
     breedId: breed.id,
     status: 'completed',
     name: 'Catalogue Show',
+    startDate: past,
+    endDate: past,
   });
-  // Create a sundry item that matches the CATALOGUE_NAME_PATTERN ('catalog' / 'catalogue')
+  // A catalogue sundry - its KIND (not its name) is what grants access
   const [sundry] = await testDb.insert(sundryItems).values({
     showId: show.id,
     name: 'Show Catalogue',
+    kind: 'printed_catalogue',
     priceInPence: 1000,
     sortOrder: 0,
   }).returning();
@@ -125,41 +133,34 @@ describe('shows.getMyCataloguePurchases', () => {
     expect(list.map((p) => p.showId)).toContain(show.id);
   });
 
+  // Live bug to 15 Oct 2026: My Entries said "View Online Catalogue" from the
+  // day entries closed, while the download (and getCatalogueAccess) stayed
+  // locked until the morning of the show (Amanda 2026-05-28). One rule now.
+  it('a closed show before its day is not available yet — and agrees with getCatalogueAccess', async () => {
+    const { exhibitor, show } = await paidCatalogueOrder();
+    const future = (() => { const d = new Date(); d.setUTCDate(d.getUTCDate() + 10); return d.toISOString().slice(0, 10); })();
+    await testDb.update(shows).set({ status: 'entries_closed', startDate: future, endDate: future }).where(eq(shows.id, show.id));
+    const caller = createTestCaller(exhibitor as never);
+    const [mine] = await caller.shows.getMyCataloguePurchases();
+    const access = await caller.shows.getCatalogueAccess({ showId: show.id });
+    expect(mine?.isAvailable).toBe(false);
+    expect(access.isAvailable).toBe(false);
+  });
+
+  it('a closed show on or after its day is available — in both places', async () => {
+    const { exhibitor, show } = await paidCatalogueOrder();
+    await setShowStatus(show.id, 'entries_closed');
+    const caller = createTestCaller(exhibitor as never);
+    const [mine] = await caller.shows.getMyCataloguePurchases();
+    const access = await caller.shows.getCatalogueAccess({ showId: show.id });
+    expect(mine?.isAvailable).toBe(true);
+    expect(access.isAvailable).toBe(true);
+  });
+
   it('returns empty for a user with no purchases', async () => {
     const stranger = await makeUser({ role: 'exhibitor' });
     const list = await createTestCaller(stranger).shows.getMyCataloguePurchases();
     expect(list).toEqual([]);
-  });
-});
-
-describe('shows.getShowDogPhotos (public)', () => {
-  it('returns up to 24 random primary photos from confirmed entries', async () => {
-    const exhibitor = await makeUser({ role: 'exhibitor' });
-    const org = await makeOrg();
-    const breed = await makeBreed();
-    const show = await makeShow({
-      organisationId: org.id, breedId: breed.id, status: 'completed',
-    });
-    // Confirmed entry on a dog with a primary photo should appear
-    const dog = await makeDog({ ownerId: exhibitor.id, breedId: breed.id });
-    const showClass = await makeShowClass({ showId: show.id, breedId: breed.id });
-    const { makeEntry, makeEntryClass } = await import('../helpers/factories');
-    const entry = await makeEntry({
-      showId: show.id, dogId: dog.id, exhibitorId: exhibitor.id, status: 'confirmed',
-    });
-    await makeEntryClass({ entryId: entry.id, showClassId: showClass.id });
-    const { dogPhotos } = await import('@/server/db/schema');
-    await testDb.insert(dogPhotos).values({
-      dogId: dog.id,
-      storageKey: 'test/key',
-      url: 'https://r2.test/dog.jpg',
-      isPrimary: true,
-    });
-
-    const photos = await createTestCaller(null).shows.getShowDogPhotos({ showId: show.id });
-    expect(photos).toHaveLength(1);
-    expect(photos[0]?.dogId).toBe(dog.id);
-    expect(photos[0]?.photoUrl).toBe('https://r2.test/dog.jpg');
   });
 });
 

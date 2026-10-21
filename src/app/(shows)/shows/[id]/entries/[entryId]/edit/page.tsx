@@ -26,7 +26,9 @@ import { Separator } from '@/components/ui/separator';
 import { StripeProvider } from '@/components/providers/stripe-provider';
 import { PaymentForm } from '@/app/(shows)/shows/[id]/enter/payment-form';
 import { cn } from '@/lib/utils';
+import { SE_H } from '@/components/show-experience/tokens';
 import { toast } from 'sonner';
+import { entryClassChangeBlock, ENTRY_CLASS_CHANGE_MESSAGES } from '@/lib/entry-edit-rules';
 
 export default function EditEntryPage({
   params,
@@ -38,6 +40,10 @@ export default function EditEntryPage({
 
   const [selectedClassIds, setSelectedClassIds] = useState<string[] | null>(null);
   const [clientSecret, setClientSecret] = useState<string | null>(null);
+  // The server's feeDiff from the mutation result — used for the top-up
+  // payment screen so the amount shown always matches what Stripe charges
+  // (ONE owner: priceEntryClassChange via entries.update).
+  const [paymentFeeDiff, setPaymentFeeDiff] = useState<number | null>(null);
 
   const { data: entry, isLoading: entryLoading } = trpc.entries.getById.useQuery(
     { id: entryId }
@@ -53,6 +59,7 @@ export default function EditEntryPage({
   const updateEntry = trpc.entries.update.useMutation({
     onSuccess: (result) => {
       if (result.requiresPayment && result.clientSecret) {
+        setPaymentFeeDiff(result.feeDiff);
         setClientSecret(result.clientSecret);
       } else {
         toast.success('Entry updated', {
@@ -87,17 +94,23 @@ export default function EditEntryPage({
   }, [showClasses]);
 
   const currentTotal = entry?.totalFee ?? 0;
-  const newTotal = useMemo(() => {
-    if (!showClasses) return 0;
-    return showClasses
-      .filter((sc) => effectiveSelection.includes(sc.id))
-      .reduce((sum, sc) => sum + sc.entryFee, 0);
-  }, [showClasses, effectiveSelection]);
 
-  const feeDiff = newTotal - currentTotal;
   const hasChanges = selectedClassIds !== null &&
     (selectedClassIds.length !== currentClassIds.length ||
       selectedClassIds.some((id) => !currentClassIds.includes(id)));
+
+  // What the change will actually cost — the SAME computation `update` then
+  // charges (`priceEntryClassChange`, ONE owner). Never hand-sum class fees
+  // here: show_classes.entryFee is seeded to firstEntryFee, so a raw sum
+  // overstates the price whenever first/subsequent tiers, the regional
+  // scale, a discount group or the multi-dog package apply.
+  const { data: preview, isFetching: previewLoading } = trpc.entries.previewUpdate.useQuery(
+    { id: entryId, classIds: effectiveSelection },
+    { enabled: hasChanges && effectiveSelection.length > 0 }
+  );
+
+  const newTotal = preview?.newFee ?? currentTotal;
+  const feeDiff = preview?.feeDiff ?? 0;
 
   function toggleClass(classId: string) {
     const current = selectedClassIds ?? currentClassIds;
@@ -128,15 +141,30 @@ export default function EditEntryPage({
     );
   }
 
+  // Same rule as the server (src/lib/entry-edit-rules.ts): only a paid entry
+  // on a show still taking entries. Say so plainly rather than offer a form
+  // the server will refuse.
+  const changeBlock = entryClassChangeBlock(entry, entry.show);
+  if (changeBlock && !clientSecret) {
+    return (
+      <div className="container mx-auto max-w-3xl px-4 py-8 text-center">
+        <p className="text-muted-foreground">{ENTRY_CLASS_CHANGE_MESSAGES[changeBlock]}</p>
+        <Button className="mt-4 min-h-[2.75rem]" variant="outline" onClick={() => router.push(`/entries/${entryId}`)}>
+          Back to your entry
+        </Button>
+      </div>
+    );
+  }
+
   // If we have a client secret, show the additional payment form
   if (clientSecret) {
     return (
       <div className="container mx-auto max-w-3xl px-4 py-6">
-        <h1 className="mb-6 text-lg font-bold sm:text-2xl">Additional Payment Required</h1>
+        <h1 className={cn(SE_H, 'mb-6 text-lg sm:text-2xl')}>Additional Payment Required</h1>
         <Card>
           <CardHeader>
             <CardTitle className="text-base">
-              Pay {formatCurrency(feeDiff)}
+              Pay {formatCurrency(paymentFeeDiff ?? 0)}
             </CardTitle>
             <CardDescription>
               Your class changes require an additional payment.
@@ -145,7 +173,7 @@ export default function EditEntryPage({
           <CardContent>
             <StripeProvider clientSecret={clientSecret}>
               <PaymentForm
-                amount={feeDiff}
+                amount={paymentFeeDiff ?? 0}
                 onSuccess={() => {
                   toast.success('Entry updated and payment processed');
                   router.push(`/entries/${entryId}`);
@@ -170,7 +198,7 @@ export default function EditEntryPage({
           <ChevronLeft className="size-4" />
           Back to entry
         </Link>
-        <h1 className="mt-2 text-lg font-bold sm:text-2xl">Edit Classes</h1>
+        <h1 className={cn(SE_H, 'mt-2 text-lg sm:text-2xl')}>Edit Classes</h1>
         <p className="text-sm text-muted-foreground">
           {entry.show.name} &middot; {entry.dog?.registeredName ?? 'Junior Handler'}
         </p>
@@ -206,7 +234,7 @@ export default function EditEntryPage({
                           className={cn(
                             'flex cursor-pointer items-start gap-3 rounded-lg border p-3 transition-all hover:bg-accent/50',
                             isSelected && 'border-primary bg-primary/5',
-                            isSelected && !wasOriginal && 'ring-1 ring-green-500/30',
+                            isSelected && !wasOriginal && 'ring-1 ring-se-fresh/30',
                             !isSelected && wasOriginal && 'ring-1 ring-red-500/30'
                           )}
                         >
@@ -221,7 +249,7 @@ export default function EditEntryPage({
                                 {sc.classDefinition.name}
                               </span>
                               {isSelected && !wasOriginal && (
-                                <Badge className="bg-green-100 text-green-700 text-xs">
+                                <Badge className="bg-se-fresh-soft text-se-fresh-deep text-xs">
                                   Adding
                                 </Badge>
                               )}
@@ -257,32 +285,41 @@ export default function EditEntryPage({
               <span className="text-muted-foreground">Current total</span>
               <span>{formatCurrency(currentTotal)}</span>
             </div>
-            <div className="flex justify-between text-sm">
-              <span className="text-muted-foreground">New total</span>
-              <span>{formatCurrency(newTotal)}</span>
-            </div>
-            <Separator />
-            <div className="flex items-center justify-between font-bold">
-              <span>Difference</span>
-              <span
-                className={cn(
-                  feeDiff > 0 && 'text-orange-600',
-                  feeDiff < 0 && 'text-green-600'
-                )}
-              >
-                <span className="inline-flex items-center gap-1">
-                  {feeDiff > 0 ? (
-                    <ArrowUpRight className="size-4" />
-                  ) : feeDiff < 0 ? (
-                    <ArrowDownRight className="size-4" />
-                  ) : (
-                    <Minus className="size-4" />
-                  )}
-                  {feeDiff > 0 ? '+' : ''}
-                  {formatCurrency(feeDiff)}
-                </span>
-              </span>
-            </div>
+            {hasChanges && previewLoading && !preview ? (
+              <p className="flex items-center gap-2 py-1 text-sm text-muted-foreground">
+                <Loader2 className="size-3.5 animate-spin" />
+                Calculating…
+              </p>
+            ) : (
+              <>
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">New total</span>
+                  <span>{formatCurrency(newTotal)}</span>
+                </div>
+                <Separator />
+                <div className="flex items-center justify-between font-bold">
+                  <span>Difference</span>
+                  <span
+                    className={cn(
+                      feeDiff > 0 && 'text-orange-600',
+                      feeDiff < 0 && 'text-se-fresh-deep'
+                    )}
+                  >
+                    <span className="inline-flex items-center gap-1">
+                      {feeDiff > 0 ? (
+                        <ArrowUpRight className="size-4" />
+                      ) : feeDiff < 0 ? (
+                        <ArrowDownRight className="size-4" />
+                      ) : (
+                        <Minus className="size-4" />
+                      )}
+                      {feeDiff > 0 ? '+' : ''}
+                      {formatCurrency(feeDiff)}
+                    </span>
+                  </span>
+                </div>
+              </>
+            )}
             {feeDiff > 0 && (
               <p className="text-sm text-muted-foreground">
                 An additional payment of {formatCurrency(feeDiff)} will be required.
@@ -304,7 +341,12 @@ export default function EditEntryPage({
           <Button
             className="flex-1"
             onClick={handleSubmit}
-            disabled={!hasChanges || effectiveSelection.length === 0 || updateEntry.isPending}
+            disabled={
+              !hasChanges ||
+              effectiveSelection.length === 0 ||
+              updateEntry.isPending ||
+              (previewLoading && !preview)
+            }
           >
             {updateEntry.isPending ? (
               <>

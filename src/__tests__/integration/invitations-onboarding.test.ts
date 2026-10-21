@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import { invitations, users, memberships } from '@/server/db/schema';
 import { testDb } from '../helpers/db';
 import { createTestCaller } from '../helpers/context';
@@ -41,6 +41,40 @@ describe('invitations.send', () => {
     });
     expect(invite?.status).toBe('pending');
     expect(invite?.token).toBeTruthy();
+  });
+
+  it('rejects inviting into an organisation the caller does not belong to (cross-org escalation)', async () => {
+    const { user: secretaryA } = await makeSecretaryWithOrg();
+    const { org: orgB } = await makeSecretaryWithOrg(); // a different club's org
+    const target = await makeUser({ role: 'exhibitor', email: 'victim-escalation@test.local' });
+
+    // Secretary A must NOT be able to forge a membership in club B's org.
+    await expect(
+      createTestCaller(secretaryA).invitations.send({
+        email: target.email,
+        role: 'secretary',
+        organisationId: orgB.id,
+      })
+    ).rejects.toThrow(/access to this organisation/i);
+
+    // No membership row was forged in org B for either the target or secretary A.
+    const forged = await testDb.query.memberships.findFirst({
+      where: and(eq(memberships.userId, target.id), eq(memberships.organisationId, orgB.id)),
+    });
+    expect(forged).toBeUndefined();
+  });
+
+  it('allows an admin to invite into any organisation (bypasses membership check)', async () => {
+    const admin = await makeUser({ role: 'admin', email: 'platform-admin@test.local' });
+    const { org } = await makeSecretaryWithOrg(); // admin is not a member of this org
+    const target = await makeUser({ role: 'exhibitor', email: 'admin-invited@test.local' });
+
+    const invite = await createTestCaller(admin).invitations.send({
+      email: target.email,
+      role: 'secretary',
+      organisationId: org.id,
+    });
+    expect(invite?.status).toBe('accepted');
   });
 });
 
@@ -217,5 +251,49 @@ describe('onboarding flow', () => {
     expect(res.success).toBe(true);
     const refreshed = await testDb.query.users.findFirst({ where: eq(users.id, user.id) });
     expect(refreshed?.onboardingCompletedAt).toBeInstanceOf(Date);
+  });
+});
+
+/**
+ * Bug hunt 2026-09-22: assignRole overwrote users.role unconditionally, so an
+ * invitation (or accepting one) could DEMOTE someone — an admin invited as a
+ * steward stopped being an admin; another club's secretary invited as a judge
+ * lost secretary access. Granting a role now only ever raises it
+ * (src/lib/roles.ts).
+ */
+describe('granting a role never lowers one', () => {
+  it('an admin invited as a steward stays an admin', async () => {
+    const { user: secretary, org } = await makeSecretaryWithOrg();
+    const admin = await makeUser({ role: 'admin', email: 'the-admin-invited@test.local' });
+    await createTestCaller(secretary).invitations.send({ email: admin.email, role: 'steward', organisationId: org.id });
+    const u = await testDb.query.users.findFirst({ where: eq(users.id, admin.id) });
+    expect(u?.role).toBe('admin');
+  });
+
+  it("another club's secretary invited as a judge stays a secretary", async () => {
+    const { user: secretaryA, org: orgA } = await makeSecretaryWithOrg();
+    const { user: secretaryB } = await makeSecretaryWithOrg();
+    await createTestCaller(secretaryA).invitations.send({ email: secretaryB.email, role: 'judge', organisationId: orgA.id });
+    const u = await testDb.query.users.findFirst({ where: eq(users.id, secretaryB.id) });
+    expect(u?.role).toBe('secretary');
+  });
+
+  it('accepting a steward invitation does not demote a secretary', async () => {
+    const { user: secretaryA, org: orgA } = await makeSecretaryWithOrg();
+    const invite = await createTestCaller(secretaryA).invitations.send({
+      email: 'future-secretary@test.local', role: 'steward', organisationId: orgA.id,
+    });
+    const invitee = await makeUser({ role: 'secretary', email: 'future-secretary@test.local' });
+    await createTestCaller(invitee).invitations.accept({ token: invite!.token! });
+    const u = await testDb.query.users.findFirst({ where: eq(users.id, invitee.id) });
+    expect(u?.role).toBe('secretary');
+  });
+
+  it('still promotes an exhibitor invited as a steward', async () => {
+    const { user: secretary, org } = await makeSecretaryWithOrg();
+    const ex = await makeUser({ role: 'exhibitor', email: 'plain-exhibitor@test.local' });
+    await createTestCaller(secretary).invitations.send({ email: ex.email, role: 'steward', organisationId: org.id });
+    const u = await testDb.query.users.findFirst({ where: eq(users.id, ex.id) });
+    expect(u?.role).toBe('steward');
   });
 });

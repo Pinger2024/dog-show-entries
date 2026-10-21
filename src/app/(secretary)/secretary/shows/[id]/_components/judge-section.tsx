@@ -5,7 +5,9 @@ import {
   Check,
   ChevronDown,
   ChevronsUpDown,
+  Download,
   FileCheck,
+  Pencil,
   Gavel,
   Loader2,
   Mail,
@@ -19,11 +21,13 @@ import {
 import { toast } from 'sonner';
 import { trpc } from '@/lib/trpc';
 import { cn } from '@/lib/utils';
+import { buildJudgeBreedAndClassification } from '@/lib/judge-breed-classification';
 import { formatCurrency, poundsToPence, penceToPoundsString } from '@/lib/date-utils';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
+import { Checkbox } from '@/components/ui/checkbox';
 import {
   Card,
   CardContent,
@@ -72,6 +76,23 @@ import {
 import { contractStageConfig } from '../_lib/show-utils';
 import { JudgeCoverageDashboard } from '@/components/judges/judge-coverage-dashboard';
 import { AddJudgeWizard } from '@/components/judges/add-judge-wizard';
+import { GroupJudgesPanel } from '@/components/judges/group-judges-panel';
+
+function formatContractTimeline(contract: {
+  offerSentAt: Date | string | null;
+  acceptedAt: Date | string | null;
+  confirmedAt: Date | string | null;
+  declinedAt: Date | string | null;
+}): string {
+  const short = (d: Date | string) =>
+    new Date(d).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+  const parts: string[] = [];
+  if (contract.offerSentAt) parts.push(`Offer sent ${short(contract.offerSentAt)}`);
+  if (contract.acceptedAt) parts.push(`Accepted ${short(contract.acceptedAt)}`);
+  if (contract.confirmedAt) parts.push(`Confirmed ${short(contract.confirmedAt)}`);
+  if (contract.declinedAt) parts.push(`Declined ${short(contract.declinedAt)}`);
+  return parts.join(' · ');
+}
 
 export function JudgesSection({ showId }: { showId: string }) {
   const [adding, setAdding] = useState(false);
@@ -104,6 +125,7 @@ export function JudgesSection({ showId }: { showId: string }) {
   const [wizardOpen, setWizardOpen] = useState(false);
   const [wizardPrefillBreedId, setWizardPrefillBreedId] = useState<string | null | undefined>(undefined);
   const [wizardPrefillSex, setWizardPrefillSex] = useState<string | null | undefined>(undefined);
+  const [wizardPrefillSpecialAwards, setWizardPrefillSpecialAwards] = useState(false);
   const utils = trpc.useUtils();
 
   const { data: assignments, isLoading } =
@@ -113,6 +135,10 @@ export function JudgesSection({ showId }: { showId: string }) {
   const { data: showRings } = trpc.secretary.getShowRings.useQuery({ showId });
   const { data: contracts } = trpc.secretary.getJudgeContracts.useQuery({ showId });
   const { data: showData } = trpc.shows.getById.useQuery({ id: showId });
+  // SV/WUSV regional shows aren't RKC-licensed — soften the RKC-specific judge
+  // wording (contract process, "subject to approval", affix, duplicate-check).
+  const isWusv =
+    (showData as { showRuleset?: 'rkc' | 'wusv' } | undefined)?.showRuleset === 'wusv';
 
   // For single-breed shows, derive the breed from the show's classes
   const singleBreedId = useMemo(() => {
@@ -157,7 +183,7 @@ export function JudgesSection({ showId }: { showId: string }) {
       const msg = err.message ?? 'Failed to add judge';
       // Provide more helpful error messages for common issues
       if (msg.includes('unique') || msg.includes('duplicate')) {
-        toast.error('A judge with this name or RKC number already exists. Select them from the dropdown instead.');
+        toast.error(isWusv ? 'A judge with this name already exists. Select them from the dropdown instead.' : 'A judge with this name or RKC number already exists. Select them from the dropdown instead.');
       } else if (msg.includes('required') || msg.includes('min')) {
         toast.error('Judge name is required.');
       } else {
@@ -183,6 +209,9 @@ export function JudgesSection({ showId }: { showId: string }) {
       setSelectedRingId('');
       setSelectedSexFilter('both');
       utils.secretary.getShowJudges.invalidate({ showId });
+      utils.secretary.getJudgeCoverage.invalidate({ showId });
+      utils.secretary.getPhaseBlockers.invalidate({ showId });
+      utils.secretary.getChecklistAutoDetect.invalidate({ showId });
     },
     onError: (err) => {
       const msg = err.message ?? 'Failed to assign judge';
@@ -202,6 +231,9 @@ export function JudgesSection({ showId }: { showId: string }) {
       setSelectedRingId('');
       setSelectedSexFilter('both');
       utils.secretary.getShowJudges.invalidate({ showId });
+      utils.secretary.getJudgeCoverage.invalidate({ showId });
+      utils.secretary.getPhaseBlockers.invalidate({ showId });
+      utils.secretary.getChecklistAutoDetect.invalidate({ showId });
     },
     onError: (err) => {
       const msg = err.message ?? 'Failed to assign judge';
@@ -218,6 +250,8 @@ export function JudgesSection({ showId }: { showId: string }) {
       toast.success('Judge assignment removed');
       utils.secretary.getShowJudges.invalidate({ showId });
       utils.secretary.getJudgeCoverage.invalidate({ showId });
+      utils.secretary.getPhaseBlockers.invalidate({ showId });
+      utils.secretary.getChecklistAutoDetect.invalidate({ showId });
     },
     onError: () => toast.error('Failed to remove judge assignment'),
   });
@@ -270,6 +304,47 @@ export function JudgesSection({ showId }: { showId: string }) {
     onError: (err) => toast.error(err.message ?? 'Failed to send confirmation'),
   });
 
+  // Edit judge — corrects a mis-entered email / phone / affix on an
+  // existing judge record without going through the add-judge wizard.
+  const [editJudgeId, setEditJudgeId] = useState<string | null>(null);
+  const [editJudgeForm, setEditJudgeForm] = useState({
+    name: '',
+    contactEmail: '',
+    contactPhone: '',
+    kennelClubAffix: '',
+  });
+  const updateJudgeMutation = trpc.secretary.updateJudge.useMutation({
+    onSuccess: () => {
+      toast.success('Judge details updated');
+      setEditJudgeId(null);
+      utils.secretary.getShowJudges.invalidate({ showId });
+      utils.secretary.searchJudges.invalidate();
+    },
+    onError: (err) => toast.error(err.message ?? 'Failed to update judge'),
+  });
+
+  const setRkcApprovalMutation = trpc.secretary.setJudgeRkcApproval.useMutation({
+    onSuccess: (_data, vars) => {
+      toast.success(
+        vars.subjectToRkcApproval
+          ? (isWusv ? 'Judge flagged as subject to approval' : 'Judge flagged as subject to RKC approval')
+          : (isWusv ? 'Approval flag cleared' : 'RKC approval flag cleared'),
+      );
+      utils.secretary.getShowJudges.invalidate({ showId });
+    },
+    onError: (err) => toast.error(err.message ?? (isWusv ? 'Failed to update approval flag' : 'Failed to update RKC approval flag')),
+  });
+
+  function openEditJudge(judge: { judgeId: string; name: string; contactEmail: string | null; contactPhone: string | null; kennelClubAffix?: string | null }) {
+    setEditJudgeForm({
+      name: judge.name,
+      contactEmail: judge.contactEmail ?? '',
+      contactPhone: judge.contactPhone ?? '',
+      kennelClubAffix: judge.kennelClubAffix ?? '',
+    });
+    setEditJudgeId(judge.judgeId);
+  }
+
   // Build a map of judgeId -> latest contract for quick lookups
   const contractsByJudge = useMemo(() => {
     const map = new Map<string, NonNullable<typeof contracts>[number]>();
@@ -284,39 +359,76 @@ export function JudgesSection({ showId }: { showId: string }) {
 
   // Deduplicate judges from assignments (a judge may have multiple breed/ring assignments)
   const uniqueJudges = useMemo(() => {
-    const seen = new Map<string, {
+    type JudgeRow = {
       judgeId: string;
       name: string;
       kcNumber: string | null;
       contactEmail: string | null;
-      breeds: string[];
+      contactPhone: string | null;
+      kennelClubAffix: string | null;
       rings: string[];
       assignmentIds: string[];
-    }>();
+      subjectToRkcApproval: boolean;
+    };
+
+    const seen = new Map<string, JudgeRow>();
     for (const a of assignments ?? []) {
+      // Group-level assignments (with a judgeRoleId) are shown in GroupJudgesPanel, not here
+      if (a.judgeRole) continue;
       const existing = seen.get(a.judgeId);
       if (existing) {
-        if (a.breed && !existing.breeds.includes(a.breed.name)) {
-          existing.breeds.push(a.breed.name);
-        }
         if (a.ring && !existing.rings.includes(`Ring ${a.ring.number}`)) {
           existing.rings.push(`Ring ${a.ring.number}`);
         }
         existing.assignmentIds.push(a.id);
+        if ((a as { subjectToRkcApproval?: boolean }).subjectToRkcApproval) {
+          existing.subjectToRkcApproval = true;
+        }
       } else {
         seen.set(a.judgeId, {
           judgeId: a.judgeId,
           name: a.judge.name,
           kcNumber: a.judge.kcNumber,
           contactEmail: a.judge.contactEmail,
-          breeds: a.breed ? [a.breed.name] : [],
+          contactPhone: a.judge.contactPhone,
+          kennelClubAffix: a.judge.kennelClubAffix,
           rings: a.ring ? [`Ring ${a.ring.number}`] : [],
           assignmentIds: [a.id],
+          subjectToRkcApproval: (a as { subjectToRkcApproval?: boolean }).subjectToRkcApproval === true,
         });
       }
     }
     return Array.from(seen.values());
   }, [assignments]);
+
+  // The show's breed list for buildJudgeBreedAndClassification — mirrors the
+  // server derivation in secretary.ts (sendJudgeOffer etc): a single-breed
+  // show's breed comes straight off the shows row; a general show's breed
+  // list comes from the distinct breeds on its showClasses.
+  const showBreedNames = useMemo(() => {
+    if (showData?.breed?.name) return [showData.breed.name];
+    return [...new Set((showData?.showClasses ?? []).filter((sc) => sc.breed).map((sc) => sc.breed!.name))];
+  }, [showData]);
+
+  // Build the breed + classification labels Amanda wants shown on the
+  // assignments card and inside the offer email preview (2026-05-15).
+  // breed line = the actual breed(s); classification = what kind of judging
+  // (breed classes / Special Awards / Junior Handling). ONE owner for this
+  // label: buildJudgeBreedAndClassification (src/lib/judge-breed-classification.ts)
+  // — this used to be reimplemented inline here, which let the assignments
+  // card and the offer email/contract PDF drift apart (fixed 2026-09-18).
+  function deriveJudgeLabels(j: typeof uniqueJudges[number]): {
+    breedLine: string;
+    classificationLines: string[];
+  } {
+    const judgeAssignments = (assignments ?? []).filter((a) => a.judgeId === j.judgeId && !a.judgeRole);
+    const { breedLine, classifications } = buildJudgeBreedAndClassification(
+      judgeAssignments,
+      showBreedNames,
+      showData?.name,
+    );
+    return { breedLine, classificationLines: classifications };
+  }
 
   function openOfferDialog(judgeId: string, email: string) {
     setOfferJudgeId(judgeId);
@@ -334,9 +446,10 @@ export function JudgesSection({ showId }: { showId: string }) {
       {/* Coverage Dashboard */}
       <JudgeCoverageDashboard
         showId={showId}
-        onAddJudge={(breedId, sex) => {
+        onAddJudge={(breedId, sex, isSpecialAwards) => {
           setWizardPrefillBreedId(breedId);
           setWizardPrefillSex(sex);
+          setWizardPrefillSpecialAwards(isSpecialAwards);
           setWizardOpen(true);
         }}
       />
@@ -348,14 +461,20 @@ export function JudgesSection({ showId }: { showId: string }) {
         onOpenChange={setWizardOpen}
         prefillBreedId={wizardPrefillBreedId}
         prefillSex={wizardPrefillSex}
+        prefillSpecialAwards={wizardPrefillSpecialAwards}
       />
+
+      {/* Group & show-level judges — multi-breed shows only */}
+      {showData?.showScope === 'general' && (
+        <GroupJudgesPanel showId={showId} />
+      )}
 
       {/* Current judge assignments with contract status */}
       <Card>
         <CardHeader>
           <CardTitle>Current Assignments ({uniqueJudges.length})</CardTitle>
           <CardDescription>
-            Manage judge assignments and track the three-stage RKC contract process.
+            Manage judge assignments and track the three-stage {isWusv ? 'contract' : 'RKC contract'} process.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -393,17 +512,29 @@ export function JudgesSection({ showId }: { showId: string }) {
                             <Badge variant="outline" className="text-muted-foreground">No Contract</Badge>
                           )}
                         </div>
-                        <div className="mt-1 flex flex-wrap gap-1.5">
-                          {j.breeds.length > 0 ? (
-                            j.breeds.map((b) => (
-                              <Badge key={b} variant="outline" className="text-xs">{b}</Badge>
-                            ))
-                          ) : (
-                            <span className="text-xs text-muted-foreground">All breeds</span>
-                          )}
-                          {j.rings.map((r) => (
-                            <Badge key={r} variant="outline" className="text-xs">{r}</Badge>
-                          ))}
+                        <div className="mt-1 space-y-1">
+                          {(() => {
+                            const { breedLine, classificationLines } = deriveJudgeLabels(j);
+                            return (
+                              <>
+                                <p className="text-xs text-muted-foreground">
+                                  <span className="font-medium text-foreground">Breed:</span> {breedLine}
+                                </p>
+                                {classificationLines.length > 0 && (
+                                  <p className="text-xs text-muted-foreground">
+                                    <span className="font-medium text-foreground">Classification:</span> {classificationLines.join('; ')}
+                                  </p>
+                                )}
+                                {j.rings.length > 0 && (
+                                  <div className="flex flex-wrap gap-1.5">
+                                    {j.rings.map((r) => (
+                                      <Badge key={r} variant="outline" className="text-xs">{r}</Badge>
+                                    ))}
+                                  </div>
+                                )}
+                              </>
+                            );
+                          })()}
                         </div>
                         {j.contactEmail && (
                           <p className="mt-1 text-xs text-muted-foreground flex items-center gap-1">
@@ -413,12 +544,41 @@ export function JudgesSection({ showId }: { showId: string }) {
                         )}
                         {contract?.offerSentAt && (
                           <p className="mt-1 text-xs text-muted-foreground">
-                            Offer sent {new Date(contract.offerSentAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
-                            {contract.acceptedAt && ` · Accepted ${new Date(contract.acceptedAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}`}
-                            {contract.confirmedAt && ` · Confirmed ${new Date(contract.confirmedAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}`}
-                            {contract.declinedAt && ` · Declined ${new Date(contract.declinedAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}`}
+                            {formatContractTimeline(contract)}
                           </p>
                         )}
+                        {contract?.contractPdfKey && (
+                          <a
+                            href={`/api/judge-contract-pdf/${contract.id}`}
+                            className="mt-2 inline-flex items-center gap-1.5 text-xs font-medium text-primary hover:underline"
+                          >
+                            <Download className="size-3.5" />
+                            Download signed contract (PDF)
+                          </a>
+                        )}
+                        <label
+                          htmlFor={`rkc-approval-${j.judgeId}`}
+                          className="mt-3 flex min-h-[2.75rem] cursor-pointer items-center gap-2.5 rounded-md border border-dashed border-muted-foreground/30 px-3 py-2 text-sm transition-colors hover:bg-muted/40"
+                        >
+                          <Checkbox
+                            id={`rkc-approval-${j.judgeId}`}
+                            checked={j.subjectToRkcApproval}
+                            disabled={setRkcApprovalMutation.isPending}
+                            onCheckedChange={(checked) => {
+                              setRkcApprovalMutation.mutate({
+                                showId,
+                                judgeId: j.judgeId,
+                                subjectToRkcApproval: checked === true,
+                              });
+                            }}
+                          />
+                          <span className="flex-1">
+                            <span className="font-medium">{isWusv ? 'Subject to approval' : 'Subject to RKC approval'}</span>
+                            <span className="ml-1 text-xs text-muted-foreground">
+                              — adds the note after the judge&apos;s name on the schedule
+                            </span>
+                          </span>
+                        </label>
                       </div>
                       <div className="flex items-center gap-1.5 shrink-0">
                         {!contract && (
@@ -476,6 +636,15 @@ export function JudgesSection({ showId }: { showId: string }) {
                             New Offer
                           </Button>
                         )}
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          className="size-11 text-muted-foreground hover:text-foreground"
+                          onClick={() => openEditJudge(j)}
+                          aria-label={`Edit ${j.name}`}
+                        >
+                          <Pencil className="size-3.5" />
+                        </Button>
                         <Button
                           size="icon"
                           variant="ghost"
@@ -606,26 +775,22 @@ export function JudgesSection({ showId }: { showId: string }) {
 
       {/* Send Offer Dialog */}
       <Dialog open={offerDialogOpen} onOpenChange={setOfferDialogOpen}>
-        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle>Send Judging Offer</DialogTitle>
             <DialogDescription>
-              Stage 1 of the RKC three-part contract process. Review the email preview below.
+              Stage 1 of the {isWusv ? 'three-part' : 'RKC three-part'} contract process. Review the email preview below.
             </DialogDescription>
           </DialogHeader>
 
           {/* Email preview */}
           {(() => {
             const judge = uniqueJudges.find((j) => j.judgeId === offerJudgeId);
-            // Derive breed names: judge's assigned breeds → show breed → class breeds → show name
-            const showBreedName = showData?.breed?.name;
-            const classBreedNames = [...new Set(
-              (showData?.showClasses ?? []).filter((sc) => sc.breed).map((sc) => sc.breed!.name)
-            )];
-            const fallbackBreed = showBreedName ?? (classBreedNames.length > 0 ? classBreedNames.join(', ') : (showData?.name ?? 'All breeds'));
-            const breedsText = judge?.breeds.length
-              ? judge.breeds.join(', ')
-              : fallbackBreed;
+            const labels = judge ? deriveJudgeLabels(judge) : { breedLine: '—', classificationLines: [] };
+            const breedLine = labels.breedLine;
+            const classificationText = labels.classificationLines.length > 0
+              ? labels.classificationLines.join(' / ')
+              : '—';
             const showDate = showData?.startDate
               ? new Date(showData.startDate).toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
               : 'TBC';
@@ -637,9 +802,9 @@ export function JudgesSection({ showId }: { showId: string }) {
             return (
               <div className="rounded-lg border bg-muted/30 p-4 space-y-3 text-sm">
                 <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Email preview</p>
-                <div className="rounded-md bg-[#2D5F3F] px-4 py-3 text-center">
-                  <p className="font-semibold text-white">Judging Appointment Offer</p>
-                  <p className="text-xs text-white/70">from {orgName}</p>
+                <div className="rounded-md bg-[#20452c] px-4 py-3 text-center">
+                  <p className="font-semibold text-[#f3ecdc]">Judging Appointment Offer</p>
+                  <p className="text-xs text-[#f3ecdc]/70">from {orgName}</p>
                 </div>
                 <p className="text-muted-foreground">Dear {judge?.name ?? 'Judge'},</p>
                 <p className="text-muted-foreground">On behalf of {orgName}, I have much pleasure in inviting you to judge at our forthcoming show...</p>
@@ -650,12 +815,18 @@ export function JudgesSection({ showId }: { showId: string }) {
                   <span>{showDate}</span>
                   <span className="font-medium">Venue</span>
                   <span>{venue}</span>
-                  <span className="font-medium">Breeds</span>
-                  <span>{breedsText}</span>
+                  <span className="font-medium">Breed</span>
+                  <span>{breedLine}</span>
+                  <span className="font-medium">Classification</span>
+                  <span>{classificationText}</span>
                   {showData?.showType && (
                     <>
                       <span className="font-medium">Type</span>
-                      <span className="capitalize">{showData.showType.replace('_', ' ')}</span>
+                      <span className="capitalize">
+                        {(showData as { showRuleset?: 'rkc' | 'wusv' }).showRuleset === 'wusv'
+                          ? 'Regional'
+                          : showData.showType.replace('_', ' ')}
+                      </span>
                     </>
                   )}
                 </div>
@@ -678,7 +849,7 @@ export function JudgesSection({ showId }: { showId: string }) {
                   </div>
                 )}
                 <div className="col-span-2 flex justify-center gap-4 pt-1">
-                  <span className="rounded-md bg-[#2D5F3F] px-4 py-1.5 text-xs font-medium text-white">Accept Appointment</span>
+                  <span className="rounded-md bg-[#2f6b43] px-4 py-1.5 text-xs font-medium text-[#f3ecdc]">Accept Appointment</span>
                   <span className="text-xs text-muted-foreground underline">Decline</span>
                 </div>
               </div>
@@ -780,6 +951,85 @@ export function JudgesSection({ showId }: { showId: string }) {
                 <Send className="size-4" />
               )}
               Send Offer
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Judge Dialog — corrects mis-entered contact details */}
+      <Dialog
+        open={editJudgeId !== null}
+        onOpenChange={(open) => { if (!open) setEditJudgeId(null); }}
+      >
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Edit judge details</DialogTitle>
+            <DialogDescription>
+              Update the judge&apos;s name, contact details, or affix. Changes
+              apply to every show this judge is on.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div>
+              <Label htmlFor="edit-judge-name" className="text-sm">Name</Label>
+              <Input
+                id="edit-judge-name"
+                value={editJudgeForm.name}
+                onChange={(e) => setEditJudgeForm((f) => ({ ...f, name: e.target.value }))}
+                className="mt-1 h-11"
+              />
+            </div>
+            <div>
+              <Label htmlFor="edit-judge-email" className="text-sm">Email</Label>
+              <Input
+                id="edit-judge-email"
+                type="email"
+                placeholder="Leave blank to clear"
+                value={editJudgeForm.contactEmail}
+                onChange={(e) => setEditJudgeForm((f) => ({ ...f, contactEmail: e.target.value }))}
+                className="mt-1 h-11"
+              />
+            </div>
+            <div>
+              <Label htmlFor="edit-judge-phone" className="text-sm">Phone</Label>
+              <Input
+                id="edit-judge-phone"
+                type="tel"
+                value={editJudgeForm.contactPhone}
+                onChange={(e) => setEditJudgeForm((f) => ({ ...f, contactPhone: e.target.value }))}
+                className="mt-1 h-11"
+              />
+            </div>
+            <div>
+              <Label htmlFor="edit-judge-affix" className="text-sm">{isWusv ? 'Kennel name' : 'Kennel Club affix'}</Label>
+              <Input
+                id="edit-judge-affix"
+                value={editJudgeForm.kennelClubAffix}
+                onChange={(e) => setEditJudgeForm((f) => ({ ...f, kennelClubAffix: e.target.value }))}
+                placeholder="e.g. Sadira"
+                className="mt-1 h-11"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditJudgeId(null)}>
+              Cancel
+            </Button>
+            <Button
+              onClick={() => {
+                if (!editJudgeId) return;
+                updateJudgeMutation.mutate({
+                  judgeId: editJudgeId,
+                  name: editJudgeForm.name.trim() || undefined,
+                  contactEmail: editJudgeForm.contactEmail.trim(),
+                  contactPhone: editJudgeForm.contactPhone.trim(),
+                  kennelClubAffix: editJudgeForm.kennelClubAffix.trim(),
+                });
+              }}
+              disabled={updateJudgeMutation.isPending || !editJudgeForm.name.trim()}
+            >
+              {updateJudgeMutation.isPending && <Loader2 className="size-4 animate-spin" />}
+              Save changes
             </Button>
           </DialogFooter>
         </DialogContent>

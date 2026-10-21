@@ -1,7 +1,6 @@
 'use client';
 
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
 import { X, Eye } from 'lucide-react';
 
 interface ImpersonationBannerProps {
@@ -11,14 +10,14 @@ interface ImpersonationBannerProps {
 }
 
 export function ImpersonationBanner({ userName, userEmail, userRole }: ImpersonationBannerProps) {
-  const router = useRouter();
   const [exiting, setExiting] = useState(false);
 
   async function handleExit() {
     setExiting(true);
     await fetch('/api/admin/stop-impersonate', { method: 'POST' });
-    router.push('/admin/users');
-    router.refresh();
+    // Full reload — router.refresh only re-fetches RSCs; the tRPC/React Query
+    // client cache would still serve the impersonated user's queries.
+    window.location.href = '/admin/users';
   }
 
   return (

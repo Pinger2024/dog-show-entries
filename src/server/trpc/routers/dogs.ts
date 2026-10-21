@@ -1,12 +1,27 @@
 import { z } from 'zod';
+import { isVisibleToViewer } from '@/lib/result-visibility';
+import { classOutcome, historyCounts, publicDogHistory, visibleResult } from '@/lib/public-dog-history';
+import { searchDogsWithPublicHistory } from '@/server/services/public-dog-summary';
+import { loadTitleAwards } from '@/server/services/title-awards';
+import { championProgress, externalShowKind, shcexProgress, EXTERNAL_SHOW_KINDS, SHCEX_POINTS_NEEDED, SHCEX_GROUP_POINTS_NEEDED, type ExternalShowKindValue } from '@/lib/rkc-titles';
+import type { ExternalResultDetails } from '@/server/services/title-awards';
+import { SHOW_COLUMNS_FOR_PUBLIC_INCLUDE } from '../public-show-fields';
 import { TRPCError } from '@trpc/server';
-import { and, eq, inArray, isNull, or, asc, desc, sql } from 'drizzle-orm';
+import { and, eq, inArray, isNull, isNotNull, or, asc, desc, sql, ne } from 'drizzle-orm';
 import { protectedProcedure, publicProcedure } from '../procedures';
 import { createTRPCRouter } from '../init';
-import { dogs, dogOwners, dogTitles, dogPhotos, users, entries, entryClasses, showClasses, shows, results, classDefinitions, achievements, judgeAssignments, judges } from '@/server/db/schema';
+import { dogs, dogOwners, dogTitles, dogPhotos, users, entries, entryClasses, showClasses, shows, results, classDefinitions, achievements, judgeAssignments, judges, dogSvProfile } from '@/server/db/schema';
 import { deleteFromR2 } from '@/server/services/storage';
-import { scrapeKcDog, searchKcDogs, fetchKcDogProfile } from '@/server/services/firecrawl';
+import { searchKcDogs, fetchKcDogProfile, RkcUnavailableError } from '@/server/services/kc-lookup';
 import { isCcType, isRccType } from '@/lib/placements';
+import { effectiveCcType } from '@/lib/effective-achievement-type';
+import { isAgeEligibleOnShowDay, ageInCompletedMonths, todayInLondon } from '@/lib/date-utils';
+import { pickRecommendedAgeClass, preferCoatDivision, type AgeClassOption } from '@/lib/class-recommendation';
+import { dogAccessCondition, dogRowGrantsAccess, userMayActOnDog } from '@/server/dog-access';
+import { findClearedPedigreeFields, pedigreeClearMessage } from '@/lib/dog-pedigree';
+import { getLimitedShowEligibility } from '@/server/services/limited-show-eligibility';
+import { isShowChampion, DOG_TITLE_TYPES } from '@/lib/dog-champion-status';
+import { findDogRegistrationClash, dogRegistrationClashMessage } from '@/lib/dog-registration-clash';
 
 /**
  * Recommend the best class for a dog based on age eligibility first,
@@ -14,37 +29,56 @@ import { isCcType, isRccType } from '@/lib/placements';
  * when the dog is still within an age bracket.
  * If availableClassNames is provided, only suggest from classes in the show schedule.
  */
+/** Age context for the class recommendation — shared by the helper's
+ *  parameter and the call-site local so the shape lives in one place. */
+type RecommendationAgeInfo = {
+  ageMonths: number;
+  dob: string;
+  showDate: string;
+  /** Dog's coat when known — a Long Coat class is only recommended for a
+   *  known long-coat dog (Mandy 2026-07-12). */
+  dogCoat?: 'stock' | 'long_stock' | null;
+  availableAgeClasses: AgeClassOption[];
+};
+
 function getClassRecommendation(
   firsts: number,
   hasCC: boolean,
   availableClassNames?: string[],
-  ageInfo?: {
-    ageMonths: number;
-    availableAgeClasses: { name: string; minMonths: number | null; maxMonths: number | null }[];
-  },
+  ageInfo?: RecommendationAgeInfo,
+  /** True when the Open-only gate is driven by a Champion title (title row
+   *  or a name prefix like "CH ...") rather than a CC recorded on Remi —
+   *  changes the wording of `reason` only; the eligibility rule is
+   *  identical either way (see `isShowChampion`, `lib/dog-champion-status.ts`). */
+  isChampionTitle = false,
+  /** Dog's coat when known — drives which of the eligible achievement
+   *  classes are SUGGESTED (never a Long Coat class for a stock/unknown-coat
+   *  dog); `eligible` itself stays the full RKC-rule list. */
+  dogCoat?: 'stock' | 'long_stock' | null,
 ): {
   eligible: string[];
   suggested: string | null;
+  /** Coat-appropriate eligible classes after `suggested`, in order — the
+   *  enter page shows the first as "or …". Owned here so the client never
+   *  re-derives a runner-up from the raw `eligible` list. */
+  alternatives: string[];
   reason: string;
 } {
   // Check age classes first — if the dog qualifies for an age class, suggest it
   if (ageInfo) {
-    const eligibleAgeClasses = ageInfo.availableAgeClasses.filter((cls) => {
-      const aboveMin = cls.minMonths === null || ageInfo.ageMonths >= cls.minMonths;
-      const belowMax = cls.maxMonths === null || ageInfo.ageMonths < cls.maxMonths;
-      return aboveMin && belowMax;
-    });
+    const eligibleAgeClasses = ageInfo.availableAgeClasses.filter((cls) =>
+      isAgeEligibleOnShowDay(ageInfo.dob, ageInfo.showDate, cls.minMonths, cls.maxMonths),
+    );
 
-    if (eligibleAgeClasses.length > 0) {
-      // Suggest the most specific age class (smallest age range)
-      const bestAgeClass = eligibleAgeClasses[0];
-
+    const bestAgeClass = pickRecommendedAgeClass(eligibleAgeClasses, ageInfo.dogCoat);
+    if (bestAgeClass) {
       // Still compute achievement eligibility for the full eligible list
       const achievementEligible = getAchievementEligible(firsts, hasCC, availableClassNames);
 
       return {
         eligible: achievementEligible,
         suggested: bestAgeClass.name,
+        alternatives: [],
         reason: `${ageInfo.ageMonths} months old — eligible for ${bestAgeClass.name}`,
       };
     }
@@ -52,15 +86,17 @@ function getClassRecommendation(
 
   // No age class eligible — fall back to achievement classes
   const eligible = getAchievementEligible(firsts, hasCC, availableClassNames);
-  const suggested = eligible[0] ?? null;
+  const [suggested = null, ...alternatives] = preferCoatDivision(eligible, (n) => n, dogCoat);
 
   const reason = hasCC
-    ? 'Has won a CC — eligible for Open only'
+    ? isChampionTitle
+      ? 'Champion — eligible for Open only'
+      : 'Has won a CC — eligible for Open only'
     : firsts === 0
       ? 'No qualifying wins recorded — eligible for all achievement classes'
       : `${firsts} first-place win${firsts !== 1 ? 's' : ''} recorded on Remi`;
 
-  return { eligible, suggested, reason };
+  return { eligible, suggested, alternatives, reason };
 }
 
 /** Compute achievement class eligibility based on RKC win rules */
@@ -88,19 +124,156 @@ function getAchievementEligible(
   }
 
   // Filter to only classes available in this show's schedule.
-  // Use flatMap to match breed-specific variants (e.g. "Special Long Coat Open" → "Open")
+  // Use flatMap to match breed-specific variants (e.g. "Special Long Coat Open" → "Open").
+  // De-duplicated: a schedule lists the same definition once per sex (Open
+  // Dog + Open Bitch), which read back as "We suggest Open or Open".
   return availableClassNames
-    ? allEligible.flatMap((name) =>
-        availableClassNames.filter(
-          (avail) =>
-            avail.toLowerCase() === name.toLowerCase() ||
-            avail.toLowerCase().endsWith(` ${name.toLowerCase()}`)
-        )
+    ? Array.from(
+        new Set(
+          allEligible.flatMap((name) =>
+            availableClassNames.filter(
+              (avail) =>
+                avail.toLowerCase() === name.toLowerCase() ||
+                avail.toLowerCase().endsWith(` ${name.toLowerCase()}`)
+            )
+          ),
+        ),
       )
     : allEligible;
 }
 
+/** Shown to exhibitors (60+, not confident with computers) when RKC's own
+ *  website is failing 5xx even after our one retry — worded so it's clear
+ *  this isn't Remi's fault and there's a way forward. Shared by kcLookup and
+ *  kcLookupProfile so the message is identical whichever RKC call failed. */
+const RKC_DOWN_MESSAGE =
+  "The Royal Kennel Club website is having trouble right now. Please try again in a few minutes, or just type your dog's details in by hand.";
+
+/** SV health/working-title fields — single source shared by the
+ *  `upsertSvProfile` mutation and the `/api/dog-autosave` route, so the two
+ *  write paths can't drift (2026-07-11). */
+export const svProfileInputSchema = z.object({
+        breedSurveyClass: z.string().nullable().optional(),
+        breedSurveyYear: z.number().int().min(1900).max(2100).nullable().optional(),
+        breedSurveyor: z.string().nullable().optional(),
+        // Amanda 2026-05-19: BVA + ANKC added as recognised hip / elbow
+        // grading bodies; "other" already supported with hipScoreOther /
+        // elbowScoreOther free-text fields.
+        hipGrade: z.enum(['not_required', 'normal', 'fast_normal', 'noch_zugelassen', 'bva', 'ankc', 'other']).nullable().optional(),
+        hipScore: z.string().nullable().optional(),
+        hipScoreOther: z.string().nullable().optional(),
+        elbowGrade: z.enum(['not_required', 'normal', 'fast_normal', 'noch_zugelassen', 'bva', 'ankc', 'other']).nullable().optional(),
+        elbowScore: z.string().nullable().optional(),
+        elbowScoreOther: z.string().nullable().optional(),
+        haemophiliaClear: z.enum(['not_required', 'yes', 'no', 'not_tested']).nullable().optional(),
+        dmTest: z.enum(['not_required', 'clear', 'carrier', 'affected', 'not_tested']).nullable().optional(),
+        koerung: z.enum(['none', 'current_year', 'lebenzeit']).nullable().optional(),
+        dna: z.enum(['recorded', 'proven']).nullable().optional(),
+        workingTitle: z.string().nullable().optional(),
+        // Other Qualifications (Mandy 2026-08-19) — the GSDL-BRG form's
+        // "BH / AD / WB (Character Assessment) / Other" row. Recorded, never
+        // required, and deliberately NOT working titles: `hasWorkingTitle`
+        // keeps them out of the Working-class routing.
+        bh: z.boolean().optional(),
+        ad: z.boolean().optional(),
+        wb: z.boolean().optional(),
+        otherQualifications: z.string().nullable().optional(),
+});
+
+/** The dog-form sections that autosave in edit mode (pedigree, breeder
+ *  location, microchip, sire/dam registration). Kept here beside `update`'s
+ *  input so the field shapes stay in one file — the `/api/dog-autosave`
+ *  route imports this rather than retyping it. */
+export const dogAutosaveFieldsSchema = z.object({
+  sireName: z.string().nullable().optional(),
+  damName: z.string().nullable().optional(),
+  breederName: z.string().nullable().optional(),
+  breederCountry: z.string().nullable().optional(),
+  breederCity: z.string().nullable().optional(),
+  breederPostcode: z.string().nullable().optional(),
+  microchipNumber: z.string().nullable().optional(),
+  coatType: z.enum(['stock', 'long_stock']).nullable().optional(),
+  sireRegistrationBody: z.enum(['kc', 'sv', 'ikc', 'other']).nullable().optional(),
+  sireRegistrationNumber: z.string().nullable().optional(),
+  damRegistrationBody: z.enum(['kc', 'sv', 'ikc', 'other']).nullable().optional(),
+  damRegistrationNumber: z.string().nullable().optional(),
+});
+
+/** The award types an owner can add by hand. */
+const EXTERNAL_RESULT_TYPES = [
+  'cc',
+  'reserve_cc',
+  'best_of_breed',
+  'best_in_show',
+  'reserve_best_in_show',
+  'best_puppy_in_breed',
+  'best_puppy_in_show',
+  'best_veteran_in_breed',
+  'group_placement',
+  'class_placement',
+  'junior_warrant',
+  'stud_book',
+  'dog_cc',
+  'reserve_dog_cc',
+  'bitch_cc',
+  'reserve_bitch_cc',
+  'best_puppy_dog',
+  'best_puppy_bitch',
+] as const;
+
+/**
+ * A result the owner adds or corrects by hand. `showKind` is one of
+ * EXTERNAL_SHOW_KINDS (lib/rkc-titles.ts); CCs and Reserve CCs are always
+ * championship shows, so they don't need it. A group placing needs its place;
+ * Best in Show / Reserve needs whether it was judged on the group system —
+ * that's what the RKC's Show Certificate of Excellence points turn on.
+ */
+const externalResultInput = z
+  .object({
+    type: z.enum(EXTERNAL_RESULT_TYPES),
+    date: z.string(), // YYYY-MM-DD
+    showName: z.string().min(1).max(255),
+    judgeName: z.string().max(255).optional(),
+    showKind: z.enum(EXTERNAL_SHOW_KINDS.map((k) => k.value) as [ExternalShowKindValue, ...ExternalShowKindValue[]]).optional(),
+    groupPlace: z.number().int().min(1).max(4).optional(),
+    groupSystem: z.boolean().optional(),
+  })
+  .superRefine((v, ctx) => {
+    const isCcOrRcc = isCcType(v.type) || isRccType(v.type);
+    if (!isCcOrRcc && !v.showKind) {
+      ctx.addIssue({ code: 'custom', path: ['showKind'], message: 'Please choose what kind of show it was' });
+    }
+    if (v.type === 'group_placement' && !v.groupPlace) {
+      ctx.addIssue({ code: 'custom', path: ['groupPlace'], message: 'Please choose the place in the group' });
+    }
+  });
+
+function externalResultDetails(input: z.infer<typeof externalResultInput>): ExternalResultDetails {
+  const kind = isCcType(input.type) || isRccType(input.type)
+    ? { showType: 'championship' as const, showScope: 'general' as const }
+    : input.showKind
+      ? externalShowKind(input.showKind)
+      : null;
+  return {
+    showName: input.showName,
+    judgeName: input.judgeName ?? null,
+    selfReported: true,
+    showType: kind?.showType ?? null,
+    showScope: kind?.showScope ?? null,
+    groupPlace: input.type === 'group_placement' ? (input.groupPlace ?? null) : null,
+    groupSystem:
+      input.type === 'best_in_show' || input.type === 'reserve_best_in_show' ? (input.groupSystem ?? null) : null,
+  };
+}
+
 export const dogsRouter = createTRPCRouter({
+  // ── Find a Dog (public search) ──────────────────────────
+  // Only dogs the public may already see a show for — never one known only
+  // from an upcoming entry (services/public-dog-summary.ts).
+  searchPublic: publicProcedure
+    .input(z.object({ query: z.string().trim().min(2).max(100) }))
+    .query(({ ctx, input }) => searchDogsWithPublicHistory(ctx.db, input.query)),
+
   // ── Public dog profile ──────────────────────────────────
   getPublicProfile: publicProcedure
     .input(z.object({ id: z.string().uuid() }))
@@ -115,7 +288,7 @@ export const dogsRouter = createTRPCRouter({
             },
           },
           titles: true,
-          achievements: true,
+          achievements: { with: { show: { columns: { showType: true, showScope: true } } } },
           owners: {
             columns: { userId: true },
           },
@@ -129,6 +302,13 @@ export const dogsRouter = createTRPCRouter({
         });
       }
 
+      // A Best Dog/Bitch at a single-breed championship IS the CC, so surface an
+      // `effectiveType` the profile displays + counts as (Mandy 2026-07-09).
+      const withEffectiveType = <T extends { type: string; show?: { showType: string | null; showScope: string | null } | null }>(a: T) => {
+        const { show, ...rest } = a;
+        return { ...rest, effectiveType: effectiveCcType(a.type, show?.showType, show?.showScope) };
+      };
+
       // Fetch show history: entries → entryClasses → showClass → classDefinition + result
       const dogEntries = await ctx.db.query.entries.findMany({
         where: and(
@@ -137,7 +317,7 @@ export const dogsRouter = createTRPCRouter({
           isNull(entries.deletedAt)
         ),
         with: {
-          show: true,
+          show: { columns: SHOW_COLUMNS_FOR_PUBLIC_INCLUDE },
           entryClasses: {
             with: {
               showClass: {
@@ -151,8 +331,15 @@ export const dogsRouter = createTRPCRouter({
         },
       });
 
-      // Build show history grouped by show
-      const showHistory = dogEntries
+      // Pre-judging privacy: anyone but the dog's owners sees only shows the
+      // dog has been judged at — never an upcoming entry, never a placing
+      // before it is published. One owner: lib/public-dog-history.ts.
+      const viewerId = ctx.session?.user?.id;
+      const viewerIsOwner = !!viewerId && dogRowGrantsAccess(dog, viewerId);
+
+      const today = todayInLondon();
+      const history = publicDogHistory(dogEntries, { viewerIsOwner, today });
+      const showHistory = history
         .map((entry) => ({
           showId: entry.show.id,
           showSlug: entry.show.slug,
@@ -162,30 +349,21 @@ export const dogsRouter = createTRPCRouter({
           classes: entry.entryClasses.map((ec) => ({
             className: ec.showClass.classDefinition.name,
             classNumber: ec.showClass.classNumber,
+            // Absent / placed / withheld / unplaced / not yet judged — one
+            // rule (classOutcome), one set of words (classOutcomeLabel).
+            outcome: classOutcome(entry.show, ec, today),
             placement: ec.result?.placement ?? null,
+            placementStatus: ec.result?.placementStatus ?? null,
             specialAward: ec.result?.specialAward ?? null,
             critiqueText: ec.result?.critiqueText ?? null,
           })),
         }))
         .sort((a, b) => b.showDate.localeCompare(a.showDate));
 
-      // Compute stats
-      const totalShows = showHistory.length;
-      let totalClasses = 0;
-      let firsts = 0;
-      let seconds = 0;
-      let thirds = 0;
-      let specialAwards = 0;
-
-      for (const show of showHistory) {
-        totalClasses += show.classes.length;
-        for (const cls of show.classes) {
-          if (cls.placement === 1) firsts++;
-          if (cls.placement === 2) seconds++;
-          if (cls.placement === 3) thirds++;
-          if (cls.specialAward) specialAwards++;
-        }
-      }
+      // Career numbers count only shows and classes the dog was actually
+      // shown in — not one it was absent from or hasn't been to yet (Mandy,
+      // 2 Oct 2026). One counter for every view: historyCounts.
+      const counts = historyCounts(history, today);
 
       return {
         dog: {
@@ -209,24 +387,31 @@ export const dogsRouter = createTRPCRouter({
           ],
         },
         titles: dog.titles,
-        achievements: dog.achievements,
+        // Same publication gate as results: achievements keyed in on show day
+        // stay hidden until published (owners see their own immediately).
+        achievements: viewerIsOwner
+          ? dog.achievements.map(withEffectiveType)
+          : dog.achievements.filter((a) => isVisibleToViewer(a, false)).map(withEffectiveType),
         showHistory,
         stats: {
-          totalShows,
-          totalClasses,
-          firsts,
-          seconds,
-          thirds,
-          specialAwards,
+          totalShows: counts.shows,
+          totalClasses: counts.classes,
+          firsts: counts.firsts,
+          seconds: counts.seconds,
+          thirds: counts.thirds,
+          specialAwards: counts.specialAwards,
         },
       };
     }),
 
   list: protectedProcedure.query(async ({ ctx }) => {
     const dogList = await ctx.db.query.dogs.findMany({
+      // Amanda 2026-05-22: joint owners should see the dog in their "My
+      // Dogs" too, not just the creator. Match on legacy `dogs.owner_id`
+      // OR any `dog_owners.user_id` row linking the dog to this user.
       where: and(
-        eq(dogs.ownerId, ctx.session.user.id),
-        isNull(dogs.deletedAt)
+        isNull(dogs.deletedAt),
+        dogAccessCondition(ctx.db, ctx.session.user.id),
       ),
       with: {
         breed: {
@@ -289,7 +474,9 @@ export const dogsRouter = createTRPCRouter({
         });
       }
 
-      if (dog.ownerId !== ctx.session.user.id) {
+      // Joint owners (any dog_owners row linked to this user) can view the
+      // dog too — not just the legacy creator. Amanda 2026-05-22.
+      if (!dogRowGrantsAccess(dog, ctx.session.user.id)) {
         throw new TRPCError({
           code: 'FORBIDDEN',
           message: 'You do not own this dog',
@@ -334,16 +521,112 @@ export const dogsRouter = createTRPCRouter({
         breederName: z.string().optional(),
         colour: z.string().optional(),
         owners: z.array(z.object({
-          ownerName: z.string().min(1),
-          ownerAddress: z.string().min(1),
+          ownerTitle: z.string().optional(),
+          ownerName: z.string().min(1, 'Owner name is required'),
+          ownerAddress: z.string().min(1, 'Owner address is required'),
           ownerEmail: z.string().email(),
           ownerPhone: z.string().optional(),
           isPrimary: z.boolean().default(false),
-        })).optional(),
+        }))
+          .min(1, 'At least one owner with name and address is required')
+          // Same sanity bound as update — see the comment there.
+          .max(10, 'Up to 10 owners are allowed'),
+        // Titles known at creation time (e.g. an imported Champion who has
+        // never been entered on Remi before) — previously only addable
+        // after the dog existed (edit mode), so a Champion with no Remi
+        // win history had no way to record the title that makes it
+        // Open-only until after its first save (Mandy, 21 Sept 2026).
+        // Same rows `addTitle` writes, inserted right after the dog. The
+        // recommender also reads a "CH" prefix in the name (isShowChampion),
+        // so a Champion is Open-only even if nobody fills this in.
+        titles: z
+          .array(z.enum(DOG_TITLE_TYPES))
+          .max(10)
+          .optional(),
       })
     )
     .mutation(async ({ ctx, input }) => {
-      const { owners, ...dogData } = input;
+      const { owners, titles, ...dogData } = input;
+
+      // Sire, dam, breeder and colour are mandatory for every new dog — a
+      // catalogue can't be produced without them, and this is the single
+      // choke point every create path (dog form, onboarding wizard) goes
+      // through. dog-form.tsx enforces this client-side too, but the server
+      // check is the guarantee (Mandy 2026-07-27: dogs were being created
+      // with these blank via the onboarding wizard, which had no check).
+      const requiredPedigreeFields: Array<{ key: 'sireName' | 'damName' | 'breederName' | 'colour'; label: string }> = [
+        { key: 'sireName', label: "the sire's name" },
+        { key: 'damName', label: "the dam's name" },
+        { key: 'breederName', label: "the breeder's name" },
+        { key: 'colour', label: 'the colour' },
+      ];
+      const missingPedigreeFields = requiredPedigreeFields.filter(
+        (f) => !dogData[f.key] || !dogData[f.key]!.trim()
+      );
+      if (missingPedigreeFields.length > 0) {
+        const list = missingPedigreeFields.map((f) => f.label).join(', ');
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: `Please add ${list} — they're needed for the catalogue.`,
+        });
+      }
+
+      // If this owner previously removed (soft-deleted) a dog with the same RKC
+      // registration number, restore that row instead of inserting — the unique
+      // kcRegNumber constraint would otherwise throw a raw 500 and the dog could
+      // never be re-added (bug hunt #23). Any other clash — a live duplicate on
+      // this account, or any dog (live or removed) on another account — is
+      // explained by lib/dog-registration-clash.ts, the one place this rule is
+      // written.
+      if (dogData.kcRegNumber) {
+        const clash = await findDogRegistrationClash(ctx.db, {
+          kcRegNumber: dogData.kcRegNumber,
+          currentUserId: ctx.session.user.id,
+        });
+        if (clash.kind === 'own-deleted') {
+          const [restored] = await ctx.db
+            .update(dogs)
+            .set({
+              ...dogData,
+              kcRegNumber: dogData.kcRegNumber,
+              sireName: dogData.sireName ?? null,
+              damName: dogData.damName ?? null,
+              breederName: dogData.breederName ?? null,
+              colour: dogData.colour ?? null,
+              deletedAt: null,
+              ownerId: ctx.session.user.id,
+            })
+            .where(eq(dogs.id, clash.dog.id))
+            .returning();
+          await ctx.db.delete(dogOwners).where(eq(dogOwners.dogId, clash.dog.id));
+          await ctx.db.insert(dogOwners).values(
+            owners.map((o, i) => ({
+              dogId: clash.dog.id,
+              userId: i === 0 ? ctx.session.user.id : null,
+              ownerTitle: o.ownerTitle || null,
+              ownerName: o.ownerName,
+              ownerAddress: o.ownerAddress,
+              ownerEmail: o.ownerEmail,
+              ownerPhone: o.ownerPhone ?? null,
+              isPrimary: o.isPrimary || i === 0,
+              sortOrder: i,
+            }))
+          );
+          if (titles && titles.length > 0) {
+            await ctx.db.delete(dogTitles).where(eq(dogTitles.dogId, clash.dog.id));
+            await ctx.db.insert(dogTitles).values(
+              titles.map((title) => ({ dogId: clash.dog.id, title }))
+            );
+          }
+          return restored!;
+        }
+        if (clash.kind !== 'none') {
+          throw new TRPCError({
+            code: 'BAD_REQUEST',
+            message: dogRegistrationClashMessage(clash, 'owner'),
+          });
+        }
+      }
 
       const [dog] = await ctx.db
         .insert(dogs)
@@ -358,35 +641,24 @@ export const dogsRouter = createTRPCRouter({
         })
         .returning();
 
-      // Create owner records — auto-create primary from user if not provided
-      if (owners && owners.length > 0) {
-        await ctx.db.insert(dogOwners).values(
-          owners.map((o, i) => ({
-            dogId: dog!.id,
-            userId: i === 0 ? ctx.session.user.id : null,
-            ownerName: o.ownerName,
-            ownerAddress: o.ownerAddress,
-            ownerEmail: o.ownerEmail,
-            ownerPhone: o.ownerPhone ?? null,
-            isPrimary: o.isPrimary || i === 0,
-            sortOrder: i,
-          }))
-        );
-      } else {
-        // Default: create primary owner from session user
-        const user = await ctx.db.query.users.findFirst({
-          where: eq(users.id, ctx.session.user.id),
-        });
-        await ctx.db.insert(dogOwners).values({
+      await ctx.db.insert(dogOwners).values(
+        owners.map((o, i) => ({
           dogId: dog!.id,
-          userId: ctx.session.user.id,
-          ownerName: ctx.session.user.name,
-          ownerAddress: user?.address ?? '',
-          ownerEmail: ctx.session.user.email,
-          ownerPhone: user?.phone ?? null,
-          isPrimary: true,
-          sortOrder: 0,
-        });
+          userId: i === 0 ? ctx.session.user.id : null,
+          ownerTitle: o.ownerTitle || null,
+          ownerName: o.ownerName,
+          ownerAddress: o.ownerAddress,
+          ownerEmail: o.ownerEmail,
+          ownerPhone: o.ownerPhone ?? null,
+          isPrimary: o.isPrimary || i === 0,
+          sortOrder: i,
+        }))
+      );
+
+      if (titles && titles.length > 0) {
+        await ctx.db.insert(dogTitles).values(
+          titles.map((title) => ({ dogId: dog!.id, title }))
+        );
       }
 
       return dog!;
@@ -406,10 +678,44 @@ export const dogsRouter = createTRPCRouter({
         breederName: z.string().nullable().optional(),
         colour: z.string().nullable().optional(),
         bio: z.string().nullable().optional(),
+        // Breeder location split — Amanda 2026-05-19, useful for SV
+        // catalogues which list breeder origin.
+        breederCountry: z.string().nullable().optional(),
+        breederCity: z.string().nullable().optional(),
+        breederPostcode: z.string().nullable().optional(),
+        // SV / WUSV fields
+        registrationBody: z.enum(['kc', 'sv', 'ikc', 'other']).nullable().optional(),
+        registrationBodyOther: z.string().nullable().optional(),
+        coatType: z.enum(['stock', 'long_stock']).nullable().optional(),
+        microchipNumber: z.string().nullable().optional(),
+        sireRegistrationBody: z.enum(['kc', 'sv', 'ikc', 'other']).nullable().optional(),
+        sireRegistrationNumber: z.string().nullable().optional(),
+        damRegistrationBody: z.enum(['kc', 'sv', 'ikc', 'other']).nullable().optional(),
+        damRegistrationNumber: z.string().nullable().optional(),
+        // Full owner-row replace — shape mirrors `create`'s `owners` input
+        // exactly. Omit entirely to leave the dog's existing dog_owners rows
+        // untouched (every caller before 2026-08-03 does this — Edit Dog had
+        // no way to fix a mis-entered owner, e.g. "Andy & Ann Johnstone"
+        // crammed into one slot; Mandy asked for this the same day).
+        owners: z.array(z.object({
+          ownerTitle: z.string().optional(),
+          ownerName: z.string().min(1, 'Owner name is required'),
+          ownerAddress: z.string().min(1, 'Owner address is required'),
+          ownerEmail: z.string().email(),
+          ownerPhone: z.string().optional(),
+          isPrimary: z.boolean().default(false),
+        }))
+          .min(1, 'At least one owner with name and address is required')
+          // Sanity bound only, NOT a domain rule — the RKC doesn't cap joint
+          // owners at anything Remi should second-guess. The old max(4)
+          // matched no rule and blocked Mandy saving a genuinely five-owned
+          // dog (Fluffycox Von Shotaan, 2026-08-24). Create has never capped.
+          .max(10, 'Up to 10 owners are allowed')
+          .optional(),
       })
     )
     .mutation(async ({ ctx, input }) => {
-      const { id, kcRegNumber, ...rest } = input;
+      const { id, kcRegNumber, owners, ...rest } = input;
 
       const existing = await ctx.db.query.dogs.findFirst({
         where: and(eq(dogs.id, id), isNull(dogs.deletedAt)),
@@ -422,11 +728,50 @@ export const dogsRouter = createTRPCRouter({
         });
       }
 
-      if (existing.ownerId !== ctx.session.user.id) {
+      if (!(await userMayActOnDog(ctx.db, ctx.session.user.id, existing.id))) {
         throw new TRPCError({
           code: 'FORBIDDEN',
           message: 'You do not own this dog',
         });
+      }
+
+      // Cannot clear sire, dam, breeder or colour once set — a catalogue
+      // can't be produced without them. A dog that's already missing one of
+      // these must stay freely editable (including being filled in) so
+      // Mandy can repair the existing records by hand. Shared with
+      // /api/dog-autosave/[dogId], which writes the same columns — see
+      // lib/dog-pedigree.ts for why the two must not drift apart.
+      const clearedFields = findClearedPedigreeFields(rest, existing);
+      if (clearedFields.length > 0) {
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: pedigreeClearMessage(clearedFields),
+        });
+      }
+
+      // Same guard `create` has carried since bug hunt #23, which update never
+      // got: kc_reg_number is UNIQUE, so setting one that another dog already
+      // holds throws a raw Postgres violation. tRPC hands that message to the
+      // client verbatim — query text, every parameter, the lot — and the dog
+      // form puts it straight on screen. Rebecca Landgren added the same dog
+      // three times, then got a wall of SQL containing her own details when she
+      // tried to fix it (Mandy 2026-08-22). Catch it here and say what's wrong
+      // — lib/dog-registration-clash.ts, the one place this rule is written,
+      // also covers the case Rebecca's fix missed: the clash can be a dog on
+      // someone ELSE'S account, which must never be named to this caller
+      // (Belinda Webb, Michael 2026-09-11).
+      if (kcRegNumber !== undefined && kcRegNumber) {
+        const clash = await findDogRegistrationClash(ctx.db, {
+          kcRegNumber,
+          excludeDogId: id,
+          currentUserId: ctx.session.user.id,
+        });
+        if (clash.kind !== 'none') {
+          throw new TRPCError({
+            code: 'BAD_REQUEST',
+            message: dogRegistrationClashMessage(clash, 'owner'),
+          });
+        }
       }
 
       const data = {
@@ -434,13 +779,85 @@ export const dogsRouter = createTRPCRouter({
         ...(kcRegNumber !== undefined ? { kcRegNumber: kcRegNumber || null } : {}),
       };
 
-      const [updated] = await ctx.db
-        .update(dogs)
-        .set(data)
-        .where(eq(dogs.id, id))
-        .returning();
+      // Dog-field update and owner-row replace happen in one transaction —
+      // unlike `create`'s plain insert, this is a delete-then-insert, and an
+      // interruption between the two would leave the dog with ZERO owner
+      // rows. That's real data loss, not just a partial write.
+      const updated = await ctx.db.transaction(async (tx) => {
+        let row = existing;
+        if (Object.keys(data).length > 0) {
+          const [updatedRow] = await tx
+            .update(dogs)
+            .set(data)
+            .where(eq(dogs.id, id))
+            .returning();
+          row = updatedRow!;
+        }
 
-      return updated!;
+        if (owners) {
+          // Preserve co-owner account links across the replace. The caller
+          // here may now be a linked co-owner rather than the account
+          // holder (the FORBIDDEN check above accepts either), so unlike
+          // the old assumption, `existing.ownerId` is NOT guaranteed to
+          // equal the caller. Row 0 always keeps `existing.ownerId` — same
+          // rule as `create` — but every other row must keep its
+          // `dog_owners.user_id` link if the new row's email still matches
+          // a previously-linked owner. Without this, ANY edit that touches
+          // the owners array (the Edit Dog form always sends one) would
+          // silently unlink every co-owner — exactly the Rafaye Kanto
+          // incident (2026-08-12), recurring on the co-owner's next edit.
+          const priorOwners = await tx.query.dogOwners.findMany({
+            where: eq(dogOwners.dogId, id),
+          });
+          const priorUserIdByEmail = new Map(
+            priorOwners
+              .filter((o) => o.userId !== null)
+              .map((o) => [o.ownerEmail.trim().toLowerCase(), o.userId] as const)
+          );
+
+          // A row keeps whatever account it was linked to, matched by email
+          // — including row 0, which is NOT always the account holder:
+          // Kanto's row 0 is John while the account had been moved to
+          // Rachel, so hardcoding row 0 to `existing.ownerId` stamped
+          // John's name with Rachel's link and cut John out of his own dog
+          // (observed on prod 2026-08-12 20:48). Email matching decides
+          // first; the account holder's link is then placed exactly once —
+          // on its matching row if there is one, otherwise on row 0 — so a
+          // reorder can never duplicate it across two owner slots.
+          const linkedUserIds = owners.map((o) =>
+            priorUserIdByEmail.get(o.ownerEmail.trim().toLowerCase()) ?? null,
+          );
+          if (!linkedUserIds.includes(existing.ownerId)) {
+            // The account holder isn't matched to any row by email — put
+            // their link on the first UNMATCHED row so the historical
+            // "the account is on an owner row" shape survives, without
+            // ever overwriting somebody else's genuine match. (Access
+            // itself never depends on this: `dogAccessCondition` grants
+            // the account holder rights via `dogs.owner_id` regardless.)
+            const firstFree = linkedUserIds.indexOf(null);
+            if (firstFree !== -1) linkedUserIds[firstFree] = existing.ownerId;
+          }
+
+          await tx.delete(dogOwners).where(eq(dogOwners.dogId, id));
+          await tx.insert(dogOwners).values(
+            owners.map((o, i) => ({
+              dogId: id,
+              userId: linkedUserIds[i] ?? null,
+              ownerTitle: o.ownerTitle || null,
+              ownerName: o.ownerName,
+              ownerAddress: o.ownerAddress,
+              ownerEmail: o.ownerEmail,
+              ownerPhone: o.ownerPhone ?? null,
+              isPrimary: o.isPrimary || i === 0,
+              sortOrder: i,
+            }))
+          );
+        }
+
+        return row;
+      });
+
+      return updated;
     }),
 
   delete: protectedProcedure
@@ -457,6 +874,10 @@ export const dogsRouter = createTRPCRouter({
         });
       }
 
+      // Destructive, account-level action — deliberately the account
+      // holder ONLY, not `dogAccessCondition`/`userMayActOnDog`. A linked
+      // co-owner gets full day-to-day rights (view/edit/enter/photos) but
+      // not the power to delete the dog out from under the account holder.
       if (existing.ownerId !== ctx.session.user.id) {
         throw new TRPCError({
           code: 'FORBIDDEN',
@@ -479,7 +900,7 @@ export const dogsRouter = createTRPCRouter({
       const existing = await ctx.db.query.dogs.findFirst({
         where: and(eq(dogs.id, input.id), isNull(dogs.deletedAt)),
       });
-      if (!existing || existing.ownerId !== ctx.session.user.id) {
+      if (!existing || !(await userMayActOnDog(ctx.db, ctx.session.user.id, existing.id))) {
         throw new TRPCError({ code: 'FORBIDDEN', message: 'Not your dog' });
       }
       const [updated] = await ctx.db
@@ -490,111 +911,13 @@ export const dogsRouter = createTRPCRouter({
       return updated!;
     }),
 
-  // ── Owner management ─────────────────────────────────────
-
-  addOwner: protectedProcedure
-    .input(
-      z.object({
-        dogId: z.string().uuid(),
-        ownerName: z.string().min(1),
-        ownerAddress: z.string().min(1),
-        ownerEmail: z.string().email(),
-        ownerPhone: z.string().optional(),
-      })
-    )
-    .mutation(async ({ ctx, input }) => {
-      const dog = await ctx.db.query.dogs.findFirst({
-        where: and(eq(dogs.id, input.dogId), isNull(dogs.deletedAt)),
-        with: { owners: true },
-      });
-
-      if (!dog || dog.ownerId !== ctx.session.user.id) {
-        throw new TRPCError({ code: 'FORBIDDEN', message: 'Not your dog' });
-      }
-
-      if (dog.owners.length >= 4) {
-        throw new TRPCError({
-          code: 'BAD_REQUEST',
-          message: 'Maximum 4 owners per dog',
-        });
-      }
-
-      const [owner] = await ctx.db
-        .insert(dogOwners)
-        .values({
-          dogId: input.dogId,
-          ownerName: input.ownerName,
-          ownerAddress: input.ownerAddress,
-          ownerEmail: input.ownerEmail,
-          ownerPhone: input.ownerPhone ?? null,
-          sortOrder: dog.owners.length,
-          isPrimary: false,
-        })
-        .returning();
-
-      return owner!;
-    }),
-
-  updateOwner: protectedProcedure
-    .input(
-      z.object({
-        id: z.string().uuid(),
-        ownerName: z.string().min(1).optional(),
-        ownerAddress: z.string().min(1).optional(),
-        ownerEmail: z.string().email().optional(),
-        ownerPhone: z.string().nullable().optional(),
-      })
-    )
-    .mutation(async ({ ctx, input }) => {
-      const owner = await ctx.db.query.dogOwners.findFirst({
-        where: eq(dogOwners.id, input.id),
-        with: { dog: true },
-      });
-
-      if (!owner || owner.dog.ownerId !== ctx.session.user.id) {
-        throw new TRPCError({ code: 'FORBIDDEN', message: 'Not your dog' });
-      }
-
-      const { id, ...data } = input;
-      const [updated] = await ctx.db
-        .update(dogOwners)
-        .set(data)
-        .where(eq(dogOwners.id, id))
-        .returning();
-
-      return updated!;
-    }),
-
-  removeOwner: protectedProcedure
-    .input(z.object({ id: z.string().uuid() }))
-    .mutation(async ({ ctx, input }) => {
-      const owner = await ctx.db.query.dogOwners.findFirst({
-        where: eq(dogOwners.id, input.id),
-        with: { dog: { with: { owners: true } } },
-      });
-
-      if (!owner || owner.dog.ownerId !== ctx.session.user.id) {
-        throw new TRPCError({ code: 'FORBIDDEN', message: 'Not your dog' });
-      }
-
-      if (owner.isPrimary) {
-        throw new TRPCError({
-          code: 'BAD_REQUEST',
-          message: 'Cannot remove the primary owner',
-        });
-      }
-
-      await ctx.db.delete(dogOwners).where(eq(dogOwners.id, input.id));
-      return { success: true };
-    }),
-
   // ── Title management ─────────────────────────────────────
 
   addTitle: protectedProcedure
     .input(
       z.object({
         dogId: z.string().uuid(),
-        title: z.enum(['ch', 'sh_ch', 'ir_ch', 'ir_sh_ch', 'int_ch', 'ob_ch', 'ft_ch', 'wt_ch']),
+        title: z.enum(DOG_TITLE_TYPES),
         dateAwarded: z.string().optional(),
         awardingBody: z.string().optional(),
       })
@@ -604,7 +927,7 @@ export const dogsRouter = createTRPCRouter({
         where: and(eq(dogs.id, input.dogId), isNull(dogs.deletedAt)),
       });
 
-      if (!dog || dog.ownerId !== ctx.session.user.id) {
+      if (!dog || !(await userMayActOnDog(ctx.db, ctx.session.user.id, dog.id))) {
         throw new TRPCError({ code: 'FORBIDDEN', message: 'Not your dog' });
       }
 
@@ -629,7 +952,7 @@ export const dogsRouter = createTRPCRouter({
         with: { dog: true },
       });
 
-      if (!title || title.dog.ownerId !== ctx.session.user.id) {
+      if (!title || !(await userMayActOnDog(ctx.db, ctx.session.user.id, title.dog.id))) {
         throw new TRPCError({ code: 'FORBIDDEN', message: 'Not your dog' });
       }
 
@@ -679,14 +1002,22 @@ export const dogsRouter = createTRPCRouter({
     .input(z.object({ query: z.string().min(2).max(255) }))
     .mutation(async ({ input }) => {
       // Require at least a space in the query to prevent overly broad searches
-      // (e.g. just "Hundark" returns hundreds — need "Hundark D" or "Hundark Phantom")
+      // — a bare kennel name can match hundreds of dogs.
       if (!input.query.trim().includes(' ')) {
         throw new TRPCError({
           code: 'BAD_REQUEST',
-          message: 'Please enter at least the kennel name and the first letter of the dog\'s name (e.g. "Hundark D") for a more accurate search.',
+          message: 'Please enter at least the kennel name and the first letter of the dog\'s name (e.g. "Thornfield S") for a more accurate search.',
         });
       }
-      const results = await searchKcDogs(input.query);
+      let results;
+      try {
+        results = await searchKcDogs(input.query);
+      } catch (error) {
+        if (error instanceof RkcUnavailableError) {
+          throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: RKC_DOWN_MESSAGE });
+        }
+        throw error;
+      }
       if (results.length === 0) {
         throw new TRPCError({
           code: 'NOT_FOUND',
@@ -696,11 +1027,19 @@ export const dogsRouter = createTRPCRouter({
       return results;
     }),
 
-  /** Fetch enriched pedigree data from the RKC dog profile page. */
+  /** Fetch enriched pedigree + health data from the RKC dog profile page. */
   kcLookupProfile: protectedProcedure
     .input(z.object({ dogId: z.string().min(1).max(100) }))
     .mutation(async ({ input }) => {
-      const profile = await fetchKcDogProfile(input.dogId);
+      let profile;
+      try {
+        profile = await fetchKcDogProfile(input.dogId);
+      } catch (error) {
+        if (error instanceof RkcUnavailableError) {
+          throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: RKC_DOWN_MESSAGE });
+        }
+        throw error;
+      }
       if (!profile) {
         // Not an error — we just couldn't get the data (timeout, slow page, etc.)
         return null;
@@ -711,10 +1050,11 @@ export const dogsRouter = createTRPCRouter({
   // ── Owner profiles (reuse previous owners) ────────────────
 
   getMyOwnerProfiles: protectedProcedure.query(async ({ ctx }) => {
-    // Get distinct owner profiles from all dogs owned by this user.
+    // Get distinct owner profiles from all dogs the user owns or co-owns.
     // Uses a subquery to deduplicate by email and return the most recent version.
     const ownerRows = await ctx.db
       .selectDistinctOn([dogOwners.ownerEmail], {
+        ownerTitle: dogOwners.ownerTitle,
         ownerName: dogOwners.ownerName,
         ownerAddress: dogOwners.ownerAddress,
         ownerEmail: dogOwners.ownerEmail,
@@ -724,7 +1064,7 @@ export const dogsRouter = createTRPCRouter({
       .innerJoin(dogs, eq(dogOwners.dogId, dogs.id))
       .where(
         and(
-          eq(dogs.ownerId, ctx.session.user.id),
+          dogAccessCondition(ctx.db, ctx.session.user.id),
           isNull(dogs.deletedAt),
         )
       )
@@ -740,13 +1080,19 @@ export const dogsRouter = createTRPCRouter({
       showId: z.string().uuid().optional(),
     }))
     .query(async ({ ctx, input }) => {
+      // The dog's own people count every win as soon as it's keyed in (class
+      // eligibility on the entry form needs them); anyone else only published
+      // ones (lib/public-dog-history.ts).
+      const viewerMaySeeUnpublished = await userMayActOnDog(ctx.db, ctx.session.user.id, input.dogId);
+
       // Count first-place wins at Open and Championship shows
-      const winRows = await ctx.db
+      const allWinRows = await ctx.db
         .select({
           className: classDefinitions.name,
           classType: classDefinitions.type,
           showType: shows.showType,
           placement: results.placement,
+          publishedAt: results.publishedAt,
         })
         .from(results)
         .innerJoin(entryClasses, eq(results.entryClassId, entryClasses.id))
@@ -762,26 +1108,45 @@ export const dogsRouter = createTRPCRouter({
             eq(results.placement, 1),
           )
         );
+      const winRows = allWinRows.filter((r) => visibleResult(r, viewerMaySeeUnpublished));
 
       const firstsAtQualifyingShows = winRows.filter(
         (r) => r.showType === 'open' || r.showType === 'championship' || r.showType === 'premier_open'
       ).length;
 
-      const ccCount = await ctx.db
-        .select({ count: sql<number>`count(*)::int` })
-        .from(achievements)
-        .where(
-          and(
-            eq(achievements.dogId, input.dogId),
-            eq(achievements.type, 'cc'),
-          )
-        );
+      // "Has this dog won a CC?" — count every CC variant, and treat a
+      // single-breed championship Best Dog/Bitch as the CC it is (Mandy
+      // 2026-07-09). Fetch with show type/scope so the mapping can apply.
+      const ccAchs = await ctx.db.query.achievements.findMany({
+        where: eq(achievements.dogId, input.dogId),
+        with: { show: { columns: { showType: true, showScope: true } } },
+      });
+      const ccFromAchievements = ccAchs.some((a) =>
+        isVisibleToViewer(a, viewerMaySeeUnpublished) &&
+        isCcType(effectiveCcType(a.type, a.show?.showType, a.show?.showScope)),
+      );
 
-      const hasCC = (ccCount[0]?.count ?? 0) > 0;
+      // A dog can arrive on Remi with no recorded wins at all — imported,
+      // or simply never entered here before — yet already be a Champion
+      // under RKC rules or a recognised governing body (a title row, or a
+      // title typed straight into the registered name, e.g. "CH Reno...").
+      // That MUST bar it from every achievement class except Open just the
+      // same as a CC recorded on Remi (Mandy, 21 Sept 2026). One owner:
+      // `lib/dog-champion-status.ts`.
+      const dog = await ctx.db.query.dogs.findFirst({
+        where: eq(dogs.id, input.dogId),
+        columns: { registeredName: true, dateOfBirth: true, coatType: true },
+        with: { titles: true },
+      });
+      const isChampionTitle = isShowChampion({
+        titles: dog?.titles,
+        registeredName: dog?.registeredName,
+      });
+      const hasCC = ccFromAchievements || isChampionTitle;
 
       // Get achievement class names actually in this show's schedule
       let availableClassNames: string[] | undefined;
-      let ageInfo: { ageMonths: number; availableAgeClasses: { name: string; minMonths: number | null; maxMonths: number | null }[] } | undefined;
+      let ageInfo: RecommendationAgeInfo | undefined;
 
       if (input.showId) {
         const showAchievementClasses = await ctx.db
@@ -796,24 +1161,16 @@ export const dogsRouter = createTRPCRouter({
           );
         availableClassNames = showAchievementClasses.map((c) => c.name);
 
-        // Fetch dog DOB and show date to calculate age for age class suggestions
-        const [dog, show] = await Promise.all([
-          ctx.db.query.dogs.findFirst({
-            where: eq(dogs.id, input.dogId),
-            columns: { dateOfBirth: true },
-          }),
-          ctx.db.query.shows.findFirst({
-            where: eq(shows.id, input.showId),
-            columns: { startDate: true },
-          }),
-        ]);
+        // Show date + the dog's DOB (fetched above) give the age for age-class suggestions
+        const show = await ctx.db.query.shows.findFirst({
+          where: eq(shows.id, input.showId),
+          columns: { startDate: true },
+        });
 
         if (dog?.dateOfBirth && show?.startDate) {
           const showDate = new Date(show.startDate);
           const dob = new Date(dog.dateOfBirth);
-          const ageMonths = (showDate.getFullYear() - dob.getFullYear()) * 12
-            + showDate.getMonth() - dob.getMonth()
-            - (showDate.getDate() < dob.getDate() ? 1 : 0);
+          const ageMonths = ageInCompletedMonths(dob, showDate);
 
           // Get age classes available in this show's schedule
           const showAgeClasses = await ctx.db
@@ -827,13 +1184,26 @@ export const dogsRouter = createTRPCRouter({
             .where(
               and(
                 eq(showClasses.showId, input.showId),
-                eq(classDefinitions.type, 'age'),
+                // Any class with an age band suggests itself, not just
+                // type: 'age' — a banded Special Award class (e.g. "Special
+                // Yearling") is just as age-restricted (see isAgeRestrictedClass).
+                or(
+                  isNotNull(classDefinitions.minAgeMonths),
+                  isNotNull(classDefinitions.maxAgeMonths),
+                ),
+                // …except junior handling, whose band is the HANDLER's age
+                // (e.g. "JHA Handling (6-11)" = 72–144 months): a 6-year-old
+                // dog was being told that was its class (demo, 21 Sept 2026).
+                ne(classDefinitions.type, 'junior_handler'),
               )
             );
 
           if (showAgeClasses.length > 0) {
             ageInfo = {
               ageMonths,
+              dob: dog.dateOfBirth,
+              showDate: show.startDate,
+              dogCoat: dog.coatType ?? null,
               availableAgeClasses: showAgeClasses.map((c) => ({
                 name: c.name,
                 minMonths: c.minMonths,
@@ -847,7 +1217,14 @@ export const dogsRouter = createTRPCRouter({
       return {
         totalFirsts: firstsAtQualifyingShows,
         hasCC,
-        recommendation: getClassRecommendation(firstsAtQualifyingShows, hasCC, availableClassNames, ageInfo),
+        recommendation: getClassRecommendation(
+          firstsAtQualifyingShows,
+          hasCC,
+          availableClassNames,
+          ageInfo,
+          isChampionTitle,
+          dog?.coatType ?? null,
+        ),
       };
     }),
 
@@ -860,13 +1237,16 @@ export const dogsRouter = createTRPCRouter({
         with: {
           breed: { with: { group: true } },
           titles: true,
-          achievements: true,
         },
       });
 
       if (!dog) {
         throw new TRPCError({ code: 'NOT_FOUND', message: 'Dog not found' });
       }
+
+      // The dog's own people count every award and win as soon as it's keyed
+      // in; anyone else only published ones (lib/public-dog-history.ts).
+      const viewerMaySeeUnpublished = await userMayActOnDog(ctx.db, ctx.session.user.id, input.dogId);
 
       // Check if the user has Pro subscription
       const user = await ctx.db.query.users.findFirst({
@@ -877,31 +1257,24 @@ export const dogsRouter = createTRPCRouter({
 
       const now = new Date();
       const dob = new Date(dog.dateOfBirth);
-      const ageMonths = (now.getFullYear() - dob.getFullYear()) * 12 + (now.getMonth() - dob.getMonth());
+      const ageMonths = ageInCompletedMonths(dob, now);
 
-      // Count achievements by type. CCs at UK championship shows are
-      // recorded as `dog_cc` / `bitch_cc` (sex-specific), so we need to
-      // include all CC variants — matching the canonical set in placements.ts.
-      const ccAchievements = dog.achievements.filter((a) => isCcType(a.type));
-      const reserveCCs = dog.achievements.filter((a) => isRccType(a.type));
-      const bobs = dog.achievements.filter((a) => a.type === 'best_of_breed');
-
-      // Count unique judges who awarded CCs and RCCs
-      const ccJudgeIds = new Set(ccAchievements.map((a) => a.judgeId).filter(Boolean));
-      const rccJudgeIds = new Set(reserveCCs.map((a) => a.judgeId).filter(Boolean));
-      // Combined unique judges across CCs and RCCs (for 2CC+5RCC route)
-      const allCcRccJudgeIds = new Set([...ccJudgeIds, ...rccJudgeIds]);
-
-      // RCCs awarded from July 2023 onwards (when the alternative champion route started)
-      const rccCutoffDate = '2023-07-01';
-      const qualifyingRCCs = reserveCCs.filter((a) => a.date >= rccCutoffDate);
+      // CCs, Reserve CCs and Bests of Breed — won at Remi shows or added by
+      // the owner — and the RKC Champion rule, each from one owner
+      // (services/title-awards.ts, lib/rkc-titles.ts).
+      const { awards: titleAwards, bobs, shcexAwards } = await loadTitleAwards(ctx.db, input.dogId, viewerMaySeeUnpublished);
+      const champion = championProgress(titleAwards, dog.dateOfBirth);
+      const shcex = shcexProgress(shcexAwards, dog.dateOfBirth);
+      const ccCount = champion.classic.ccs;
+      const reserveCcCount = titleAwards.filter((a) => a.kind === 'rcc').length;
 
       // Count first-place wins from results for JW and ShCEx calculation
-      const firstPlaceWins = await ctx.db
+      const allFirstPlaceWins = await ctx.db
         .select({
           showType: shows.showType,
           showDate: shows.startDate,
           className: classDefinitions.name,
+          publishedAt: results.publishedAt,
         })
         .from(results)
         .innerJoin(entryClasses, eq(results.entryClassId, entryClasses.id))
@@ -917,6 +1290,7 @@ export const dogsRouter = createTRPCRouter({
             eq(results.placement, 1),
           )
         );
+      const firstPlaceWins = allFirstPlaceWins.filter((w) => visibleResult(w, viewerMaySeeUnpublished));
 
       // Junior Warrant: 25 points from firsts between 6-18 months
       // Championship show first = 3 points, Open/Premier Open show first = 1 point
@@ -932,13 +1306,6 @@ export const dogsRouter = createTRPCRouter({
       const jwChampionshipWins = jwWins.filter((w) => w.showType === 'championship').length;
       const jwOpenWins = jwWins.filter((w) => w.showType === 'open' || w.showType === 'premier_open').length;
       const jwPoints = jwChampionshipWins * 3 + jwOpenWins * 1;
-
-      // ShCEx: 50 points from firsts at open shows
-      // Points scale: 1st in class = depends on entries (simplified: 1 point per first at open show)
-      const shcexWins = firstPlaceWins.filter(
-        (w) => w.showType === 'open' || w.showType === 'premier_open'
-      );
-      const shcexPoints = shcexWins.length; // Simplified — 1 point per first at open shows
 
       // Veteran Warrant: 25 points from veteran classes at open shows
       const veteranWins = firstPlaceWins.filter(
@@ -969,43 +1336,42 @@ export const dogsRouter = createTRPCRouter({
         }>;
       }> = [];
 
-      // Champion: 3 CCs under 3 different judges
-      // OR (from July 2023): 2 CCs + 5 RCCs under at least 7 different judges
+      // Champion (RKC): 3 CCs under 3 different judges, or — from July 2023 —
+      // 2 CCs + 5 RCCs from 7 different judges; either way one CC won after
+      // 12 months of age (lib/rkc-titles.ts).
       if (!existingTitles.has('ch')) {
-        const classicProgress = Math.min(ccAchievements.length / 3, 1);
-        const altCCProgress = Math.min(ccAchievements.length / 2, 1);
-        const altRCCProgress = Math.min(qualifyingRCCs.length / 5, 1);
-        const altJudgeProgress = Math.min(allCcRccJudgeIds.size / 7, 1);
-        const altOverallProgress = Math.min((altCCProgress + altRCCProgress + altJudgeProgress) / 3, 1);
-
-        const classicMet = ccAchievements.length >= 3 && ccJudgeIds.size >= 3;
-        const altMet = ccAchievements.length >= 2 && qualifyingRCCs.length >= 5 && allCcRccJudgeIds.size >= 7;
+        const { classic, alternative } = champion;
+        const classicProgress = Math.min(classic.ccs / 3, 1);
+        const alternativeProgress = (Math.min(alternative.ccs, 2) + Math.min(alternative.rccs, 5)) / 7;
+        const over12Note = classic.ccs > 0 && !classic.hasCcOver12Months
+          ? ' · one CC must be won after 12 months of age'
+          : '';
 
         titleProgress.push({
           title: 'Champion (Ch)',
           code: 'ch',
-          current: ccAchievements.length,
+          current: classic.ccs,
           required: 3,
-          progress: Math.max(classicProgress, altOverallProgress),
-          detail: `${ccAchievements.length}/3 CCs${ccJudgeIds.size > 0 ? ` (${ccJudgeIds.size} judge${ccJudgeIds.size !== 1 ? 's' : ''})` : ''}`,
-          milestoneReached: classicMet || altMet,
+          progress: Math.max(classicProgress, alternativeProgress),
+          detail: `${classic.ccs}/3 CCs${classic.judges > 0 ? ` (${classic.judges} judge${classic.judges !== 1 ? 's' : ''})` : ''}${over12Note}`,
+          milestoneReached: champion.met,
           routes: isPro
             ? [
                 {
                   name: 'Classic Route',
-                  current: ccAchievements.length,
+                  current: classic.ccs,
                   required: 3,
                   progress: classicProgress,
-                  detail: `${ccAchievements.length}/3 CCs under ${ccJudgeIds.size}/3 judges`,
-                  met: classicMet,
+                  detail: `${classic.ccs}/3 CCs under ${classic.judges}/3 judges`,
+                  met: classic.met,
                 },
                 {
                   name: 'Alternative Route (from July 2023)',
-                  current: ccAchievements.length + qualifyingRCCs.length,
+                  current: Math.min(alternative.ccs, 2) + Math.min(alternative.rccs, 5),
                   required: 7,
-                  progress: altOverallProgress,
-                  detail: `${ccAchievements.length}/2 CCs + ${qualifyingRCCs.length}/5 RCCs under ${allCcRccJudgeIds.size}/7 judges`,
-                  met: altMet,
+                  progress: alternativeProgress,
+                  detail: `${alternative.ccs}/2 CCs + ${alternative.rccs}/5 RCCs under ${alternative.judges}/7 judges`,
+                  met: alternative.met,
                 },
               ]
             : undefined,
@@ -1018,10 +1384,10 @@ export const dogsRouter = createTRPCRouter({
         titleProgress.push({
           title: 'Show Champion (Sh Ch)',
           code: 'sh_ch',
-          current: ccAchievements.length,
+          current: ccCount,
           required: 3,
-          progress: Math.min(ccAchievements.length / 3, 1),
-          detail: `${ccAchievements.length}/3 CCs (+ qualifying field trial win required)`,
+          progress: Math.min(ccCount / 3, 1),
+          detail: `${ccCount}/3 CCs (+ qualifying field trial win required)`,
           milestoneReached: false,
         });
       }
@@ -1052,16 +1418,26 @@ export const dogsRouter = createTRPCRouter({
         });
       }
 
-      // Pro-only: Show Certificate of Excellence (ShCEx)
+      // Pro-only: Show Certificate of Excellence (ShCEx) — the RKC's points
+      // table, from Best of Breed, group placings and Best in Show at
+      // all-breed and group open shows (lib/rkc-titles.ts shcexProgress).
       if (isPro && !existingTitles.has('sh_ch')) {
+        const needInfo = shcex.needInfo > 0
+          ? ` · ${shcex.needInfo} result${shcex.needInfo !== 1 ? 's need' : ' needs'} the type of show — tap Edit`
+          : '';
+        // A group placing or Best in Show brings the Best of Breed point won first
+        // at that show — say so, so the owner isn't left wondering where it came from.
+        const impliedBobs = shcex.impliedBobs > 0
+          ? ` · includes ${shcex.impliedBobs} point${shcex.impliedBobs !== 1 ? 's' : ''} for the Best of Breed won before the group`
+          : '';
         titleProgress.push({
           title: 'Show Certificate of Excellence (ShCEx)',
           code: 'shcex',
-          current: shcexPoints,
-          required: 50,
-          progress: Math.min(shcexPoints / 50, 1),
-          detail: `${shcexPoints}/50 points from ${shcexWins.length} first${shcexWins.length !== 1 ? 's' : ''} at open shows`,
-          milestoneReached: shcexPoints >= 50,
+          current: shcex.points,
+          required: SHCEX_POINTS_NEEDED,
+          progress: Math.min(shcex.points / SHCEX_POINTS_NEEDED, 1),
+          detail: `${shcex.points}/${SHCEX_POINTS_NEEDED} points · ${shcex.groupPoints} from group competition (${SHCEX_GROUP_POINTS_NEEDED} needed)${impliedBobs}${needInfo}`,
+          milestoneReached: shcex.met,
           proOnly: true,
         });
       }
@@ -1087,16 +1463,19 @@ export const dogsRouter = createTRPCRouter({
         titleProgress,
         isPro,
         stats: {
-          ccs: ccAchievements.length,
-          reserveCCs: reserveCCs.length,
+          ccs: ccCount,
+          reserveCCs: reserveCcCount,
           bobs: bobs.length,
           totalFirsts: firstPlaceWins.length,
           jwPoints,
-          shcexPoints: isPro ? shcexPoints : undefined,
+          shcexPoints: isPro ? shcex.points : undefined,
           veteranPoints: isPro && ageMonths >= 84 ? veteranPoints : undefined,
-          uniqueJudges: isPro ? ccJudgeIds.size : undefined,
+          // Different judges who have given the dog a CC or a Reserve CC.
+          uniqueJudges: isPro ? champion.alternative.judges : undefined,
         },
-        disclaimer: 'Progress shown is based on results recorded in Remi only. Wins at shows not using Remi are not included.',
+        // CCs, Reserve CCs and BOBs include the ones the owner has added by
+        // hand (services/title-awards.ts); class wins come from Remi shows only.
+        disclaimer: 'Counts results from shows run on Remi and the awards you have added yourself. Always check with the Royal Kennel Club before claiming a title.',
       };
     }),
 
@@ -1156,10 +1535,14 @@ export const dogsRouter = createTRPCRouter({
         );
       }
 
+      // The dog's own people see results as soon as they're keyed in; anyone
+      // else only once published (src/lib/result-visibility.ts).
+      const viewerMaySeeUnpublished = await userMayActOnDog(ctx.db, ctx.session.user.id, input.dogId);
+
       // Flatten to results with placements in a single pass
       const flatResults = dogEntries.flatMap((entry) =>
         entry.entryClasses
-          .filter((ec) => ec.result?.placement)
+          .filter((ec) => ec.result?.placement && isVisibleToViewer(ec.result, viewerMaySeeUnpublished))
           .map((ec) => ({
             id: ec.id,
             showId: entry.show.id,
@@ -1208,9 +1591,9 @@ export const dogsRouter = createTRPCRouter({
   setPrimaryPhoto: protectedProcedure
     .input(z.object({ photoId: z.string().uuid(), dogId: z.string().uuid() }))
     .mutation(async ({ ctx, input }) => {
-      // Verify ownership
+      // Verify access (account holder or linked co-owner)
       const dog = await ctx.db.query.dogs.findFirst({
-        where: and(eq(dogs.id, input.dogId), eq(dogs.ownerId, ctx.session.user.id), isNull(dogs.deletedAt)),
+        where: and(eq(dogs.id, input.dogId), dogAccessCondition(ctx.db, ctx.session.user.id), isNull(dogs.deletedAt)),
       });
       if (!dog) throw new TRPCError({ code: 'NOT_FOUND', message: 'Dog not found' });
 
@@ -1224,27 +1607,9 @@ export const dogsRouter = createTRPCRouter({
       await ctx.db
         .update(dogPhotos)
         .set({ isPrimary: true })
-        .where(eq(dogPhotos.id, input.photoId));
-
-      return { success: true };
-    }),
-
-  updatePhotoCaption: protectedProcedure
-    .input(z.object({
-      photoId: z.string().uuid(),
-      dogId: z.string().uuid(),
-      caption: z.string().max(200).nullable(),
-    }))
-    .mutation(async ({ ctx, input }) => {
-      const dog = await ctx.db.query.dogs.findFirst({
-        where: and(eq(dogs.id, input.dogId), eq(dogs.ownerId, ctx.session.user.id), isNull(dogs.deletedAt)),
-      });
-      if (!dog) throw new TRPCError({ code: 'NOT_FOUND', message: 'Dog not found' });
-
-      await ctx.db
-        .update(dogPhotos)
-        .set({ caption: input.caption })
-        .where(eq(dogPhotos.id, input.photoId));
+        // Scope to the verified dog — ownership was checked on dogId, but the
+        // write must not touch a photo belonging to another dog.
+        .where(and(eq(dogPhotos.id, input.photoId), eq(dogPhotos.dogId, input.dogId)));
 
       return { success: true };
     }),
@@ -1259,59 +1624,33 @@ export const dogsRouter = createTRPCRouter({
     }))
     .mutation(async ({ ctx, input }) => {
       const dog = await ctx.db.query.dogs.findFirst({
-        where: and(eq(dogs.id, input.dogId), eq(dogs.ownerId, ctx.session.user.id), isNull(dogs.deletedAt)),
+        where: and(eq(dogs.id, input.dogId), dogAccessCondition(ctx.db, ctx.session.user.id), isNull(dogs.deletedAt)),
       });
       if (!dog) throw new TRPCError({ code: 'NOT_FOUND', message: 'Dog not found' });
 
       await ctx.db
         .update(dogPhotos)
         .set({ focalX: input.focalX, focalY: input.focalY, fitMode: input.fitMode })
-        .where(eq(dogPhotos.id, input.photoId));
+        .where(and(eq(dogPhotos.id, input.photoId), eq(dogPhotos.dogId, input.dogId)));
 
       return { success: true };
     }),
 
   // ── Self-Reported Results (external shows) ────────────────
   addExternalResult: protectedProcedure
-    .input(
-      z.object({
-        dogId: z.string().uuid(),
-        type: z.enum([
-          'cc',
-          'reserve_cc',
-          'best_of_breed',
-          'best_in_show',
-          'reserve_best_in_show',
-          'best_puppy_in_breed',
-          'best_puppy_in_show',
-          'best_veteran_in_breed',
-          'group_placement',
-          'class_placement',
-          'junior_warrant',
-          'stud_book',
-          'dog_cc',
-          'reserve_dog_cc',
-          'bitch_cc',
-          'reserve_bitch_cc',
-          'best_puppy_dog',
-          'best_puppy_bitch',
-        ]),
-        date: z.string(), // YYYY-MM-DD
-        showName: z.string().min(1).max(255),
-        judgeName: z.string().max(255).optional(),
-      })
-    )
+    .input(externalResultInput.extend({ dogId: z.string().uuid() }))
     .mutation(async ({ ctx, input }) => {
       const dog = await ctx.db.query.dogs.findFirst({
         where: and(eq(dogs.id, input.dogId), isNull(dogs.deletedAt)),
       });
 
-      if (!dog || dog.ownerId !== ctx.session.user.id) {
+      if (!dog || !(await userMayActOnDog(ctx.db, ctx.session.user.id, dog.id))) {
         throw new TRPCError({ code: 'FORBIDDEN', message: 'Not your dog' });
       }
 
-      // Store showName and judgeName in the details jsonb field
-      // No showId — marks this as an external/self-reported result
+      // No showId — marks this as an external result the owner added. It
+      // shows on the dog's public page straight away, marked "added by
+      // owner" (Mandy, 5 Oct 2026).
       const [achievement] = await ctx.db
         .insert(achievements)
         .values({
@@ -1319,15 +1658,39 @@ export const dogsRouter = createTRPCRouter({
           type: input.type,
           date: input.date,
           showId: null,
-          details: {
-            showName: input.showName,
-            judgeName: input.judgeName ?? null,
-            selfReported: true,
-          },
+          details: externalResultDetails(input),
+          publishedAt: new Date(),
         })
         .returning();
 
       return achievement!;
+    }),
+
+  /** Fix or complete a result the owner added — e.g. add the show type to one added before Remi asked for it. */
+  updateExternalResult: protectedProcedure
+    .input(externalResultInput.extend({ id: z.string().uuid() }))
+    .mutation(async ({ ctx, input }) => {
+      const achievement = await ctx.db.query.achievements.findFirst({
+        where: eq(achievements.id, input.id),
+        with: { dog: true },
+      });
+      if (!achievement || !(await userMayActOnDog(ctx.db, ctx.session.user.id, achievement.dog.id))) {
+        throw new TRPCError({ code: 'FORBIDDEN', message: 'Not your dog' });
+      }
+      if (achievement.showId) {
+        throw new TRPCError({ code: 'BAD_REQUEST', message: 'Cannot change results recorded by show officials' });
+      }
+      const [updated] = await ctx.db
+        .update(achievements)
+        .set({
+          type: input.type,
+          date: input.date,
+          details: externalResultDetails(input),
+          publishedAt: achievement.publishedAt ?? new Date(),
+        })
+        .where(eq(achievements.id, input.id))
+        .returning();
+      return updated!;
     }),
 
   removeExternalResult: protectedProcedure
@@ -1338,7 +1701,7 @@ export const dogsRouter = createTRPCRouter({
         with: { dog: true },
       });
 
-      if (!achievement || achievement.dog.ownerId !== ctx.session.user.id) {
+      if (!achievement || !(await userMayActOnDog(ctx.db, ctx.session.user.id, achievement.dog.id))) {
         throw new TRPCError({ code: 'FORBIDDEN', message: 'Not your dog' });
       }
 
@@ -1358,7 +1721,7 @@ export const dogsRouter = createTRPCRouter({
     .input(z.object({ photoId: z.string().uuid(), dogId: z.string().uuid() }))
     .mutation(async ({ ctx, input }) => {
       const dog = await ctx.db.query.dogs.findFirst({
-        where: and(eq(dogs.id, input.dogId), eq(dogs.ownerId, ctx.session.user.id), isNull(dogs.deletedAt)),
+        where: and(eq(dogs.id, input.dogId), dogAccessCondition(ctx.db, ctx.session.user.id), isNull(dogs.deletedAt)),
       });
       if (!dog) throw new TRPCError({ code: 'NOT_FOUND', message: 'Dog not found' });
 
@@ -1381,50 +1744,50 @@ export const dogsRouter = createTRPCRouter({
     }),
 
   // ── Limited show eligibility check (2026 RKC rule) ──────
+  // Owner: getLimitedShowEligibility (src/server/services/limited-show-eligibility.ts).
   checkLimitedShowEligibility: protectedProcedure
     .input(z.object({ dogId: z.string().uuid() }))
+    .query(async ({ ctx, input }) => getLimitedShowEligibility(ctx.db, input.dogId)),
+
+  // ── SV / WUSV profile ────────────────────────────────────
+
+  getSvProfile: protectedProcedure
+    .input(z.object({ dogId: z.string().uuid() }))
     .query(async ({ ctx, input }) => {
-      // Count CCs (any type: cc, dog_cc, bitch_cc)
-      const ccTypes = ['cc', 'dog_cc', 'bitch_cc'] as const;
-      const ccRows = await ctx.db
-        .select({ count: sql<number>`count(*)::int` })
-        .from(achievements)
-        .where(
-          and(
-            eq(achievements.dogId, input.dogId),
-            inArray(achievements.type, [...ccTypes])
-          )
-        );
-      const ccCount = ccRows[0]?.count ?? 0;
+      const dog = await ctx.db.query.dogs.findFirst({
+        where: and(eq(dogs.id, input.dogId), isNull(dogs.deletedAt)),
+        columns: { ownerId: true },
+      });
+      if (!dog) throw new TRPCError({ code: 'NOT_FOUND', message: 'Dog not found' });
+      if (!(await userMayActOnDog(ctx.db, ctx.session.user.id, input.dogId)))
+        throw new TRPCError({ code: 'FORBIDDEN', message: 'Not your dog' });
 
-      // Count RCCs with distinct judges (reserve_cc, reserve_dog_cc, reserve_bitch_cc)
-      const rccTypes = ['reserve_cc', 'reserve_dog_cc', 'reserve_bitch_cc'] as const;
-      const rccRows = await ctx.db
-        .select({
-          judgeId: achievements.judgeId,
+      const profile = await ctx.db.query.dogSvProfile.findFirst({
+        where: eq(dogSvProfile.dogId, input.dogId),
+      });
+      return profile ?? null;
+    }),
+
+  upsertSvProfile: protectedProcedure
+    .input(svProfileInputSchema.extend({ dogId: z.string().uuid() }))
+    .mutation(async ({ ctx, input }) => {
+      const dog = await ctx.db.query.dogs.findFirst({
+        where: and(eq(dogs.id, input.dogId), isNull(dogs.deletedAt)),
+        columns: { ownerId: true },
+      });
+      if (!dog) throw new TRPCError({ code: 'NOT_FOUND', message: 'Dog not found' });
+      if (!(await userMayActOnDog(ctx.db, ctx.session.user.id, input.dogId)))
+        throw new TRPCError({ code: 'FORBIDDEN', message: 'Not your dog' });
+
+      const { dogId, ...profileData } = input;
+      const [profile] = await ctx.db
+        .insert(dogSvProfile)
+        .values({ dogId, ...profileData })
+        .onConflictDoUpdate({
+          target: dogSvProfile.dogId,
+          set: { ...profileData, updatedAt: new Date() },
         })
-        .from(achievements)
-        .where(
-          and(
-            eq(achievements.dogId, input.dogId),
-            inArray(achievements.type, [...rccTypes])
-          )
-        );
-      // Count distinct judges (null judgeId counts as one)
-      const distinctJudges = new Set(rccRows.map((r) => r.judgeId ?? 'unknown'));
-      const rccDistinctJudgeCount = distinctJudges.size;
-
-      return {
-        hasCC: ccCount > 0,
-        ccCount,
-        rccDistinctJudgeCount,
-        rccTotal: rccRows.length,
-        ineligible: ccCount > 0 || rccDistinctJudgeCount >= 5,
-        reason: ccCount > 0
-          ? 'This dog has won a CC and is ineligible for Limited shows'
-          : rccDistinctJudgeCount >= 5
-            ? 'This dog has 5+ RCCs under different judges and is ineligible for Limited shows (2026 rule)'
-            : null,
-      };
+        .returning();
+      return profile!;
     }),
 });

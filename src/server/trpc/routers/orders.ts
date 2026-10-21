@@ -1,9 +1,23 @@
 import { z } from 'zod';
+import { dogAlreadyOnRegional } from '@/server/services/regional-entry';
+import { resolveEntryMembership } from '@/server/services/entry-membership';
+import { SHOW_COLUMNS_FOR_PUBLIC_INCLUDE } from '../public-show-fields';
 import { TRPCError } from '@trpc/server';
 import { and, eq, isNull, inArray, desc, sql, asc } from 'drizzle-orm';
-import { differenceInMonths, differenceInWeeks } from 'date-fns';
-import { protectedProcedure } from '../procedures';
+import { differenceInWeeks } from 'date-fns';
+import { protectedProcedure, publicProcedure } from '../procedures';
 import { createTRPCRouter } from '../init';
+import type { Database } from '@/server/db';
+import { publicOrgColumns } from '../public-org-columns';
+import { syncCatalogueNumbers } from '@/server/services/catalogue-numbering';
+import { countPriorRegionalPayingDogs } from '@/server/services/regional-pricing';
+import { validateSundrySelection } from '@/server/services/sundry-selection';
+import { getLimitedShowEligibility } from '@/server/services/limited-show-eligibility';
+import { entryWindowOpen } from '@/lib/show-status';
+import { priceOrderExtras } from '@/server/services/order-extras-pricing';
+import { sundryViolationError } from '@/server/services/sundry-selection';
+import { sendExtrasAddedEmail, sendOrderPaidEmails } from '@/server/services/email';
+import { priorPackageStanding } from '@/server/services/package-pricing';
 import {
   orders,
   entries,
@@ -19,596 +33,1057 @@ import {
   judgeAssignments,
   judges,
   users,
-  achievements,
+  dogSvProfile,
 } from '@/server/db/schema';
-import { createPaymentIntent } from '@/server/services/stripe';
+import {
+  createPaymentIntent,
+  cancelPaymentIntent,
+  retrievePaymentIntent,
+  calculatePlatformFee,
+} from '@/server/services/stripe';
+import { findOrCreatePersonByEmail, normaliseEmail } from '@/server/services/people';
+import { takeGuestCheckoutAttempt } from '@/server/services/rate-limit';
+import {
+  computeOrderFees,
+  amountChargedPence,
+  type DogEntryInput,
+  type FeeContext,
+} from '@/lib/fee-calc';
+import {
+  computeRegionalOrderFees,
+  resolveClassFlatFee,
+  type RegionalDogEntryInput,
+  type RegionalFeeContext,
+} from '@/lib/regional-fee-calc';
+import { entryRequirements, pedigreeRequirementsMissing, entryBlockedMessage } from '@/lib/entry-requirements';
+import { hasJudgingConflict } from '@/lib/judge-exhibitor-conflict';
+import { getCompetitionAgeError, isOldEnoughForNfc, nfcMinAgeMessage } from '@/lib/date-utils';
+import { PARKING_KINDS } from '@/lib/sundry-kind';
+import { isExtrasOnlyOrder } from '@/lib/extras-only-order';
+import { formatAtcNumber } from '@/lib/registration-flags';
+import { specialAwardClassFee } from '@/lib/class-labels';
+import { dogAccessCondition } from '@/server/dog-access';
 
 const cartEntrySchema = z.object({
   entryType: z.enum(['standard', 'junior_handler']).default('standard'),
   dogId: z.string().uuid().optional(),
   classIds: z.array(z.string().uuid()),
   isNfc: z.boolean().default(false),
+  // RKC registration flags — per entry, because the status is judged as at
+  // the entry closing date (see entries.naf/taf/cnaf).
+  naf: z.boolean().default(false),
+  taf: z.boolean().default(false),
+  cnaf: z.boolean().default(false),
+  atcNumber: z.string().max(32).optional(),
   // Junior handler fields
   handlerName: z.string().optional(),
   handlerDob: z.string().optional(),
   handlerKcNumber: z.string().optional(),
 });
 
-export const ordersRouter = createTRPCRouter({
-  checkout: protectedProcedure
-    .input(
-      z.object({
-        showId: z.string().uuid(),
-        entries: z.array(cartEntrySchema).min(1),
-        catalogueRequested: z.boolean().default(false),
-        /** RKC F(1).11.b.(6)/(8) — exhibitor right to withhold name/address from catalogue */
-        withholdFromPublication: z.boolean().default(false),
-        sundryItems: z.array(z.object({
-          sundryItemId: z.string().uuid(),
-          quantity: z.number().int().min(1),
-        })).default([]),
-      })
-    )
-    .mutation(async ({ ctx, input }) => {
-      // Validate show is accepting entries
-      const show = await ctx.db.query.shows.findFirst({
-        where: eq(shows.id, input.showId),
+/** What a checkout asks for — the signed-in `checkout` and, with no entries,
+ *  the signed-out `guestCheckout` both parse through it, so every default and
+ *  the extras-only blanking in placeOrder apply to both. */
+const checkoutInputSchema = z.object({
+  showId: z.string().uuid(),
+  // May be empty: a signed-in user can buy extras (catalogue, parking
+  // pass...) with no dog at all — Mandy, 15 Oct 2026. The refine below
+  // keeps a cart with nothing in it out.
+  entries: z.array(cartEntrySchema),
+  catalogueRequested: z.boolean().default(false),
+  /** RKC F(1).11.b.(6)/(8) — exhibitor right to withhold name/address from catalogue */
+  withholdFromPublication: z.boolean().default(false),
+  sundryItems: z.array(z.object({
+    sundryItemId: z.string().uuid(),
+    quantity: z.number().int().min(1),
+  })).default([]),
+  /** Channel the exhibitor arrived from (from the show page's ?src= param). */
+  referralSource: z
+    .string()
+    .regex(/^[a-z0-9_-]+$/i, 'invalid source')
+    .max(32)
+    .optional(),
+  /** Discount group the exhibitor declared they belong to (e.g. Members). */
+  discountGroupId: z.string().uuid().optional(),
+  /** Regional (SV/WUSV) checkout declarations — self-declared, on trust.
+   *  regionalMembership = the membership label the exhibitor ticked (must
+   *  match a configured option); regionalMembershipNumber = the number
+   *  given (never validated). */
+  regionalMembership: z.string().max(120).optional(),
+  regionalMembershipNumber: z.string().max(120).optional(),
+  regionalFirstTimeExhibitor: z.boolean().default(false),
+  /** Optional discretionary donation (pence, capped at £1000) plus the
+   *  kennel affix to thank in the catalogue. Only honoured when the show
+   *  enables donations. */
+  donationPence: z.number().int().min(0).max(100_000).default(0),
+  donationAffix: z.string().max(120).optional(),
+}).refine((v) => v.entries.length > 0 || v.sundryItems.length > 0, {
+  message: 'Choose a dog, a junior handler or at least one extra',
+  path: ['entries'],
+});
+
+type CheckoutInput = z.infer<typeof checkoutInputSchema>;
+
+/**
+ * Cancel checkouts that were abandoned — their pending entries, the orders,
+ * and their open Stripe PaymentIntents, so a checkout still open in another
+ * tab (or a delayed/async payment method) can't charge the customer for an
+ * order we've just cancelled (bug hunt #3). ONE owner: the signed-in stale
+ * cleanup and the guest path's proven previous order both come here.
+ */
+async function cancelAbandonedOrders(
+  db: Database,
+  abandoned: { id: string; stripePaymentIntentId: string | null }[],
+) {
+  if (abandoned.length === 0) return;
+  const ids = abandoned.map((o) => o.id);
+  // Soft-delete stale entries so they don't block duplicate checks
+  await db
+    .update(entries)
+    .set({ deletedAt: new Date(), status: 'cancelled' })
+    .where(
+      and(
+        inArray(entries.orderId, ids),
+        eq(entries.status, 'pending'),
+        isNull(entries.deletedAt)
+      )
+    );
+  await db.update(orders).set({ status: 'cancelled' }).where(inArray(orders.id, ids));
+  for (const o of abandoned) {
+    if (o.stripePaymentIntentId) {
+      await cancelPaymentIntent(o.stripePaymentIntentId);
+    }
+  }
+}
+
+/**
+ * Place an order: validate the cart, price it, write the order, entries and
+ * extras, and open the Stripe payment (or confirm a £0 order). ONE owner of
+ * checkout — the signed-in `checkout` and the signed-out `guestCheckout`
+ * (Mandy, 15 Oct 2026: extras with no dog and no sign-in) both call it.
+ *
+ * `exhibitorId` is the person the order is filed under. `cancelStaleOrders`
+ * cancels that person's other open checkouts at this show; only a signed-in
+ * caller may do that — on the guest path the person is whoever owns the typed
+ * email, so it would let anyone cancel someone else's payment.
+ */
+async function placeOrder(
+  db: Database,
+  exhibitorId: string,
+  rawInput: CheckoutInput,
+  opts: { cancelStaleOrders: boolean; buyer: 'signed_in' | 'guest' },
+) {
+  // An order with NO entries is "extras only" (Mandy, 15 Oct 2026). Every
+  // field that belongs to the dog side of the form — regional membership
+  // and first-timer ticks, the discount group, the regional donation box,
+  // the catalogue request and the withhold-from-catalogue tick — is
+  // dropped here, once, because the wizard hides that whole block and a
+  // direct API call must not be able to use it either.
+  const hasEntries = rawInput.entries.length > 0;
+  const input = hasEntries
+    ? rawInput
+    : {
+        ...rawInput,
+        regionalMembership: undefined,
+        regionalMembershipNumber: undefined,
+        regionalFirstTimeExhibitor: false,
+        discountGroupId: undefined,
+        donationPence: 0,
+        donationAffix: undefined,
+        catalogueRequested: false,
+        withholdFromPublication: false,
+      };
+
+  // Validate show is accepting entries. Remi is merchant of record —
+  // exhibitor entry fees land in Remi's Stripe balance and are paid
+  // out to the club by BACS after the show. No need to fetch the
+  // host org's payment config here.
+  const show = await db.query.shows.findFirst({
+    where: eq(shows.id, input.showId),
+  });
+
+  if (!show) {
+    throw new TRPCError({ code: 'NOT_FOUND', message: 'Show not found' });
+  }
+
+  // ONE owner for "is this show still accepting entries" — entryWindowOpen
+  // (lib/show-status.ts). Also used by entries.create, priceEntryClassChange
+  // (class-change top-ups) and priceOrderExtras (extras purchases).
+  if (!entryWindowOpen(show)) {
+    throw new TRPCError({
+      code: 'BAD_REQUEST',
+      message: 'Show is not accepting entries',
+    });
+  }
+
+  // Validate all dogs belong to (or are co-owned by) the caller
+  const dogIds = input.entries
+    .filter((e) => e.entryType === 'standard' && e.dogId)
+    .map((e) => e.dogId!);
+
+  if (dogIds.length > 0) {
+    const userDogs = await db.query.dogs.findMany({
+      where: and(
+        inArray(dogs.id, dogIds),
+        dogAccessCondition(db, exhibitorId),
+        isNull(dogs.deletedAt)
+      ),
+      with: { breed: true },
+    });
+
+    if (userDogs.length !== new Set(dogIds).size) {
+      throw new TRPCError({
+        code: 'BAD_REQUEST',
+        message: 'One or more dogs not found or not owned by you',
+      });
+    }
+
+    // Baseline pedigree check — sire, dam, breeder and colour all print
+    // in the show catalogue, so no dog can check out without them. Must
+    // run before any Stripe payment intent is created below (a rejection
+    // after payment would be worse than the original bug). Junior
+    // handler entries have no dogId and skip this entirely. Deliberately
+    // applies to NFC entries too — the SV `!isNfc` exemption elsewhere is
+    // about competition eligibility (coat type, health tests); NFC dogs
+    // still appear in the printed catalogue, so the same catalogue
+    // reason applies regardless of isNfc.
+    for (const entryInput of input.entries) {
+      if (entryInput.entryType !== 'standard' || !entryInput.dogId) continue;
+      const dog = userDogs.find((d) => d.id === entryInput.dogId);
+      if (!dog) continue;
+      const missing = pedigreeRequirementsMissing(dog);
+      if (missing.length > 0) {
+        const dogName = dog.registeredName ?? 'This dog';
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: `${dogName} can't be entered yet — please add ${missing.join(', ')}. These print in the show catalogue.`,
+        });
+      }
+    }
+
+    // Breed validation for single-breed shows.
+    // Primary source: the show's own breedId (set when the single-breed show is created).
+    // Fallback: derive from show classes and judge assignments for legacy shows.
+    if (show.showScope === 'single_breed') {
+      const allowedBreedIds = new Set<string>();
+      if (show.breedId) allowedBreedIds.add(show.breedId);
+
+      // Fallback for shows without show.breedId set
+      if (allowedBreedIds.size === 0) {
+        const showClassRows = await db.query.showClasses.findMany({
+          where: eq(showClasses.showId, input.showId),
+          columns: { breedId: true },
+        });
+        const judgeAssignmentRows = await db.query.judgeAssignments.findMany({
+          where: eq(judgeAssignments.showId, input.showId),
+          columns: { breedId: true },
+        });
+        for (const sc of showClassRows) {
+          if (sc.breedId) allowedBreedIds.add(sc.breedId);
+        }
+        for (const ja of judgeAssignmentRows) {
+          if (ja.breedId) allowedBreedIds.add(ja.breedId);
+        }
+      }
+
+      // If we found breed constraints, validate each dog
+      if (allowedBreedIds.size > 0) {
+        for (const dog of userDogs) {
+          if (!allowedBreedIds.has(dog.breedId)) {
+            const dogName = dog.registeredName ?? 'This dog';
+            const breedName = dog.breed?.name ?? 'its breed';
+            throw new TRPCError({
+              code: 'BAD_REQUEST',
+              message: `${dogName} (${breedName}) cannot be entered in this single-breed show. Only dogs of the show breed are eligible.`,
+            });
+          }
+        }
+      }
+    }
+
+    // Breed validation for individual classes (all show types)
+    // Ensure each dog is only entered in classes matching its breed, or AV/unassigned classes
+    // + (SV) enforce regional entry requirements (reg# + microchip for
+    //   all dogs; health triad Junior+; working title for Working).
+    for (const entryInput of input.entries) {
+      if (entryInput.entryType !== 'standard' || !entryInput.dogId) continue;
+      if (entryInput.classIds.length === 0) continue;
+      const dog = userDogs.find((d) => d.id === entryInput.dogId);
+      if (!dog) continue;
+
+      const entryClasses = await db.query.showClasses.findMany({
+        where: and(
+          inArray(showClasses.id, entryInput.classIds),
+          eq(showClasses.showId, input.showId)
+        ),
+        with: { classDefinition: true },
       });
 
-      if (!show) {
-        throw new TRPCError({ code: 'NOT_FOUND', message: 'Show not found' });
-      }
-
-      if (show.status !== 'entries_open') {
-        throw new TRPCError({
-          code: 'BAD_REQUEST',
-          message: 'Show is not accepting entries',
-        });
-      }
-
-      // Also reject if entry close date has passed
-      if (show.entryCloseDate && new Date(show.entryCloseDate).getTime() < Date.now()) {
-        throw new TRPCError({
-          code: 'BAD_REQUEST',
-          message: 'Entry closing date has passed',
-        });
-      }
-
-      // Validate all dogs belong to user (for standard entries)
-      const dogIds = input.entries
-        .filter((e) => e.entryType === 'standard' && e.dogId)
-        .map((e) => e.dogId!);
-
-      if (dogIds.length > 0) {
-        const userDogs = await ctx.db.query.dogs.findMany({
-          where: and(
-            inArray(dogs.id, dogIds),
-            eq(dogs.ownerId, ctx.session.user.id),
-            isNull(dogs.deletedAt)
-          ),
-          with: { breed: true },
-        });
-
-        if (userDogs.length !== new Set(dogIds).size) {
+      for (const sc of entryClasses) {
+        // Classes with no breedId are AV (Any Variety) or universal — any breed is allowed
+        // Junior handler classes also accept any breed
+        if (!sc.breedId || sc.classDefinition.type === 'junior_handler') continue;
+        if (sc.breedId !== dog.breedId) {
+          const dogName = dog.registeredName ?? 'This dog';
+          const breedName = dog.breed?.name ?? 'its breed';
           throw new TRPCError({
             code: 'BAD_REQUEST',
-            message: 'One or more dogs not found or not owned by you',
+            message: `${dogName} (${breedName}) cannot be entered in the class "${sc.classDefinition.name}" as it is restricted to a different breed.`,
           });
         }
+      }
 
-        // Breed validation for single-breed shows.
-        // Primary source: the show's own breedId (set when the single-breed show is created).
-        // Fallback: derive from show classes and judge assignments for legacy shows.
-        if (show.showScope === 'single_breed') {
-          const allowedBreedIds = new Set<string>();
-          if (show.breedId) allowedBreedIds.add(show.breedId);
+      // Regional entry requirements (Amanda 2026-05-28). Now via
+      // entryRequirements, the ONE declaration — which adds the six
+      // fields that used to be demanded only by this wizard's Next button
+      // and by nothing on the server: coat type, registration body,
+      // breeder town and postcode, and the sire's and dam's registration
+      // numbers. No exhibitor loses an entry they could previously make,
+      // because the wizard already stopped them; this closes the
+      // direct-API hole and the secretary path (2026-09-11).
+      //
+      // Whether this half applies (regional show, competitive entry) is
+      // entryRequirements' decision, not this loop's. The baseline pedigree
+      // was already checked and thrown on above, before any payment intent.
+      const svProfile = await db.query.dogSvProfile.findFirst({
+        where: eq(dogSvProfile.dogId, dog.id),
+      });
+      const { sv: missing } = entryRequirements({
+        dog,
+        svProfile,
+        showRuleset: show.showRuleset,
+        entryType: entryInput.entryType,
+        isNfc: entryInput.isNfc,
+        classNames: entryClasses
+          .map((sc) => sc.classDefinition?.name)
+          .filter((n): n is string => !!n),
+      });
+      if (missing.length > 0) {
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: entryBlockedMessage(dog.registeredName, missing),
+        });
+      }
+    }
 
-          // Fallback for shows without show.breedId set
-          if (allowedBreedIds.size === 0) {
-            const showClassRows = await ctx.db.query.showClasses.findMany({
-              where: eq(showClasses.showId, input.showId),
-              columns: { breedId: true },
-            });
-            const judgeAssignmentRows = await ctx.db.query.judgeAssignments.findMany({
-              where: eq(judgeAssignments.showId, input.showId),
-              columns: { breedId: true },
-            });
-            for (const sc of showClassRows) {
-              if (sc.breedId) allowedBreedIds.add(sc.breedId);
-            }
-            for (const ja of judgeAssignmentRows) {
-              if (ja.breedId) allowedBreedIds.add(ja.breedId);
-            }
-          }
+    // RKC age validation: dogs must meet minimum age on show day.
+    // Competition age is judged against the specific class(es) entered, so
+    // Baby Puppy (4–6 months) isn't caught by the general 6-month floor.
+    const showDate = new Date(show.startDate);
+    const dogMap = new Map(userDogs.map((d) => [d.id, d]));
 
-          // If we found breed constraints, validate each dog
-          if (allowedBreedIds.size > 0) {
-            for (const dog of userDogs) {
-              if (!allowedBreedIds.has(dog.breedId)) {
-                const dogName = dog.registeredName ?? 'This dog';
-                const breedName = dog.breed?.name ?? 'its breed';
-                throw new TRPCError({
-                  code: 'BAD_REQUEST',
-                  message: `${dogName} (${breedName}) cannot be entered in this single-breed show. Only dogs of the show breed are eligible.`,
-                });
-              }
-            }
-          }
+    const ageCheckClassIds = [
+      ...new Set(input.entries.flatMap((e) => e.classIds)),
+    ];
+    const ageCheckClassRows = ageCheckClassIds.length
+      ? await db.query.showClasses.findMany({
+          where: and(
+            inArray(showClasses.id, ageCheckClassIds),
+            eq(showClasses.showId, input.showId),
+          ),
+          with: {
+            classDefinition: {
+              columns: {
+                name: true,
+                type: true,
+                minAgeMonths: true,
+                maxAgeMonths: true,
+              },
+            },
+          },
+        })
+      : [];
+    const ageCheckClassMap = new Map(
+      ageCheckClassRows.map((sc) => [sc.id, sc.classDefinition]),
+    );
+
+    for (const entryInput of input.entries) {
+      if (entryInput.entryType !== 'standard' || !entryInput.dogId) continue;
+      const dog = dogMap.get(entryInput.dogId);
+      if (!dog?.dateOfBirth) continue;
+
+      const dob = new Date(dog.dateOfBirth);
+      const dogName = dog.registeredName ?? 'This dog';
+
+      if (entryInput.isNfc) {
+        // NFC entries: minimum 12 weeks (RKC 2026 regulations). ONE
+        // owner — src/lib/date-utils.ts (CLAUDE.md, "One owner per rule").
+        if (!isOldEnoughForNfc(dob, showDate)) {
+          const ageWeeks = differenceInWeeks(showDate, dob);
+          throw new TRPCError({
+            code: 'BAD_REQUEST',
+            message: nfcMinAgeMessage(dogName, ageWeeks),
+          });
         }
+      } else {
+        const classes = entryInput.classIds
+          .map((cid) => ageCheckClassMap.get(cid))
+          .filter((c): c is NonNullable<typeof c> => !!c);
+        const ageError = getCompetitionAgeError({
+          dogName,
+          dob,
+          showDate,
+          classes,
+        });
+        if (ageError) {
+          throw new TRPCError({ code: 'BAD_REQUEST', message: ageError });
+        }
+      }
+    }
+  }
 
-        // Breed validation for individual classes (all show types)
-        // Ensure each dog is only entered in classes matching its breed, or AV/unassigned classes
-        for (const entryInput of input.entries) {
-          if (entryInput.entryType !== 'standard' || !entryInput.dogId) continue;
-          if (entryInput.classIds.length === 0) continue;
-          const dog = userDogs.find((d) => d.id === entryInput.dogId);
-          if (!dog) continue;
+  // Limited show eligibility check (2026 RKC rule) — one owner:
+  // getLimitedShowEligibility (src/server/services/limited-show-eligibility.ts).
+  if (show.showType === 'limited' && dogIds.length > 0) {
+    for (const dogId of [...new Set(dogIds)]) {
+      const eligibility = await getLimitedShowEligibility(db, dogId);
+      if (eligibility.ineligible) {
+        const dog = await db.query.dogs.findFirst({
+          where: eq(dogs.id, dogId),
+          columns: { registeredName: true },
+        });
+        const name = dog?.registeredName ?? 'This dog';
+        const message = eligibility.hasCC
+          ? `${name} has won a CC and is ineligible for Limited shows`
+          : `${name} has 5+ RCCs under different judges and is ineligible for Limited shows (2026 rule)`;
+        throw new TRPCError({ code: 'BAD_REQUEST', message });
+      }
+    }
+  }
 
-          const entryClasses = await ctx.db.query.showClasses.findMany({
-            where: and(
-              inArray(showClasses.id, entryInput.classIds),
-              eq(showClasses.showId, input.showId)
-            ),
+  // Non-NFC entries must have at least one class
+  for (const entryInput of input.entries) {
+    if (!entryInput.isNfc && entryInput.classIds.length === 0) {
+      throw new TRPCError({
+        code: 'BAD_REQUEST',
+        message: 'Each entry must have at least one class selected (unless entering NFC)',
+      });
+    }
+  }
+
+  // Clean up stale entries from previous abandoned/failed checkout attempts
+  // so they don't block the current checkout. Signed-in callers only (see the
+  // doc above): the guest path cancels just the one order it proves is its own.
+  if (opts.cancelStaleOrders) {
+    const staleOrders = await db.query.orders.findMany({
+      where: and(
+        eq(orders.showId, input.showId),
+        eq(orders.exhibitorId, exhibitorId),
+        inArray(orders.status, ['pending_payment', 'failed'])
+      ),
+      columns: { id: true, stripePaymentIntentId: true },
+    });
+    await cancelAbandonedOrders(db, staleOrders);
+  }
+
+  // WUSV / regional rule (Amanda 2026-05-26): a dog can be entered
+  // in exactly ONE class at a regional show — the SV grading model
+  // assigns one age/coat/sex class per dog by definition. Enforce
+  // both axes of "one class per dog":
+  //   (a) within this order, each standard entry must select one class
+  //   (b) the dog must not already have a non-deleted entry on this show
+  // NFC and junior-handler entries are exempt (NFC is by definition
+  // not for grading; JH is a handler-skill class, not a dog class).
+  if (show.showRuleset === 'wusv') {
+    const seenDogIds = new Set<string>();
+    for (const entryInput of input.entries) {
+      if (entryInput.entryType !== 'standard' || entryInput.isNfc) continue;
+      if (entryInput.classIds.length > 1) {
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: 'At a regional show, a dog can only be entered in one class. Please pick a single class for each dog.',
+        });
+      }
+      if (entryInput.dogId) {
+        if (seenDogIds.has(entryInput.dogId)) {
+          const dog = await db.query.dogs.findFirst({
+            where: eq(dogs.id, entryInput.dogId),
+            columns: { registeredName: true },
+          });
+          throw new TRPCError({
+            code: 'BAD_REQUEST',
+            message: `${dog?.registeredName ?? 'This dog'} appears twice in your cart. Each dog can only be entered once at a regional.`,
+          });
+        }
+        seenDogIds.add(entryInput.dogId);
+
+        if (await dogAlreadyOnRegional(db, entryInput.dogId, input.showId)) {
+          const dog = await db.query.dogs.findFirst({
+            where: eq(dogs.id, entryInput.dogId),
+            columns: { registeredName: true },
+          });
+          throw new TRPCError({
+            code: 'BAD_REQUEST',
+            message: `${dog?.registeredName ?? 'This dog'} is already entered in this regional show. Each dog can only be entered once at a regional.`,
+          });
+        }
+      }
+    }
+  }
+
+  // Check for duplicate classes against confirmed entries only
+  // (pending entries from previous attempts have been cleaned up above)
+  for (const entryInput of input.entries) {
+    if (entryInput.entryType === 'standard' && entryInput.dogId) {
+      const existingEntry = await db.query.entries.findFirst({
+        where: and(
+          eq(entries.dogId, entryInput.dogId),
+          eq(entries.showId, input.showId),
+          isNull(entries.deletedAt),
+          eq(entries.status, 'confirmed')
+        ),
+        with: { entryClasses: true },
+      });
+
+      if (existingEntry) {
+        const existingClassIds = new Set(existingEntry.entryClasses.map((ec) => ec.showClassId));
+        const duplicateClassIds = entryInput.classIds.filter((id) => existingClassIds.has(id));
+
+        if (duplicateClassIds.length > 0) {
+          const dog = await db.query.dogs.findFirst({
+            where: eq(dogs.id, entryInput.dogId),
+          });
+          const dupClasses = await db.query.showClasses.findMany({
+            where: inArray(showClasses.id, duplicateClassIds),
             with: { classDefinition: true },
           });
-
-          for (const sc of entryClasses) {
-            // Classes with no breedId are AV (Any Variety) or universal — any breed is allowed
-            // Junior handler classes also accept any breed
-            if (!sc.breedId || sc.classDefinition.type === 'junior_handler') continue;
-            if (sc.breedId !== dog.breedId) {
-              const dogName = dog.registeredName ?? 'This dog';
-              const breedName = dog.breed?.name ?? 'its breed';
-              throw new TRPCError({
-                code: 'BAD_REQUEST',
-                message: `${dogName} (${breedName}) cannot be entered in the class "${sc.classDefinition.name}" as it is restricted to a different breed.`,
-              });
-            }
-          }
-        }
-
-        // RKC age validation: dogs must meet minimum age on show day
-        const showDate = new Date(show.startDate);
-        const dogMap = new Map(userDogs.map((d) => [d.id, d]));
-
-        for (const entryInput of input.entries) {
-          if (entryInput.entryType !== 'standard' || !entryInput.dogId) continue;
-          const dog = dogMap.get(entryInput.dogId);
-          if (!dog?.dateOfBirth) continue;
-
-          const dob = new Date(dog.dateOfBirth);
-          const ageMonths = differenceInMonths(showDate, dob);
-          const ageWeeks = differenceInWeeks(showDate, dob);
-          const dogName = dog.registeredName ?? 'This dog';
-
-          if (entryInput.isNfc) {
-            // NFC entries: minimum 12 weeks (RKC 2026 regulations)
-            if (ageWeeks < 12) {
-              throw new TRPCError({
-                code: 'BAD_REQUEST',
-                message: `${dogName} will only be ${ageWeeks} weeks old on show day. Dogs must be at least 12 weeks old for NFC entries.`,
-              });
-            }
-          } else {
-            // Competition entries: minimum 6 months
-            if (ageMonths < 4) {
-              // Under 4 months: reject entirely
-              throw new TRPCError({
-                code: 'BAD_REQUEST',
-                message: `${dogName} will only be ${ageMonths} months old on show day. Dogs must be at least 6 months old to enter competition classes, or at least 12 weeks old for Not For Competition (NFC) entries.`,
-              });
-            } else if (ageMonths < 6) {
-              // Between 4 and 6 months: suggest NFC
-              throw new TRPCError({
-                code: 'BAD_REQUEST',
-                message: `${dogName} will only be ${ageMonths} months old on show day. Dogs must be at least 6 months old for competition classes. You can enter Not For Competition (NFC) instead.`,
-              });
-            }
-          }
-        }
-      }
-
-      // Limited show eligibility check (2026 RKC rule)
-      if (show.showType === 'limited' && dogIds.length > 0) {
-        for (const dogId of [...new Set(dogIds)]) {
-          const ccTypes = ['cc', 'dog_cc', 'bitch_cc'] as const;
-          const ccRows = await ctx.db
-            .select({ count: sql<number>`count(*)::int` })
-            .from(achievements)
-            .where(
-              and(
-                eq(achievements.dogId, dogId),
-                inArray(achievements.type, [...ccTypes])
-              )
-            );
-          const ccCount = ccRows[0]?.count ?? 0;
-
-          if (ccCount > 0) {
-            const dog = await ctx.db.query.dogs.findFirst({
-              where: eq(dogs.id, dogId),
-              columns: { registeredName: true },
-            });
-            throw new TRPCError({
-              code: 'BAD_REQUEST',
-              message: `${dog?.registeredName ?? 'This dog'} has won a CC and is ineligible for Limited shows`,
-            });
-          }
-
-          const rccTypes = ['reserve_cc', 'reserve_dog_cc', 'reserve_bitch_cc'] as const;
-          const rccRows = await ctx.db
-            .select({ judgeId: achievements.judgeId })
-            .from(achievements)
-            .where(
-              and(
-                eq(achievements.dogId, dogId),
-                inArray(achievements.type, [...rccTypes])
-              )
-            );
-          const distinctJudges = new Set(rccRows.map((r) => r.judgeId ?? 'unknown'));
-          if (distinctJudges.size >= 5) {
-            const dog = await ctx.db.query.dogs.findFirst({
-              where: eq(dogs.id, dogId),
-              columns: { registeredName: true },
-            });
-            throw new TRPCError({
-              code: 'BAD_REQUEST',
-              message: `${dog?.registeredName ?? 'This dog'} has 5+ RCCs under different judges and is ineligible for Limited shows (2026 rule)`,
-            });
-          }
-        }
-      }
-
-      // Non-NFC entries must have at least one class
-      for (const entryInput of input.entries) {
-        if (!entryInput.isNfc && entryInput.classIds.length === 0) {
+          const classNames = dupClasses.map((c) => c.classDefinition.name).join(', ');
           throw new TRPCError({
             code: 'BAD_REQUEST',
-            message: 'Each entry must have at least one class selected (unless entering NFC)',
+            message: `${dog?.registeredName ?? 'This dog'} is already entered in: ${classNames}`,
           });
         }
       }
+    }
+  }
 
-      // Clean up stale entries from previous abandoned/failed checkout attempts
-      // so they don't block the current checkout
-      const staleOrders = await ctx.db.query.orders.findMany({
-        where: and(
-          eq(orders.showId, input.showId),
-          eq(orders.exhibitorId, ctx.session.user.id),
-          inArray(orders.status, ['pending_payment', 'failed'])
-        ),
-        columns: { id: true },
-      });
-
-      if (staleOrders.length > 0) {
-        const staleOrderIds = staleOrders.map((o) => o.id);
-        // Soft-delete stale entries so they don't block duplicate checks
-        await ctx.db
-          .update(entries)
-          .set({ deletedAt: new Date(), status: 'cancelled' })
-          .where(
-            and(
-              inArray(entries.orderId, staleOrderIds),
-              eq(entries.status, 'pending'),
-              isNull(entries.deletedAt)
-            )
-          );
-        // Mark stale orders as cancelled
-        await ctx.db
-          .update(orders)
-          .set({ status: 'cancelled' })
-          .where(inArray(orders.id, staleOrderIds));
-      }
-
-      // Check for duplicate classes against confirmed entries only
-      // (pending entries from previous attempts have been cleaned up above)
-      for (const entryInput of input.entries) {
-        if (entryInput.entryType === 'standard' && entryInput.dogId) {
-          const existingEntry = await ctx.db.query.entries.findFirst({
-            where: and(
-              eq(entries.dogId, entryInput.dogId),
-              eq(entries.showId, input.showId),
-              isNull(entries.deletedAt),
-              eq(entries.status, 'confirmed')
-            ),
-            with: { entryClasses: true },
-          });
-
-          if (existingEntry) {
-            const existingClassIds = new Set(existingEntry.entryClasses.map((ec) => ec.showClassId));
-            const duplicateClassIds = entryInput.classIds.filter((id) => existingClassIds.has(id));
-
-            if (duplicateClassIds.length > 0) {
-              const dog = await ctx.db.query.dogs.findFirst({
-                where: eq(dogs.id, entryInput.dogId),
-              });
-              const dupClasses = await ctx.db.query.showClasses.findMany({
-                where: inArray(showClasses.id, duplicateClassIds),
-                with: { classDefinition: true },
-              });
-              const classNames = dupClasses.map((c) => c.classDefinition.name).join(', ');
-              throw new TRPCError({
-                code: 'BAD_REQUEST',
-                message: `${dog?.registeredName ?? 'This dog'} is already entered in: ${classNames}`,
-              });
-            }
-          }
-        }
-      }
-
-      // Judge conflict check: warn if exhibitor's name matches an assigned judge
-      const exhibitor = await ctx.db.query.users.findFirst({
-        where: eq(users.id, ctx.session.user.id),
+  // Judge conflict check: a judge can't exhibit in classes they judge.
+  // Junior Handling judges assess the handler, not the dog, so a JH-only
+  // judge IS allowed to enter (Amanda 2026-06-01). See hasJudgingConflict.
+  // Only when there are entries: a judge may buy a catalogue or sponsor a
+  // class (extras only, no dog — Mandy, 15 Oct 2026).
+  const exhibitor = hasEntries
+    ? await db.query.users.findFirst({
+        where: eq(users.id, exhibitorId),
         columns: { name: true },
+      })
+    : undefined;
+  if (exhibitor?.name) {
+    const assignedJudges = await db.query.judgeAssignments.findMany({
+      where: eq(judgeAssignments.showId, input.showId),
+      with: { judge: { columns: { name: true } } },
+    });
+    if (hasJudgingConflict(assignedJudges, exhibitor.name)) {
+      throw new TRPCError({
+        code: 'BAD_REQUEST',
+        message: 'You appear to be assigned as a judge at this show. Judges cannot exhibit dogs at shows they are judging.',
       });
-      if (exhibitor?.name) {
-        const assignedJudges = await ctx.db.query.judgeAssignments.findMany({
-          where: eq(judgeAssignments.showId, input.showId),
-          with: { judge: { columns: { name: true } } },
+    }
+  }
+
+  // Collect all class IDs and validate
+  const allClassIds = input.entries.flatMap((e) => e.classIds);
+  const classMap = new Map<
+    string,
+    { id: string; entryFee: number; classDefinition?: { name: string; type: string } | null }
+  >();
+
+  if (allClassIds.length > 0) {
+    const selectedClasses = await db.query.showClasses.findMany({
+      where: and(
+        inArray(showClasses.id, allClassIds),
+        eq(showClasses.showId, input.showId)
+      ),
+      with: { classDefinition: { columns: { name: true, type: true } } },
+    });
+
+    for (const sc of selectedClasses) {
+      classMap.set(sc.id, sc);
+    }
+
+    // Verify all requested classes exist
+    for (const classId of allClassIds) {
+      if (!classMap.has(classId)) {
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: `Invalid class ID: ${classId}`,
         });
-        const exhibitorName = exhibitor.name.toLowerCase().trim();
-        const isJudge = assignedJudges.some(
-          (a) => a.judge?.name?.toLowerCase().trim() === exhibitorName
-        );
-        if (isJudge) {
-          throw new TRPCError({
-            code: 'BAD_REQUEST',
-            message: 'You appear to be assigned as a judge at this show. Judges cannot exhibit dogs at shows they are judging.',
-          });
-        }
       }
+    }
+  }
 
-      // Collect all class IDs and validate
-      const allClassIds = input.entries.flatMap((e) => e.classIds);
-      const classMap = new Map<string, { id: string; entryFee: number }>();
+  // What the declared membership means — an RKC discount group (member
+  // rates + member multi-dog package) or a regional membership. ONE owner,
+  // shared with the secretary's Add Entry: resolveEntryMembership.
+  const membership = await resolveEntryMembership(db, show, {
+    discountGroupId: input.discountGroupId,
+    regionalMembership: input.regionalMembership,
+  });
 
-      if (allClassIds.length > 0) {
-        const selectedClasses = await ctx.db.query.showClasses.findMany({
-          where: and(
-            inArray(showClasses.id, allClassIds),
-            eq(showClasses.showId, input.showId)
-          ),
-        });
+  const feeCtx: FeeContext = {
+    firstEntryFeePence: show.firstEntryFee,
+    subsequentEntryFeePence: show.subsequentEntryFee,
+    nfcEntryFeePence: show.nfcEntryFee,
+    juniorHandlerFeePence: show.juniorHandlerFee,
+    multiDogThreshold: show.multiDogThreshold,
+    multiDogPackagePence: show.multiDogPackagePence,
+    discountGroup: membership.discountGroup,
+  };
 
-        for (const sc of selectedClasses) {
-          classMap.set(sc.id, sc);
-        }
+  // Regional (SV/WUSV) shows price on a tiered per-DISTINCT-DOG scale with a
+  // member column — a different model from the RKC first/subsequent-class
+  // fees, so they take their own engine (Mandy 2026-07-02). Falls back to
+  // the standard RKC path when a regional show has no fee config set yet.
+  const regionalCfg =
+    show.showRuleset === 'wusv' ? show.regionalFeeConfig : null;
+  const isRegional = regionalCfg != null;
 
-        // Verify all requested classes exist
-        for (const classId of allClassIds) {
-          if (!classMap.has(classId)) {
-            throw new TRPCError({
-              code: 'BAD_REQUEST',
-              message: `Invalid class ID: ${classId}`,
-            });
-          }
-        }
-      }
+  // The declared regional membership (resolveEntryMembership above): its
+  // own schedule if it has one, else the member column. Self-declared — on
+  // trust.
+  const regionalMembershipLabel = membership.regionalLabel;
+  const regionalFirstTime =
+    isRegional &&
+    input.regionalFirstTimeExhibitor &&
+    !!regionalCfg.firstTimeEnabled;
 
-      // Calculate total amount using show-level fee tiers if available
-      let totalAmount = 0;
-      for (const entry of input.entries) {
-        const classCount = entry.classIds.length;
+  // Per-entry fee breakdown, shared by the order total and the entry_classes
+  // rows below — sourced from whichever engine applies.
+  let entriesSubtotal = 0;
+  let perEntryBreakdown: { fee: number; perClassFees: number[] }[] | null = null;
 
-        if (entry.entryType === 'junior_handler' && show.juniorHandlerFee != null) {
-          totalAmount += show.juniorHandlerFee;
-        } else if (entry.isNfc && show.nfcEntryFee != null) {
-          totalAmount += classCount > 0 ? show.nfcEntryFee * classCount : show.nfcEntryFee;
-        } else if (show.firstEntryFee != null) {
-          const subsequentRate = show.subsequentEntryFee ?? show.firstEntryFee;
-          totalAmount += show.firstEntryFee + subsequentRate * (classCount - 1);
-        } else {
-          // Fallback: per-class fees
-          for (const classId of entry.classIds) {
-            totalAmount += classMap.get(classId)!.entryFee;
-          }
-        }
-      }
-
-      // Validate and calculate sundry items
-      let sundryTotal = 0;
-      const validatedSundryItems: { sundryItemId: string; quantity: number; unitPrice: number }[] = [];
-
-      if (input.sundryItems.length > 0) {
-        const requestedIds = input.sundryItems.map((s) => s.sundryItemId);
-        const availableItems = await ctx.db.query.sundryItems.findMany({
-          where: and(
-            inArray(sundryItems.id, requestedIds),
-            eq(sundryItems.showId, input.showId),
-            eq(sundryItems.enabled, true)
-          ),
-        });
-
-        const itemMap = new Map(availableItems.map((i) => [i.id, i]));
-
-        for (const requested of input.sundryItems) {
-          const item = itemMap.get(requested.sundryItemId);
-          if (!item) {
-            throw new TRPCError({
-              code: 'BAD_REQUEST',
-              message: `Sundry item not found or not available: ${requested.sundryItemId}`,
-            });
-          }
-          if (item.maxPerOrder != null && requested.quantity > item.maxPerOrder) {
-            throw new TRPCError({
-              code: 'BAD_REQUEST',
-              message: `Maximum ${item.maxPerOrder} of "${item.name}" per order`,
-            });
-          }
-          const lineTotal = item.priceInPence * requested.quantity;
-          sundryTotal += lineTotal;
-          validatedSundryItems.push({
-            sundryItemId: item.id,
-            quantity: requested.quantity,
-            unitPrice: item.priceInPence,
-          });
-        }
-      }
-
-      totalAmount += sundryTotal;
-
-      // Create order
-      const [order] = await ctx.db
-        .insert(orders)
-        .values({
-          showId: input.showId,
-          exhibitorId: ctx.session.user.id,
-          status: 'pending_payment',
-          totalAmount,
-        })
-        .returning();
-
-      // Create entries and entry classes
-      const createdEntries: { id: string; dogId: string | null }[] = [];
-
-      for (const entryInput of input.entries) {
-        const classCount = entryInput.classIds.length;
-        let entryFee: number;
-
-        if (entryInput.entryType === 'junior_handler' && show.juniorHandlerFee != null) {
-          entryFee = show.juniorHandlerFee;
-        } else if (entryInput.isNfc && show.nfcEntryFee != null) {
-          entryFee = show.nfcEntryFee * classCount;
-        } else if (show.firstEntryFee != null) {
-          const subsequentRate = show.subsequentEntryFee ?? show.firstEntryFee;
-          entryFee = show.firstEntryFee + subsequentRate * (classCount - 1);
-        } else {
-          entryFee = entryInput.classIds.reduce(
-            (sum, cid) => sum + (classMap.get(cid)?.entryFee ?? 0),
-            0
-          );
-        }
-
-        const [entry] = await ctx.db
-          .insert(entries)
-          .values({
+  if (isRegional) {
+    // Dogs this exhibitor already has at this show count towards the scale —
+    // the discount is per exhibitor per show, not per basket (Mandy
+    // 2026-09-16). ONE owner: countPriorRegionalPayingDogs.
+    const regionalCtx: RegionalFeeContext = {
+      tiers: membership.regionalTiers ?? regionalCfg.tiers,
+      isMember: membership.regionalIsMember,
+      firstTimeExhibitor: regionalFirstTime,
+      firstTimeFeePence: regionalCfg.firstTimeFeePence ?? 0,
+      juniorHandlerFeePence: show.juniorHandlerFee ?? 0,
+      priorPayingDogCount: hasEntries
+        ? await countPriorRegionalPayingDogs(db, {
             showId: input.showId,
-            dogId: entryInput.dogId ?? null,
-            exhibitorId: ctx.session.user.id,
-            orderId: order!.id,
-            entryType: entryInput.entryType,
-            isNfc: entryInput.isNfc,
-            status: 'pending',
-            totalFee: entryFee,
-            catalogueRequested: input.catalogueRequested,
-            withholdFromPublication: input.withholdFromPublication,
+            exhibitorId: exhibitorId,
           })
-          .returning();
-
-        createdEntries.push({
-          id: entry!.id,
-          dogId: entryInput.dogId ?? null,
+        : 0,
+    };
+    // Regional dogs sit in exactly one class; a Baby Puppy class priced
+    // away from the scale charges flat (Mandy 2026-07-10).
+    const regionalEntries: RegionalDogEntryInput[] = input.entries.map((e, i) => ({
+      key: String(i),
+      kind: e.entryType === 'junior_handler' ? 'junior_handler' : 'standard',
+      flatFeePence: resolveClassFlatFee(e.classIds[0], classMap, regionalCfg.tiers),
+    }));
+    const regionalResult = computeRegionalOrderFees(regionalEntries, regionalCtx);
+    entriesSubtotal = regionalResult.entriesTotal;
+    perEntryBreakdown = regionalResult.perEntry.map((e) => ({
+      fee: e.fee,
+      perClassFees: e.perClassFees,
+    }));
+  } else {
+    // Standard RKC path — first/subsequent class fees + optional discount
+    // group + multi-dog package. Legacy per-class fallback for shows that
+    // pre-date show-level fees.
+    const dogEntries: DogEntryInput[] = input.entries.map((e, i) => ({
+      key: String(i),
+      kind:
+        e.entryType === 'junior_handler'
+          ? 'junior_handler'
+          : e.isNfc
+            ? 'nfc'
+            : 'standard',
+      classCount: e.classIds.length,
+      // Special Award Classes charge their own fee, not the tier (Mandy
+      // 2026-07-19). ONE owner: specialAwardClassFee. Aligned to classIds
+      // order so perClassFees[idx] matches.
+      specialClassFees: e.classIds.map((cid) => {
+        const c = classMap.get(cid);
+        return c ? specialAwardClassFee(c) : null;
+      }),
+    }));
+    const usePerClassFallback = show.firstEntryFee == null;
+    // Dogs this exhibitor already has at this show count toward the
+    // multi-dog package — per exhibitor per show, not per basket (Mandy
+    // 2026-09-28). ONE owner: priorPackageStanding.
+    const feeResult = usePerClassFallback
+      ? null
+      : computeOrderFees(dogEntries, {
+          ...feeCtx,
+          prior: hasEntries
+            ? await priorPackageStanding(db, {
+                showId: input.showId,
+                exhibitorId: exhibitorId,
+                show,
+              })
+            : undefined,
         });
+    if (feeResult) {
+      entriesSubtotal = feeResult.total;
+      perEntryBreakdown = feeResult.perEntry.map((e) => ({
+        fee: e.fee,
+        perClassFees: e.perClassFees,
+      }));
+    } else {
+      for (const entry of input.entries) {
+        for (const classId of entry.classIds) {
+          entriesSubtotal += classMap.get(classId)!.entryFee;
+        }
+      }
+    }
+  }
 
-        // Create entry classes with tiered fees
-        await ctx.db.insert(entryClasses).values(
-          entryInput.classIds.map((cid, idx) => {
-            let classFee: number;
-            if (entryInput.isNfc && show.nfcEntryFee != null) {
-              classFee = show.nfcEntryFee;
-            } else if (show.firstEntryFee != null) {
-              classFee = idx === 0 ? show.firstEntryFee : (show.subsequentEntryFee ?? show.firstEntryFee);
-            } else {
-              classFee = classMap.get(cid)!.entryFee;
-            }
-            return {
-              entryId: entry!.id,
-              showClassId: cid,
-              fee: classFee,
-            };
-          })
+  // Discretionary donation — only honoured when the show enables it.
+  const donationPence =
+    isRegional && regionalCfg.donationsEnabled ? input.donationPence : 0;
+
+  let totalAmount = entriesSubtotal + donationPence;
+
+  // Validate and calculate sundry items — ONE owner:
+  // validateSundrySelection (src/server/services/sundry-selection.ts).
+  // Quantities are aggregated per item before the maxPerOrder check
+  // there, so the cap can't be bypassed by splitting a quantity across
+  // duplicate cart lines — e.g. two lines of 2 when maxPerOrder is 2
+  // (bug hunt #27).
+  const sundrySelection = await validateSundrySelection(db, {
+    showId: input.showId,
+    items: input.sundryItems,
+  });
+  // Checkout enforces every rule and keeps the same messages it always
+  // has: not_found/wrong_show/disabled collapse into one generic
+  // message, over_max gets its own. Only the FIRST violation is
+  // reported, matching the old inline loop which threw as soon as it
+  // hit a problem.
+  const firstViolation = sundrySelection.violations[0];
+  if (firstViolation) {
+    throw sundryViolationError(firstViolation);
+  }
+
+  const validatedSundryItems = sundrySelection.items.map((i) => ({
+    sundryItemId: i.sundryItemId,
+    quantity: i.quantity,
+    unitPrice: i.unitPrice,
+  }));
+  const sundryTotal = validatedSundryItems.reduce(
+    (sum, i) => sum + i.unitPrice * i.quantity,
+    0
+  );
+
+  totalAmount += sundryTotal;
+
+  // Platform handling fee (£1 + 1% of subtotal) — the exhibitor pays
+  // totalAmount + platformFee at Stripe. Fee is 0 for £0 orders so
+  // free entries bypass Stripe entirely.
+  const platformFeePence =
+    totalAmount === 0 ? 0 : calculatePlatformFee(totalAmount);
+
+  // Create order
+  const [order] = await db
+    .insert(orders)
+    .values({
+      showId: input.showId,
+      exhibitorId: exhibitorId,
+      status: 'pending_payment',
+      totalAmount,
+      platformFeePence,
+      donationPence,
+      donationAffix:
+        donationPence > 0 ? input.donationAffix?.trim() || null : null,
+      referralSource: input.referralSource?.toLowerCase() ?? null,
+      discountGroupId: membership.discountGroupId,
+      regionalMembership: regionalMembershipLabel,
+      regionalMembershipNumber:
+        regionalMembershipLabel && input.regionalMembershipNumber
+          ? input.regionalMembershipNumber
+          : null,
+      regionalFirstTimeExhibitor: regionalFirstTime,
+    })
+    .returning();
+
+  // Create entries and entry classes
+  const createdEntries: { id: string; dogId: string | null }[] = [];
+
+  for (let entryIdx = 0; entryIdx < input.entries.length; entryIdx++) {
+    const entryInput = input.entries[entryIdx]!;
+    // Fee comes from the canonical engine breakdown when available (RKC or
+    // regional). The legacy per-class fallback re-sums classMap to match.
+    const feeBreak = perEntryBreakdown?.[entryIdx];
+    const entryFee = feeBreak
+      ? feeBreak.fee
+      : entryInput.classIds.reduce(
+          (sum, cid) => sum + (classMap.get(cid)?.entryFee ?? 0),
+          0,
         );
 
-        // Create junior handler details if applicable
-        if (
-          entryInput.entryType === 'junior_handler' &&
-          entryInput.handlerName
-        ) {
-          await ctx.db.insert(juniorHandlerDetails).values({
-            entryId: entry!.id,
-            handlerName: entryInput.handlerName,
-            dateOfBirth: entryInput.handlerDob!,
-            kcNumber: entryInput.handlerKcNumber ?? null,
-          });
-        }
-
-        // Create audit log
-        await ctx.db.insert(entryAuditLog).values({
-          entryId: entry!.id,
-          action: 'created',
-          userId: ctx.session.user.id,
-          changes: {
-            classIds: entryInput.classIds,
-            entryType: entryInput.entryType,
-          },
-        });
-      }
-
-      // Create order sundry items
-      if (validatedSundryItems.length > 0) {
-        await ctx.db.insert(orderSundryItems).values(
-          validatedSundryItems.map((s) => ({
-            orderId: order!.id,
-            sundryItemId: s.sundryItemId,
-            quantity: s.quantity,
-            unitPrice: s.unitPrice,
-          }))
-        );
-      }
-
-      // Free entries (£0) — skip Stripe, auto-confirm
-      if (totalAmount === 0) {
-        await ctx.db
-          .update(orders)
-          .set({ status: 'paid' })
-          .where(eq(orders.id, order!.id));
-
-        // Confirm all entries immediately
-        for (const entry of createdEntries) {
-          await ctx.db
-            .update(entries)
-            .set({ status: 'confirmed' })
-            .where(eq(entries.id, entry.id));
-        }
-
-        return {
-          clientSecret: null,
-          orderId: order!.id,
-          totalAmount: 0,
-          entryCount: createdEntries.length,
-          freeEntry: true,
-        };
-      }
-
-      // Create Stripe PaymentIntent
-      const paymentIntent = await createPaymentIntent(totalAmount, {
-        orderId: order!.id,
+    const [entry] = await db
+      .insert(entries)
+      .values({
         showId: input.showId,
-        exhibitorId: ctx.session.user.id,
-        entryCount: String(input.entries.length),
-      });
-
-      // Update order with Stripe PI ID
-      await ctx.db
-        .update(orders)
-        .set({ stripePaymentIntentId: paymentIntent.id })
-        .where(eq(orders.id, order!.id));
-
-      // Create payment record
-      await ctx.db.insert(payments).values({
+        dogId: entryInput.dogId ?? null,
+        exhibitorId: exhibitorId,
         orderId: order!.id,
-        stripePaymentId: paymentIntent.id,
-        amount: totalAmount,
+        entryType: entryInput.entryType,
+        isNfc: entryInput.isNfc,
         status: 'pending',
-        type: 'initial',
-      });
+        totalFee: entryFee,
+        catalogueRequested: input.catalogueRequested,
+        withholdFromPublication: input.withholdFromPublication,
+        // Per-entry (not per-order like the two above): each dog has its
+        // own RKC paperwork position.
+        naf: entryInput.naf,
+        taf: entryInput.taf,
+        cnaf: entryInput.cnaf,
+        atcNumber: formatAtcNumber(entryInput.atcNumber),
+      })
+      .returning();
 
-      return {
-        clientSecret: paymentIntent.client_secret!,
+    createdEntries.push({
+      id: entry!.id,
+      dogId: entryInput.dogId ?? null,
+    });
+
+    // Create entry classes with per-class fees. The sum of these must
+    // match entries.total_fee above — the JH and NFC branches have to
+    // stay aligned between the two loops or the financial "Entries by
+    // Class" breakdown disagrees with the order-level revenue.
+    // NFC entries can legitimately have zero classes — skip the insert
+    // in that case (Drizzle's .values([]) throws "values() must be
+    // called with at least one value").
+    if (entryInput.classIds.length > 0) {
+      await db.insert(entryClasses).values(
+        entryInput.classIds.map((cid, idx) => {
+          // Service-computed per-class fees keep the entry_classes rows
+          // in sync with entries.total_fee even when the multi-dog
+          // package splits across paying dogs.
+          const classFee = feeBreak
+            ? (feeBreak.perClassFees[idx] ?? 0)
+            : (classMap.get(cid)?.entryFee ?? 0);
+          return {
+            entryId: entry!.id,
+            showClassId: cid,
+            fee: classFee,
+          };
+        })
+      );
+    }
+
+    // Create junior handler details if applicable
+    if (
+      entryInput.entryType === 'junior_handler' &&
+      entryInput.handlerName
+    ) {
+      await db.insert(juniorHandlerDetails).values({
+        entryId: entry!.id,
+        handlerName: entryInput.handlerName,
+        dateOfBirth: entryInput.handlerDob!,
+        kcNumber: entryInput.handlerKcNumber ?? null,
+      });
+    }
+
+    // Create audit log
+    await db.insert(entryAuditLog).values({
+      entryId: entry!.id,
+      action: 'created',
+      userId: exhibitorId,
+      changes: {
+        classIds: entryInput.classIds,
+        entryType: entryInput.entryType,
+      },
+    });
+  }
+
+  // Create order sundry items
+  if (validatedSundryItems.length > 0) {
+    await db.insert(orderSundryItems).values(
+      validatedSundryItems.map((s) => ({
         orderId: order!.id,
-        totalAmount,
-        entryCount: createdEntries.length,
-        freeEntry: false,
-      };
+        sundryItemId: s.sundryItemId,
+        quantity: s.quantity,
+        unitPrice: s.unitPrice,
+      }))
+    );
+  }
+
+  // Free entries (£0) — skip Stripe, auto-confirm
+  if (totalAmount === 0) {
+    await db
+      .update(orders)
+      .set({ status: 'paid' })
+      .where(eq(orders.id, order!.id));
+
+    // Confirm all entries immediately
+    for (const entry of createdEntries) {
+      await db
+        .update(entries)
+        .set({ status: 'confirmed' })
+        .where(eq(entries.id, entry.id));
+    }
+
+    // Same as the paid path: a confirmed entry needs a catalogue number or
+    // it never reaches the catalogue. Non-fatal — the entries are already
+    // committed, so a numbering hiccup mustn't fail the exhibitor's booking.
+    try {
+      await syncCatalogueNumbers(db, input.showId);
+    } catch (err) {
+      console.error(`[orders] syncCatalogueNumbers failed for show ${input.showId}:`, err);
+    }
+
+    // A free order never reaches the Stripe webhook, so tell the exhibitor
+    // and the secretary here — the same one owner the webhook calls. Until
+    // 15 Oct 2026 free orders (mostly junior handlers) got no email at all.
+    // Non-blocking: it never rejects and must not slow the checkout.
+    void sendOrderPaidEmails(order!.id);
+
+    return {
+      clientSecret: null,
+      orderId: order!.id,
+      totalAmount: 0,
+      entryCount: createdEntries.length,
+      freeEntry: true,
+    };
+  }
+
+  // Gross = what the exhibitor is charged (subtotal + £1+1% handling
+  // fee). Money lands in Remi's platform Stripe account; the
+  // subtotal is forwarded to the club by BACS after entries close.
+  // The platformFeePence column on orders + the metadata below keep
+  // the two components separable for reconciliation and payouts.
+  const grossAmount = amountChargedPence(totalAmount, platformFeePence);
+
+  const paymentIntent = await createPaymentIntent(grossAmount, {
+    orderId: order!.id,
+    showId: input.showId,
+    exhibitorId,
+    buyer: opts.buyer,
+    entryCount: String(input.entries.length),
+    platformFeePence: String(platformFeePence),
+    subtotalPence: String(totalAmount),
+  });
+
+  // Update order with Stripe PI ID
+  await db
+    .update(orders)
+    .set({ stripePaymentIntentId: paymentIntent.id })
+    .where(eq(orders.id, order!.id));
+
+  // Create payment record. amount here reflects what the exhibitor
+  // is being charged (gross) so the sum reconciles with Stripe's
+  // own balance transactions.
+  await db.insert(payments).values({
+    orderId: order!.id,
+    stripePaymentId: paymentIntent.id,
+    amount: grossAmount,
+    status: 'pending',
+    type: 'initial',
+  });
+
+  return {
+    clientSecret: paymentIntent.client_secret!,
+    orderId: order!.id,
+    totalAmount,
+    platformFeePence,
+    grossAmount,
+    entryCount: createdEntries.length,
+    freeEntry: false,
+  };
+}
+
+/** What buying extras WITHOUT signing in asks for. There is no entries field
+ *  at all: a dog or a junior handler always needs a sign-in (Mandy, 15 Oct
+ *  2026), and a hand-made request can't add one. */
+const guestCheckoutInputSchema = z.object({
+  showId: z.string().uuid(),
+  sundryItems: z
+    .array(z.object({ sundryItemId: z.string().uuid(), quantity: z.number().int().min(1) }))
+    .min(1),
+  referralSource: z.string().regex(/^[a-z0-9_-]+$/i).max(32).optional(),
+  buyer: z.object({
+    name: z.string().trim().min(2).max(120),
+    email: z.string().trim().email().max(254),
+  }),
+  /** The browser's last guest checkout at this show, to cancel if still open. */
+  previousOrder: z
+    .object({ orderId: z.string().uuid(), clientSecret: z.string().min(1).max(500) })
+    .optional(),
+});
+
+/**
+ * Cancel a guest's earlier checkout — but only one this browser can PROVE is
+ * its own, by holding that payment's client secret (which only the browser
+ * that opened it was given). It need not be the same person: a guest who goes
+ * Back and types a different email still has the old payment open. Anything
+ * that doesn't check out is left alone; the new checkout goes ahead either way.
+ */
+async function cancelProvenPreviousOrder(
+  db: Database,
+  showId: string,
+  previous: { orderId: string; clientSecret: string },
+) {
+  const order = await db.query.orders.findFirst({
+    where: and(
+      eq(orders.id, previous.orderId),
+      eq(orders.showId, showId),
+      eq(orders.status, 'pending_payment'),
+    ),
+    columns: { id: true, stripePaymentIntentId: true },
+  });
+  if (!order?.stripePaymentIntentId) return;
+  if (!previous.clientSecret.startsWith(`${order.stripePaymentIntentId}_secret_`)) return;
+  const intent = await retrievePaymentIntent(order.stripePaymentIntentId);
+  if (!intent || intent.client_secret !== previous.clientSecret) return;
+  await cancelAbandonedOrders(db, [order]);
+}
+
+export const ordersRouter = createTRPCRouter({
+  checkout: protectedProcedure
+    .input(checkoutInputSchema)
+    .mutation(({ ctx, input }) =>
+      placeOrder(ctx.db, ctx.session.user.id, input, { cancelStaleOrders: true, buyer: 'signed_in' }),
+    ),
+
+  /**
+   * Buy extras — a catalogue, a parking pass — WITHOUT signing in (Mandy,
+   * 15 Oct 2026: "Just extras, no dog" asks only for a name and an email).
+   * The order is filed under the person with that email, found or created by
+   * the one owner (services/people.ts); they are never signed in by it, and
+   * the answer is the same whether the email was already on Remi or not, so
+   * it can't be used to find out who has an account. Everything else — the
+   * entry window, the extras rules, the price, Stripe, the emails — is the
+   * one checkout, placeOrder.
+   */
+  guestCheckout: publicProcedure
+    .input(guestCheckoutInputSchema)
+    .mutation(async ({ ctx, input }) => {
+      if (ctx.session) {
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: "You're signed in, so please use the normal checkout.",
+        });
+      }
+      if (!takeGuestCheckoutAttempt({ ip: ctx.clientIp ?? null, email: normaliseEmail(input.buyer.email) })) {
+        throw new TRPCError({
+          code: 'TOO_MANY_REQUESTS',
+          message: 'Too many tries. Please wait a few minutes and try again.',
+        });
+      }
+
+      const { person } = await findOrCreatePersonByEmail(ctx.db, input.buyer);
+      if (input.previousOrder) {
+        await cancelProvenPreviousOrder(ctx.db, input.showId, input.previousOrder);
+      }
+
+      return placeOrder(
+        ctx.db,
+        person.id,
+        checkoutInputSchema.parse({
+          showId: input.showId,
+          entries: [],
+          sundryItems: input.sundryItems,
+          referralSource: input.referralSource,
+        }),
+        { cancelStaleOrders: false, buyer: 'guest' },
+      );
     }),
 
   getById: protectedProcedure
@@ -618,8 +1093,9 @@ export const ordersRouter = createTRPCRouter({
         where: eq(orders.id, input.id),
         with: {
           show: {
+            columns: SHOW_COLUMNS_FOR_PUBLIC_INCLUDE,
             with: {
-              organisation: true,
+              organisation: { columns: publicOrgColumns },
               venue: true,
             },
           },
@@ -652,6 +1128,158 @@ export const ordersRouter = createTRPCRouter({
       return order;
     }),
 
+  // ── Extras on an existing (paid) entry's order ────────────────────
+  // Design doc: research/DESIGN-add-extras-to-entry-2026-09-21.md.
+  // Pricing has ONE owner: priceOrderExtras (mirrors priceEntryClassChange,
+  // the class-change top-up owner). previewExtras calls it read-only;
+  // addExtras calls it then does the writes — free items land immediately,
+  // anything with a cost is DEFERRED into a PaymentIntent's metadata and
+  // applied by the Stripe webhook on success (same pattern as the
+  // entries.update upgrade branch), so an abandoned top-up can't leave the
+  // exhibitor with free extras or overstate the club's revenue.
+  previewExtras: protectedProcedure
+    .input(
+      z.object({
+        orderId: z.string().uuid(),
+        items: z.array(
+          z.object({
+            sundryItemId: z.string().uuid(),
+            quantity: z.number().int().min(1),
+          })
+        ),
+      })
+    )
+    .query(async ({ ctx, input }) => {
+      const pricing = await priceOrderExtras(ctx.db, {
+        orderId: input.orderId,
+        userId: ctx.session.user.id,
+        items: input.items,
+      });
+
+      return {
+        lines: pricing.lines,
+        subtotalPence: pricing.subtotalPence,
+        platformFeePence: pricing.platformFeePence,
+        grossPence: pricing.grossPence,
+        requiresPayment: pricing.requiresPayment,
+      };
+    }),
+
+  addExtras: protectedProcedure
+    .input(
+      z.object({
+        orderId: z.string().uuid(),
+        // The entry the exhibitor came from — carried through to the
+        // PaymentIntent metadata purely so the webhook/audit log has an
+        // entryId to attribute the purchase to (entry_audit_log.entryId is
+        // NOT NULL). Must belong to this order.
+        entryId: z.string().uuid(),
+        items: z.array(
+          z.object({
+            sundryItemId: z.string().uuid(),
+            quantity: z.number().int().min(1),
+          })
+        ).min(1),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      const pricing = await priceOrderExtras(ctx.db, {
+        orderId: input.orderId,
+        userId: ctx.session.user.id,
+        items: input.items,
+      });
+
+      // The entry the exhibitor came from must actually belong to this
+      // order — covers both "entry without order" and a mismatched/foreign
+      // entryId with one clear error, same shape as priceOrderExtras' own
+      // ownership checks.
+      const entry = await ctx.db.query.entries.findFirst({
+        where: and(eq(entries.id, input.entryId), isNull(entries.deletedAt)),
+        columns: { id: true, orderId: true },
+      });
+      if (!entry || entry.orderId !== input.orderId) {
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: 'Entry not found for this order — please contact the show secretary.',
+        });
+      }
+
+      // Free-only extras (gross 0): apply immediately, no Stripe involved.
+      if (pricing.grossPence === 0) {
+        await ctx.db.insert(orderSundryItems).values(
+          pricing.lines.map((line) => ({
+            orderId: input.orderId,
+            sundryItemId: line.sundryItemId,
+            quantity: line.quantity,
+            unitPrice: line.unitPrice,
+          }))
+        );
+
+        await ctx.db
+          .update(orders)
+          .set({
+            totalAmount: sql`${orders.totalAmount} + ${pricing.subtotalPence}`,
+            platformFeePence: sql`${orders.platformFeePence} + ${pricing.platformFeePence}`,
+          })
+          .where(eq(orders.id, input.orderId));
+
+        await ctx.db.insert(entryAuditLog).values({
+          entryId: input.entryId,
+          action: 'extras_added',
+          userId: ctx.session.user.id,
+          changes: {
+            via: 'extras_free',
+            items: pricing.lines,
+            subtotalPence: pricing.subtotalPence,
+            platformFeePence: pricing.platformFeePence,
+          },
+        });
+
+        sendExtrasAddedEmail(input.orderId, input.entryId, pricing.lines, pricing.platformFeePence).catch((err) =>
+          console.error('[orders.addExtras] Extras email failed:', err)
+        );
+
+        return { requiresPayment: false as const };
+      }
+
+      // Paid extras: stage the purchase in the PaymentIntent metadata and
+      // defer applying it until the webhook sees the payment succeed.
+      const pendingExtras = pricing.lines
+        .map((l) => `${l.sundryItemId}:${l.quantity}:${l.unitPrice}`)
+        .join(',');
+      if (pendingExtras.length > 480) {
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: 'Too many extras to add online — please contact the show secretary.',
+        });
+      }
+
+      const pi = await createPaymentIntent(pricing.grossPence, {
+        type: 'extras',
+        orderId: input.orderId,
+        showId: pricing.order.showId,
+        exhibitorId: ctx.session.user.id,
+        entryId: input.entryId,
+        platformFeePence: String(pricing.platformFeePence),
+        subtotalPence: String(pricing.subtotalPence),
+        pendingExtras,
+      });
+
+      await ctx.db.insert(payments).values({
+        orderId: input.orderId,
+        entryId: input.entryId,
+        stripePaymentId: pi.id,
+        amount: pricing.grossPence,
+        status: 'pending',
+        type: 'adjustment',
+      });
+
+      return {
+        requiresPayment: true as const,
+        clientSecret: pi.client_secret!,
+      };
+    }),
+
   list: protectedProcedure
     .input(
       z.object({
@@ -665,7 +1293,7 @@ export const ordersRouter = createTRPCRouter({
       const items = await ctx.db.query.orders.findMany({
         where,
         with: {
-          show: { with: { venue: true } },
+          show: { columns: SHOW_COLUMNS_FOR_PUBLIC_INCLUDE, with: { venue: true } },
           entries: {
             with: {
               dog: true,
@@ -691,4 +1319,85 @@ export const ordersRouter = createTRPCRouter({
             : null,
       };
     }),
+
+  // Orders the calling exhibitor placed for extras ONLY — a catalogue, parking
+  // pass etc. bought with no dog (Mandy, 15 Oct 2026). My Entries is built
+  // from entries, so without this an extras-only buyer would see "No entries
+  // yet" and could never reach their catalogue link or parking pass. An
+  // "extras-only order" is: paid, at least one sundry line, and NO entry with
+  // deletedAt IS NULL. A withdrawn dog keeps its entry row (status
+  // 'withdrawn', deletedAt NULL), so its order keeps its dog card and is NOT
+  // listed here. Scoped to the caller; the show is the public-column subset,
+  // never the organisation.
+  myExtrasOnlyOrders: protectedProcedure.query(async ({ ctx }) => {
+    const paidOrders = await ctx.db.query.orders.findMany({
+      where: and(eq(orders.exhibitorId, ctx.session.user.id), eq(orders.status, 'paid')),
+      with: {
+        show: {
+          columns: SHOW_COLUMNS_FOR_PUBLIC_INCLUDE,
+          with: { venue: { columns: { name: true } } },
+        },
+        entries: { columns: { id: true, deletedAt: true } },
+        orderSundryItems: { with: { sundryItem: { columns: { name: true } } } },
+      },
+      orderBy: [desc(orders.createdAt)],
+    });
+    return paidOrders
+      .filter((o) =>
+        isExtrasOnlyOrder({
+          liveEntryCount: o.entries.filter((e) => e.deletedAt === null).length,
+          sundryLineCount: o.orderSundryItems.length,
+        }),
+      )
+      .map((o) => ({
+        id: o.id,
+        totalAmount: o.totalAmount,
+        createdAt: o.createdAt,
+        show: o.show,
+        items: o.orderSundryItems.map((i) => ({
+          id: i.id,
+          name: i.sundryItem.name,
+          quantity: i.quantity,
+          unitPrice: i.unitPrice,
+        })),
+      }));
+  }),
+
+  // Parking passes the calling exhibitor has purchased, for the entries
+  // page's "Extras" row (Mandy 2026-08-04). Scoped to ctx.session.user.id —
+  // never a public/organisation-wide query. Grouped by order (not show) so
+  // the quantity always matches what /api/parking-pass/[orderId] would
+  // actually render, even in the rare case of two separate paid orders for
+  // the same show.
+  myParkingPasses: protectedProcedure.query(async ({ ctx }) => {
+    const rows = await ctx.db
+      .select({
+        orderId: orderSundryItems.orderId,
+        showId: orders.showId,
+        quantity: orderSundryItems.quantity,
+      })
+      .from(orderSundryItems)
+      .innerJoin(sundryItems, eq(orderSundryItems.sundryItemId, sundryItems.id))
+      .innerJoin(orders, eq(orderSundryItems.orderId, orders.id))
+      .where(
+        and(
+          eq(orders.exhibitorId, ctx.session.user.id),
+          eq(orders.status, 'paid'),
+          // Parking is the secretary's choice of kind, never the item's name.
+          inArray(sundryItems.kind, [...PARKING_KINDS]),
+        )
+      );
+
+    const byOrder = new Map<string, { orderId: string; showId: string; quantity: number }>();
+    for (const row of rows) {
+      const existing = byOrder.get(row.orderId);
+      if (existing) {
+        existing.quantity += row.quantity;
+      } else {
+        byOrder.set(row.orderId, { orderId: row.orderId, showId: row.showId, quantity: row.quantity });
+      }
+    }
+
+    return Array.from(byOrder.values());
+  }),
 });
