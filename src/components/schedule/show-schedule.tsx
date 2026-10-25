@@ -32,6 +32,7 @@ import { sectionClasses } from '@/lib/class-labels';
 import { getRkcScheduleProfile } from '@/lib/rkc-schedule-profile';
 import { isRkcJudgesWelfareStatement } from '@/lib/rkc-statements';
 import { what3wordsAddress } from '@/lib/what3words';
+import { displayShowTypeLabel } from '@/lib/show-types';
 
 // Re-export so existing consumers (route.ts, pdf-generation.ts, tests,
 // preview scripts) continue importing from this module path.
@@ -190,7 +191,7 @@ export function ShowSchedule({
 
           {/* Show type badge */}
           <View style={[s.coverBadge, isWusv ? { backgroundColor: CSv.primary } : {}]}>
-            <Text style={s.coverBadgeText}>{isWusv ? 'Regional' : rkcProfile.title}</Text>
+            <Text style={s.coverBadgeText}>{isWusv ? displayShowTypeLabel(show.showType, show.showRuleset) : rkcProfile.title}</Text>
           </View>
           {!isWusv && <Text style={s.coverSpecimen}>RKC specimen · {rkcProfile.specimenVersion}</Text>}
 

@@ -5,21 +5,13 @@ import { shows, entries, showSponsors } from '@/server/db/schema';
 import { isUuid } from '@/lib/slugify';
 import { toImageDataUri, loadShareImageFonts, SHARE_GREEN as G, type ShareImageFont } from '@/lib/share-image-data';
 import { publicShowStatus } from '@/lib/show-status';
+import { displayShowTypeTitle } from '@/lib/show-types';
 
 export const runtime = 'nodejs';
 export const alt = 'Preview card for a dog show listing on Remi';
 export const contentType = 'image/png';
 export const size = { width: 1200, height: 630 };
 export const revalidate = 900;
-
-const SHOW_TYPE_LABELS: Record<string, string> = {
-  companion: 'Companion Show',
-  primary: 'Primary Show',
-  limited: 'Limited Show',
-  open: 'Open Show',
-  premier_open: 'Premier Open Show',
-  championship: 'Championship Show',
-};
 
 const BG_GRADIENT = `linear-gradient(172deg, ${G.deep}, ${G.deepest})`;
 const HEAD = { fontFamily: 'Hanken Grotesk', fontWeight: 800, letterSpacing: '-0.015em' } as const;
@@ -228,7 +220,7 @@ export default async function OGImage({
       }
     }
 
-    const showType = SHOW_TYPE_LABELS[show.showType] ?? show.showType;
+    const showType = displayShowTypeTitle(show.showType, show.showRuleset);
     const showDate = new Date(show.startDate).toLocaleDateString('en-GB', {
       weekday: 'long',
       day: 'numeric',

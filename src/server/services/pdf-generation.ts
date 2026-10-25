@@ -140,6 +140,7 @@ export async function generatePrizeCardsPdf(
   const showInfo: PrizeCardShowInfo = {
     name: show.name,
     showType: show.showType,
+    showRuleset: show.showRuleset,
     date: show.startDate,
     organisation: show.organisation?.name ?? null,
     logoUrl: show.organisation?.logoUrl ?? null,
@@ -578,6 +579,7 @@ export async function generateRingBoardPdf(showId: string): Promise<Buffer> {
   const showInfo: RingBoardShowInfo = {
     name: show.name,
     showType: show.showType,
+    showRuleset: show.showRuleset,
     date: show.startDate,
     venue: show.venue?.name ?? null,
     organisation: show.organisation?.name ?? null,

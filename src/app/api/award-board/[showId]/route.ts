@@ -47,6 +47,7 @@ export async function GET(
       show: {
         clubName: show.organisation?.name ?? '',
         showType: show.showType,
+        showRuleset: show.showRuleset,
         showDate: show.startDate,
       },
     });

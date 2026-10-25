@@ -3,6 +3,7 @@ import path from 'path';
 import { formatLondonShortDate } from '@/lib/date-utils';
 import { sexLetter } from '@/lib/class-labels';
 import '@/lib/pdf-hyphenation';
+import { displayShowTypeTitle } from '@/lib/show-types';
 
 const fontsDir = path.join(process.cwd(), 'public', 'fonts');
 Font.register({
@@ -17,6 +18,8 @@ Font.register({
 export interface RingBoardShowInfo {
   name: string;
   showType: string;
+  /** 'wusv' prints a regional as "Regional" (displayShowTypeLabel owns the rule). */
+  showRuleset?: string | null;
   date: string;
   organisation: string | null;
   venue: string | null;
@@ -36,15 +39,6 @@ export interface RingBoardRing {
     totalEntries: number;
   }[];
 }
-
-const SHOW_TYPE_LABELS: Record<string, string> = {
-  companion: 'Companion Show',
-  primary: 'Primary Show',
-  limited: 'Limited Show',
-  open: 'Open Show',
-  premier_open: 'Premier Open Show',
-  championship: 'Championship Show',
-};
 
 const s = StyleSheet.create({
   page: {
@@ -191,7 +185,7 @@ export function RingBoard({
 }) {
   // Always Europe/London, never the process's own timezone (Michael 2026-09-03).
   const showDate = formatLondonShortDate(show.date);
-  const showTypeLabel = SHOW_TYPE_LABELS[show.showType] ?? show.showType;
+  const showTypeLabel = displayShowTypeTitle(show.showType, show.showRuleset);
 
   return (
     <Document title={`Ring Board — ${show.name}`} author="Remi Show Manager">

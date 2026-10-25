@@ -6,20 +6,12 @@ import { isUuid } from '@/lib/slugify';
 import { format } from 'date-fns';
 import { loadShareImageFonts, SHARE_GREEN as G } from '@/lib/share-image-data';
 import { isLiveEntry } from '@/lib/entry-counts';
+import { displayShowTypeTitle } from '@/lib/show-types';
 
 export const runtime = 'nodejs';
 export const contentType = 'image/png';
 export const size = { width: 1200, height: 630 };
 export const revalidate = 3600;
-
-const SHOW_TYPE_LABELS: Record<string, string> = {
-  companion: 'Companion Show',
-  primary: 'Primary Show',
-  limited: 'Limited Show',
-  open: 'Open Show',
-  premier_open: 'Premier Open Show',
-  championship: 'Championship Show',
-};
 
 const BG_GRADIENT = `linear-gradient(172deg, ${G.deep}, ${G.deepest})`;
 const HEAD = { fontFamily: 'Hanken Grotesk', fontWeight: 800, letterSpacing: '-0.015em' } as const;
@@ -92,7 +84,7 @@ export default async function OGImage({
   }
 
   const showDate = format(new Date(show.startDate), 'EEEE d MMMM yyyy');
-  const showType = SHOW_TYPE_LABELS[show.showType] ?? show.showType;
+  const showType = displayShowTypeTitle(show.showType, show.showRuleset);
   const venueName = show.venue?.name ?? '';
   const orgName = show.organisation?.name ?? '';
 

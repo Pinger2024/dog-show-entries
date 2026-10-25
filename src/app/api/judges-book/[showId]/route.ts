@@ -52,6 +52,7 @@ export type JudgesBookClass = {
 export type JudgesBookShowInfo = {
   name: string;
   showType: string;
+  showRuleset?: string | null;
   date: string;
   organisation: string | null;
   /** Club/show logo for the front cover (club branding). */
@@ -188,6 +189,7 @@ export async function GET(
   const showInfo: JudgesBookShowInfo = {
     name: show.name,
     showType: show.showType,
+    showRuleset: show.showRuleset,
     date: show.startDate,
     organisation: show.organisation?.name ?? null,
     logoUrl: show.organisation?.logoUrl ?? null,

@@ -2,15 +2,7 @@ import { View, Text, Image } from '@react-pdf/renderer';
 import { FitText } from '@/components/pdf-kit/fit-text';
 import { styles, C } from './catalogue-styles';
 import { formatLondonLongDate } from '@/lib/date-utils';
-
-const SHOW_TYPE_LABELS: Record<string, string> = {
-  championship: 'Championship Show',
-  premier_open: 'Premier Open Show',
-  open: 'Open Show',
-  limited: 'Limited Show',
-  primary: 'Primary Show',
-  companion: 'Companion Show',
-};
+import { displayShowTypeTitle } from '@/lib/show-types';
 
 // styles.page's usable content width — A5 (419.53pt) minus its own
 // padding (22pt each side). This header has no padding of its own beyond
@@ -23,6 +15,8 @@ const HEADER_TITLE_MAX_SIZE = 13;
 interface CatalogueHeaderProps {
   showName: string;
   showType?: string;
+  /** 'wusv' prints a regional as "Regional Show". */
+  showRuleset?: string | null;
   organisationName?: string;
   date?: string;
   venue?: string;
@@ -35,6 +29,7 @@ interface CatalogueHeaderProps {
 export function CatalogueHeader({
   showName,
   showType,
+  showRuleset,
   organisationName,
   date,
   venue,
@@ -46,7 +41,7 @@ export function CatalogueHeader({
   // Always Europe/London, never the process's own timezone (Michael 2026-09-03).
   const formattedDate = date ? formatLondonLongDate(date) : '';
 
-  const showTypeLabel = showType ? SHOW_TYPE_LABELS[showType] : undefined;
+  const showTypeLabel = showType ? displayShowTypeTitle(showType, showRuleset) : undefined;
 
   return (
     <View style={styles.header} fixed>

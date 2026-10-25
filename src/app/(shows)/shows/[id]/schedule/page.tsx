@@ -17,7 +17,7 @@ import {
 } from 'lucide-react';
 import { trpc } from '@/lib/trpc/client';
 import { formatCurrency, parseLocalDate } from '@/lib/date-utils';
-import { showTypeLabels } from '@/lib/show-types';
+import { displayShowTypeLabel } from '@/lib/show-types';
 import { buildClassLabelMap, sectionClasses } from '@/lib/class-labels';
 import { sortOfficers } from '@/components/schedule/shared/officers';
 import { Button } from '@/components/ui/button';
@@ -215,7 +215,7 @@ export default function SchedulePage({
       <div>
         <div className="flex flex-wrap items-center gap-2 mb-2">
           <Badge variant="secondary" className="text-xs">
-            {showTypeLabels[show.showType] ?? show.showType}
+            {displayShowTypeLabel(show.showType, show.showRuleset)}
           </Badge>
           {show.showScope && (
             <Badge variant="outline" className="text-xs">

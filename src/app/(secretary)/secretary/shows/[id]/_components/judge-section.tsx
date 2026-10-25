@@ -77,6 +77,7 @@ import { contractStageConfig } from '../_lib/show-utils';
 import { JudgeCoverageDashboard } from '@/components/judges/judge-coverage-dashboard';
 import { AddJudgeWizard } from '@/components/judges/add-judge-wizard';
 import { GroupJudgesPanel } from '@/components/judges/group-judges-panel';
+import { displayShowTypeLabel } from '@/lib/show-types';
 
 function formatContractTimeline(contract: {
   offerSentAt: Date | string | null;
@@ -822,10 +823,8 @@ export function JudgesSection({ showId }: { showId: string }) {
                   {showData?.showType && (
                     <>
                       <span className="font-medium">Type</span>
-                      <span className="capitalize">
-                        {(showData as { showRuleset?: 'rkc' | 'wusv' }).showRuleset === 'wusv'
-                          ? 'Regional'
-                          : showData.showType.replace('_', ' ')}
+                      <span>
+                        {displayShowTypeLabel(showData.showType, (showData as { showRuleset?: 'rkc' | 'wusv' }).showRuleset)}
                       </span>
                     </>
                   )}

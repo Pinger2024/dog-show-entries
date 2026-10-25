@@ -3,6 +3,7 @@ import path from 'path';
 import type { PrizeCardPage } from '@/lib/prize-card-pages';
 import { formatLondonLongDate } from '@/lib/date-utils';
 import '@/lib/pdf-hyphenation';
+import { displayShowTypeTitle } from '@/lib/show-types';
 
 /**
  * Prize Card COMPOSITE — the official template design. Unlike the plain
@@ -64,6 +65,8 @@ export interface CompositeShowInfo {
    *  put both on the card twice over (Mandy 2026-08-16). */
   showName: string;
   showType: string;
+  /** 'wusv' prints a regional as "Regional" (displayShowTypeLabel owns the rule). */
+  showRuleset?: string | null;
   date: string; // ISO yyyy-mm-dd
   /** Club logo, already fetched, downscaled and inlined as a data URI by
    *  the route — never a remote URL. A club with no logo passes null and
@@ -79,15 +82,6 @@ interface CompositeProps {
    *  zero-page (invalid) PDF in that case. */
   pages: PrizeCardPage[];
 }
-
-const SHOW_TYPE_LABELS: Record<string, string> = {
-  companion: 'Companion Show',
-  primary: 'Primary Show',
-  limited: 'Limited Show',
-  open: 'Open Show',
-  premier_open: 'Premier Open Show',
-  championship: 'Championship Show',
-};
 
 // The four placements we have Mixam-designed template artwork for.
 // No VHC template exists, so the composite tops out at Reserve.
@@ -180,7 +174,7 @@ const styles = StyleSheet.create({
 export function PrizeCardComposite({ show, pages }: CompositeProps) {
   // Always Europe/London, never the process's own timezone (Michael 2026-09-03).
   const showDate = formatLondonLongDate(show.date);
-  const showTypeLabel = SHOW_TYPE_LABELS[show.showType] ?? show.showType;
+  const showTypeLabel = displayShowTypeTitle(show.showType, show.showRuleset);
 
   // No confirmed entries anywhere yet — a zero-Page Document is invalid PDF,
   // so render one explanatory page instead of erroring or 404ing (same

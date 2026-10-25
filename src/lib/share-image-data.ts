@@ -19,15 +19,7 @@ import { isUuid } from '@/lib/slugify';
 import { publicShowStatus } from '@/lib/show-status';
 import { HANKEN_GROTESK_FACES } from '@/lib/hanken-faces';
 import { BRAND } from '@/lib/brand';
-
-const SHOW_TYPE_LABELS: Record<string, string> = {
-  companion: 'Companion Show',
-  primary: 'Primary Show',
-  limited: 'Limited Show',
-  open: 'Open Show',
-  premier_open: 'Premier Open Show',
-  championship: 'Championship Show',
-};
+import { displayShowTypeTitle } from '@/lib/show-types';
 
 export type StatusBadge = {
   text: string;
@@ -50,7 +42,7 @@ export interface ShareImageData {
   entryCount: number;
   /** Distinct judge names for this show, in assignment order. */
   judges: string[];
-  /** Pretty show type label (e.g. "Open Show"). */
+  /** Pretty show type label (e.g. "Open Show", "Regional Show"). */
   showType: string;
   /** Human-formatted start date — "Saturday 4 May 2026". */
   showDate: string;
@@ -225,7 +217,7 @@ export async function loadShareImageData(idOrSlug: string): Promise<ShareImageDa
     fetchAsBuffer(show.organisation?.logoUrl),
   ]);
 
-  const showType = SHOW_TYPE_LABELS[show.showType] ?? show.showType;
+  const showType = displayShowTypeTitle(show.showType, show.showRuleset);
   const showDate = new Date(show.startDate).toLocaleDateString('en-GB', {
     weekday: 'long',
     day: 'numeric',

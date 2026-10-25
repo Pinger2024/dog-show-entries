@@ -2,6 +2,7 @@ import { Document, Page, Text, View, StyleSheet, Font, Image } from '@react-pdf/
 import path from 'path';
 import { formatLondonLongDate } from '@/lib/date-utils';
 import '@/lib/pdf-hyphenation';
+import { displayShowTypeTitle } from '@/lib/show-types';
 
 // Register Times New Roman
 const fontsDir = path.join(process.cwd(), 'public', 'fonts');
@@ -17,6 +18,8 @@ Font.register({
 export interface PrizeCardShowInfo {
   name: string;
   showType: string;
+  /** 'wusv' prints a regional as "Regional" (displayShowTypeLabel owns the rule). */
+  showRuleset?: string | null;
   date: string;
   organisation: string | null;
   logoUrl: string | null;
@@ -44,15 +47,6 @@ interface PrizeCardsProps {
    *  A5 sheet edge-to-edge on a home printer (Amanda 2026-05-27). */
   pageSize?: [number, number];
 }
-
-const SHOW_TYPE_LABELS: Record<string, string> = {
-  companion: 'Companion Show',
-  primary: 'Primary Show',
-  limited: 'Limited Show',
-  open: 'Open Show',
-  premier_open: 'Premier Open Show',
-  championship: 'Championship Show',
-};
 
 // Punchy single-word/short labels matching traditional UK prize card style
 // (Higham Press / MBJ etc. all set the placement as a single bold word like
@@ -255,7 +249,7 @@ export function PrizeCards({ show, classes, includeJudgeName, placements, cardSt
   // "16 May 2026" the previous design used.
   // Always Europe/London, never the process's own timezone (Michael 2026-09-03).
   const showDate = formatLondonLongDate(show.date);
-  const showTypeLabel = SHOW_TYPE_LABELS[show.showType] ?? show.showType;
+  const showTypeLabel = displayShowTypeTitle(show.showType, show.showRuleset);
   const placementCount = Math.min(Math.max(placements, 1), 5);
 
   return (

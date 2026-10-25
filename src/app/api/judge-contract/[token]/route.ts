@@ -9,6 +9,7 @@ import { generateJudgeContractPdf } from '@/server/services/judge-contract-pdf';
 import { emailHeader } from '@/server/services/email';
 import { html, rawHtml, type SafeHtml } from '@/lib/html-escape';
 import { BRAND } from '@/lib/brand';
+import { displayShowTypeLabel } from '@/lib/show-types';
 import { FEEDBACK_REPLY_TO } from '@/lib/email-addresses';
 import { isContractOfferExpired } from '@/lib/judge-contract-offer';
 
@@ -226,7 +227,7 @@ export async function GET(
           <tr><td class="label">Date</td><td>${showDate}</td></tr>
           <tr><td class="label">Venue</td><td>${venue}</td></tr>
           <tr><td class="label">Breeds</td><td>${breedsText}</td></tr>
-          ${show.showType ? html`<tr><td class="label">Show Type</td><td>${show.showType.replace('_', ' ').replace(/\b\w/g, (c: string) => c.toUpperCase())}</td></tr>` : ''}
+          ${show.showType ? html`<tr><td class="label">Show Type</td><td>${displayShowTypeLabel(show.showType, show.showRuleset)}</td></tr>` : ''}
         </table>
 
         ${contract.notes ? html`<p style="padding: 12px; background: ${BRAND.paper}; border-radius: 8px; font-size: 14px; color: ${BRAND.ink2};">${contract.notes}</p>` : ''}

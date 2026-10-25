@@ -4,6 +4,7 @@ import path from 'path';
 import { C } from '@/components/catalogue/catalogue-styles';
 import { KC_PLACEMENTS } from '@/lib/placements';
 import { formatLondonShortDate } from '@/lib/date-utils';
+import { displayShowTypeTitle } from '@/lib/show-types';
 
 /**
  * Award Board PDF — a wipe-clean, laminatable show-day grid where
@@ -234,17 +235,10 @@ function createStyles(size: AwardBoardSize) {
 export interface AwardBoardShowInfo {
   clubName: string;
   showType: string;
+  /** 'wusv' prints a regional as "Regional" (displayShowTypeLabel owns the rule). */
+  showRuleset?: string | null;
   showDate: string | null;
 }
-
-const SHOW_TYPE_LABELS: Record<string, string> = {
-  companion: 'Companion Show',
-  primary: 'Primary Show',
-  limited: 'Limited Show',
-  open: 'Open Show',
-  premier_open: 'Premier Open Show',
-  championship: 'Championship Show',
-};
 
 function HeaderField({
   label,
@@ -276,7 +270,7 @@ export function AwardBoard({
 }) {
   const styles = createStyles(size);
   const showTypeLabel = show?.showType
-    ? (SHOW_TYPE_LABELS[show.showType] ?? show.showType)
+    ? displayShowTypeTitle(show.showType, show.showRuleset)
     : null;
   // Always Europe/London, never the process's own timezone (Michael 2026-09-03).
   const showDate = show?.showDate ? formatLondonShortDate(show.showDate) : null;

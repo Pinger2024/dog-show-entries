@@ -37,7 +37,7 @@ import {
   entryCloseAdjustedMessage,
 } from '@/lib/entry-close-rules';
 import { EntryCloseHint } from '@/components/shows/entry-close-hint';
-import { showTypeLabels, displayShowTypeLabel } from '@/lib/show-types';
+import { displayShowTypeLabel } from '@/lib/show-types';
 import { cn } from '@/lib/utils';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';

@@ -129,6 +129,7 @@ export async function GET(
   const showInfo: RingBoardShowInfo = {
     name: show.name,
     showType: show.showType,
+    showRuleset: show.showRuleset,
     date: show.startDate,
     organisation: show.organisation?.name ?? null,
     venue: show.venue?.name ?? null,

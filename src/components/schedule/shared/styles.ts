@@ -100,17 +100,6 @@ export function paletteFor(isWusv: boolean): typeof C {
   return isWusv ? (CSv as typeof C) : C;
 }
 
-// ── Constants ──────────────────────────────────────────────────────────────────
-
-export const SHOW_TYPE_LABELS: Record<string, string> = {
-  companion: 'Companion Show',
-  primary: 'Primary Show',
-  limited: 'Limited Show',
-  open: 'Open Show',
-  premier_open: 'Premier Open Show',
-  championship: 'Championship Show',
-};
-
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
 /** Join venue parts, cleaning up double commas and extra spaces */

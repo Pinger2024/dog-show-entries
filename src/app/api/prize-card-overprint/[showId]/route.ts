@@ -101,6 +101,7 @@ export async function GET(
     clubName: show.organisation?.name ?? 'Unknown Club',
     showName: show.name,
     showType: show.showType,
+    showRuleset: show.showRuleset,
     date: show.startDate,
     logoUrl: safeLogoUrl,
     judges: breedJudges,

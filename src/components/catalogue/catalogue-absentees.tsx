@@ -51,6 +51,7 @@ export function CatalogueAbsentees({ show, entries }: Props) {
         <CatalogueHeader
           showName={show.name}
           showType={show.showType}
+          showRuleset={show.showRuleset}
           organisationName={show.organisation}
           date={show.date}
           venue={show.venue}

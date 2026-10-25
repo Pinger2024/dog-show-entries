@@ -106,6 +106,7 @@ import {
 } from '@/server/services/report-queries';
 import { validateRkcSchedule } from '@/lib/rkc-schedule-compliance';
 import { championshipClassesComplete } from '@/lib/championship-class-requirements';
+import { displayShowTypeLabel } from '@/lib/show-types';
 
 /**
  * True if this judge has assignments with any organisation outside the
@@ -4797,10 +4798,9 @@ export const secretaryRouter = createTRPCRouter({
             // SV/WUSV regional shows still carry show_type='championship' on
             // the legacy column, so render "Regional" when the ruleset is
             // wusv (Amanda 2026-05-22).
-            const isWusvHere = (show as { showRuleset?: 'rkc' | 'wusv' }).showRuleset === 'wusv';
-            const showTypeText = isWusvHere
-              ? 'Regional'
-              : (show.showType ? show.showType.replace('_', ' ').replace(/\b\w/g, (c: string) => c.toUpperCase()) : null);
+            const showTypeText = show.showType
+              ? displayShowTypeLabel(show.showType, (show as { showRuleset?: 'rkc' | 'wusv' }).showRuleset)
+              : null;
             return showTypeText ? `<tr>
             <td style="padding: 10px 12px; border-bottom: 1px solid ${BRAND.line}; font-weight: 600; color: ${BRAND.ink};">Show Type</td>
             <td style="padding: 10px 12px; border-bottom: 1px solid ${BRAND.line}; color: ${BRAND.ink};">${showTypeText}</td>

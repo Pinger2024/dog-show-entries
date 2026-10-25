@@ -7,15 +7,7 @@ import { ShowPreviewClient } from './preview/show-preview';
 import { buildShowJsonLd } from '@/lib/show-json-ld';
 import { isUuid } from '@/lib/slugify';
 import { publicShowStatus } from '@/lib/show-status';
-
-const SHOW_TYPE_LABELS: Record<string, string> = {
-  companion: 'Companion Show',
-  primary: 'Primary Show',
-  limited: 'Limited Show',
-  open: 'Open Show',
-  premier_open: 'Premier Open Show',
-  championship: 'Championship Show',
-};
+import { displayShowTypeTitle } from '@/lib/show-types';
 
 /** Resolve a show by UUID or slug */
 async function resolveShow(idOrSlug: string) {
@@ -59,7 +51,7 @@ export async function generateMetadata({
     year: 'numeric',
   });
 
-  const showType = SHOW_TYPE_LABELS[show.showType] ?? show.showType;
+  const showType = displayShowTypeTitle(show.showType, show.showRuleset);
   const venue = show.venue?.name;
   const org = show.organisation?.name;
 

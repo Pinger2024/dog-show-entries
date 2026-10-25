@@ -15,6 +15,7 @@ import { RKC_JUDGES_WELFARE_STATEMENT, isRkcJudgesWelfareStatement } from '@/lib
 import { formatLondonLongDate } from '@/lib/date-utils';
 import { pickSvCoverJudges } from '@/lib/schedule-judges';
 import { what3wordsAddress } from '@/lib/what3words';
+import { displayShowTypeTitle } from '@/lib/show-types';
 
 // A5 portrait is 148mm x 210mm = ~419.53pt x ~595.28pt. These widths are the
 // usable content width inside CoverPage's coverTopBand (paddingHorizontal:
@@ -77,15 +78,6 @@ function estimateBestAwardRowHeight(
 // height for balancing; the column View itself sizes from flex:1, not
 // this constant.
 const DONATIONS_COLUMN_WIDTH = 181.75;
-
-const SHOW_TYPE_LABELS: Record<string, string> = {
-  championship: 'Championship Show',
-  premier_open: 'Premier Open Show',
-  open: 'Open Show',
-  limited: 'Limited Show',
-  primary: 'Primary Show',
-  companion: 'Companion Show',
-};
 
 /** Every front-matter page's footer, factored out into one place so the
  *  wording can't drift between pages — see pdf-kit's `Folio`. */
@@ -974,7 +966,7 @@ export function CoverPage({ show }: FrontMatterProps) {
     return <SvCoverPage show={show} classCount={svClassCount || (show.totalClasses ?? 0)} />;
   }
 
-  const showTypeLabel = show.showType ? SHOW_TYPE_LABELS[show.showType] : undefined;
+  const showTypeLabel = show.showType ? displayShowTypeTitle(show.showType, show.showRuleset) : undefined;
 
   // Formal RKC designation — reuses the schedule's own profile helper so the
   // two documents can never state the show's designation differently (Mandy

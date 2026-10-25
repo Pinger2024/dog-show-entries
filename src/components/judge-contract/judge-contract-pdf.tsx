@@ -2,6 +2,7 @@ import { Document, Page, Text, View, StyleSheet, Font } from '@react-pdf/rendere
 import path from 'node:path';
 import { formatCurrency, formatLondonLongDate, formatLondonShortDate } from '@/lib/date-utils';
 import '@/lib/pdf-hyphenation';
+import { displayShowTypeTitle } from '@/lib/show-types';
 
 const fontsDir = path.join(process.cwd(), 'public', 'fonts');
 Font.register({
@@ -12,15 +13,6 @@ Font.register({
     { src: path.join(fontsDir, 'times-new-roman-italic.ttf'), fontStyle: 'italic' },
   ],
 });
-
-const SHOW_TYPE_LABELS: Record<string, string> = {
-  companion: 'Companion Show',
-  primary: 'Primary Show',
-  limited: 'Limited Show',
-  open: 'Open Show',
-  premier_open: 'Premier Open Show',
-  championship: 'Championship Show',
-};
 
 export type JudgeContractPdfData = {
   societyName: string;
@@ -249,11 +241,9 @@ function formatDateShort(d: Date): string {
 }
 
 export function JudgeContractPdf({ data }: { data: JudgeContractPdfData }) {
-  const showTypeLabel = data.show.showRuleset === 'wusv'
-    ? 'Regional'
-    : data.show.showType
-      ? SHOW_TYPE_LABELS[data.show.showType] ?? data.show.showType
-      : null;
+  const showTypeLabel = data.show.showType
+    ? displayShowTypeTitle(data.show.showType, data.show.showRuleset)
+    : null;
   const isWusv = data.show.showRuleset === 'wusv';
   const venue = data.show.venueName
     ? `${data.show.venueName}${data.show.venuePostcode ? `, ${data.show.venuePostcode}` : ''}`
