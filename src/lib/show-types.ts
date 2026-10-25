@@ -14,12 +14,39 @@ export const showTypeLabels: Record<string, string> = {
  *  of "Championship" whenever the show is on the WUSV ruleset. */
 const REGIONAL_TYPE_LABEL = 'Regional';
 
+/** The show's type as a grouping / colour KEY: `regional` for a WUSV show,
+ *  else the stored enum value. Use this to group or colour; use
+ *  `displayShowTypeLabel` to print. */
+export type DisplayShowType = keyof typeof showTypeLabels | 'regional';
+
+export function displayShowType(
+  showType: string,
+  showRuleset?: string | null,
+): string {
+  return showRuleset === 'wusv' ? 'regional' : showType;
+}
+
+/** Display key → label. The enum table plus the regional pseudo-type. */
+export const displayShowTypeLabels: Record<string, string> = {
+  ...showTypeLabels,
+  regional: REGIONAL_TYPE_LABEL,
+};
+
 export function displayShowTypeLabel(
   showType: string,
   showRuleset?: string | null,
 ): string {
-  if (showRuleset === 'wusv') return REGIONAL_TYPE_LABEL;
-  return showTypeLabels[showType] ?? showType;
+  return displayShowTypeLabels[displayShowType(showType, showRuleset)] ?? showType;
+}
+
+/** The type as a show TITLE — "Championship Show", "Regional Show". For
+ *  covers, headers, footers, page titles and share cards that print the
+ *  full phrase; the bare `displayShowTypeLabel` is for badges and rows. */
+export function displayShowTypeTitle(
+  showType: string,
+  showRuleset?: string | null,
+): string {
+  return `${displayShowTypeLabel(showType, showRuleset)} Show`;
 }
 
 /** Generic show names made of the show type alone — "Open Show",

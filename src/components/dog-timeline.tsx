@@ -22,7 +22,6 @@ import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { getPlacementLabel, placementColors } from '@/lib/placements';
 import { formatRelativeDate } from '@/lib/date-utils';
-import { showTypeLabels } from '@/lib/show-types';
 import { getEmbedUrl } from '@/lib/video-utils';
 
 /* ─── Post creation form ─── */

@@ -346,6 +346,7 @@ export const dogsRouter = createTRPCRouter({
           showName: entry.show.name,
           showDate: entry.show.startDate,
           showType: entry.show.showType,
+          showRuleset: entry.show.showRuleset,
           classes: entry.entryClasses.map((ec) => ({
             className: ec.showClass.classDefinition.name,
             classNumber: ec.showClass.classNumber,

@@ -46,7 +46,7 @@ import {
 import { classOutcomeLabel, placementColors } from '@/lib/placements';
 import { DogTimeline } from '@/components/dog-timeline';
 import { ChampionshipProgress } from '@/components/championship-progress';
-import { showTypeLabels } from '@/lib/show-types';
+import { displayShowType, displayShowTypeLabel } from '@/lib/show-types';
 import { SE_H } from '@/components/show-experience/tokens';
 import { cn } from '@/lib/utils';
 
@@ -58,6 +58,7 @@ const showTypeColors: Record<string, string> = {
   limited: 'bg-se-honey-soft text-se-honey-deep border-se-honey-line',
   open: 'bg-violet-50 text-violet-700 border-violet-200',
   premier_open: 'bg-rose-50 text-rose-700 border-rose-200',
+  regional: 'bg-teal-50 text-teal-700 border-teal-200',
   championship: 'bg-indigo-50 text-indigo-700 border-indigo-200',
 };
 
@@ -679,9 +680,9 @@ export function DogProfileClient({ id }: { id: string }) {
                     </Link>
                     <Badge
                       variant="outline"
-                      className={`text-xs font-normal ${showTypeColors[show.showType] ?? ''}`}
+                      className={`text-xs font-normal ${showTypeColors[displayShowType(show.showType, show.showRuleset)] ?? ''}`}
                     >
-                      {showTypeLabels[show.showType] ?? show.showType}
+                      {displayShowTypeLabel(show.showType, show.showRuleset)}
                     </Badge>
                   </div>
                   <p className="mt-0.5 text-xs text-muted-foreground">

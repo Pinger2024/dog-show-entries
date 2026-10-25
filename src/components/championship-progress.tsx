@@ -16,7 +16,6 @@ import {
 import { trpc } from '@/lib/trpc/client';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { showTypeLabels } from '@/lib/show-types';
 
 interface ChampionshipProgressProps {
   dogId: string;
@@ -200,7 +199,7 @@ export function ChampionshipProgress({ dogId, isPro }: ChampionshipProgressProps
                         className="rounded-md border px-3 py-2 text-center"
                       >
                         <p className="text-xs text-muted-foreground">
-                          {showTypeLabels[st.showType] ?? st.showType}
+                          {st.label}
                         </p>
                         <p className="mt-0.5 font-serif text-lg font-semibold">
                           {st.count}

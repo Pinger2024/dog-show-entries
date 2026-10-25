@@ -14,6 +14,7 @@ import { todayInLondon } from '@/lib/date-utils';
 import { userMayActOnDog } from '@/server/dog-access';
 import { loadTitleAwards } from '@/server/services/title-awards';
 import { championProgress } from '@/lib/rkc-titles';
+import { displayShowType, displayShowTypeLabel } from '@/lib/show-types';
 
 // Remi Pro price — will be created in Stripe Dashboard
 // £4.99/month or £39.99/year
@@ -163,7 +164,7 @@ export const proRouter = createTRPCRouter({
           isNull(entries.deletedAt)
         ),
         with: {
-          show: { columns: { id: true, name: true, startDate: true, endDate: true, showType: true } },
+          show: { columns: { id: true, name: true, startDate: true, endDate: true, showType: true, showRuleset: true } },
           entryClasses: {
             with: {
               result: true,
@@ -225,10 +226,16 @@ export const proRouter = createTRPCRouter({
         .map(([year, stats]) => ({ year, ...stats }));
 
       // Show type breakdown
-      const showTypeBreakdown = new Map<string, { count: number; firsts: number }>();
+      // Grouped by the DISPLAY type, so a regional (stored as championship +
+      // wusv ruleset) is its own tile, not counted as a Championship show.
+      const showTypeBreakdown = new Map<string, { count: number; firsts: number; label: string }>();
       for (const entry of shownEntries) {
-        const showType = entry.show.showType;
-        const stats = showTypeBreakdown.get(showType) ?? { count: 0, firsts: 0 };
+        const showType = displayShowType(entry.show.showType, entry.show.showRuleset);
+        const stats = showTypeBreakdown.get(showType) ?? {
+          count: 0,
+          firsts: 0,
+          label: displayShowTypeLabel(entry.show.showType, entry.show.showRuleset),
+        };
         stats.count++;
         for (const ec of entry.entryClasses) {
           if (ec.result?.placement === 1) stats.firsts++;
