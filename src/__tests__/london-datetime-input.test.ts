@@ -233,6 +233,7 @@ const NEW_SHOW_BASE = {
   showType: 'championship',
   showScope: 'single_breed',
   organisationId: '00000000-0000-4000-8000-000000000001',
+  venueId: '00000000-0000-4000-8000-000000000001', // required since 28 Oct 2026 (Mandy)
   startDate: SHOW_29_AUG,
   endDate: SHOW_29_AUG,
 };
