@@ -3,6 +3,7 @@ import {
   requiredGuarantorCount,
   hasEnoughGuarantors,
   showFeesConfigured,
+  secretaryDetailsComplete,
 } from '@/lib/show-setup-requirements';
 
 describe('requiredGuarantorCount', () => {
@@ -59,4 +60,32 @@ describe('showFeesConfigured', () => {
       showFeesConfigured({ firstEntryFee: null, regionalFeeConfig: { tiers: [] } }),
     ).toBe(false);
   });
+});
+
+describe('secretaryDetailsComplete', () => {
+  const full = {
+    secretaryName: 'Jane Smith',
+    secretaryEmail: 'jane@example.com',
+    secretaryAddress: '1 High Street, Leeds',
+    secretaryPhone: '07700 900123',
+  };
+  const complete = (show: Record<string, string | null | undefined>) =>
+    (secretaryDetailsComplete as (s: unknown) => boolean)(show);
+
+  it('is true with name, email, address and phone all set', () => {
+    expect(complete(full)).toBe(true);
+  });
+
+  it('is false with name and email only (the wizard/banner disagreement)', () => {
+    expect(complete({ ...full, secretaryAddress: null, secretaryPhone: null })).toBe(false);
+  });
+
+  it.each(['secretaryName', 'secretaryEmail', 'secretaryAddress', 'secretaryPhone'])(
+    'is false when %s is null, empty or whitespace',
+    (field) => {
+      expect(complete({ ...full, [field]: null })).toBe(false);
+      expect(complete({ ...full, [field]: '' })).toBe(false);
+      expect(complete({ ...full, [field]: '   ' })).toBe(false);
+    },
+  );
 });
