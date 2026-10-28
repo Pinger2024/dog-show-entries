@@ -116,18 +116,34 @@ export function SetupWizard({ showId, show }: SetupWizardProps) {
     [blockers, show.scheduleData],
   );
 
-  // On mount: open the step a blocker's link asked for (?step=…), otherwise
-  // the first incomplete one.
+  // On mount, open the first incomplete step — unless a blocker's link
+  // asked for one (?step=…), which the effect below follows.
   useEffect(() => {
     if (initialized || !blockers) return;
-    if (isWizardStepId(requestedStep)) {
-      setActiveStep(requestedStep);
-    } else {
+    if (!isWizardStepId(requestedStep)) {
       const firstIncomplete = STEPS.find((s) => !stepComplete(s.id));
       if (firstIncomplete) setActiveStep(firstIncomplete.id);
     }
     setInitialized(true);
   }, [blockers, initialized, requestedStep, stepComplete]);
+
+  // Follow a blocker's link whenever it changes, not only on mount: the
+  // lifecycle banner sits ABOVE this wizard on the same page, so clicking
+  // "Venue not confirmed" there is a soft navigation that changes the query
+  // string without remounting anything. Then land on the anchor the link
+  // named (#sundry-items) or the top of the step, once it has rendered.
+  useEffect(() => {
+    if (!isWizardStepId(requestedStep)) return;
+    setActiveStep(requestedStep);
+    const hash = window.location.hash.slice(1);
+    const timer = window.setTimeout(() => {
+      const target =
+        (hash ? document.getElementById(hash) : null) ??
+        document.getElementById(`wizard-step-${requestedStep}`);
+      target?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 150);
+    return () => window.clearTimeout(timer);
+  }, [requestedStep]);
 
   // ── Render ─────────────────────────────────────────
 
@@ -269,7 +285,7 @@ export function SetupWizard({ showId, show }: SetupWizardProps) {
         const isCurrent = step.id === activeStep;
 
         return (
-          <Card key={step.id} className="overflow-hidden">
+          <Card key={step.id} id={`wizard-step-${step.id}`} className="overflow-hidden">
             {/* Step header — always visible */}
             <button
               type="button"

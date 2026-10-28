@@ -4397,10 +4397,21 @@ export const secretaryRouter = createTRPCRouter({
           actionPath: wizardStepPath('classes'), severity: 'required', step: 'classes',
         });
       }
+      // ONE owner for judge coverage — src/server/services/judge-coverage.ts.
+      // This used to be a raw "any judge at all?" count while the checklist
+      // auto-detect used coverage, so a show whose only judge covered one
+      // breed (or only the Special Award Classes) could pass here and fail
+      // there. Zero judges keeps its own plain message.
       if (Number(judgeCount[0]?.count) === 0) {
         openEntriesBlockers.push({
           key: 'no_judge', label: 'No judge assigned',
           detail: 'Assign at least one judge on the People page',
+          actionPath: '/people', severity: 'required', step: 'judge',
+        });
+      } else if (!(await computeJudgeCoverage(ctx.db, input.showId)).allCovered) {
+        openEntriesBlockers.push({
+          key: 'judge_coverage_incomplete', label: 'Not every breed or section has a judge',
+          detail: 'Assign a judge for every breed and section on the People page',
           actionPath: '/people', severity: 'required', step: 'judge',
         });
       }

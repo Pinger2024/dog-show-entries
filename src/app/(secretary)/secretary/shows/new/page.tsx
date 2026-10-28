@@ -309,6 +309,13 @@ export default function NewShowPage() {
 
   // Auto-select the organisation if there's only one
   const currentOrgId = form.watch('organisationId');
+
+  // Venues belong to a club: changing the club drops a venue chosen for
+  // the previous one, so step 2 cannot carry another club's venue through.
+  useEffect(() => {
+    form.setValue('venueId', undefined as unknown as string);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentOrgId]);
   useEffect(() => {
     if (organisations.length === 1 && !form.getValues('organisationId')) {
       form.setValue('organisationId', organisations[0].id, { shouldDirty: true });
