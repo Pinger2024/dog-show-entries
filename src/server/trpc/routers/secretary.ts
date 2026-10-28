@@ -34,7 +34,14 @@ import { optionalTypedText, requiredTypedText } from '@/lib/typed-text';
 import { BRAND } from '@/lib/brand';
 import { FEEDBACK_REPLY_TO } from '@/lib/email-addresses';
 import { checkOwnerRecord, type OwnerCheckIssue } from '@/lib/catalogue-data-checks';
-import { requiredGuarantorCount, hasEnoughGuarantors, showFeesConfigured } from '@/lib/show-setup-requirements';
+import {
+  requiredGuarantorCount,
+  hasEnoughGuarantors,
+  showFeesConfigured,
+  secretaryDetailsComplete,
+  missingSecretaryDetails,
+} from '@/lib/show-setup-requirements';
+import { wizardStepPath, wizardStepLabel, type WizardStepKey } from '@/lib/show-setup-steps';
 import { SV_CLASS_AUTO_CREATE_COMBOS, isUnnumberedClassDef } from '@/lib/class-labels';
 import {
   shows,
@@ -475,7 +482,7 @@ export const secretaryRouter = createTRPCRouter({
   listVenues: secretaryProcedure
     .input(z.object({ organisationId: z.string().uuid() }))
     .query(async ({ ctx, input }) => {
-      await verifyOrgAccess(ctx.db, ctx.session.user.id, input.organisationId);
+      await verifyOrgAccess(ctx.db, ctx.session.user.id, input.organisationId, { callerIsAdmin: ctx.callerIsAdmin });
       return ctx.db.query.venues.findMany({
         where: eq(venues.organisationId, input.organisationId),
         orderBy: (venues, { asc }) => [asc(venues.name)],
@@ -498,7 +505,7 @@ export const secretaryRouter = createTRPCRouter({
       })
     )
     .mutation(async ({ ctx, input }) => {
-      await verifyOrgAccess(ctx.db, ctx.session.user.id, input.organisationId);
+      await verifyOrgAccess(ctx.db, ctx.session.user.id, input.organisationId, { callerIsAdmin: ctx.callerIsAdmin });
 
       // Auto-geocode from postcode for "Near Me" feature
       let lat: string | null = null;
@@ -547,7 +554,7 @@ export const secretaryRouter = createTRPCRouter({
         throw new TRPCError({ code: 'NOT_FOUND', message: 'Venue not found' });
       }
       if (venue.organisationId) {
-        await verifyOrgAccess(ctx.db, ctx.session.user.id, venue.organisationId);
+        await verifyOrgAccess(ctx.db, ctx.session.user.id, venue.organisationId, { callerIsAdmin: ctx.callerIsAdmin });
       }
       const [updated] = await ctx.db
         .update(venues)
@@ -561,7 +568,7 @@ export const secretaryRouter = createTRPCRouter({
   listOrgPeople: secretaryProcedure
     .input(z.object({ organisationId: z.string().uuid() }))
     .query(async ({ ctx, input }) => {
-      await verifyOrgAccess(ctx.db, ctx.session.user.id, input.organisationId);
+      await verifyOrgAccess(ctx.db, ctx.session.user.id, input.organisationId, { callerIsAdmin: ctx.callerIsAdmin });
       return ctx.db.query.organisationPeople.findMany({
         where: eq(organisationPeople.organisationId, input.organisationId),
         orderBy: (op, { asc }) => [asc(op.name)],
@@ -580,7 +587,7 @@ export const secretaryRouter = createTRPCRouter({
       notes: z.string().optional(),
     }))
     .mutation(async ({ ctx, input }) => {
-      await verifyOrgAccess(ctx.db, ctx.session.user.id, input.organisationId);
+      await verifyOrgAccess(ctx.db, ctx.session.user.id, input.organisationId, { callerIsAdmin: ctx.callerIsAdmin });
       const [person] = await ctx.db.insert(organisationPeople).values(input).returning();
       return person!;
     }),
@@ -602,7 +609,7 @@ export const secretaryRouter = createTRPCRouter({
         where: eq(organisationPeople.id, id),
       });
       if (!person) throw new TRPCError({ code: 'NOT_FOUND' });
-      await verifyOrgAccess(ctx.db, ctx.session.user.id, person.organisationId);
+      await verifyOrgAccess(ctx.db, ctx.session.user.id, person.organisationId, { callerIsAdmin: ctx.callerIsAdmin });
       const [updated] = await ctx.db.update(organisationPeople).set(rest).where(eq(organisationPeople.id, id)).returning();
       return updated!;
     }),
@@ -614,7 +621,7 @@ export const secretaryRouter = createTRPCRouter({
         where: eq(organisationPeople.id, input.id),
       });
       if (!person) throw new TRPCError({ code: 'NOT_FOUND' });
-      await verifyOrgAccess(ctx.db, ctx.session.user.id, person.organisationId);
+      await verifyOrgAccess(ctx.db, ctx.session.user.id, person.organisationId, { callerIsAdmin: ctx.callerIsAdmin });
       await ctx.db.delete(organisationPeople).where(eq(organisationPeople.id, input.id));
       return { deleted: true };
     }),
@@ -637,7 +644,7 @@ export const secretaryRouter = createTRPCRouter({
       })
     )
     .mutation(async ({ ctx, input }) => {
-      await verifyOrgAccess(ctx.db, ctx.session.user.id, input.organisationId);
+      await verifyOrgAccess(ctx.db, ctx.session.user.id, input.organisationId, { callerIsAdmin: ctx.callerIsAdmin });
 
       // If the logo URL changed (or the org doesn't have extracted colours
       // yet) we re-run node-vibrant so the SV schedule's tonal wash
@@ -717,7 +724,7 @@ export const secretaryRouter = createTRPCRouter({
       })
     )
     .mutation(async ({ ctx, input }) => {
-      await verifyOrgAccess(ctx.db, ctx.session.user.id, input.organisationId);
+      await verifyOrgAccess(ctx.db, ctx.session.user.id, input.organisationId, { callerIsAdmin: ctx.callerIsAdmin });
       const [updated] = await ctx.db
         .update(organisations)
         .set({ showRuleset: input.showRuleset })
@@ -736,7 +743,7 @@ export const secretaryRouter = createTRPCRouter({
   getPayoutDetails: secretaryProcedure
     .input(z.object({ organisationId: z.string().uuid() }))
     .query(async ({ ctx, input }) => {
-      await verifyOrgAccess(ctx.db, ctx.session.user.id, input.organisationId);
+      await verifyOrgAccess(ctx.db, ctx.session.user.id, input.organisationId, { callerIsAdmin: ctx.callerIsAdmin });
       const org = await ctx.db.query.organisations.findFirst({
         where: eq(organisations.id, input.organisationId),
         columns: {
@@ -776,7 +783,7 @@ export const secretaryRouter = createTRPCRouter({
       })
     )
     .mutation(async ({ ctx, input }) => {
-      await verifyOrgAccess(ctx.db, ctx.session.user.id, input.organisationId);
+      await verifyOrgAccess(ctx.db, ctx.session.user.id, input.organisationId, { callerIsAdmin: ctx.callerIsAdmin });
       // Normalise the sort code to hyphenated form so storage matches
       // what we render back.
       const digits = input.sortCode.replace(/-/g, '');
@@ -4288,7 +4295,7 @@ export const secretaryRouter = createTRPCRouter({
       // src/lib/show-setup-requirements.ts (CLAUDE.md, "One owner per rule").
       detected.entry_fees_set = showFeesConfigured(show);
       detected.entry_close_date_set = show.entryCloseDate != null;
-      detected.secretary_details_set = !!(show.secretaryName && show.secretaryEmail);
+      detected.secretary_details_set = secretaryDetailsComplete(show);
       // Post-show: the "Publish results" checklist item declares this autoDetectKey
       // (default-checklist.ts) but it was never populated here, so it could never
       // auto-tick. (The sibling 'judge_approvals_sent' key is still unwired — see
@@ -4371,6 +4378,13 @@ export const secretaryRouter = createTRPCRouter({
         detail: string;
         actionPath: string;
         severity: 'required' | 'recommended';
+        /**
+         * The setup-wizard step that puts this right. ONE owner —
+         * src/lib/show-setup-steps.ts: the wizard ticks a step only when no
+         * required blocker points at it, so the tick and this list cannot
+         * disagree (Mandy, 28 Oct 2026).
+         */
+        step?: WizardStepKey;
       };
 
       // Blockers for opening entries
@@ -4379,15 +4393,15 @@ export const secretaryRouter = createTRPCRouter({
       if (Number(classCount[0]?.count) === 0) {
         openEntriesBlockers.push({
           key: 'no_classes', label: 'No classes created',
-          detail: 'Add classes on the main show page',
-          actionPath: '', severity: 'required',
+          detail: `Add classes in ${wizardStepLabel('classes')}`,
+          actionPath: wizardStepPath('classes'), severity: 'required', step: 'classes',
         });
       }
       if (Number(judgeCount[0]?.count) === 0) {
         openEntriesBlockers.push({
           key: 'no_judge', label: 'No judge assigned',
           detail: 'Assign at least one judge on the People page',
-          actionPath: '/people', severity: 'required',
+          actionPath: '/people', severity: 'required', step: 'judge',
         });
       }
       // ONE owner — src/lib/show-setup-requirements.ts (CLAUDE.md, "One
@@ -4397,29 +4411,32 @@ export const secretaryRouter = createTRPCRouter({
       if (!showFeesConfigured(show)) {
         openEntriesBlockers.push({
           key: 'no_entry_fees', label: 'Entry fees not set',
-          detail: 'Click Edit on the main show page to set entry fees',
-          actionPath: '', severity: 'required',
+          detail: `Set the entry fees in ${wizardStepLabel('details')}`,
+          actionPath: wizardStepPath('details'), severity: 'required', step: 'details',
         });
       }
       if (!show.entryCloseDate) {
         openEntriesBlockers.push({
           key: 'no_close_date', label: 'Entry close date not set',
-          detail: 'Click Edit on the main show page to set a close date',
-          actionPath: '', severity: 'required',
+          detail: `Set the entry close date in ${wizardStepLabel('details')}`,
+          actionPath: wizardStepPath('details'), severity: 'required', step: 'details',
         });
       }
-      if (!show.secretaryName || !show.secretaryEmail || !show.secretaryAddress || !show.secretaryPhone) {
+      // ONE owner — src/lib/show-setup-requirements.ts. The checklist
+      // auto-detect used to want name + email while this wanted all four
+      // (Mandy, 28 Oct 2026: a ticked step beside a red banner).
+      if (!secretaryDetailsComplete(show)) {
         openEntriesBlockers.push({
           key: 'no_secretary_details', label: 'Secretary contact details incomplete',
-          detail: 'Add the secretary name, postal address, email and phone number required on the schedule and entry form',
-          actionPath: '', severity: 'required',
+          detail: `The schedule and entry form print the secretary's details. Still needed: ${missingSecretaryDetails(show).join(', ')}`,
+          actionPath: wizardStepPath('details'), severity: 'required', step: 'details',
         });
       }
       if (!isWusvShow && (!show.showOpenTime || !show.startTime)) {
         openEntriesBlockers.push({
           key: 'show_times_missing', label: 'Show opening or judging time missing',
           detail: 'Set both times before publishing the RKC schedule',
-          actionPath: '/schedule', severity: 'required',
+          actionPath: '/schedule', severity: 'required', step: 'schedule',
         });
       }
       if (!isWusvShow && guarantors.length < minGuarantors) {
@@ -4427,24 +4444,31 @@ export const secretaryRouter = createTRPCRouter({
           key: 'insufficient_guarantors',
           label: `Guarantors (${guarantors.length} of ${minGuarantors})`,
           detail: `${show.showType === 'championship' ? 'Championship' : 'Open'} shows need ${minGuarantors} guarantors`,
-          actionPath: '/schedule', severity: 'required',
+          actionPath: '/schedule', severity: 'required', step: 'schedule',
         });
       }
 
+      // Until 28 Oct 2026 this pointed at the show page (actionPath '') —
+      // which for a draft show IS the setup wizard, and the wizard had no
+      // venue control. Mandy hit that dead end on the GSD Club of Scotland
+      // show. The venue now lives on the wizard's details step.
       if (!show.venueId) {
         openEntriesBlockers.push({
           key: 'no_venue', label: 'Venue not confirmed',
-          detail: 'Confirm the show venue',
-          actionPath: '', severity: 'required',
+          detail: `Choose the venue in ${wizardStepLabel('details')}`,
+          actionPath: wizardStepPath('details'), severity: 'required', step: 'details',
         });
       }
       // SV/WUSV regionals aren't RKC-licensed — skip the warning entirely
       // for that ruleset (Amanda 2026-05-24).
+      // Recommended, not required: the licence number often arrives from
+      // the RKC after entries have opened, and Mandy does not want it to
+      // hold a show up (28 Oct 2026). d5b07e6b had made it required.
       if (!show.kcLicenceNo && show.showRuleset !== 'wusv') {
         openEntriesBlockers.push({
           key: 'no_rkc_licence', label: 'RKC licence not recorded',
-          detail: 'Record the RKC licence number',
-          actionPath: '', severity: 'required',
+          detail: `Record the RKC licence number in ${wizardStepLabel('details')} when it arrives`,
+          actionPath: wizardStepPath('details'), severity: 'recommended', step: 'details',
         });
       }
 
@@ -4488,9 +4512,10 @@ export const secretaryRouter = createTRPCRouter({
           openEntriesBlockers.push({
             key: 'rkc_' + issue.code,
             label: issue.message,
-            detail: 'Fix the classification on the main show page before opening entries',
-            actionPath: '',
+            detail: `Fix the classification in ${wizardStepLabel('classes')} before opening entries`,
+            actionPath: wizardStepPath('classes'),
             severity: 'required',
+            step: 'classes',
           });
         }
       }
@@ -4515,7 +4540,7 @@ export const secretaryRouter = createTRPCRouter({
             key: 'judge_acceptance_missing',
             label: `${missingAcceptance.size} assigned judge${missingAcceptance.size === 1 ? ' has' : 's have'} not accepted`,
             detail: 'Every assigned judge must accept the written appointment before entries open',
-            actionPath: '/people', severity: 'required',
+            actionPath: '/people', severity: 'required', step: 'judge',
           });
         }
       }
@@ -4533,7 +4558,10 @@ export const secretaryRouter = createTRPCRouter({
         openEntriesBlockers.push({
           key: 'no_sundry_items', label: 'Sundry items not added',
           detail: 'Add catalogues, memberships, donations or other extras exhibitors can buy at checkout',
-          actionPath: `/secretary/shows/${input.showId}#sundry-items`, severity: 'recommended',
+          // Relative, like every other actionPath: the banner and the action
+          // panel prefix the show's URL themselves, so the absolute path this
+          // used to carry went to /secretary/shows/<id>/secretary/shows/<id>.
+          actionPath: `${wizardStepPath('details')}#sundry-items`, severity: 'recommended', step: 'details',
         });
       }
 
@@ -6449,7 +6477,7 @@ export const secretaryRouter = createTRPCRouter({
     .input(z.object({ organisationId: z.string().uuid() }))
     .query(async ({ ctx, input }) => {
       if (!ctx.callerIsAdmin)
-        await verifyOrgAccess(ctx.db, ctx.session.user.id, input.organisationId);
+        await verifyOrgAccess(ctx.db, ctx.session.user.id, input.organisationId, { callerIsAdmin: ctx.callerIsAdmin });
       return ctx.db.query.sponsors.findMany({
         where: and(
           eq(sponsors.organisationId, input.organisationId),
@@ -6478,7 +6506,7 @@ export const secretaryRouter = createTRPCRouter({
     )
     .mutation(async ({ ctx, input }) => {
       if (!ctx.callerIsAdmin)
-        await verifyOrgAccess(ctx.db, ctx.session.user.id, input.organisationId);
+        await verifyOrgAccess(ctx.db, ctx.session.user.id, input.organisationId, { callerIsAdmin: ctx.callerIsAdmin });
       const [created] = await ctx.db
         .insert(sponsors)
         .values(input)
@@ -6511,7 +6539,7 @@ export const secretaryRouter = createTRPCRouter({
       });
       if (!existing) throw new TRPCError({ code: 'NOT_FOUND', message: 'Sponsor not found' });
       if (!ctx.callerIsAdmin)
-        await verifyOrgAccess(ctx.db, ctx.session.user.id, existing.organisationId);
+        await verifyOrgAccess(ctx.db, ctx.session.user.id, existing.organisationId, { callerIsAdmin: ctx.callerIsAdmin });
       const [updated] = await ctx.db
         .update(sponsors)
         .set(data)
@@ -6530,7 +6558,7 @@ export const secretaryRouter = createTRPCRouter({
       });
       if (!existing) throw new TRPCError({ code: 'NOT_FOUND', message: 'Sponsor not found' });
       if (!ctx.callerIsAdmin)
-        await verifyOrgAccess(ctx.db, ctx.session.user.id, existing.organisationId);
+        await verifyOrgAccess(ctx.db, ctx.session.user.id, existing.organisationId, { callerIsAdmin: ctx.callerIsAdmin });
       const [deleted] = await ctx.db
         .update(sponsors)
         .set({ deletedAt: new Date() })
@@ -6831,7 +6859,7 @@ export const secretaryRouter = createTRPCRouter({
   getSponsorNameSuggestions: secretaryProcedure
     .input(z.object({ organisationId: z.string().uuid() }))
     .query(async ({ ctx, input }) => {
-      await verifyOrgAccess(ctx.db, ctx.session.user.id, input.organisationId);
+      await verifyOrgAccess(ctx.db, ctx.session.user.id, input.organisationId, { callerIsAdmin: ctx.callerIsAdmin });
       // Names are drawn from two sources: class-level sponsorships
       // (class_sponsorships.sponsor_name) and show-level awards
       // (shows.schedule_data->'awardSponsors'[*]). UNION + GROUP BY

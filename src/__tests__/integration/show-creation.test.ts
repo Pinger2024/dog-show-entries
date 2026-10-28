@@ -11,6 +11,7 @@ import {
   makeSecretaryWithOrg,
   makeSecretaryWithOrgAndBreed,
   makeShow,
+  makeVenue,
 } from '../helpers/factories';
 
 describe('shows.create', () => {
@@ -23,6 +24,7 @@ describe('shows.create', () => {
       showType: 'open',
       showScope: 'single_breed',
       organisationId: org.id,
+      venueId: (await makeVenue({ organisationId: org.id })).id,
       breedId: breed.id,
       startDate: '2030-06-01',
       endDate: '2030-06-01',
@@ -52,6 +54,7 @@ describe('shows.create', () => {
       showType: 'open',
       showScope: 'single_breed',
       organisationId: org.id,
+      venueId: (await makeVenue({ organisationId: org.id })).id,
       breedId: breed.id,
       startDate: '2030-06-01',
       endDate: '2030-06-01',
@@ -82,6 +85,7 @@ describe('shows.create', () => {
       showType: 'open',
       showScope: 'single_breed',
       organisationId: org.id,
+      venueId: (await makeVenue({ organisationId: org.id })).id,
       breedId: breed.id,
       startDate: '2030-06-01',
       endDate: '2030-06-01',
@@ -128,6 +132,7 @@ describe('shows.create', () => {
       showType: 'championship',
       showScope: 'general',
       organisationId: org.id,
+      venueId: (await makeVenue({ organisationId: org.id })).id,
       startDate: '2030-06-01',
       endDate: '2030-06-01',
       allBreedClassData: {
@@ -156,6 +161,7 @@ describe('shows.create', () => {
       showType: 'open' as const,
       showScope: 'single_breed' as const,
       organisationId: org.id,
+      venueId: (await makeVenue({ organisationId: org.id })).id,
       breedId: breed.id,
       startDate: '2030-06-01',
       endDate: '2030-06-01',
@@ -181,6 +187,7 @@ describe('shows.create', () => {
           showType: 'open',
           showScope: 'single_breed',
           organisationId: org.id,
+          venueId: (await makeVenue({ organisationId: org.id })).id,
           breedId: breed.id,
           startDate: `2030-${month}-01`,
           endDate: `2030-${month}-01`,
@@ -201,6 +208,7 @@ describe('shows.create', () => {
         showType: 'open',
         showScope: 'single_breed',
         organisationId: otherOrg.id,
+        venueId: (await makeVenue({ organisationId: otherOrg.id })).id,
         breedId: breed.id,
         startDate: '2030-06-01',
         endDate: '2030-06-01',

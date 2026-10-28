@@ -483,7 +483,10 @@ export const showsRouter = createTRPCRouter({
         showScope: z.enum(['single_breed', 'group', 'general']),
         breedId: z.string().uuid().optional(),
         organisationId: z.string().uuid(),
-        venueId: z.string().uuid().optional(),
+        // Required: a show must not be able to bypass choosing its venue
+        // (Mandy, 28 Oct 2026 — a show created without one had no screen
+        // that could add it, and the schedule prints the venue).
+        venueId: z.string().uuid({ message: 'Please choose the venue or add a new one' }),
         startDate: z.string(),
         endDate: z.string(),
         entriesOpenDate: z.string().datetime().optional(),

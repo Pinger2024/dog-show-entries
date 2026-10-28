@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { fireDogConfetti } from '@/lib/confetti';
 import {
   AlertTriangle,
@@ -29,6 +30,15 @@ import {
   latestPermissibleCloseDateInputValue,
 } from '@/lib/entry-close-rules';
 import { EntryCloseHint, CloseDateRuleHint } from '@/components/shows/entry-close-hint';
+import { VenuePicker } from '@/components/show/venue-picker';
+import {
+  WIZARD_STEPS,
+  WIZARD_STEP_PARAM,
+  isWizardStepId,
+  wizardStepBlocked,
+  type WizardStepId,
+} from '@/lib/show-setup-steps';
+import { SECRETARY_DETAIL_FIELDS, missingSecretaryDetails } from '@/lib/show-setup-requirements';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -61,15 +71,11 @@ type Show = NonNullable<RouterOutputs['shows']['getById']>;
 
 // ── Step definitions ──────────────────────────────────────
 
-const STEPS = [
-  { id: 'classes', label: 'Classes & Breeds', shortLabel: 'Classes' },
-  { id: 'judge', label: 'Judge', shortLabel: 'Judge' },
-  { id: 'details', label: 'Fees & Setup', shortLabel: 'Setup' },
-  { id: 'schedule', label: 'Schedule', shortLabel: 'Schedule' },
-  { id: 'open', label: 'Open Entries', shortLabel: 'Open' },
-] as const;
+// ONE owner — src/lib/show-setup-steps.ts: the entries-open blockers name
+// these same steps, which is how the wizard knows what is complete.
+const STEPS = WIZARD_STEPS;
 
-type StepId = (typeof STEPS)[number]['id'];
+type StepId = WizardStepId;
 
 interface SetupWizardProps {
   showId: string;
@@ -79,49 +85,49 @@ interface SetupWizardProps {
 export function SetupWizard({ showId, show }: SetupWizardProps) {
   // ── All hooks first (Rules of Hooks!) ──────────────
 
-  const { data: autoDetect } = trpc.secretary.getChecklistAutoDetect.useQuery(
+  // The same blockers the lifecycle banner shows. A step is complete when no
+  // REQUIRED blocker points at it — ONE owner (src/lib/show-setup-steps.ts),
+  // so the tick here and the red line in the banner can never disagree
+  // (Mandy, 28 Oct 2026: a ticked "Fees & Setup" beside "Venue not confirmed",
+  // because this used to hand-type its own three-item rule).
+  const { data: blockers } = trpc.secretary.getPhaseBlockers.useQuery(
     { showId },
     { staleTime: 15_000 },
   );
+  const searchParams = useSearchParams();
+  const requestedStep = searchParams.get(WIZARD_STEP_PARAM);
 
   const [activeStep, setActiveStep] = useState<StepId>('classes');
   const [initialized, setInitialized] = useState(false);
 
-  // Derive step completion from server data
   const stepComplete = useCallback(
     (stepId: StepId): boolean => {
-      if (!autoDetect) return false;
+      if (!blockers) return false;
       switch (stepId) {
-        case 'classes':
-          return autoDetect.classes_created === true;
-        case 'judge':
-          return autoDetect.judges_assigned === true && autoDetect.judge_offers_sent === true;
-        case 'details':
-          return (
-            autoDetect.entry_fees_set === true &&
-            autoDetect.entry_close_date_set === true &&
-            autoDetect.secretary_details_set === true
-          );
         case 'schedule':
-          return show.scheduleData != null;
+          // Saved at least once, and nothing required left on it.
+          return show.scheduleData != null && !wizardStepBlocked('schedule', blockers.openEntriesBlockers);
         case 'open':
           return false; // This step is "done" when entries are opened
         default:
-          return false;
+          return !wizardStepBlocked(stepId, blockers.openEntriesBlockers);
       }
     },
-    [autoDetect, show.scheduleData],
+    [blockers, show.scheduleData],
   );
 
-  // Auto-open first incomplete step on mount
+  // On mount: open the step a blocker's link asked for (?step=…), otherwise
+  // the first incomplete one.
   useEffect(() => {
-    if (initialized || !autoDetect) return;
-    const firstIncomplete = STEPS.find((s) => !stepComplete(s.id));
-    if (firstIncomplete) {
-      setActiveStep(firstIncomplete.id);
+    if (initialized || !blockers) return;
+    if (isWizardStepId(requestedStep)) {
+      setActiveStep(requestedStep);
+    } else {
+      const firstIncomplete = STEPS.find((s) => !stepComplete(s.id));
+      if (firstIncomplete) setActiveStep(firstIncomplete.id);
     }
     setInitialized(true);
-  }, [autoDetect, initialized, stepComplete]);
+  }, [blockers, initialized, requestedStep, stepComplete]);
 
   // ── Render ─────────────────────────────────────────
 
@@ -465,6 +471,30 @@ function StepJudge({ showId, show }: { showId: string; show: Show }) {
 
 // ── Secretary Details (read-only with edit toggle) ────────
 
+const secretaryFieldLabel = (key: (typeof SECRETARY_DETAIL_FIELDS)[number]['key']) =>
+  SECRETARY_DETAIL_FIELDS.find((f) => f.key === key)?.label ?? key;
+
+/**
+ * "Still needed: Phone, Postal address" — the same list, from the same
+ * owner, that the lifecycle banner's blocker prints. Mandy filled in a
+ * secretary's name and email and could not see why the banner still said
+ * "incomplete" (28 Oct 2026): the form never said what it needed.
+ */
+function SecretaryDetailsHint({ missing }: { missing: string[] }) {
+  if (missing.length === 0) {
+    return (
+      <p className="text-xs text-se-fresh-deep">
+        All four details are in — the schedule and entry form can print them.
+      </p>
+    );
+  }
+  return (
+    <p className="text-xs text-destructive">
+      Still needed before entries can open: {missing.join(', ')}.
+    </p>
+  );
+}
+
 function SecretaryDetails({
   secretaryName,
   secretaryEmail,
@@ -472,6 +502,7 @@ function SecretaryDetails({
   secretaryAddress,
   secretaryUserId,
   onChange,
+  onSave,
 }: {
   secretaryName: string;
   secretaryEmail: string;
@@ -479,6 +510,8 @@ function SecretaryDetails({
   secretaryAddress: string;
   secretaryUserId: string | null;
   onChange: (fields: { name?: string; email?: string; phone?: string; address?: string }) => void;
+  /** Persist the four fields to the show — "Save Changes" must mean saved. */
+  onSave?: (fields: { name: string; email: string; phone: string; address: string }) => void;
 }) {
   const [editing, setEditing] = useState(false);
   const [editName, setEditName] = useState(secretaryName);
@@ -507,6 +540,9 @@ function SecretaryDetails({
       phone: editPhone,
       address: editAddress,
     });
+    // Save to the show now, not only when the step's own Save is pressed —
+    // Mandy pressed this button and the banner stayed red (28 Oct 2026).
+    onSave?.({ name: editName, email: editEmail, phone: editPhone, address: editAddress });
 
     // Also update the underlying user record so future shows get the correct data
     if (secretaryUserId) {
@@ -547,8 +583,8 @@ function SecretaryDetails({
             help={{
               what: 'Your contact details as the show secretary. These appear in the printed schedule and on the show page so exhibitors know who to ask if they have a question.',
               todo: [
-                'Add your name, email and phone number.',
-                'A postal address is helpful if any entries come in by post.',
+                'Add your name, email, phone number and postal address — all four are needed before entries can open.',
+                'The schedule and the entry form print them, so exhibitors know who to contact and where to post an entry.',
                 'These details are saved against your account so future shows can pre-fill them.',
               ],
               benefit: 'Type these once and they pre-fill every show you ever run with us. They also flow through to the schedule, the catalogue, the entry confirmation emails to exhibitors, and any letters we need to send on your behalf. No copy and paste, no remembering to update three documents when your phone number changes.',
@@ -563,22 +599,30 @@ function SecretaryDetails({
         </div>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <div className="space-y-1.5">
-            <Label htmlFor="wiz-sec-name" className="text-xs">Name</Label>
+            <Label htmlFor="wiz-sec-name" className="text-xs">{secretaryFieldLabel('secretaryName')} <span className="text-destructive">*</span></Label>
             <Input id="wiz-sec-name" placeholder="Secretary name" className="min-h-[2.75rem]" value={val.name} onChange={(e) => set.name(e.target.value)} />
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="wiz-sec-email" className="text-xs">Email</Label>
+            <Label htmlFor="wiz-sec-email" className="text-xs">{secretaryFieldLabel('secretaryEmail')} <span className="text-destructive">*</span></Label>
             <Input id="wiz-sec-email" type="email" placeholder="secretary@example.com" className="min-h-[2.75rem]" value={val.email} onChange={(e) => set.email(e.target.value)} />
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="wiz-sec-phone" className="text-xs">Phone</Label>
+            <Label htmlFor="wiz-sec-phone" className="text-xs">{secretaryFieldLabel('secretaryPhone')} <span className="text-destructive">*</span></Label>
             <Input id="wiz-sec-phone" type="tel" placeholder="Phone number" className="min-h-[2.75rem]" value={val.phone} onChange={(e) => set.phone(e.target.value)} />
           </div>
         </div>
         <div className="space-y-1.5">
-          <Label htmlFor="wiz-sec-address" className="text-xs">Address</Label>
+          <Label htmlFor="wiz-sec-address" className="text-xs">{secretaryFieldLabel('secretaryAddress')} <span className="text-destructive">*</span></Label>
           <Input id="wiz-sec-address" placeholder="House/flat, street, town, postcode" className="min-h-[2.75rem]" value={val.address} onChange={(e) => set.address(e.target.value)} />
         </div>
+        <SecretaryDetailsHint
+          missing={missingSecretaryDetails({
+            secretaryName: val.name,
+            secretaryEmail: val.email,
+            secretaryPhone: val.phone,
+            secretaryAddress: val.address,
+          })}
+        />
         {editing && (
           <Button size="sm" className="min-h-[2.75rem]" onClick={saveEdits}>
             Save Changes
@@ -621,6 +665,9 @@ function SecretaryDetails({
           </p>
         )}
       </div>
+      <SecretaryDetailsHint
+        missing={missingSecretaryDetails({ secretaryName, secretaryEmail, secretaryPhone, secretaryAddress })}
+      />
     </div>
   );
 }
@@ -693,6 +740,27 @@ function StepDetails({
     onError: (err) => toast.error(err.message ?? 'Failed to save details'),
   });
 
+  // The venue and the secretary details save on their own, without moving
+  // to the next step: choosing a venue is a choice, not "I'm done here".
+  const saveVenueMutation = trpc.shows.update.useMutation({
+    onSuccess: () => {
+      utils.shows.getById.invalidate({ id: showId });
+      utils.secretary.getChecklistAutoDetect.invalidate({ showId });
+      utils.secretary.getPhaseBlockers.invalidate({ showId });
+      toast.success('Venue saved');
+    },
+    onError: (err) => toast.error(err.message ?? 'Failed to save the venue'),
+  });
+  const saveSecretaryMutation = trpc.shows.update.useMutation({
+    onSuccess: () => {
+      utils.shows.getById.invalidate({ id: showId });
+      utils.secretary.getChecklistAutoDetect.invalidate({ showId });
+      utils.secretary.getPhaseBlockers.invalidate({ showId });
+      toast.success('Secretary details saved');
+    },
+    onError: (err) => toast.error(err.message ?? 'Failed to save the secretary details'),
+  });
+
   function handleSave() {
     // Mandy's hard rule (2026-08-04): entries — and postal entries — must
     // close at least two weeks before the show. Same helper + message the
@@ -739,6 +807,30 @@ function StepDetails({
 
   return (
     <div className="space-y-6">
+      {/* Venue — until 28 Oct 2026 no screen could set a show's venue after
+          creation (Mandy, GSD Club of Scotland): the banner said "Venue not
+          confirmed" and sent her here, and here had nothing. */}
+      <div className="space-y-3">
+        <SectionHeading
+          title="Venue"
+          help={{
+            what: 'Where the show is held. It is printed on the schedule and shown to exhibitors on the show page, with a map once the postcode is known.',
+            todo: [
+              'Choose one of your club\'s venues, or add a new one with its name, address and postcode.',
+              'Your choice is saved straight away.',
+            ],
+            tip: 'Add the postcode and we put the venue on the map for exhibitors travelling to you.',
+          }}
+        />
+        <VenuePicker
+          organisationId={show.organisationId}
+          value={show.venueId}
+          onChange={(venueId) => saveVenueMutation.mutate({ id: showId, venueId })}
+          disabled={saveVenueMutation.isPending}
+          idPrefix="wiz-venue"
+        />
+      </div>
+
       {/* Entry Fees */}
       <div className="space-y-3">
         <SectionHeading
@@ -965,6 +1057,15 @@ function StepDetails({
         secretaryPhone={secretaryPhone}
         secretaryAddress={secretaryAddress}
         secretaryUserId={show.secretaryUserId}
+        onSave={(f) =>
+          saveSecretaryMutation.mutate({
+            id: showId,
+            secretaryName: f.name || null,
+            secretaryEmail: f.email || null,
+            secretaryPhone: f.phone || null,
+            secretaryAddress: f.address || null,
+          })
+        }
         onChange={(fields) => {
           if (fields.name !== undefined) setSecretaryName(fields.name);
           if (fields.email !== undefined) setSecretaryEmail(fields.email);
@@ -1020,8 +1121,8 @@ function StepDetails({
         )}
       </Button>
 
-      {/* Sundry Items */}
-      <div className="space-y-3">
+      {/* Sundry Items — id is the anchor the no_sundry_items blocker links to */}
+      <div id="sundry-items" className="space-y-3">
         <SectionHeading
           title="Sundry Items"
           subtitle="Optional extras exhibitors can add to their order at checkout."

@@ -12,7 +12,6 @@ import {
   ArrowRight,
   Check,
   Loader2,
-  Plus,
   CalendarIcon,
   User,
   Lock,
@@ -46,6 +45,7 @@ import {
   latestPermissibleCloseDate,
 } from '@/lib/entry-close-rules';
 import { EntryCloseHint, CloseDateRuleHint } from '@/components/shows/entry-close-hint';
+import { VenuePicker } from '@/components/show/venue-picker';
 import { CLASS_TEMPLATES, getRelevantTemplates } from '@/lib/class-templates';
 import { AllBreedClassSetup, type AllBreedClassData } from '@/components/shows/all-breed-class-setup';
 import { Button } from '@/components/ui/button';
@@ -145,12 +145,10 @@ export const createShowSchema = z.object({
   postalCloseDate: z.string().optional(),
   description: z.string().optional(),
 
-  // Step 2 - Venue
-  venueId: z.string().uuid().optional(),
-  newVenueName: z.string().optional(),
-  newVenueAddress: z.string().optional(),
-  newVenuePostcode: z.string().optional(),
-  newVenueIndoorOutdoor: z.string().optional(),
+  // Step 2 - Venue. Required: a show must not be able to bypass choosing
+  // its venue (Mandy, 28 Oct 2026). Adding a new venue happens inside the
+  // VenuePicker, which hands back the id.
+  venueId: z.string().uuid('Please choose the venue or add a new one'),
 
   // Step 3 - Entry Fees (in pounds, converted to pence on submit)
   firstEntryFee: z.coerce.number().min(0, 'Fee must be 0 or more').default(0),
@@ -246,7 +244,6 @@ export default function NewShowPage() {
   const { data: session } = useSession();
   const [step, setStep] = useState(0);
   const [openSections, setOpenSections] = useState<string[]>(['classification', 'schedule', 'secretary']);
-  const [createVenue, setCreateVenue] = useState(false);
   const [selectedTemplates, setSelectedTemplates] = useState<string[]>([]);
   const [allBreedData, setAllBreedData] = useState<AllBreedClassData>({
     selectedBreedIds: [],
@@ -278,10 +275,6 @@ export default function NewShowPage() {
       postalCloseDate: '',
       description: '',
       venueId: undefined,
-      newVenueName: '',
-      newVenueAddress: '',
-      newVenuePostcode: '',
-      newVenueIndoorOutdoor: '',
       firstEntryFee: '' as unknown as number,
       subsequentEntryFee: '' as unknown as number,
       nfcEntryFee: '' as unknown as number,
@@ -295,7 +288,6 @@ export default function NewShowPage() {
   const { data: allBreeds } = trpc.breeds.list.useQuery();
 
   const utils = trpc.useUtils();
-  const createVenueMutation = trpc.secretary.createVenue.useMutation();
   const createShowMutation = trpc.shows.create.useMutation();
   const inviteMutation = trpc.invitations.send.useMutation();
   const [inviteOpen, setInviteOpen] = useState(false);
@@ -378,11 +370,6 @@ export default function NewShowPage() {
     { enabled: !!currentOrgId }
   );
 
-  // Default to "New Venue" if no existing venues for this org
-  useEffect(() => {
-    if (venues && venues.length === 0) setCreateVenue(true);
-  }, [venues]);
-
   // Fetch org members for the secretary picker
   const { data: orgMembersData } = trpc.secretary.orgMembers.useQuery(
     { organisationId: currentOrgId },
@@ -431,27 +418,13 @@ export default function NewShowPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessionUserId, orgMembers]);
 
-  const isSubmitting =
-    createVenueMutation.isPending || createShowMutation.isPending;
+  const isSubmitting = createShowMutation.isPending;
 
   async function onSubmit(values: CreateShowValues, asDraft: boolean) {
     try {
       // Dates first: a date that isn't real fails here, before the venue or
       // show is written.
       const dates = newShowDatesPayload(values);
-      let venueId = values.venueId;
-
-      // Create venue if needed
-      if (createVenue && values.newVenueName) {
-        const venue = await createVenueMutation.mutateAsync({
-          name: values.newVenueName,
-          address: values.newVenueAddress || undefined,
-          postcode: values.newVenuePostcode || undefined,
-          indoorOutdoor: values.newVenueIndoorOutdoor || undefined,
-          organisationId: values.organisationId,
-        });
-        venueId = venue.id;
-      }
 
       const show = await createShowMutation.mutateAsync({
         name: values.name,
@@ -467,7 +440,7 @@ export default function NewShowPage() {
         secretaryAddress: values.secretaryAddress || undefined,
         showOpenTime: values.showOpenTime || undefined,
         organisationId: values.organisationId,
-        venueId: venueId || undefined,
+        venueId: values.venueId,
         startDate: values.startDate,
         endDate: values.endDate,
         // A picked date means 00:00 UK time on that date, whatever zone the
@@ -526,6 +499,7 @@ export default function NewShowPage() {
   const watchedShowRuleset = form.watch('showRuleset');
   const watchedStartDate = form.watch('startDate');
   const watchedEndDate = form.watch('endDate');
+  const watchedVenueId = form.watch('venueId');
   const watchedAcceptsPostal = form.watch('acceptsPostalEntries');
   const watchedEntriesOpen = form.watch('entriesOpenDate');
 
@@ -577,7 +551,8 @@ export default function NewShowPage() {
           watchedEndDate
         );
       case 1:
-        return true; // Venue is optional
+        // A show must not be able to bypass choosing its venue (Mandy, 28 Oct 2026).
+        return !!watchedVenueId;
       case 2:
         return true; // Fees can be 0
       case 3:
@@ -1286,138 +1261,17 @@ export default function NewShowPage() {
                   Venue
                 </CardTitle>
                 <CardDescription>
-                  Where will the show take place? Select an existing venue or add a new one.
+                  Where will the show take place? Choose one of your club&apos;s venues or add a new one.
+                  Every show needs a venue — it is printed on the schedule.
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
-                <div className="flex gap-2">
-                  <Button
-                    type="button"
-                    variant={!createVenue ? 'default' : 'outline'}
-                    size="sm"
-                    onClick={() => setCreateVenue(false)}
-                  >
-                    Existing Venue
-                  </Button>
-                  <Button
-                    type="button"
-                    variant={createVenue ? 'default' : 'outline'}
-                    size="sm"
-                    onClick={() => {
-                      setCreateVenue(true);
-                      form.setValue('venueId', undefined);
-                    }}
-                  >
-                    <Plus className="size-3.5" />
-                    New Venue
-                  </Button>
-                </div>
-
-                {!createVenue ? (
-                  <FormField
-                    control={form.control}
-                    name="venueId"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Venue</FormLabel>
-                        <Select
-                          onValueChange={field.onChange}
-                          defaultValue={field.value}
-                        >
-                          <FormControl>
-                            <SelectTrigger className="w-full">
-                              <SelectValue placeholder="Select a venue (optional)" />
-                            </SelectTrigger>
-                          </FormControl>
-                          <SelectContent>
-                            {(venues ?? []).map((v) => (
-                              <SelectItem key={v.id} value={v.id}>
-                                {v.name}
-                                {v.postcode ? ` (${v.postcode})` : ''}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                ) : (
-                  <div className="space-y-4 rounded-lg border p-4">
-                    <FormField
-                      control={form.control}
-                      name="newVenueName"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Venue Name</FormLabel>
-                          <FormControl>
-                            <Input
-                              placeholder="e.g. National Exhibition Centre"
-                              {...field}
-                            />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                    <FormField
-                      control={form.control}
-                      name="newVenueAddress"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Address</FormLabel>
-                          <FormControl>
-                            <Input
-                              placeholder="Street, town"
-                              {...field}
-                            />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                    <div className="grid gap-4 sm:grid-cols-2">
-                      <FormField
-                        control={form.control}
-                        name="newVenuePostcode"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Postcode</FormLabel>
-                            <FormControl>
-                              <Input placeholder="e.g. B40 1NT" {...field} />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-                      <FormField
-                        control={form.control}
-                        name="newVenueIndoorOutdoor"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Indoor/Outdoor</FormLabel>
-                            <Select
-                              onValueChange={field.onChange}
-                              defaultValue={field.value}
-                            >
-                              <FormControl>
-                                <SelectTrigger className="w-full">
-                                  <SelectValue placeholder="Select" />
-                                </SelectTrigger>
-                              </FormControl>
-                              <SelectContent>
-                                <SelectItem value="indoor">Indoor</SelectItem>
-                                <SelectItem value="outdoor">Outdoor</SelectItem>
-                                <SelectItem value="both">Both</SelectItem>
-                              </SelectContent>
-                            </Select>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-                    </div>
-                  </div>
-                )}
+                <VenuePicker
+                  organisationId={currentOrgId}
+                  value={watchedVenueId}
+                  onChange={(id) => form.setValue('venueId', id, { shouldValidate: true, shouldDirty: true })}
+                  idPrefix="new-show-venue"
+                />
               </CardContent>
             </Card>
           )}
@@ -1711,7 +1565,7 @@ export default function NewShowPage() {
           )}
 
           {/* Step 5: Review */}
-          {step === 4 && <ReviewStep form={form} organisations={organisations} venues={venues ?? []} classDefinitions={classDefinitions ?? []} createVenue={createVenue} classSexArrangements={classSexArrangements} allBreedData={allBreedData} onEditStep={setStep} />}
+          {step === 4 && <ReviewStep form={form} organisations={organisations} venues={venues ?? []} classDefinitions={classDefinitions ?? []} classSexArrangements={classSexArrangements} allBreedData={allBreedData} onEditStep={setStep} />}
 
           {/* Navigation */}
           <div className="mt-8 flex items-center justify-between gap-2 border-t pt-6">
@@ -1914,7 +1768,6 @@ function ReviewStep({
   organisations,
   venues,
   classDefinitions,
-  createVenue,
   classSexArrangements,
   allBreedData,
   onEditStep,
@@ -1923,7 +1776,6 @@ function ReviewStep({
   organisations: { id: string; name: string }[];
   venues: { id: string; name: string; postcode: string | null }[];
   classDefinitions: { id: string; name: string }[];
-  createVenue: boolean;
   classSexArrangements: readonly { value: string; label: string }[];
   allBreedData: AllBreedClassData;
   onEditStep: (step: number) => void;
@@ -2019,18 +1871,13 @@ function ReviewStep({
               <Pencil className="size-3" /> Edit
             </Button>
           </div>
-          {createVenue && values.newVenueName ? (
-            <div>
-              <p className="text-sm font-medium">{values.newVenueName} <Badge variant="outline" className="text-xs">New</Badge></p>
-              {values.newVenuePostcode && <p className="text-xs text-muted-foreground mt-0.5">{values.newVenuePostcode}</p>}
-            </div>
-          ) : venue ? (
+          {venue ? (
             <p className="text-sm font-medium">
               {venue.name}
               {venue.postcode && <span className="text-muted-foreground"> — {venue.postcode}</span>}
             </p>
           ) : (
-            <p className="text-sm text-muted-foreground italic">No venue selected — you can add one later</p>
+            <p className="text-sm text-destructive">No venue chosen yet — every show needs one before it can be created</p>
           )}
         </div>
 

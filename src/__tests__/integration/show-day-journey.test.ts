@@ -12,6 +12,7 @@ import {
   makeSecretaryWithOrgAndBreed,
   makeStewardAssignment,
   setShowStatus,
+  makeVenue,
 } from '../helpers/factories';
 import { injectStripeEvent, buildStripeWebhookRequest } from '../helpers/stripe-event';
 
@@ -34,6 +35,7 @@ describe('end-to-end show day', () => {
       showType: 'open',
       showScope: 'single_breed',
       organisationId: org.id,
+      venueId: (await makeVenue({ organisationId: org.id })).id,
       breedId: breed.id,
       startDate: '2030-05-15',
       endDate: '2030-05-15',
@@ -157,6 +159,7 @@ describe('end-to-end show day', () => {
       showType: 'open',
       showScope: 'single_breed',
       organisationId: org.id,
+      venueId: (await makeVenue({ organisationId: org.id })).id,
       breedId: breed.id,
       startDate: '2030-05-15',
       endDate: '2030-05-15',
@@ -168,6 +171,7 @@ describe('end-to-end show day', () => {
       showType: 'open',
       showScope: 'single_breed',
       organisationId: org.id,
+      venueId: (await makeVenue({ organisationId: org.id })).id,
       breedId: breed.id,
       startDate: '2030-06-15',
       endDate: '2030-06-15',

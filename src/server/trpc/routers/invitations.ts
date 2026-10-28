@@ -36,7 +36,7 @@ export const invitationsRouter = createTRPCRouter({
       // forge an active membership for themselves there — exposing that club's
       // entries, exhibitor PII and payout bank details. Admins manage every org.
       if (input.organisationId && ctx.session.user.role !== 'admin') {
-        await verifyOrgAccess(ctx.db, ctx.session.user.id, input.organisationId);
+        await verifyOrgAccess(ctx.db, ctx.session.user.id, input.organisationId, { callerIsAdmin: ctx.callerIsAdmin });
       }
 
       const token = generateToken();

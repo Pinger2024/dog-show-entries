@@ -21,6 +21,7 @@ import {
   orderSundryItems,
   judges,
   judgeAssignments,
+  venues,
   achievements,
   feedback,
   sponsors,
@@ -572,4 +573,13 @@ export async function settleOrderLikeWebhook(orderId: string) {
   await testDb.update(orders).set({ status: 'paid' }).where(eq(orders.id, orderId));
   await testDb.update(entries).set({ status: 'confirmed' }).where(eq(entries.orderId, orderId));
   await testDb.update(payments).set({ status: 'succeeded' }).where(eq(payments.orderId, orderId));
+}
+
+/** A venue for `organisationId`. shows.create needs one since 28 Oct 2026 (Mandy: a show must not bypass choosing its venue). */
+export async function makeVenue(opts: Partial<typeof venues.$inferInsert> & { organisationId: string }) {
+  const [row] = await testDb
+    .insert(venues)
+    .values({ name: opts.name ?? `Test Venue ${seq()}`, ...opts })
+    .returning();
+  return row!;
 }

@@ -7,6 +7,7 @@ import {
   makeSecretaryWithOrg,
   makeSecretaryWithOrgAndBreed,
   makeShow,
+  makeVenue,
 } from '../helpers/factories';
 
 /**
@@ -32,6 +33,7 @@ describe('shows.create — entry-close floor', () => {
         showType: 'open',
         showScope: 'single_breed',
         organisationId: org.id,
+        venueId: (await makeVenue({ organisationId: org.id })).id,
         breedId: breed.id,
         startDate: '2030-06-11',
         endDate: '2030-06-11',
@@ -52,6 +54,7 @@ describe('shows.create — entry-close floor', () => {
       showType: 'open',
       showScope: 'single_breed',
       organisationId: org.id,
+      venueId: (await makeVenue({ organisationId: org.id })).id,
       breedId: breed.id,
       startDate: '2030-06-11',
       endDate: '2030-06-11',

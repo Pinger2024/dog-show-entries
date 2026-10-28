@@ -21,6 +21,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { trpc } from '@/lib/trpc';
+import { VenuePicker } from '@/components/show/venue-picker';
 import { format } from 'date-fns';
 import {
   formatDateRange,
@@ -492,6 +493,8 @@ function EditShowDetailsDialog({
     endDate: string;
     entryCloseDate: Date | string | null;
     postalCloseDate: Date | string | null;
+    organisationId: string;
+    venueId: string | null;
     kcLicenceNo: string | null;
     description: string | null;
     bannerImageUrl: string | null;
@@ -531,6 +534,7 @@ function EditShowDetailsDialog({
   const [postalCloseDate, setPostalCloseDate] = useState(
     show.postalCloseDate ? toLondonDateTimeInput(show.postalCloseDate) : ''
   );
+  const [venueId, setVenueId] = useState<string | null>(show.venueId);
   const [kcLicenceNo, setKcLicenceNo] = useState(show.kcLicenceNo ?? '');
   const [description, setDescription] = useState(show.description ?? '');
   const [bannerImageUrl, setBannerImageUrl] = useState(show.bannerImageUrl ?? '');
@@ -602,6 +606,7 @@ function EditShowDetailsDialog({
       endDate,
       entryCloseDate: entryClose.instant,
       postalCloseDate: postalClose.instant,
+      venueId,
       kcLicenceNo: kcLicenceNo || null,
       description: description || null,
       bannerImageUrl: bannerImageUrl || null,
@@ -631,6 +636,7 @@ function EditShowDetailsDialog({
     setEndDate(show.endDate);
     setEntryCloseDate(show.entryCloseDate ? toLondonDateTimeInput(show.entryCloseDate) : '');
     setPostalCloseDate(show.postalCloseDate ? toLondonDateTimeInput(show.postalCloseDate) : '');
+    setVenueId(show.venueId);
     setKcLicenceNo(show.kcLicenceNo ?? '');
     setDescription(show.description ?? '');
     setClassSexArrangement(show.classSexArrangement ?? '');
@@ -1087,6 +1093,18 @@ function EditShowDetailsDialog({
               </>
             )}
 
+            {/* Venue — editable here as well as in the setup wizard, so a
+                show whose venue changes after entries open can be fixed
+                without support (Mandy, 28 Oct 2026). */}
+            <div className="space-y-1.5">
+              <Label htmlFor="edit-venue-select">Venue</Label>
+              <VenuePicker
+                organisationId={show.organisationId}
+                value={venueId}
+                onChange={setVenueId}
+                idPrefix="edit-venue"
+              />
+            </div>
             <div className="space-y-1.5">
               <Label htmlFor="edit-kc">RKC Licence Number</Label>
               <Input
