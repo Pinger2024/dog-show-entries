@@ -359,6 +359,14 @@ export async function runStartupMigrations() {
       ADD COLUMN IF NOT EXISTS catalogue_number_skip INTEGER[] NOT NULL DEFAULT '{}'::integer[];
   `);
 
+  // ── 2026-10-27: the original online closing date, so an extended show can
+  // say so publicly (RKC F(1)7.d for 2027 — extending the ONLINE close date
+  // no longer needs the RKC's permission; the postal one still does). Null on
+  // every existing show, which is correct: none has been extended. ──
+  await db.execute(sql`
+    ALTER TABLE shows ADD COLUMN IF NOT EXISTS entry_close_extended_from TIMESTAMPTZ;
+  `);
+
   // -- 2026-10-15: sundry kind (see migrateSundryKinds above) --
   const sundryFilled = await migrateSundryKinds(db);
   if (sundryFilled > 0) console.log(`[startup-migrations] sundry kind backfilled on ${sundryFilled} row(s)`);

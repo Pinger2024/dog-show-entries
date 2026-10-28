@@ -1,7 +1,7 @@
 import React from 'react';
 import { Text, View } from '@react-pdf/renderer';
-import { formatCurrency } from '@/lib/date-utils';
-import { getRkcScheduleProfile } from '@/lib/rkc-schedule-profile';
+import { formatCurrency, NFC_MIN_AGE_WEEKS } from '@/lib/date-utils';
+import { getRkcScheduleProfile, type RkcRegulationYear } from '@/lib/rkc-schedule-profile';
 import { RKC_JUDGES_WELFARE_STATEMENT } from '@/lib/rkc-statements';
 import type { ScheduleShowInfo } from './types';
 import { C, formatTime, s } from './styles';
@@ -24,13 +24,20 @@ export function RkcPostalEntryInstructions({ show }: { show: ScheduleShowInfo })
     showType: show.showType,
     showScope: show.showScope,
     judgedOnGroupSystem: show.scheduleData?.judgedOnGroupSystem,
+    startDate: show.date,
   });
   const puppyAge = profile.minimumPuppyAgeMonths === 4 ? '4' : '6';
+  // F(1)8.e as amended for 2027: the proof-of-postage sentence goes, and the
+  // responsibility for an entry having arrived sits with the exhibitor, who is
+  // advised to enclose an SAE if they want it acknowledged.
+  const receiptAdvice = profile.regulationYear >= 2027
+    ? 'Exhibitors who require acknowledgement of receipt are advised to include a stamped, self-addressed envelope with their entry.'
+    : 'In case of dispute proof of postage of such applications may be required by The Royal Kennel Club.';
 
   return (
     <Text style={{ fontFamily: 'Times', fontSize: 6.2, lineHeight: 1.35, color: C.textMedium, marginTop: 4 }}>
       <Text style={{ fontWeight: 'bold' }}>INSTRUCTIONS: </Text>
-      This form must be used by one person only (or partnership). Writing MUST BE IN INK OR INDELIBLE PENCIL. Use one line only for each dog. The name of the dog and all the details as recorded with The Royal Kennel Club must be given on this entry form. If an error is made the dog may be disqualified by the Committee of The Royal Kennel Club. All dogs must be REGISTERED at The Royal Kennel Club in the name of the exhibitor. If the registration or transfer of ownership has not been confirmed it must be applied for before the closing date of entries. In case of dispute proof of postage of such applications may be required by The Royal Kennel Club. Puppies under {puppyAge} months of age on the first day of the Show cannot be entered for competition. On no account will entries be accepted without fees. If a dog is in the process of Registration or Transfer at the time entry is made, add the letters NAF or TAF as appropriate after its name. NAF means Name Applied For; TAF means Transfer Applied For. Please put classes in numerical order and USE BLOCK CAPITALS throughout when completing this entry form. The Royal Kennel Club Authority to Compete number (for dogs registered and resident outside the UK) must be stated or the entry will be returned. PLEASE CHECK ALL DETAILS BEFORE POSTING. Send completed postal entries and fees to: {show.secretaryName || 'Show Secretary'}, {show.secretaryAddress || 'the secretary address shown in the schedule'}.
+      This form must be used by one person only (or partnership). Writing MUST BE IN INK OR INDELIBLE PENCIL. Use one line only for each dog. The name of the dog and all the details as recorded with The Royal Kennel Club must be given on this entry form. If an error is made the dog may be disqualified by the Committee of The Royal Kennel Club. All dogs must be REGISTERED at The Royal Kennel Club in the name of the exhibitor. If the registration or transfer of ownership has not been confirmed it must be applied for before the closing date of entries. {receiptAdvice} Puppies under {puppyAge} months of age on the first day of the Show cannot be entered for competition. On no account will entries be accepted without fees. If a dog is in the process of Registration or Transfer at the time entry is made, add the letters NAF or TAF as appropriate after its name. NAF means Name Applied For; TAF means Transfer Applied For. Please put classes in numerical order and USE BLOCK CAPITALS throughout when completing this entry form. The Royal Kennel Club Authority to Compete number (for dogs registered and resident outside the UK) must be stated or the entry will be returned. PLEASE CHECK ALL DETAILS BEFORE POSTING. Send completed postal entries and fees to: {show.secretaryName || 'Show Secretary'}, {show.secretaryAddress || 'the secretary address shown in the schedule'}.
     </Text>
   );
 }
@@ -49,14 +56,132 @@ export function RkcJudgesWelfareCommitment() {
   );
 }
 
-function BestPuppyRule({ multiBreed, groupSystem }: { multiBreed: boolean; groupSystem: boolean }) {
+/**
+ * Who may lodge an objection — RKC Regulation F(B)5, which the RKC requires to
+ * be printed in the schedule or on the back of the entry form. ONE owner: both
+ * schedule renderers print this same rule, and 2027 rewords it, so it lives
+ * here rather than being hand-mirrored in each.
+ *
+ * 2027 (F(B)5 and F(1)28.c.(2) as amended): the restriction to an owner or
+ * handler of a dog in the same breed or class becomes explicit ("only if"),
+ * closing the reading that anyone not under suspension could object.
+ */
+export function rkcObjectionEligibilityRule(regulationYear: RkcRegulationYear): string {
+  const opening = regulationYear >= 2027
+    ? 'Any individual has the right to lodge an objection to a dog, only if he/she is the owner or handler of a dog competing in the same breed or class. An objection may also, however, be lodged by an official of the Show or by anyone so deputed by the Royal Kennel Club.'
+    : 'An individual has the right to lodge an objection to a dog if he/she is the owner or handler of a dog competing in the same breed or class. An objection may however, be lodged by an official of the Show or by anyone so deputed by the Royal Kennel Club.';
+  return `${opening} It will be the responsibility of the individual who lodges the objection or the official (as appropriate) to substantiate the grounds for the objection. The Royal Kennel Club will substantiate the grounds for an objection made on its behalf.`;
+}
+
+/**
+ * The Best Veteran in Show eligibility sentence a club gets when it hasn't
+ * written its own (`scheduleData.bestVeteranInShowEligibility`).
+ *
+ * F(1)27 as amended for 2027 standardises this and — at breed club shows, our
+ * whole product today — widens the pool: a Best Veteran is declared from ANY
+ * veteran entered in ANY breed class, not just from the Veteran classes. The
+ * regulation also finally puts a number on veteran age: 7 years on the first
+ * day. The awards engine (`lib/top-awards.ts`) still infers the veteran band
+ * from class names; that change is held pending Mandy's confirmation.
+ */
+export function defaultBestVeteranEligibility({
+  multiBreed,
+  showType,
+  regulationYear,
+}: {
+  multiBreed: boolean;
+  showType: string;
+  regulationYear: RkcRegulationYear;
+}): string {
+  if (regulationYear < 2027) {
+    return 'Eligible dogs are those declared Best Veteran in their breed, or Best Veteran of Sex where applicable.';
+  }
+  const age = 'A Veteran is a dog of 7 years or more on the first day of the show.';
+  if (!multiBreed) {
+    return `${age} A Best Veteran is declared from any Veterans entered in any breed classes.`;
+  }
+  if (showType === 'championship') {
+    return `${age} Best Veteran in Show must be selected from the Best Veteran in Group winners.`;
+  }
+  return `${age} The Best Veteran in Show is the exhibit which has been declared Best from the Any Variety Veteran classes scheduled.`;
+}
+
+/** The age band, unchanged by the 2027 amendment and so shared by both years. */
+const BABY_PUPPY_AGE_SENTENCE =
+  'A Baby Puppy is a dog of four and less than six calendar months of age on the first day of the show.';
+
+/**
+ * F(1)26.f's lettered clauses for 2027, verbatim and in the RKC's own order.
+ * Declared as the three clauses they are rather than run into one string, so
+ * the lettering cannot drift out of step with the regulation it copies.
+ */
+const BABY_PUPPY_2027_CLAUSES: readonly string[] = [
+  '(a) Baby Puppy classes may be scheduled at any breed club show.',
+  '(b) Any Variety Baby Puppy classes may be scheduled at any breed club show.',
+  '(c) Best Baby Puppy in Breed may be declared in each breed from the dogs entered in the Baby Puppy breed classes. There must be no progression to further competition and Baby Puppies must not be entered in any other classes at a show.',
+];
+
+/**
+ * F(1)26.f as amended for 2027: Any Variety Baby Puppy classes are named,
+ * Best Baby Puppy in Breed is declared per breed from the Baby Puppy BREED
+ * classes, and — the substantive change — a baby puppy may not be entered in
+ * any other class at the show.
+ *
+ * **Laid out as the RKC lay it out** — a lead sentence, then lettered (a), (b)
+ * and (c) one per line. Mandy, 27 Oct 2026, after reading the run-on version
+ * on the practice site: *"yes I would lay it out the exact same as RKC have
+ * laid it out"*. She had queried the paragraph as self-contradictory, and she
+ * was reading it correctly: (b) permits an Any Variety Baby Puppy class at a
+ * breed club show while (c) bars a baby puppy from "any other classes". The
+ * contradiction is the regulation's own, resolved by the amendment's own title
+ * — "Amendment to ensure Baby Puppies should only enter Baby Puppy classes" —
+ * which we do not print. The lettering is what makes that legible at a glance
+ * on the page, so this is the RKC's layout restored, not wording of ours.
+ *
+ * 2026 is deliberately untouched and stays one paragraph: the lettered clauses
+ * arrived with the 2027 amendment, and every 2026 baseline must stay byte-
+ * identical (see research/RKC-2027-CHANGES-2026-10-26.md).
+ */
+export function babyPuppyRule(regulationYear: RkcRegulationYear): string {
+  if (regulationYear >= 2027) {
+    return [BABY_PUPPY_AGE_SENTENCE, ...BABY_PUPPY_2027_CLAUSES].join('\n');
+  }
+  return `${BABY_PUPPY_AGE_SENTENCE} Baby Puppy classes may be scheduled at any breed Club show. Best Baby Puppy in Breed may be declared from the dogs entered in the Baby Puppy class. There must be no progression to further competitions.`;
+}
+
+/**
+ * The two printed Not For Competition sentences — the formal schedule rule
+ * (F(1)18) and the friendly summary card — both of which quote the minimum
+ * age. ONE owner for the printed text, reading {@link NFC_MIN_AGE_WEEKS} so
+ * the schedule can never disagree with the gate that actually refuses the
+ * entry (`isOldEnoughForNfc`).
+ *
+ * Why this exists: the age was a constant in `date-utils.ts` but a
+ * hand-typed "12 weeks" in three printed strings — rkc-rules.tsx (this
+ * rule), show-schedule.tsx and show-schedule-multibreed.tsx (the summary,
+ * byte-identical in both). Found 2026-10-27 while checking our rendered 2027
+ * schedule against the RKC's specimens, which print "3 calendar months" for
+ * the same rule: if that figure ever has to move, it must move in one place.
+ */
+export function nfcScheduleRule(accepted: boolean): string {
+  if (!accepted) return 'Not for Competition entries will not be accepted.';
+  return `Not for Competition entries will be accepted. Details of each dog so entered must be recorded on the entry form and must be Royal Kennel Club registered. Dogs must be at least ${NFC_MIN_AGE_WEEKS} weeks of age on the first day of the show.`;
+}
+
+/** The exhibitor-facing summary card version of {@link nfcScheduleRule}. */
+export function nfcSummaryText(accepted: boolean): string {
+  if (!accepted) return 'Not For Competition entries are not accepted at this show.';
+  return `Not For Competition entries are accepted. NFC dogs must be registered with the Royal Kennel Club and aged ${NFC_MIN_AGE_WEEKS} weeks or over.`;
+}
+
+function BestPuppyRule({ multiBreed, groupSystem, regulationYear }: { multiBreed: boolean; groupSystem: boolean; regulationYear: RkcRegulationYear }) {
   if (!multiBreed) {
     return (
       <Text style={s.ruleText}>
         <Text style={s.ruleNumber}>10.</Text>{' '}
         <Text style={s.ruleTextBold}>Best Puppy in Show:</Text>{' '}
         Where a Best Puppy in Show competition is scheduled the Best Puppy in Show is a puppy which has competed and is unbeaten by any other puppy exhibited at the show. A puppy is a dog of six and not exceeding twelve calendar months of age on the first day of the show.
-        {'\n'}A Baby Puppy is a dog of four and less than six calendar months of age on the first day of the show. Baby Puppy classes may be scheduled at any breed Club show. Best Baby Puppy in Breed may be declared from the dogs entered in the Baby Puppy class. There must be no progression to further competitions.
+        {'\n'}{babyPuppyRule(regulationYear)}
       </Text>
     );
   }
@@ -101,6 +226,7 @@ export function RkcNumberedRules({ show, multiBreed }: { show: ScheduleShowInfo;
     showType: show.showType,
     showScope: show.showScope,
     judgedOnGroupSystem: sd?.judgedOnGroupSystem,
+    startDate: show.date,
   });
 
   return (
@@ -134,12 +260,12 @@ export function RkcNumberedRules({ show, multiBreed }: { show: ScheduleShowInfo;
       <Rule num="7">The Committee reserves to itself the right to refuse entries.</Rule>
       <Rule num="8">Puppies under {profile.minimumPuppyAgeMonths === 4 ? 'four' : 'six'} calendar months of age on the first day of the Show are not eligible for exhibition.</Rule>
       <Rule num="9">The mating of bitches within the precincts of the Show is forbidden.</Rule>
-      <BestPuppyRule multiBreed={multiBreed} groupSystem={profile.isGroupSystem} />
+      <BestPuppyRule multiBreed={multiBreed} groupSystem={profile.isGroupSystem} regulationYear={profile.regulationYear} />
       <BestInShowRule multiBreed={multiBreed} groupSystem={profile.isGroupSystem} />
       {sd?.hasBestVeteranInShow && (
         <Text style={s.ruleText}>
           <Text style={s.ruleTextBold}>Best Veteran in Show:</Text>{' '}
-          {sd.bestVeteranInShowEligibility?.trim() || 'Eligible dogs are those declared Best Veteran in their breed, or Best Veteran of Sex where applicable.'}
+          {sd.bestVeteranInShowEligibility?.trim() || defaultBestVeteranEligibility({ multiBreed, showType: show.showType, regulationYear: profile.regulationYear })}
         </Text>
       )}
       <Rule num="12">Exhibits will not be admitted to Group or Best in Show competition after a period of ten minutes has elapsed since the announcement that exhibits are required for judging, unless they have been unavoidably delayed by previous judging not being completed on time, and then only with the special permission of the Show Management.</Rule>
@@ -151,9 +277,7 @@ export function RkcNumberedRules({ show, multiBreed }: { show: ScheduleShowInfo;
       <Text style={s.ruleText}>
         <Text style={s.ruleNumber}>18.</Text>{' '}
         <Text style={s.ruleTextBold}>Not for Competition:</Text>{' '}
-        {sd?.acceptsNfc === false
-          ? 'Not for Competition entries will not be accepted.'
-          : 'Not for Competition entries will be accepted. Details of each dog so entered must be recorded on the entry form and must be Royal Kennel Club registered. Dogs must be at least 12 weeks of age on the first day of the show.'}
+        {nfcScheduleRule(sd?.acceptsNfc !== false)}
       </Text>
       <Rule num="19">No modifications will be made to the schedule except by permission of the Board of the Royal Kennel Club, which will be followed by advertisement in the Canine press wherever possible.</Rule>
       <Rule num="20">An exhibitor or competitor should ensure that contact details for any handler are available and must be provided upon request in any investigation of a breach of this regulation by such handler.</Rule>

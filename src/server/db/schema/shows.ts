@@ -165,6 +165,12 @@ export const shows = pgTable(
     endTime: text('end_time'),
     entriesOpenDate: timestamp('entries_open_date', { withTimezone: true }),
     entryCloseDate: timestamp('entry_close_date', { withTimezone: true }),
+    /** The ORIGINAL online closing date, kept from the moment a club first
+     *  extends it (RKC F(1)7.d, 2027: extending the online close date no
+     *  longer needs permission). Null = never extended. Set, kept and
+     *  cleared by `resolveEntryCloseExtension` in lib/entry-close-rules.ts —
+     *  nothing else writes it. */
+    entryCloseExtendedFrom: timestamp('entry_close_extended_from', { withTimezone: true }),
     postalCloseDate: timestamp('postal_close_date', { withTimezone: true }),
     status: showStatusEnum('status').notNull().default('draft'),
     kcLicenceNo: text('kc_licence_no'),

@@ -204,7 +204,7 @@ export function getCompetitionAgeError(params: {
   const hasNonAgeClass = classes.some((c) => !isAgeRestricted(c));
   if ((hasNonAgeClass || classes.length === 0) && ageMonths < 6) {
     if (ageMonths < 4) {
-      return `${dogName} will only be ${ageMonths} months old on show day. Dogs must be at least 6 months old to enter competition classes, or at least 12 weeks old for Not For Competition (NFC) entries.`;
+      return `${dogName} will only be ${ageMonths} months old on show day. Dogs must be at least 6 months old to enter competition classes, or at least ${NFC_MIN_AGE_WEEKS} weeks old for Not For Competition (NFC) entries.`;
     }
     return `${dogName} will only be ${ageMonths} months old on show day. Dogs must be at least 6 months old for competition classes. You can enter Not For Competition (NFC) instead.`;
   }
@@ -294,6 +294,42 @@ export function ageInCompletedMonths(dob: string | Date, onDate: string | Date):
     (on.getMonth() - born.getMonth()) -
     (on.getDate() < born.getDate() ? 1 : 0)
   );
+}
+
+/**
+ * RKC: "A Veteran is a dog of 7 years or more on the first day of the show."
+ * Eighty-four COMPLETED months — the same figure prod already stores on the
+ * `Veteran` class definition row (`minAgeMonths`) and the same one
+ * `dogs.getTitleProgress` gates the Veteran Warrant on.
+ *
+ * ONE owner for the number (CLAUDE.md "One owner per rule"): it was written
+ * out as a bare `84` in the title-progress router, the class-definition seed
+ * and the test-data generator, with nothing tying them together.
+ */
+export const VETERAN_MIN_AGE_MONTHS = 84;
+
+/**
+ * Is this dog a Veteran on the show's first day?
+ *
+ * THE single source for the veteran age band, and the sibling of
+ * `isPuppyOnShowDate` in `lib/top-awards.ts` (which stays there because it
+ * grew up inside the award engine; this one lives here because the Veteran
+ * Warrant gate and the class-definition seed need it too, and neither has
+ * any business importing the award engine).
+ *
+ * Built on {@link ageInCompletedMonths} deliberately, so the award engine's
+ * idea of a veteran cannot drift from `dogs.getTitleProgress`'s: a dog born
+ * exactly 84 calendar months before show day is a veteran in both.
+ *
+ * Unknown or unparseable DOB returns false — callers fall back to their own
+ * class-name inference rather than silently widening who counts as a veteran.
+ */
+export function isVeteranOnShowDate(dob: string | null | undefined, showDate: string | Date): boolean {
+  if (!dob) return false;
+  const born = new Date(dob);
+  const on = typeof showDate === 'string' ? new Date(showDate) : showDate;
+  if (Number.isNaN(born.getTime()) || Number.isNaN(on.getTime())) return false;
+  return ageInCompletedMonths(born, on) >= VETERAN_MIN_AGE_MONTHS;
 }
 
 /**

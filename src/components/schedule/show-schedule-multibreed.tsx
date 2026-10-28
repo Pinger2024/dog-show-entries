@@ -24,9 +24,10 @@ import { SectionBand, InfoCard, ImportantShowNotices, GoldRule, Rule, TwoColSect
 import { sortOfficers } from './shared/officers';
 import { buildEntryFeeGroups } from './shared/entry-fee-groups';
 import { AdvertPage, selectAdverts } from './shared/advert-page';
-import { RkcJudgesWelfareCommitment, RkcNumberedRules, RkcPostalEntryInstructions } from './shared/rkc-rules';
+import { RkcJudgesWelfareCommitment, RkcNumberedRules, RkcPostalEntryInstructions, nfcSummaryText, rkcObjectionEligibilityRule } from './shared/rkc-rules';
 import type { ScheduleAdvert } from './shared/types';
 import { getRkcScheduleProfile } from '@/lib/rkc-schedule-profile';
+import { entryDeclaration } from '@/lib/rkc-entry-declaration';
 import { isRkcJudgesWelfareStatement } from '@/lib/rkc-statements';
 import { what3wordsAddress } from '@/lib/what3words';
 
@@ -63,6 +64,7 @@ export function ShowScheduleMultibreed({
     showType: show.showType,
     showScope: show.showScope,
     judgedOnGroupSystem: show.scheduleData?.judgedOnGroupSystem,
+    startDate: show.date,
   });
   const showDate = show.endDate && show.endDate !== show.date
     ? `${formatDate(show.date)} — ${formatDate(show.endDate)}`
@@ -458,9 +460,7 @@ export function ShowScheduleMultibreed({
         {/* NFC */}
         <InfoCard title="Not For Competition">
           <Text style={s.infoText}>
-            {sd?.acceptsNfc !== false
-              ? 'Not For Competition entries are accepted. NFC dogs must be registered with the Royal Kennel Club and aged 12 weeks or over.'
-              : 'Not For Competition entries are not accepted at this show.'}
+            {nfcSummaryText(sd?.acceptsNfc !== false)}
           </Text>
         </InfoCard>
 
@@ -1187,7 +1187,7 @@ export function ShowScheduleMultibreed({
         <Rule num="2">(a) No substance which alters the natural colour, texture or body of the coat may be present in the DOG&apos;s coat for any purpose at any time during the show. No substance which alters the natural colour of any external part of the dog may be present on the dog for any purpose at any time during the show. (b) Any other substance (other than water) which may be used in preparation of the dog for exhibition must not be allowed to remain in the coat or on any other part of the dog at the time of exhibition.</Rule>
         <Rule num="3">No act or operation which alters the natural conformation of a dog or any part thereof may be performed except:- (a) Operations certified to the satisfaction of the Board. (b) The removal of dew-claws of any breed. (c) Operations to prevent breeding provided that such operations are notified to the Royal Kennel Club before neutered dogs are shown. Nor must anything be done calculated in the opinion of the General Committee to deceive.</Rule>
         <Rule num="4">The Board without previous notice may order an examination of any dog or dogs at any Show. Any examination thus ordered will be made by a person having executive authority who shall have a written directive from the Royal Kennel Club in their possession. Samples may be taken for further examination and analysis.</Rule>
-        <Rule num="5">An individual has the right to lodge an objection to a dog if he/she is the owner or handler of a dog competing in the same breed or class. An objection may however, be lodged by an official of the Show or by anyone so deputed by the Royal Kennel Club. It will be the responsibility of the individual who lodges the objection or the official (as appropriate) to substantiate the grounds for the objection. The Royal Kennel Club will substantiate the grounds for an objection made on its behalf.</Rule>
+        <Rule num="5">{rkcObjectionEligibilityRule(rkcProfile.regulationYear)}</Rule>
         <Rule num="6">Any objection by an individual related to an infringement of these regulations must be made in writing to the Show Secretary or his/her office before the close of the Show and the individual must produce evidence of identity at the time of lodging the complaint.</Rule>
         <Rule num="7">The chalking, powdering or spraying (with the exception of water) of exhibits within the precincts of the show is prohibited.</Rule>
 
@@ -1425,7 +1425,7 @@ export function ShowScheduleMultibreed({
               DECLARATION
             </Text>
             <Text style={{ fontFamily: 'Times', fontSize: 6.5, lineHeight: 1.5, color: C.textMedium }}>
-              I/We agree to submit to and be bound by Royal Kennel Club Limited Rules &amp; Regulations in their present form or as they may be amended from time to time in relation to all canine matters with which the Royal Kennel Club is concerned and that this entry is made upon the basis that all current single or joint registered owners of this dog(s) have authorised/consented to this entry. I/We also undertake to abide by the Regulations of this Show and not to bring to the Show any dog which has contracted or been knowingly exposed to any infectious or contagious disease during the 21 days prior to the Show, or which is suffering from a visible condition which adversely affects its health or welfare or to bring any dog which has been prepared for exhibition contrary to Royal Kennel Club Regulations for the Preparation of Dogs for Exhibition F (Annex B). I/We agree without reservation that any Veterinary Surgeon operating on any of my/our dogs in such a way that the operation alters the natural conformation of the dog or part thereof may report such operations to the Royal Kennel Club. I/We declare that where any alteration has been made to the natural conformation of the dog(s) the relevant permission to show has been granted by the Royal Kennel Club. I/We further declare that I believe to the best of my knowledge that the dogs are not liable to disqualification under Royal Kennel Club Show Regulations. I/We also confirm that I/we understand the eligibility of the classes entered.
+              {entryDeclaration({ startDate: show.date })}
             </Text>
           </View>
 

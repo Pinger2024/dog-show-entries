@@ -38,6 +38,7 @@ import {
 import { differenceInMonths, format, parseISO } from 'date-fns';
 import { toast } from 'sonner';
 import { isWithinAgeRange, getAgeEligibilityDetail, handlerAgeYearsOnDate, formatCurrency, isAgeRestrictedClass, isOldEnoughForNfc, NFC_MIN_AGE_WEEKS } from '@/lib/date-utils';
+import { entryDeclaration } from '@/lib/rkc-entry-declaration';
 import { svAgeClassAllowed, hasWorkingTitle } from '@/lib/sv-entry-readiness';
 import { entryRequirements } from '@/lib/entry-requirements';
 import { displayShowTypeLabel } from '@/lib/show-types';
@@ -2581,38 +2582,10 @@ export default function EnterShowPage() {
               {show?.showRuleset === 'wusv' ? 'GSDL-BRG Declaration' : 'RKC Declaration'}
             </h3>
             <div className="max-h-40 overflow-y-auto rounded-[10px] border border-se-line bg-se-paper2 p-3 text-pretty text-xs leading-relaxed text-se-ink3">
-              {show?.showRuleset === 'wusv' ? (
-                <>
-                  I/We agree to abide by the GSDL-British Regional Group Rules &amp; Regulations (based on WUSV/SV Rules &amp; Regulations) for this Regional Event. I/We confirm that the information provided about the dog is accurate, and that the dog meets the eligibility requirements for the classes entered — including any health test disclosure, DNA recording, Koerung or working title requirements that apply to the class. I/We undertake not to bring to the Event any dog which has contracted or been knowingly exposed to any infectious or contagious disease during the 21 days prior to the Event, or which is suffering from a visible condition that adversely affects its health or welfare. I/We acknowledge that exhibitors are obligated to make true statements about their dog(s) and to show sportsmanlike conduct; any attempt at deception may result in disqualification and disciplinary action by the GSDL-BRG.
-                </>
-              ) : (
-                <>
-                  I/We agree to submit to and be bound by Royal Kennel Club Limited
-                  Rules &amp; Regulations in their present form or as they may be
-                  amended from time to time in relation to all canine matters with
-                  which the Royal Kennel Club is concerned and that this entry is
-                  made upon the basis that all current single or joint registered
-                  owners of this dog(s) have authorised/consented to this entry.
-                  I/We also undertake to abide by the Regulations of this Show and
-                  not to bring to the Show any dog which has contracted or been
-                  knowingly exposed to any infectious or contagious disease during
-                  the 21 days prior to the Show, or which is suffering from a
-                  visible condition which adversely affects its health or welfare or
-                  to bring any dog which has been prepared for exhibition contrary
-                  to Royal Kennel Club Regulations for the Preparation of Dogs for
-                  Exhibition F (Annex B). I/We agree without reservation that any
-                  Veterinary Surgeon operating on any of my/our dogs in such a way
-                  that the operation alters the natural conformation of the dog or
-                  part thereof may report such operations to the Royal Kennel Club.
-                  I/We declare that where any alteration has been made to the
-                  natural conformation of the dog(s) the relevant permission to show
-                  has been granted by the Royal Kennel Club. I/We further declare
-                  that I believe to the best of my knowledge that the dogs are not
-                  liable to disqualification under Royal Kennel Club Show
-                  Regulations. I/We also confirm that I/we understand the
-                  eligibility of the classes entered.
-                </>
-              )}
+              {entryDeclaration({
+                isRegional: show?.showRuleset === 'wusv',
+                startDate: show?.startDate,
+              })}
             </div>
             <label className="flex cursor-pointer items-start gap-3">
               <Checkbox

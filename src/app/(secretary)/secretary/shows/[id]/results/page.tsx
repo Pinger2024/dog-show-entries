@@ -282,7 +282,8 @@ function BestAwardsSection({
   const utils = trpc.useUtils();
   const isChampionship = showType === 'championship';
 
-  // Derive puppy/veteran class winner dogIds from live results for filtering.
+  // Derive puppy class winner dogIds from live results for filtering. (The
+  // veteran band is not derived here — it comes from buildPlacementIndex.)
   // Prefers AGE on the show's start date when a result's DOB is known — the
   // RKC puppy band ("six and not exceeding twelve calendar months", see
   // isPuppyOnShowDate) is authoritative regardless of which class the dog

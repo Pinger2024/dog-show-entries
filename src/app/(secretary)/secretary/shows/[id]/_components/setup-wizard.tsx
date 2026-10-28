@@ -28,7 +28,7 @@ import {
   checkCloseInput,
   latestPermissibleCloseDateInputValue,
 } from '@/lib/entry-close-rules';
-import { EntryCloseHint } from '@/components/shows/entry-close-hint';
+import { EntryCloseHint, CloseDateRuleHint } from '@/components/shows/entry-close-hint';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -915,6 +915,7 @@ function StepDetails({
                 }
               />
             </div>
+            <CloseDateRuleHint field="entry close date" startDate={show.startDate} showRuleset={show.showRuleset} />
           </div>
           {show.acceptsPostalEntries && (
             <div className="space-y-1.5">
@@ -951,6 +952,7 @@ function StepDetails({
                   }
                 />
               </div>
+              <CloseDateRuleHint field="postal close date" startDate={show.startDate} showRuleset={show.showRuleset} />
             </div>
           )}
         </div>

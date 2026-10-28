@@ -35,8 +35,9 @@ import {
   latestPermissibleCloseDate,
   latestPermissibleCloseDateInputValue,
   entryCloseAdjustedMessage,
+  type CloseDateField,
 } from '@/lib/entry-close-rules';
-import { EntryCloseHint } from '@/components/shows/entry-close-hint';
+import { EntryCloseHint, CloseDateRuleHint } from '@/components/shows/entry-close-hint';
 import { displayShowTypeLabel } from '@/lib/show-types';
 import { cn } from '@/lib/utils';
 import { Label } from '@/components/ui/label';
@@ -460,7 +461,7 @@ function adjustCloseDateForFloor(
   closeDate: string,
   setCloseDate: (value: string) => void,
   newStartDate: string,
-  field: 'entry close date' | 'postal close date',
+  field: CloseDateField,
 ) {
   if (!newStartDate) return;
   const check = checkCloseInput(closeDate, newStartDate, field);
@@ -963,6 +964,7 @@ function EditShowDetailsDialog({
                     }
                   />
                 </div>
+                <CloseDateRuleHint field="entry close date" startDate={startDate} showRuleset={show.showRuleset} />
               </div>
               <div className="space-y-1.5">
                 <Label htmlFor="edit-postal-close">Postal Close Date</Label>
@@ -997,6 +999,7 @@ function EditShowDetailsDialog({
                     }
                   />
                 </div>
+                <CloseDateRuleHint field="postal close date" startDate={startDate} showRuleset={show.showRuleset} />
               </div>
             </div>
             {isWusv ? (

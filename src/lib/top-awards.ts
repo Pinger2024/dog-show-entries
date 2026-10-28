@@ -11,6 +11,7 @@
  * results and dog profiles), plus the candidate-filtering metadata for that
  * award (which sex / puppy / veteran / long-coat winners are eligible).
  */
+import { isVeteranOnShowDate } from '@/lib/date-utils';
 import { type AchievementType } from './placements';
 import { buildBestAwards } from './best-awards';
 
@@ -365,6 +366,9 @@ function addCalendarMonths(date: Date, months: number): Date {
  * Unknown DOB (or unparseable date) returns false — callers fall back to
  * their own class-name inference rather than silently widening who counts
  * as a puppy.
+ *
+ * Its sibling for the other end of the age range is `isVeteranOnShowDate`
+ * in `lib/date-utils.ts` — same contract, same fallback.
  */
 export function isPuppyOnShowDate(dob: string | null | undefined, showDate: string): boolean {
   if (!dob) return false;
@@ -420,9 +424,18 @@ export type IndexClass = {
  * previous class-name inference — "puppy" (but not "baby" puppy) → puppy band
  * — never silently widening who counts as a puppy.
  *
- * Veteran-band membership stays class-name based ("veteran" in the class
- * name) — awaiting Mandy on an age threshold, out of scope here. Baby-puppy
- * stays class-name based and deliberately disjoint from the puppy band.
+ * Veteran-band membership works the SAME way, as of 2026-10-27: age on the
+ * show's first day decides it (`isVeteranOnShowDate` — 7 years or more,
+ * RKC F(1)27), falling back to the class name when DOB is missing. This is
+ * what the 2027 regulation spells out — "a Best Veteran is declared from any
+ * Veterans entered in any breed classes" — and what Mandy confirmed happens
+ * in the ring on 26 Oct 2026: a 7-year-old running in Open is a veteran, and
+ * only another VETERAN beating it puts it out of the running. That second
+ * half needs no code: `eligibleCandidates` filters to the band first, so the
+ * beaten comparison that follows is veteran-vs-veteran by construction.
+ *
+ * Baby-puppy stays class-name based and deliberately disjoint from the puppy
+ * band.
  */
 export function buildPlacementIndex(classes: IndexClass[], showDate?: string): PlacementIndex {
   const placements = new Map<string, DogPlacements>();
@@ -435,15 +448,18 @@ export function buildPlacementIndex(classes: IndexClass[], showDate?: string): P
     const n = cls.className.toLowerCase();
     const isBabyPuppy = n.includes('puppy') && n.includes('baby');
     const isPuppyClassName = n.includes('puppy') && !isBabyPuppy;
-    const isVeteran = n.includes('veteran');
+    const isVeteranClassName = n.includes('veteran');
     for (const r of cls.results) {
       if (!r.dogId) continue;
       const dob = r.dogDateOfBirth ?? null;
       const isPuppy = dob != null && showDate != null
         ? isPuppyOnShowDate(dob, showDate)
         : isPuppyClassName;
+      const veteran = dob != null && showDate != null
+        ? isVeteranOnShowDate(dob, showDate)
+        : isVeteranClassName;
       if (isPuppy) inPuppyClass.add(r.dogId);
-      if (isVeteran) inVeteranClass.add(r.dogId);
+      if (veteran) inVeteranClass.add(r.dogId);
       if (isBabyPuppy) inBabyPuppyClass.add(r.dogId);
       if (isYoungClass && r.placement === 1) wonYoungClass.add(r.dogId);
       if (r.placement != null) {

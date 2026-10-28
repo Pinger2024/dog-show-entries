@@ -2,6 +2,7 @@ import 'dotenv/config';
 import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
 import * as schema from './schema';
+import { VETERAN_MIN_AGE_MONTHS } from '@/lib/date-utils';
 
 const connectionString = process.env.DATABASE_URL!;
 const client = postgres(connectionString);
@@ -112,7 +113,7 @@ async function seed() {
       { name: 'Special Long Coat Yearling', type: 'age' as const, sortOrder: 45, minAgeMonths: 12, maxAgeMonths: 24, description: 'For Long Coat dogs aged 12-24 months' },
       { name: 'Special Long Coat Open', type: 'achievement' as const, sortOrder: 125, description: 'For Long Coat German Shepherd Dogs eligible for entry at the show. No restrictions.' },
       // Veteran — always last breed class within each sex
-      { name: 'Veteran', type: 'age' as const, sortOrder: 900, minAgeMonths: 84, description: 'For dogs of not less than 7 years of age on the first day of the show.' },
+      { name: 'Veteran', type: 'age' as const, sortOrder: 900, minAgeMonths: VETERAN_MIN_AGE_MONTHS, description: 'For dogs of not less than 7 years of age on the first day of the show.' },
       // Special
       { name: 'Good Citizen Dog Scheme', type: 'special' as const, sortOrder: 150, description: 'For dogs that have passed any level of the Royal Kennel Club Good Citizen Dog Scheme.' },
       { name: 'Special Beginners', type: 'special' as const, sortOrder: 140, description: 'For dogs whose owners/handlers have never won a CC or Reserve CC at Championship Shows.' },

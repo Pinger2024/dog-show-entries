@@ -42,6 +42,7 @@ import { ShareKitCard } from '@/components/show/share-kit';
 import { cn } from '@/lib/utils';
 import { captureReferralSource } from '@/lib/referral-source';
 import { effectiveShowStatus, showResultsHref, showResultsState } from '@/lib/show-status';
+import { entryCloseExtendedNotice } from '@/lib/entry-close-rules';
 import { what3wordsAddress, what3wordsUrl } from '@/lib/what3words';
 import { useCountdown } from '@/components/show-experience/use-countdown';
 import { useInView, useStuckReveal } from '@/components/show-experience/use-in-view';
@@ -628,6 +629,14 @@ export function ShowPreviewClient() {
   const entryCloseDateRaw = (show as { entryCloseDate?: string | null } | null | undefined)?.entryCloseDate;
   const entryCloseDate = entryCloseDateRaw ? new Date(entryCloseDateRaw) : null;
   const countdown = useCountdown(entryCloseDate);
+  // RKC F(1)7.d (2027): a club may extend its online closing date without the
+  // RKC's permission. Mandy, 26 Oct 2026 — say so here on the public page, and
+  // do NOT email people who have already entered. Wording owned by
+  // lib/entry-close-rules.ts so the two placements below cannot drift.
+  const extendedNotice = entryCloseExtendedNotice(
+    entryCloseDateRaw,
+    (show as { entryCloseExtendedFrom?: string | null } | null | undefined)?.entryCloseExtendedFrom,
+  );
 
   // Mobile section entrances (#6) — one useInView per lg:hidden section, kept
   // unconditional per Rules of Hooks even though the sections themselves are
@@ -863,6 +872,10 @@ export function ShowPreviewClient() {
             >
               <CountdownCells countdown={countdown} dark />
             </HoneyBanner>
+          )}
+
+          {isOpen && extendedNotice && (
+            <p className="mt-2 text-[13px] font-semibold leading-snug text-se-honey">{extendedNotice}</p>
           )}
         </div>
       </SEDarkPanel>
@@ -1163,6 +1176,11 @@ export function ShowPreviewClient() {
                   </div>
                   <CountdownCells countdown={countdown} dark />
                 </div>
+              )}
+              {isOpen && extendedNotice && (
+                <p className="bg-se-honey-soft px-[18px] py-2.5 text-[13px] font-semibold leading-snug text-se-honey-ink">
+                  {extendedNotice}
+                </p>
               )}
               <div className="p-4">
                 <div className="grid grid-cols-2 gap-2">

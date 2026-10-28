@@ -30,7 +30,7 @@ import { toPublicScheduleData } from '../public-show-fields';
 import { isUuid, generateShowSlug } from '@/lib/slugify';
 import { hasUserPurchasedCatalogue, isCatalogueReleasedToExhibitors } from '@/lib/catalogue-utils';
 import { ONLINE_CATALOGUE_ACCESS_KINDS } from '@/lib/sundry-kind';
-import { isCloseDateWithinFloor, entryCloseFloorMessage } from '@/lib/entry-close-rules';
+import { isCloseDateWithinFloor, entryCloseFloorMessage, resolveEntryCloseExtension } from '@/lib/entry-close-rules';
 import { DEFAULT_REGIONAL_FEE_TIERS } from '@/lib/regional-fee-calc';
 import type { RegionalFeeConfig } from '@/server/db/schema/shows';
 import { PUBLIC_SHOW_STATUSES } from '@/lib/public-show-statuses';
@@ -861,6 +861,10 @@ export const showsRouter = createTRPCRouter({
           organisationId: true,
           startDate: true,
           entryCloseDate: true,
+          // Needed by resolveEntryCloseExtension — without it a SECOND
+          // extension reads undefined and overwrites the club's original
+          // closing date with the one it is extending from this time.
+          entryCloseExtendedFrom: true,
           postalCloseDate: true,
           status: true,
         },
@@ -949,9 +953,18 @@ export const showsRouter = createTRPCRouter({
           : null;
       }
       if (entryCloseDate !== undefined) {
-        updateData.entryCloseDate = entryCloseDate
-          ? new Date(entryCloseDate)
-          : null;
+        const nextClose = entryCloseDate ? new Date(entryCloseDate) : null;
+        updateData.entryCloseDate = nextClose;
+        // RKC F(1)7.d (2027): a club may extend its ONLINE closing date
+        // without permission. Remember the date it started from so the show
+        // page can say "entries have been extended" — the rule for when that
+        // is set, kept and cleared lives in lib/entry-close-rules.ts, never
+        // here (Mandy, 26 Oct 2026: show it publicly, email nobody).
+        updateData.entryCloseExtendedFrom = resolveEntryCloseExtension({
+          storedClose: storedShow?.entryCloseDate,
+          nextClose,
+          storedExtendedFrom: storedShow?.entryCloseExtendedFrom,
+        });
       }
       if (postalCloseDate !== undefined) {
         updateData.postalCloseDate = postalCloseDate

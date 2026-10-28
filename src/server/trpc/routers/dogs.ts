@@ -15,7 +15,7 @@ import { deleteFromR2 } from '@/server/services/storage';
 import { searchKcDogs, fetchKcDogProfile, RkcUnavailableError } from '@/server/services/kc-lookup';
 import { isCcType, isRccType } from '@/lib/placements';
 import { effectiveCcType } from '@/lib/effective-achievement-type';
-import { isAgeEligibleOnShowDay, ageInCompletedMonths, todayInLondon } from '@/lib/date-utils';
+import { isAgeEligibleOnShowDay, ageInCompletedMonths, todayInLondon, VETERAN_MIN_AGE_MONTHS } from '@/lib/date-utils';
 import { pickRecommendedAgeClass, preferCoatDivision, type AgeClassOption } from '@/lib/class-recommendation';
 import { dogAccessCondition, dogRowGrantsAccess, userMayActOnDog } from '@/server/dog-access';
 import { findClearedPedigreeFields, pedigreeClearMessage } from '@/lib/dog-pedigree';
@@ -1444,7 +1444,7 @@ export const dogsRouter = createTRPCRouter({
       }
 
       // Pro-only: Veteran Warrant
-      if (isPro && ageMonths >= 84) {
+      if (isPro && ageMonths >= VETERAN_MIN_AGE_MONTHS) {
         // Dogs 7+ years old
         titleProgress.push({
           title: 'Veteran Warrant (VW)',
@@ -1470,7 +1470,7 @@ export const dogsRouter = createTRPCRouter({
           totalFirsts: firstPlaceWins.length,
           jwPoints,
           shcexPoints: isPro ? shcex.points : undefined,
-          veteranPoints: isPro && ageMonths >= 84 ? veteranPoints : undefined,
+          veteranPoints: isPro && ageMonths >= VETERAN_MIN_AGE_MONTHS ? veteranPoints : undefined,
           // Different judges who have given the dog a CC or a Reserve CC.
           uniqueJudges: isPro ? champion.alternative.judges : undefined,
         },

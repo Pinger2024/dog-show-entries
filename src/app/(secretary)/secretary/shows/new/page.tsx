@@ -45,7 +45,7 @@ import {
   checkCloseInput,
   latestPermissibleCloseDate,
 } from '@/lib/entry-close-rules';
-import { EntryCloseHint } from '@/components/shows/entry-close-hint';
+import { EntryCloseHint, CloseDateRuleHint } from '@/components/shows/entry-close-hint';
 import { CLASS_TEMPLATES, getRelevantTemplates } from '@/lib/class-templates';
 import { AllBreedClassSetup, type AllBreedClassData } from '@/components/shows/all-breed-class-setup';
 import { Button } from '@/components/ui/button';
@@ -1009,6 +1009,7 @@ export default function NewShowPage() {
                     {watchedStartDate && (
                       <>
                         <EntryCloseHint startDate={watchedStartDate} className="mt-1.5" />
+                        <CloseDateRuleHint field="entry close date" startDate={watchedStartDate} showRuleset={form.watch('showRuleset')} className="mt-1.5" />
                         <div className="mt-1.5 flex flex-wrap gap-1">
                           {[
                             { label: 'Latest allowed', date: latestCloseDate! },
@@ -1054,7 +1055,10 @@ export default function NewShowPage() {
                   <div>
                     <DatePickerField control={form.control} name="postalCloseDate" label="Postal Close Date" placeholder="Pick a date" disableBefore={watchedEntriesOpen ? parseLocalDate(watchedEntriesOpen) : undefined} disableAfter={latestCloseDate} />
                     {watchedStartDate && (
-                      <EntryCloseHint startDate={watchedStartDate} className="mt-1.5" />
+                      <>
+                        <EntryCloseHint startDate={watchedStartDate} className="mt-1.5" />
+                        <CloseDateRuleHint field="postal close date" startDate={watchedStartDate} showRuleset={form.watch('showRuleset')} className="mt-1.5" />
+                      </>
                     )}
                   </div>
                 )}

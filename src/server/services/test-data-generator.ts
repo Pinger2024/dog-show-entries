@@ -8,6 +8,7 @@
 import { db } from '@/server/db';
 import { eq, asc, sql, and, isNull, inArray } from 'drizzle-orm';
 import * as schema from '@/server/db/schema';
+import { VETERAN_MIN_AGE_MONTHS } from '@/lib/date-utils';
 
 // ── Realistic UK kennel prefixes and suffixes ──
 
@@ -264,7 +265,7 @@ function generateDateOfBirth(ageCategory: 'puppy' | 'yearling' | 'junior' | 'adu
     case 'yearling': monthsOld = randomInt(12, 23); break;
     case 'junior': monthsOld = randomInt(6, 17); break;
     case 'adult': monthsOld = randomInt(24, 72); break;
-    case 'veteran': monthsOld = randomInt(84, 132); break;
+    case 'veteran': monthsOld = randomInt(VETERAN_MIN_AGE_MONTHS, 132); break;
   }
   d.setMonth(d.getMonth() - monthsOld);
   d.setDate(randomInt(1, 28));
