@@ -67,6 +67,11 @@ describe('judge coverage — checklist agrees with the dashboard', () => {
     expect(coverage.coveredCount).toBeLessThan(coverage.totalCount);
     expect(checklist.judges_assigned).toBe(false);
     expect(checklist.judges_assigned).toBe(coverage.coveredCount === coverage.totalCount);
+
+    // The entries-open banner must say the same (28 Oct 2026: it used to
+    // count judges, so this show passed the banner and failed the tick).
+    const blockers = await caller.secretary.getPhaseBlockers({ showId: show.id });
+    expect(blockers.openEntriesBlockers.map((b) => b.key)).toContain('judge_coverage_incomplete');
   });
 
   it('(b) a properly covered show ticks judges_assigned true, agreeing with the dashboard', async () => {
@@ -91,6 +96,11 @@ describe('judge coverage — checklist agrees with the dashboard', () => {
     expect(coverage.coveredCount).toBe(coverage.totalCount);
     expect(checklist.judges_assigned).toBe(true);
     expect(checklist.judges_assigned).toBe(coverage.coveredCount === coverage.totalCount);
+
+    const blockers = await caller.secretary.getPhaseBlockers({ showId: show.id });
+    const keys = blockers.openEntriesBlockers.map((b) => b.key);
+    expect(keys).not.toContain('judge_coverage_incomplete');
+    expect(keys).not.toContain('no_judge');
   });
 
   it('(c) no assignments at all — both false', async () => {
