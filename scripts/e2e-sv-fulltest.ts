@@ -168,12 +168,19 @@ async function main() {
   // ── 1. SHOW CREATION via shows.create (real procedure) ─
   log('\n[1/7] Show creation via shows.create');
   const startDate = dateStr(45);
+  // A show must have a venue since 28 Oct 2026 (Mandy) — reuse the club's
+  // first venue, or add one for the run.
+  const existingVenues = await secCaller.secretary.listVenues({ organisationId: MIDLAND_REGIONAL_ORG_ID });
+  const venue =
+    existingVenues[0] ??
+    (await secCaller.secretary.createVenue({ organisationId: MIDLAND_REGIONAL_ORG_ID, name: 'E2E Test Venue' }));
   const created = await secCaller.shows.create({
     name: SHOW_NAME,
     showType: 'championship',
     showScope: 'single_breed',
     showRuleset: 'wusv',
     organisationId: MIDLAND_REGIONAL_ORG_ID,
+    venueId: venue.id,
     breedId: GSD_BREED_ID,
     startDate,
     endDate: startDate,
