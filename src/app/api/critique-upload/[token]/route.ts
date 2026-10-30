@@ -4,9 +4,7 @@ import { eq } from 'drizzle-orm';
 import { db } from '@/server/db';
 import { critiqueDocuments } from '@/server/db/schema';
 import { uploadToR2 } from '@/server/services/storage';
-import { parseCritiqueDocument } from '@/lib/critique-parse';
-import { matchCritiqueBlocks } from '@/lib/critique-match';
-import { loadShowClassRows, toClassList, toResultsGraph } from '@/server/services/critique-results-graph';
+import { readCritiqueDocument } from '@/server/services/critique-read';
 
 // Token-gated, NOT session-gated — deliberately the first upload route
 // authenticated purely by a magic-link credential (the judge never logs
@@ -109,12 +107,7 @@ export async function POST(
     );
   }
 
-  const rows = await loadShowClassRows(db, doc.showId);
-  const classList = toClassList(rows);
-  const resultsGraph = toResultsGraph(rows);
-
-  const parsed = parseCritiqueDocument(rawText, classList);
-  const matched = matchCritiqueBlocks(parsed, resultsGraph);
+  const { matched, counts } = await readCritiqueDocument(db, doc.showId, rawText);
 
   // Re-upload replaces rawText/parsedJson/originalFilename/storageKey
   // wholesale — status is left exactly as it was (invited or submitted).
@@ -122,18 +115,6 @@ export async function POST(
     .update(critiqueDocuments)
     .set({ rawText, parsedJson: matched, originalFilename, storageKey })
     .where(eq(critiqueDocuments.id, doc.id));
-
-  const critiqueBlocks = matched.blocks.filter((b) => b.kind === 'critique');
-  const counts = {
-    total: matched.blocks.length,
-    critiques: critiqueBlocks.length,
-    exact: critiqueBlocks.filter((b) => b.confidence === 'exact').length,
-    check: critiqueBlocks.filter((b) => b.confidence === 'check').length,
-    unmatched:
-      critiqueBlocks.filter((b) => b.confidence === 'unmatched').length +
-      matched.blocks.filter((b) => b.kind === 'unmatched').length,
-    hasOverview: matched.blocks.some((b) => b.kind === 'overview'),
-  };
 
   return NextResponse.json({ ok: true, counts });
 }

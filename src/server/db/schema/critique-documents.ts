@@ -35,6 +35,9 @@ export type CritiqueParsedBlock = {
   dogRaw: string | null;
   dogNameCleaned: string | null;
   pedigreeRaw: string | null;
+  /** The numbered layout's catalogue number (lib/critique-parse.ts). Absent
+   *  on documents read before 30 Oct 2026 — treat missing as null. */
+  catalogueNumberRaw?: string | null;
   critiqueText: string;
   matchedShowClassId: string | null;
   matchedEntryClassId: string | null;

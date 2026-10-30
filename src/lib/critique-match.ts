@@ -8,10 +8,14 @@
  * See research/DESIGN-judge-critique-upload-2026-07-31.md.
  */
 import type { ParsedBlock, ParsedCritiqueDocument } from './critique-parse';
+import { getPlacementLabel } from './placements';
 
 export type ResultsGraphEntry = {
   entryClassId: string;
   placement: number;
+  /** entries.catalogue_number — one number per dog per show, so a judge who
+   *  wrote "14." has identified the dog completely. null before numbering. */
+  catalogueNumber: string | null;
   registeredName: string;
   /** Non-empty when a steward already typed a critique on the day. */
   existingCritiqueText: string | null;
@@ -20,9 +24,22 @@ export type ResultsGraphEntry = {
 export type ResultsGraphShowClass = {
   showClassId: string;
   className: string;
-  sex: 'dog' | 'bitch';
+  /** null for a mixed, Junior Handling or Special Award class. */
+  sex: 'dog' | 'bitch' | null;
   entries: ResultsGraphEntry[];
 };
+
+/** How a class is named to the judge and the secretary in review —
+ *  "Limit Dog", "Veteran" — one wording for hints, cards and pickers. */
+export function critiqueClassLabel(className: string, sex: 'dog' | 'bitch' | null): string {
+  return sex === 'dog' ? `${className} Dog` : sex === 'bitch' ? `${className} Bitch` : className;
+}
+
+/** "14" and "014" are the same catalogue number; " 14 " too. */
+function sameCatalogueNumber(a: string | null | undefined, b: string | null | undefined): boolean {
+  if (!a || !b) return false;
+  return a.trim().replace(/^0+(?=\d)/, '') === b.trim().replace(/^0+(?=\d)/, '');
+}
 
 export type BlockConfidence = 'exact' | 'check' | 'unmatched';
 
@@ -95,6 +112,93 @@ export function namesMatch(a: string, b: string): boolean {
   return ta === tb;
 }
 
+type NumberMatch = {
+  entry: ResultsGraphEntry | null;
+  confidence: BlockConfidence;
+  hints: string[];
+};
+
+/**
+ * Matches a block the judge wrote by CATALOGUE NUMBER (the numbered layout,
+ * critique-parse.ts). The number is unique per show, so it decides the dog;
+ * the heading and the heading's bracketed placing order are checks on it:
+ *
+ *  - number placed under the heading's class → that dog;
+ *  - heading had no sex word and the parser guessed wrong ("Minor Puppy
+ *    (33-32)") → the sibling class of the same name, no fuss;
+ *  - number placed once, but not where the heading says → that dog, amber,
+ *    with a hint saying where it IS placed (a heading the judge left out,
+ *    or a slip of the pen — the secretary decides);
+ *  - number placed in two classes with nothing to choose between them, or
+ *    not placed at all → no match, with a hint saying so;
+ *  - the judge's bracketed order disagrees with the steward's placing →
+ *    amber, with both in the hint. Never resolved silently: the steward's
+ *    record and the judge's document are two sources of equal standing.
+ */
+function matchByCatalogueNumber(
+  block: ParsedBlock,
+  resultsGraph: ResultsGraphShowClass[],
+  headingClass: ResultsGraphShowClass | undefined,
+): NumberMatch {
+  const n = block.catalogueNumberRaw!.trim();
+  const candidates: { sc: ResultsGraphShowClass; entry: ResultsGraphEntry }[] = [];
+  for (const sc of resultsGraph) {
+    for (const entry of sc.entries) {
+      if (sameCatalogueNumber(entry.catalogueNumber, n)) candidates.push({ sc, entry });
+    }
+  }
+  const headingLabel = headingClass ? critiqueClassLabel(headingClass.className, headingClass.sex) : null;
+
+  if (candidates.length === 0) {
+    return {
+      entry: null,
+      confidence: 'unmatched',
+      hints: [`No dog numbered ${n} was placed${headingLabel ? ` in ${headingLabel}` : ' at this show'}.`],
+    };
+  }
+
+  let picked: { sc: ResultsGraphShowClass; entry: ResultsGraphEntry } | undefined;
+  let classAgrees = true;
+  if (headingClass) {
+    picked =
+      candidates.find((c) => c.sc.showClassId === headingClass.showClassId) ??
+      candidates.find((c) => c.sc.className === headingClass.className);
+    if (!picked && candidates.length === 1) {
+      picked = candidates[0];
+      classAgrees = false;
+    }
+  } else if (candidates.length === 1) {
+    picked = candidates[0];
+  }
+
+  if (!picked) {
+    const where = candidates.map((c) => critiqueClassLabel(c.sc.className, c.sc.sex));
+    return {
+      entry: null,
+      confidence: 'unmatched',
+      hints: [`No. ${n} is placed in more than one class: ${where.join(' and ')}. Choose the right one.`],
+    };
+  }
+
+  const hints: string[] = [];
+  if (!classAgrees) {
+    hints.push(
+      `No. ${n} is placed ${getPlacementLabel(picked.entry.placement)} in ${critiqueClassLabel(picked.sc.className, picked.sc.sex)}, not in ${headingLabel} where the judge listed it.`,
+    );
+  }
+  const placingAgrees = block.position == null || block.position === picked.entry.placement;
+  if (!placingAgrees) {
+    hints.push(
+      `The judge's order puts No. ${n} ${getPlacementLabel(block.position!)}; the steward recorded ${getPlacementLabel(picked.entry.placement)}.`,
+    );
+  }
+  return {
+    entry: picked.entry,
+    confidence: classAgrees && placingAgrees ? 'exact' : 'check',
+    hints,
+  };
+}
+
 export function matchCritiqueBlocks(
   parsed: ParsedCritiqueDocument,
   resultsGraph: ResultsGraphShowClass[],
@@ -120,6 +224,25 @@ export function matchCritiqueBlocks(
     }
 
     const showClass = block.matchedShowClassId ? showClassById.get(block.matchedShowClassId) : undefined;
+
+    if (block.catalogueNumberRaw) {
+      const byNumber = matchByCatalogueNumber(block, resultsGraph, showClass);
+      const existingText = byNumber.entry?.existingCritiqueText?.trim() ?? '';
+      const conflict =
+        byNumber.entry && existingText && existingText !== block.critiqueText.trim()
+          ? { existingText: byNumber.entry.existingCritiqueText! }
+          : null;
+      return {
+        ...block,
+        matchedEntryClassId: byNumber.entry?.entryClassId ?? null,
+        confidence: byNumber.confidence,
+        conflict,
+        resolution: null,
+        include: true,
+        hints: [...byNumber.hints, ...hints],
+      };
+    }
+
     const entry = showClass?.entries.find((e) => e.placement === block.position);
 
     if (!entry) {

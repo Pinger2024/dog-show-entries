@@ -17,6 +17,7 @@ import {
   type AssignableEntryClass,
 } from '@/server/services/critique-results-graph';
 import { publishGateStatus } from '@/lib/critique-publish-gate';
+import { readCritiqueDocument } from '@/server/services/critique-read';
 import { sendCritiqueSubmittedEmail, APP_URL } from '@/server/services/email';
 import { critiqueJudgesForShow, inviteJudgeForCritiques, showHasCritiqueLink } from '@/server/services/critique-invites';
 import { critiqueAutoSendPhase, upcomingAutoInviteDate, upcomingReminderDate } from '@/lib/critique-schedule';
@@ -36,6 +37,8 @@ const critiqueBlockInputSchema = z.object({
   dogRaw: z.string().nullable(),
   dogNameCleaned: z.string().nullable(),
   pedigreeRaw: z.string().nullable(),
+  // Absent on documents read before 30 Oct 2026 (see the schema type).
+  catalogueNumberRaw: z.string().nullable().optional(),
   critiqueText: z.string(),
   matchedShowClassId: z.string().uuid().nullable(),
   matchedEntryClassId: z.string().uuid().nullable(),
@@ -136,7 +139,13 @@ function enrichBlocks(blocks: CritiqueParsedBlock[], assignable: AssignableEntry
     return {
       ...b,
       matchedDisplay: match
-        ? { className: match.className, sex: match.sex, placement: match.placement, registeredName: match.registeredName }
+        ? {
+            className: match.className,
+            sex: match.sex,
+            placement: match.placement,
+            catalogueNumber: match.catalogueNumber,
+            registeredName: match.registeredName,
+          }
         : null,
     };
   });
@@ -404,6 +413,38 @@ export const critiquesRouter = createTRPCRouter({
         .where(eq(critiqueDocuments.id, doc.id));
 
       return { ok: true as const, gate: publishGateStatus(nextBlocks) };
+    }),
+
+  /**
+   * Reads the judge's SAVED document again, from scratch — for a layout Remi
+   * has learned since it was uploaded (Mandy, 30 Oct 2026: the North Eastern
+   * judge's numbered document). Replaces the review wholesale, as a fresh
+   * upload would; never changes the document's status.
+   */
+  reparse: secretaryProcedure
+    .input(z.object({ showId: z.string().uuid(), judgeId: z.string().uuid() }))
+    .mutation(async ({ ctx, input }) => {
+      await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId, { callerIsAdmin: ctx.callerIsAdmin });
+
+      const doc = await ctx.db.query.critiqueDocuments.findFirst({
+        where: and(eq(critiqueDocuments.showId, input.showId), eq(critiqueDocuments.judgeId, input.judgeId)),
+      });
+      if (!doc) throw new TRPCError({ code: 'NOT_FOUND', message: 'This judge has not been invited yet.' });
+      if (doc.status === 'published') {
+        throw new TRPCError({ code: 'BAD_REQUEST', message: 'Unpublish before reading the document again.' });
+      }
+      if (!doc.rawText) {
+        throw new TRPCError({ code: 'BAD_REQUEST', message: 'No critiques uploaded yet.' });
+      }
+
+      const { matched, counts } = await readCritiqueDocument(ctx.db, input.showId, doc.rawText);
+
+      await ctx.db
+        .update(critiqueDocuments)
+        .set({ parsedJson: matched })
+        .where(eq(critiqueDocuments.id, doc.id));
+
+      return { ok: true as const, counts, gate: publishGateStatus(matched.blocks) };
     }),
 
   publish: secretaryProcedure

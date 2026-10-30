@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { CheckCircle2, AlertTriangle, HelpCircle, Pencil } from 'lucide-react';
 import { getPlacementLabel } from '@/lib/placements';
+import { critiqueClassLabel } from '@/lib/critique-match';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
@@ -17,12 +18,26 @@ import {
 } from '@/components/ui/select';
 import { UNASSIGNED_VALUE, type CritiqueAssignableOption, type CritiqueDisplayBlock } from './types';
 
-function sexSuffix(sex: 'dog' | 'bitch' | null) {
-  return sex === 'dog' ? ' Dog' : sex === 'bitch' ? ' Bitch' : '';
+/** "No. 26 — Special Long Coat Open Dog — 2nd — NAME": the number first, so a
+ *  secretary holding the judge's numbered document can pick by eye. */
+function optionLabel(o: CritiqueAssignableOption) {
+  const number = o.catalogueNumber ? `No. ${o.catalogueNumber} — ` : '';
+  return `${number}${critiqueClassLabel(o.className, o.sex)} — ${getPlacementLabel(o.placement)} — ${o.registeredName}`;
 }
 
-function optionLabel(o: CritiqueAssignableOption) {
-  return `${o.className}${sexSuffix(o.sex)} — ${getPlacementLabel(o.placement)} — ${o.registeredName}`;
+/** The judge's own words about the dog, when they had no name for it. */
+function blockHeadline(block: CritiqueDisplayBlock): string {
+  if (block.catalogueNumberRaw) return `No. ${block.catalogueNumberRaw}`;
+  return block.dogRaw || block.dogNameCleaned || 'Unrecognised text';
+}
+
+/** Hints are two kinds: whole sentences from the matcher ("No. 24 is placed
+ *  3rd in Limit Dog, not in …") and award phrases spotted in the prose
+ *  ("Dog CC"). The sentences stand alone; the phrases become one line. */
+function hintLines(hints: string[]): string[] {
+  const sentences = hints.filter((h) => /[.!?]$/.test(h));
+  const phrases = hints.filter((h) => !/[.!?]$/.test(h));
+  return phrases.length ? [...sentences, `Mentions the ${phrases.join(', ')}.`] : sentences;
 }
 
 export type BlockPatch = Partial<{
@@ -49,11 +64,14 @@ export function CritiqueBlockCard({
   block,
   assignableOptions,
   role,
+  duplicateTarget = false,
   onChange,
 }: {
   block: CritiqueDisplayBlock;
   assignableOptions: CritiqueAssignableOption[];
   role: 'judge' | 'secretary';
+  /** Another included critique points at the same dog (critique-publish-gate.ts). */
+  duplicateTarget?: boolean;
   onChange: (patch: BlockPatch) => void;
 }) {
   const [editingText, setEditingText] = useState(false);
@@ -83,9 +101,16 @@ export function CritiqueBlockCard({
   const needsHome = block.include && !block.matchedEntryClassId;
   const needsCheck = block.include && !needsHome && block.confidence === 'check';
   const unresolvedConflict = role === 'secretary' && block.include && !!block.conflict && !block.resolution;
+  const isDuplicate = block.include && !needsHome && duplicateTarget;
+  const hints = hintLines(block.hints ?? []);
 
   const statusBadge = !block.include ? (
     <Badge className="shrink-0 bg-muted text-muted-foreground">Left out</Badge>
+  ) : isDuplicate ? (
+    <Badge className="shrink-0 border-se-honey-line bg-se-honey-soft text-se-honey-deep">
+      <AlertTriangle className="size-3" />
+      Two critiques point at this dog
+    </Badge>
   ) : unresolvedConflict ? (
     <Badge className="shrink-0 border-se-honey-line bg-se-honey-soft text-se-honey-deep">
       <AlertTriangle className="size-3" />
@@ -114,15 +139,18 @@ export function CritiqueBlockCard({
         <div className="min-w-0">
           {block.matchedDisplay ? (
             <>
-              <p className="truncate font-medium">{block.matchedDisplay.registeredName}</p>
+              <p className="truncate font-medium">
+                {block.matchedDisplay.catalogueNumber ? `No. ${block.matchedDisplay.catalogueNumber} · ` : ''}
+                {block.matchedDisplay.registeredName}
+              </p>
               <p className="text-xs text-muted-foreground">
-                {block.matchedDisplay.className}
-                {sexSuffix(block.matchedDisplay.sex)} — {getPlacementLabel(block.matchedDisplay.placement)}
+                {critiqueClassLabel(block.matchedDisplay.className, block.matchedDisplay.sex)} —{' '}
+                {getPlacementLabel(block.matchedDisplay.placement)}
               </p>
             </>
           ) : (
             <>
-              <p className="truncate font-medium">{block.dogRaw || block.dogNameCleaned || 'Unrecognised text'}</p>
+              <p className="truncate font-medium">{blockHeadline(block)}</p>
               <p className="text-xs text-muted-foreground">
                 {block.classNameRaw ?? "Doesn't match a class on this show"}
                 {block.position ? ` — ${getPlacementLabel(block.position)}` : ''}
@@ -132,6 +160,15 @@ export function CritiqueBlockCard({
         </div>
         {statusBadge}
       </div>
+
+      {block.include && (hints.length > 0 || isDuplicate) && (
+        <div className="space-y-1 text-xs text-se-honey-deep">
+          {isDuplicate && <p>Another critique is already attached to this dog. Move one of them, or leave one out.</p>}
+          {hints.map((h) => (
+            <p key={h}>{h}</p>
+          ))}
+        </div>
+      )}
 
       {editingText ? (
         <Textarea
@@ -175,7 +212,7 @@ export function CritiqueBlockCard({
         </Button>
       )}
 
-      {block.include && (needsHome || needsCheck || role === 'secretary') && (
+      {block.include && (needsHome || needsCheck || isDuplicate || role === 'secretary') && (
         <div className="min-w-0">
           <p className="mb-1 text-xs font-medium text-muted-foreground">
             {needsHome ? 'Which dog is this critique for?' : 'Not the right dog? Change it'}

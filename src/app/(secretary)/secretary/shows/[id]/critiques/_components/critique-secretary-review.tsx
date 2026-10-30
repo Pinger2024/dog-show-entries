@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { ArrowLeft, Loader2, Send, Undo2 } from 'lucide-react';
+import { ArrowLeft, BookOpen, Loader2, Send, Undo2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { trpc } from '@/lib/trpc';
 import { Button } from '@/components/ui/button';
@@ -18,7 +18,7 @@ import {
 } from '@/components/ui/alert-dialog';
 import { CritiqueBlockCard, type BlockPatch } from '@/components/critiques/critique-block-card';
 import type { CritiqueDisplayBlock } from '@/components/critiques/types';
-import { publishGateStatus } from '@/lib/critique-publish-gate';
+import { duplicateTargetIds, publishGateStatus } from '@/lib/critique-publish-gate';
 
 export function CritiqueSecretaryReview({
   showId,
@@ -34,6 +34,7 @@ export function CritiqueSecretaryReview({
   const updateMutation = trpc.critiques.updateBlocks.useMutation();
   const publishMutation = trpc.critiques.publish.useMutation();
   const unpublishMutation = trpc.critiques.unpublish.useMutation();
+  const reparseMutation = trpc.critiques.reparse.useMutation();
 
   // Seeded once per judge, then edited purely locally — a background
   // refetch must never clobber the secretary's in-progress edits. Both
@@ -93,6 +94,25 @@ export function CritiqueSecretaryReview({
     }
   }
 
+  // Read the saved document again (a layout Remi has learned since it was
+  // uploaded). The review is replaced wholesale, so drop the local copy and
+  // let the refetch seed it afresh.
+  async function handleReparse() {
+    try {
+      const res = await reparseMutation.mutateAsync({ showId, judgeId });
+      if (saveTimer.current) clearTimeout(saveTimer.current);
+      setBlocks(null);
+      await refetch();
+      toast.success(
+        res.counts.critiques === 0
+          ? 'Read again — Remi still could not pick out any critiques'
+          : `Read again — ${res.counts.critiques} critiques found, ${res.counts.exact} matched to a dog`,
+      );
+    } catch (err) {
+      toast.error('Could not read the document again', { description: (err as Error).message });
+    }
+  }
+
   async function handleUnpublish() {
     try {
       await unpublishMutation.mutateAsync({ showId, judgeId });
@@ -113,6 +133,7 @@ export function CritiqueSecretaryReview({
 
   const displayBlocks = blocks ?? data.blocks;
   const gate = publishGateStatus(displayBlocks);
+  const duplicates = duplicateTargetIds(displayBlocks);
   const isPublished = data.status === 'published';
   const canAttemptPublish = data.status === 'submitted' && gate.canPublish;
 
@@ -136,6 +157,19 @@ export function CritiqueSecretaryReview({
           {data.status === 'published' && 'Published to the results page'}
           {data.originalFilename ? ` · ${data.originalFilename}` : ''}
         </p>
+        {data.hasUpload && !isPublished && (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="mt-3 min-h-[2.75rem]"
+            onClick={handleReparse}
+            disabled={reparseMutation.isPending}
+          >
+            {reparseMutation.isPending ? <Loader2 className="size-4 animate-spin" /> : <BookOpen className="size-4" />}
+            Read the document again
+          </Button>
+        )}
       </div>
 
       {!data.hasUpload ? (
@@ -151,6 +185,7 @@ export function CritiqueSecretaryReview({
                 block={block}
                 assignableOptions={data.assignableOptions}
                 role="secretary"
+                duplicateTarget={!!block.matchedEntryClassId && duplicates.has(block.matchedEntryClassId)}
                 onChange={(patch) => updateBlock(i, patch)}
               />
             ))}

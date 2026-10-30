@@ -65,6 +65,7 @@ function buildResultsGraph(
     byShowClass.get(b.matchedShowClassId)!.entries.push({
       entryClassId: `ec-${n}`,
       placement: b.position,
+      catalogueNumber: override.catalogueNumber ?? null,
       registeredName: override.registeredName ?? b.dogNameCleaned ?? '',
       existingCritiqueText: override.existingCritiqueText ?? null,
     });
@@ -197,6 +198,7 @@ describe('matchCritiqueBlocks — award-mention hints (review-only, never drive 
             ownersRaw: 'TEST OWNER',
             dogRaw: 'TEST DOG',
             dogNameCleaned: 'TEST DOG',
+            catalogueNumberRaw: null,
             pedigreeRaw: null,
             critiqueText: 'A worthy winner of the Bitch CC.',
             matchedShowClassId: null,

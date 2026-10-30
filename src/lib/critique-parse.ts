@@ -32,6 +32,10 @@ export type ParsedBlock = {
   dogRaw: string | null;
   dogNameCleaned: string | null;
   pedigreeRaw: string | null;
+  /** The dog's CATALOGUE number, when the judge identified the dog by it
+   *  instead of by name ("14. Large expressive elongated dog…" — the
+   *  numbered layout, see parseCatalogueLine). null in the other layouts. */
+  catalogueNumberRaw: string | null;
   critiqueText: string;
   /** show_classes.id the header line matched, or null (unmatched/overview, or unrecognised header). */
   matchedShowClassId: string | null;
@@ -108,6 +112,61 @@ const CERTIFICATE_LINE_RE = /^(?:reserve\s+)?(?:dog\s+|bitch\s+)?(?:challenge\s+
 // breeding. Captures what precedes it, the breeding itself, and any prose that
 // runs on after the closing bracket.
 const INLINE_PEDIGREE_RE = /^(.*?)\s*\(([^()]*(?:\s+x\s+|\s+-\s+)[^()]*)\)\s*(.*)$/i;
+
+// ── The numbered layout (Philippe Tran Ngoc An, North Eastern 2026 — Mandy,
+// 30 Oct 2026: "The judge has only put the numbers and not the names"). The
+// class heading carries the placing order in brackets, and each critique is
+// ONE line that starts with the dog's catalogue number:
+//   Yearling (Dogs) (17-16-14-15)
+//   14. Large expressive elongated dog. Good color. …
+// No owner, no dog name — the number is the whole identification, and
+// critique-match.ts turns it into the dog (the catalogue number is unique
+// per show, so it is a stronger key than a name ever was).
+//
+// THE owner of what such a line looks like. The number must be followed by
+// a full stop, bracket or colon, or a spaced dash — never a bare space, so
+// prose that happens to start with a number ("2 year old male…") is never
+// read as structure (the same discipline PLACEMENT_RE keeps). An ordinal
+// ("1st.") cannot match: the letters sit between the digits and the stop.
+// "12.5 cm" cannot match: the stop must be followed by whitespace.
+const CATALOGUE_LINE_RE = /^(\d{1,4})(?:[.):]|\s[–-])\s+(\S.*)$/;
+
+export function parseCatalogueLine(line: string): { catalogueNumber: string; rest: string } | null {
+  const m = CATALOGUE_LINE_RE.exec(line.trim());
+  if (!m) return null;
+  return { catalogueNumber: m[1], rest: m[2].trim() };
+}
+
+// A judge who numbers PLACINGS ("1. Smith's – ROSEBUD EDIE", then the prose
+// beneath) writes the same "N." — but what follows is a dog line, not a
+// sentence: an owner/dog dash, a date of birth, or a name in capitals. That
+// shape keeps the old meaning (position = N, dog named), so a placing can
+// never be mistaken for catalogue number 1, 2 or 3.
+function restIsDogLine(rest: string): boolean {
+  if (BORN_RE.test(rest)) return true;
+  OWNER_DOG_SEP_RE.lastIndex = 0;
+  if (OWNER_DOG_SEP_RE.test(rest)) return true;
+  const letters = rest.replace(/[^A-Za-z]/g, '');
+  return letters.length >= 4 && letters === letters.toUpperCase();
+}
+
+/** Peels the placing order off a heading — "Yearling (Dogs) (17-16-14-15)"
+ *  → "Yearling (Dogs)" and ['17', '16', '14', '15']. Only an all-numeric list
+ *  counts: "(Dogs)" and "(7 entered, 5 absent)" are left where they are, and
+ *  so is an age band that is part of the class's own name, because the
+ *  heading is tried AS WRITTEN first (see parseCritiqueDocument). */
+export function stripPlacingList(line: string): { heading: string; placings: string[] | null } {
+  const m = /^(.*?)\s*\(\s*(\d{1,4}(?:\s*[-–,/]\s*\d{1,4})*)\s*\)\s*[.:]?\s*$/.exec(line.trim());
+  if (!m) return { heading: line.trim(), placings: null };
+  return { heading: m[1].trim(), placings: m[2].split(/[-–,/]/).map((n) => n.trim()) };
+}
+
+/** Where a catalogue number sits in the heading's placing order (1-based), or null. */
+function placingFromHeading(placings: string[] | null, catalogueNumber: string): number | null {
+  if (!placings) return null;
+  const i = placings.findIndex((p) => p.replace(/^0+/, '') === catalogueNumber.replace(/^0+/, ''));
+  return i === -1 ? null : i + 1;
+}
 
 // Owner/dog separator: an en dash or hyphen, always surrounded by single
 // spaces. Owners can contain commas/ampersands but never a spaced dash in
@@ -209,7 +268,23 @@ function stripEntryCount(line: string): string {
 }
 
 // Misspellings judges really write, mapped word by word ("Vetran Dog").
-const HEADER_TYPOS: Record<string, string> = { vetran: 'veteran', veteren: 'veteran', vetern: 'veteran' };
+const HEADER_TYPOS: Record<string, string> = {
+  vetran: 'veteran',
+  veteren: 'veteran',
+  vetern: 'veteran',
+  // "(Dogs)" / "(Bitches)" — the numbered layout names the sex in the plural.
+  dogs: 'dog',
+  bitches: 'bitch',
+  puppies: 'puppy',
+};
+
+// "Juniors (Dogs)", "Limits (Dogs)": a plural class name is the class.
+function singularizeKey(key: string): string {
+  return key
+    .split(' ')
+    .map((w) => (w.length > 3 && w.endsWith('s') && !w.endsWith('ss') ? w.slice(0, -1) : w))
+    .join(' ');
+}
 
 function headerKey(line: string): string {
   return normalizeHeaderText(stripEntryCount(line))
@@ -247,7 +322,13 @@ function lookupHeader(
   line: string,
 ): ClassListEntry | undefined {
   const norm = headerKey(line);
-  return lookup.get(norm) ?? lookup.get(norm.replace(/^(?:class\s+)?\d{1,3}\s+/, ''));
+  const unnumbered = norm.replace(/^(?:class\s+)?\d{1,3}\s+/, '');
+  return (
+    lookup.get(norm) ??
+    lookup.get(unnumbered) ??
+    lookup.get(singularizeKey(norm)) ??
+    lookup.get(singularizeKey(unnumbered))
+  );
 }
 
 /** Does the heading say which sex? ("Open Bitch" yes, "Special Long Coat Open" no) */
@@ -262,7 +343,9 @@ function headerNamesSex(line: string): 'dog' | 'bitch' | null {
 // actual class list — used to catch an unrecognised/mistyped class header
 // so it surfaces as its own `unmatched` block instead of being swallowed
 // into the preceding critique's prose.
-function looksLikeHeaderShaped(t: string): boolean {
+function looksLikeHeaderShaped(raw: string): boolean {
+  // "Puppy (Dogs)" is as header-shaped as "Puppy Dogs".
+  const t = raw.replace(/[()]/g, '').replace(/\s+/g, ' ').trim();
   if (t.length === 0 || t.length > 40) return false;
   if (/[.,;:]$/.test(t)) return false;
   if (/\d/.test(t)) return false;
@@ -279,6 +362,7 @@ function emptyBlock(kind: ParsedBlockKind, overrides: Partial<ParsedBlock> = {})
     dogRaw: null,
     dogNameCleaned: null,
     pedigreeRaw: null,
+    catalogueNumberRaw: null,
     critiqueText: '',
     matchedShowClassId: null,
     ...overrides,
@@ -295,10 +379,27 @@ export function parseCritiqueDocument(
     .filter((l) => !isNoiseLine(l))
     .map((l) => l.trim());
 
-  const isAnyHeaderLine = (line: string) =>
-    lookupHeader(headerLookup, line) !== undefined || looksLikeHeaderShaped(line);
-  const endsProse = (line: string) =>
-    isAnyHeaderLine(line) || PLACEMENT_RE.test(line) || CERTIFICATE_LINE_RE.test(line);
+  // A heading is tried as written first ("JHA Handling (6-11)" is a class
+  // whose NAME carries an age band), then with a trailing placing order
+  // peeled off ("Yearling (Dogs) (17-16-14-15)" — the numbered layout).
+  const resolveHeader = (
+    line: string,
+  ): { matched: ClassListEntry; placings: string[] | null; heading: string } | undefined => {
+    const direct = lookupHeader(headerLookup, line);
+    if (direct) return { matched: direct, placings: null, heading: line };
+    const { heading, placings } = stripPlacingList(line);
+    if (!placings) return undefined;
+    const m = lookupHeader(headerLookup, heading);
+    return m ? { matched: m, placings, heading } : undefined;
+  };
+  const headerShaped = (line: string) => looksLikeHeaderShaped(stripPlacingList(line).heading);
+  const isAnyHeaderLine = (line: string) => resolveHeader(line) !== undefined || headerShaped(line);
+  const isDogLine = (line: string) => {
+    if (PLACEMENT_RE.test(line)) return true;
+    const cat = parseCatalogueLine(line);
+    return cat !== null;
+  };
+  const endsProse = (line: string) => isAnyHeaderLine(line) || isDogLine(line) || CERTIFICATE_LINE_RE.test(line);
   // A heading that doesn't say Dog or Bitch ("Special Long Coat Open.") is
   // the class of the half it sits in — the sex of the last heading that did.
   const bySex = new Map(classList.map((e) => [`${normalizeHeaderText(e.className)}|${e.sex}`, e]));
@@ -311,7 +412,7 @@ export function parseCritiqueDocument(
   // placement line too, so a paste that starts mid-document (no header yet)
   // surfaces its placements as reviewable blocks instead of eating them.
   const overviewLines: string[] = [];
-  while (i < content.length && !isAnyHeaderLine(content[i]) && !PLACEMENT_RE.test(content[i])) {
+  while (i < content.length && !isAnyHeaderLine(content[i]) && !isDogLine(content[i])) {
     overviewLines.push(content[i]);
     i++;
   }
@@ -323,18 +424,22 @@ export function parseCritiqueDocument(
   let currentShowClassId: string | null = null;
   let currentClassNameRaw: string | null = null;
   let currentSex: 'dog' | 'bitch' | null = null;
+  // The heading's bracketed placing order (numbered layout), or null.
+  let currentPlacings: string[] | null = null;
   let placementsInClass = 0;
 
   while (i < content.length) {
     const line = content[i];
-    const matched = lookupHeader(headerLookup, line);
+    const header = resolveHeader(line);
 
-    if (matched) {
-      const namedSex = headerNamesSex(line);
+    if (header) {
+      const { matched, placings, heading } = header;
+      const namedSex = headerNamesSex(heading);
       if (namedSex) currentSex = namedSex;
       const inHalf = !namedSex && currentSex ? bySex.get(`${normalizeHeaderText(matched.className)}|${currentSex}`) : undefined;
       currentShowClassId = (inHalf ?? matched).showClassId;
       currentClassNameRaw = line;
+      currentPlacings = placings;
       placementsInClass = 0;
       i++;
       continue;
@@ -346,7 +451,7 @@ export function parseCritiqueDocument(
       continue;
     }
 
-    if (looksLikeHeaderShaped(line)) {
+    if (headerShaped(line)) {
       // Header-shaped but not in the show's class list — its own block,
       // never folded into the preceding critique's prose. Subsequent
       // placements can't be trusted to belong to the OLD class, so drop
@@ -354,11 +459,38 @@ export function parseCritiqueDocument(
       blocks.push(emptyBlock('unmatched', { classNameRaw: line }));
       currentShowClassId = null;
       currentClassNameRaw = null;
+      currentPlacings = null;
       i++;
       continue;
     }
 
-    const pm = PLACEMENT_RE.exec(line);
+    // The numbered layout: "14. Large expressive elongated dog. …" — the
+    // catalogue number, then the critique on the same line (and any lines
+    // beneath it). The placing comes from the heading's bracketed order.
+    const cat = parseCatalogueLine(line);
+    if (cat && !restIsDogLine(cat.rest)) {
+      placementsInClass++;
+      i++;
+      const proseLines: string[] = [cat.rest];
+      while (i < content.length && !endsProse(content[i])) {
+        proseLines.push(content[i]);
+        i++;
+      }
+      blocks.push(
+        emptyBlock('critique', {
+          classNameRaw: currentClassNameRaw,
+          position: placingFromHeading(currentPlacings, cat.catalogueNumber),
+          catalogueNumberRaw: cat.catalogueNumber,
+          critiqueText: proseLines.join(' ').replace(/\s+/g, ' ').trim(),
+          matchedShowClassId: currentShowClassId,
+        }),
+      );
+      continue;
+    }
+
+    // "1. Smith's – ROSEBUD EDIE": a judge numbering PLACINGS with "N." reads
+    // exactly like a comma-less "1st" line from here on.
+    const pm = PLACEMENT_RE.exec(line) ?? (cat ? ([line, cat.catalogueNumber, cat.rest] as unknown as RegExpExecArray) : null);
     // A class's only dog, written with no placing — the first dog line
     // (it carries a date of birth) under a heading is the winner.
     const impliedWinner = !pm && currentShowClassId !== null && placementsInClass === 0 && BORN_RE.test(line);

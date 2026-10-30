@@ -43,7 +43,7 @@ export async function loadShowClassRows(db: Database, showId: string): Promise<S
       entryClasses: {
         with: {
           entry: {
-            columns: { status: true, deletedAt: true, entryType: true },
+            columns: { status: true, deletedAt: true, entryType: true, catalogueNumber: true },
             with: {
               dog: { columns: { registeredName: true } },
               juniorHandlerDetails: { columns: { handlerName: true } },
@@ -73,6 +73,7 @@ export async function loadShowClassRows(db: Database, showId: string): Promise<S
       .map((ec) => ({
         entryClassId: ec.id,
         placement: ec.result!.placement!,
+        catalogueNumber: ec.entry.catalogueNumber ?? null,
         registeredName:
           (ec.entry.entryType === 'junior_handler'
             ? ec.entry.juniorHandlerDetails?.handlerName
@@ -116,9 +117,9 @@ export function toResultsGraph(rows: ShowClassRow[]): ResultsGraphShowClass[] {
   return rows.map((sc) => ({
     showClassId: sc.id,
     className: sc.className,
-    // Arbitrary for null-sex (JH/Special) classes — matchCritiqueBlocks never
-    // reads this field, only showClassId + entries.
-    sex: sc.sex === 'bitch' ? 'bitch' : 'dog',
+    // The real sex, null for a mixed / JH / Special Award class — the
+    // matcher's hints name the class with it ("Veteran", not "Veteran Dog").
+    sex: sc.sex,
     entries: sc.entries,
   }));
 }
@@ -133,6 +134,8 @@ export interface AssignableEntryClass {
    *  from the doubled dog/bitch header variants toClassList() emits. */
   sex: 'dog' | 'bitch' | null;
   placement: number;
+  /** entries.catalogue_number, so a picker can read "No. 26 — …". */
+  catalogueNumber: string | null;
   registeredName: string;
   existingCritiqueText: string | null;
 }
@@ -147,6 +150,7 @@ export function toAssignableList(rows: ShowClassRow[]): AssignableEntryClass[] {
         className: sc.className,
         sex: sc.sex,
         placement: e.placement,
+        catalogueNumber: e.catalogueNumber,
         registeredName: e.registeredName,
         existingCritiqueText: e.existingCritiqueText,
       });

@@ -15,6 +15,7 @@ import {
 } from '@/components/ui/card';
 import { SECard, Wordmark } from '@/components/show-experience/kit';
 import { CritiqueBlockCard, type BlockPatch } from '@/components/critiques/critique-block-card';
+import { duplicateTargetIds } from '@/lib/critique-publish-gate';
 import type { CritiqueDisplayBlock } from '@/components/critiques/types';
 import { CritiqueUploadForm } from './_components/critique-upload-form';
 
@@ -206,6 +207,7 @@ export default function JudgeCritiquePage({ params }: { params: Promise<{ token:
   }
 
   const displayBlocks = blocks ?? data.blocks;
+  const duplicates = duplicateTargetIds(displayBlocks);
   // Wrong-document guard: a judge uploading last year's (or another show's)
   // critiques gets hundreds of "needs a home" cards and no idea why. If not
   // a single critique matched a class on this show, say so plainly up top.
@@ -242,6 +244,7 @@ export default function JudgeCritiquePage({ params }: { params: Promise<{ token:
             block={block}
             assignableOptions={data.assignableOptions}
             role="judge"
+            duplicateTarget={!!block.matchedEntryClassId && duplicates.has(block.matchedEntryClassId)}
             onChange={(patch) => updateBlock(i, patch)}
           />
         ))}
