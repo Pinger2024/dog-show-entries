@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { findFiles, PROJECT_ROOT } from '../helpers/static-scan';
 import { parseCatalogueLine, stripPlacingList } from '@/lib/critique-parse';
-import { critiqueClassLabel } from '@/lib/critique-match';
+import { critiqueClassLabel, reassignmentPatch } from '@/lib/critique-match';
 import { duplicateTargetIds } from '@/lib/critique-publish-gate';
 
 // Mandy, 30 Oct 2026: a judge's critiques by catalogue number. Three new
@@ -16,6 +16,11 @@ import { duplicateTargetIds } from '@/lib/critique-publish-gate';
 //     → src/lib/critique-publish-gate.ts (duplicateTargetIds).
 // And ONE path from a document's text to reviewable blocks — the upload
 // route and the secretary's "read again" both call readCritiqueDocument.
+//
+// Mandy, 30 Oct 2026 (demo): a fourth rule — what a person choosing the dog
+// does to a block (the hints about the automatic match go with it)
+//     → src/lib/critique-match.ts (reassignmentPatch), applied by the
+//       router's reconcile step AND the review card's picker.
 
 const PARSER = path.join('src', 'lib', 'critique-parse.ts');
 const MATCHER = path.join('src', 'lib', 'critique-match.ts');
@@ -58,6 +63,23 @@ describe('the numbered critique layout has one owner', () => {
       offenders,
       'Use parseCatalogueLine()/stripPlacingList() from src/lib/critique-parse.ts and critiqueClassLabel() from src/lib/critique-match.ts.',
     ).toEqual([]);
+  });
+
+  it('a person choosing the dog is one rule: nobody else clears the hints by hand', () => {
+    expect(reassignmentPatch('ec-1')).toMatchObject({ confidence: 'exact', hints: [], resolution: null });
+    const offenders: string[] = [];
+    for (const f of sources()) {
+      const r = rel(f);
+      if (r === MATCHER) continue;
+      readFileSync(f, 'utf8').split('\n').forEach((line, i) => {
+        if (/\bhints\s*[:=]\s*\[\]/.test(line)) offenders.push(`${r}:${i + 1}: ${line.trim()}`);
+      });
+    }
+    expect(offenders, 'Apply reassignmentPatch() from src/lib/critique-match.ts.').toEqual([]);
+    const card = readFileSync(path.join(PROJECT_ROOT, 'src', 'components', 'critiques', 'critique-block-card.tsx'), 'utf8');
+    const router = readFileSync(path.join(PROJECT_ROOT, 'src', 'server', 'trpc', 'routers', 'critiques.ts'), 'utf8');
+    expect(card).toMatch(/reassignmentPatch\(/);
+    expect(router).toMatch(/reassignmentPatch\(/);
   });
 
   it('a document is read by readCritiqueDocument and nothing else parses or matches one', () => {

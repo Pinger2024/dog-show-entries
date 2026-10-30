@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'fs';
 import { join } from 'path';
 import { parseCritiqueDocument, type ClassListEntry } from '@/lib/critique-parse';
-import { matchCritiqueBlocks, type ResultsGraphShowClass } from '@/lib/critique-match';
+import { reassignmentPatch, matchCritiqueBlocks, type ResultsGraphShowClass } from '@/lib/critique-match';
 import { publishGateStatus } from '@/lib/critique-publish-gate';
 import { NE_CHAMP_2026_PLACINGS, neClassId, neEntryClassId } from './fixtures/ne-champ-2026-placings';
 
@@ -182,5 +182,23 @@ describe('matchCritiqueBlocks — catalogue numbers, shapes the real document do
     expect(b.catalogueNumberRaw).toBeNull();
     expect(b.matchedEntryClassId).toBe('ec-28');
     expect(b.confidence).toBe('exact');
+  });
+});
+
+// Mandy, 30 Oct 2026 (demo): she moved the judge's second "24." critique to
+// Kaizuka Bomber and the card kept the hint about the automatic match. One
+// owner for what a person's choice does to a block — the server's reconcile
+// step and the review card both apply exactly this.
+describe('reassignmentPatch — what a person choosing the dog does to a block', () => {
+  it('picking a dog: the match is theirs (exact), the hints go, the resolution is reset', () => {
+    expect(reassignmentPatch('ec-26')).toEqual({
+      matchedEntryClassId: 'ec-26', confidence: 'exact', hints: [], resolution: null,
+    });
+  });
+
+  it('leaving it unmatched: unmatched, and the hints still go', () => {
+    expect(reassignmentPatch(null)).toEqual({
+      matchedEntryClassId: null, confidence: 'unmatched', hints: [], resolution: null,
+    });
   });
 });

@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { CheckCircle2, AlertTriangle, HelpCircle, Pencil } from 'lucide-react';
 import { getPlacementLabel } from '@/lib/placements';
-import { critiqueClassLabel } from '@/lib/critique-match';
+import { critiqueClassLabel, reassignmentPatch } from '@/lib/critique-match';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
@@ -45,12 +45,14 @@ export type BlockPatch = Partial<{
   include: boolean;
   matchedEntryClassId: string | null;
   resolution: 'document' | 'existing' | null;
-  /** Optimistic mirror of the server's reconcile rules so the local publish
-   *  gate updates immediately: 'exact' on an amber confirmation or a
-   *  reassignment, 'unmatched' on unassignment. The server re-derives
-   *  confidence on every save — this never overrides it, it just keeps the
-   *  banner honest between keystroke and round-trip. */
+  /** Local echo of the server's reconcile rules so the publish gate and the
+   *  card update immediately, not after the round-trip: 'exact' on an amber
+   *  confirmation, and — on a reassignment — whatever `reassignmentPatch`
+   *  (lib/critique-match.ts, the one owner) says, which includes dropping
+   *  the hints about the automatic match. The server re-derives all of it on
+   *  every save; this never overrides it. */
   confidence: 'exact' | 'unmatched';
+  hints: string[];
 }>;
 
 /**
@@ -219,13 +221,7 @@ export function CritiqueBlockCard({
           </p>
           <Select
             value={block.matchedEntryClassId ?? UNASSIGNED_VALUE}
-            onValueChange={(v) =>
-              onChange(
-                v === UNASSIGNED_VALUE
-                  ? { matchedEntryClassId: null, confidence: 'unmatched' }
-                  : { matchedEntryClassId: v, confidence: 'exact' },
-              )
-            }
+            onValueChange={(v) => onChange(reassignmentPatch(v === UNASSIGNED_VALUE ? null : v))}
           >
             <SelectTrigger className="min-h-[2.75rem] w-full max-w-[calc(100vw-4rem)]">
               <SelectValue placeholder="Choose a dog" />

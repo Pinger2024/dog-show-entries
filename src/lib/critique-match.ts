@@ -278,3 +278,33 @@ export function matchCritiqueBlocks(
 
   return { v: 1, blocks };
 }
+
+/**
+ * What changes on a block when a PERSON picks a different dog for it (or
+ * none). The one owner of that rule: the server's reconcile step applies it
+ * to the stored block, and the review card applies the same patch locally so
+ * the screen matches the save without a refetch (a refetch must never
+ * clobber the secretary's in-progress edits, so the card cannot rely on one).
+ *
+ *  - the match is now the person's: 'exact' with a dog, 'unmatched' without;
+ *  - the hints described why the AUTOMATIC match was doubtful ("No. 24 is
+ *    placed 3rd in Limit Dog, not in … where the judge listed it") — that
+ *    match is gone, so they go with it (Mandy, 30 Oct 2026: the old hint
+ *    sat under the dog she had just moved the critique to);
+ *  - a steward-vs-document resolution was about the old target, so it has
+ *    to be chosen again. Only the server recomputes the conflict itself,
+ *    because only it holds the new target's existing steward text.
+ */
+export function reassignmentPatch(matchedEntryClassId: string | null): {
+  matchedEntryClassId: string | null;
+  confidence: 'exact' | 'unmatched';
+  hints: string[];
+  resolution: null;
+} {
+  return {
+    matchedEntryClassId,
+    confidence: matchedEntryClassId === null ? 'unmatched' : 'exact',
+    hints: [],
+    resolution: null,
+  };
+}

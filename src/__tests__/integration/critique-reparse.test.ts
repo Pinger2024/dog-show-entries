@@ -136,3 +136,61 @@ describe('Judge critiques by catalogue number — upload, review, and the secret
     expect(doc?.parsedJson).toBeNull();
   });
 });
+
+// Mandy, 30 Oct 2026 (demo, Telegram 8149): she moved the judge's second
+// "24." critique from Neerlaw's Gatsby to Kaizuka Bomber, and the card kept
+// saying "No. 24 is placed 3rd in Limit Dog, not in Special Long Coat Open
+// Dog where the judge listed it." The hints describe why the AUTOMATIC match
+// was doubtful; once a person has chosen the dog, that match is gone and so
+// is anything said about it.
+describe('Moving a critique to another dog clears what Remi said about the automatic match', () => {
+  const JUDGE_ORDER_DISAGREES = [
+    'Open (Dogs) (11-12)',
+    '',
+    '11. Judge wrote this one first.',
+    '',
+    '12. Judge wrote this one second.',
+  ].join('\n');
+
+  it('a reassignment drops the hints; an untouched block keeps its own', async () => {
+    const { secretary, show, judge, ec12, ec11 } = await seedShow();
+    const secretaryCaller = createTestCaller(secretary);
+    const publicCaller = createTestCaller(null);
+
+    const { uploadToken: token } = await secretaryCaller.critiques.invite({
+      showId: show.id, judgeId: judge.id, email: 'p-judge@test.local',
+    });
+    const uploadRes = await critiqueUploadPOST(uploadReq(token, { text: JUDGE_ORDER_DISAGREES }), params(token));
+    expect(uploadRes.status).toBe(200);
+    await publicCaller.critiques.submitByToken({ token });
+
+    // The steward placed 12 first and 11 second; the judge's bracket says the
+    // opposite, so both blocks carry a hint and need a look.
+    const before = await secretaryCaller.critiques.getForSecretary({ showId: show.id, judgeId: judge.id });
+    const b11 = before.blocks.find((b) => b.catalogueNumberRaw === '11')!;
+    const b12 = before.blocks.find((b) => b.catalogueNumberRaw === '12')!;
+    expect(b11.matchedEntryClassId).toBe(ec11.id);
+    expect(b11.confidence).toBe('check');
+    expect(b11.hints).toEqual(["The judge's order puts No. 11 1st; the steward recorded 2nd."]);
+    expect(b12.hints).toEqual(["The judge's order puts No. 12 2nd; the steward recorded 1st."]);
+
+    // The secretary decides the judge's "11." was really about No. 12's dog
+    // and moves it. Only that block was touched.
+    const moved = before.blocks.map((b) =>
+      b.catalogueNumberRaw === '11' ? { ...b, matchedEntryClassId: ec12.id, confidence: 'exact' as const } : b,
+    );
+    // Two critiques now point at No. 12, so the gate holds — that is correct
+    // and not what this test is about.
+    await secretaryCaller.critiques.updateBlocks({ showId: show.id, judgeId: judge.id, blocks: moved });
+
+    const after = await secretaryCaller.critiques.getForSecretary({ showId: show.id, judgeId: judge.id });
+    const movedBlock = after.blocks.find((b) => b.catalogueNumberRaw === '11')!;
+    expect(movedBlock.matchedEntryClassId).toBe(ec12.id);
+    expect(movedBlock.confidence).toBe('exact');
+    expect(movedBlock.hints).toEqual([]);
+
+    const untouched = after.blocks.find((b) => b.catalogueNumberRaw === '12')!;
+    expect(untouched.hints).toEqual(["The judge's order puts No. 12 2nd; the steward recorded 1st."]);
+    expect(untouched.confidence).toBe('check');
+  });
+});

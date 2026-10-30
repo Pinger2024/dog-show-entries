@@ -17,6 +17,7 @@ import {
   type AssignableEntryClass,
 } from '@/server/services/critique-results-graph';
 import { publishGateStatus } from '@/lib/critique-publish-gate';
+import { reassignmentPatch } from '@/lib/critique-match';
 import { readCritiqueDocument } from '@/server/services/critique-read';
 import { sendCritiqueSubmittedEmail, APP_URL } from '@/server/services/email';
 import { critiqueJudgesForShow, inviteJudgeForCritiques, showHasCritiqueLink } from '@/server/services/critique-invites';
@@ -90,13 +91,12 @@ function reconcileBlocks(
           message: 'That class/dog is not part of this show — please refresh and try again.',
         });
       }
-      next.matchedEntryClassId = inc.matchedEntryClassId;
-      next.resolution = null;
+      // One owner for what a person's choice does to a block (confidence,
+      // hints, resolution) — the review card applies the same patch locally.
+      Object.assign(next, reassignmentPatch(inc.matchedEntryClassId));
       if (inc.matchedEntryClassId === null) {
-        next.confidence = 'unmatched';
         next.conflict = null;
       } else {
-        next.confidence = 'exact';
         const target = byEntryClassId.get(inc.matchedEntryClassId)!;
         const existingText = target.existingCritiqueText?.trim() ?? '';
         next.conflict =
