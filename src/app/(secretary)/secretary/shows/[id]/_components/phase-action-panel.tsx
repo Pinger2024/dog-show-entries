@@ -8,7 +8,6 @@ import {
   Check,
   CheckCircle,
   ChevronRight,
-  CircleDot,
   ClipboardList,
   ExternalLink,
   FileText,
@@ -26,15 +25,24 @@ import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { trpc } from '@/lib/trpc';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
 import type { ScheduleData } from '@/server/db/schema/shows';
 import type { RouterOutputs } from '@/server/trpc/router';
+import {
+  SECard,
+  SEButton,
+  Pulse,
+  Chip,
+  HoneyBanner,
+  CountdownCells,
+} from '@/components/show-experience/kit';
+import { SE_H } from '@/components/show-experience/tokens';
 import {
   derivePhase,
   formatDaysUntil,
   formatDeadline,
 } from '../_lib/phase-utils';
 import { useShowId } from '../_lib/show-context';
+import { ConfirmCloseEntries } from './confirm-close-entries';
 
 type Show = NonNullable<RouterOutputs['shows']['getById']>;
 
@@ -80,30 +88,32 @@ function ActionCard({
   external?: boolean;
   onClick?: () => void;
 }) {
-  const accentStyles = {
-    default: 'bg-muted/40 hover:bg-muted/60 border-border/60',
-    emerald: 'bg-emerald-50/60 hover:bg-emerald-50 border-emerald-200/60 dark:bg-emerald-950/20 dark:hover:bg-emerald-950/30 dark:border-emerald-800/40',
-    blue: 'bg-blue-50/60 hover:bg-blue-50 border-blue-200/60 dark:bg-blue-950/20 dark:hover:bg-blue-950/30 dark:border-blue-800/40',
-    amber: 'bg-amber-50/60 hover:bg-amber-50 border-amber-200/60 dark:bg-amber-950/20 dark:hover:bg-amber-950/30 dark:border-amber-800/40',
-    primary: 'bg-primary/5 hover:bg-primary/10 border-primary/20',
-    rose: 'bg-rose-50/60 hover:bg-rose-50 border-rose-200/60 dark:bg-rose-950/20 dark:hover:bg-rose-950/30 dark:border-rose-800/40',
+  const accentStyles: Record<string, string> = {
+    default: 'hover:bg-se-paper2/60',
+    emerald: 'border-se-fresh-line/60 bg-se-fresh-soft/50 hover:bg-se-fresh-soft',
+    blue: 'border-primary/20 bg-primary/5 hover:bg-primary/10',
+    amber: 'border-se-honey-line/60 bg-se-honey-soft/50 hover:bg-se-honey-soft',
+    primary: 'border-primary/20 bg-primary/5 hover:bg-primary/10',
+    rose: 'border-destructive/20 bg-destructive/5 hover:bg-destructive/10',
   };
 
-  const iconStyles = {
-    default: 'bg-muted text-muted-foreground',
-    emerald: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-400',
-    blue: 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-400',
-    amber: 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-400',
+  const iconStyles: Record<string, string> = {
+    default: 'bg-se-paper2 text-se-ink2',
+    emerald: 'bg-se-fresh-soft text-se-fresh-deep',
+    blue: 'bg-primary/10 text-primary',
+    amber: 'bg-se-honey-soft text-se-honey-deep',
     primary: 'bg-primary/10 text-primary',
-    rose: 'bg-rose-100 text-rose-700 dark:bg-rose-900/40 dark:text-rose-400',
+    rose: 'bg-destructive/10 text-destructive',
   };
 
   const content = (
-    <div className={cn(
-      'group relative flex items-start gap-3.5 rounded-2xl border p-4 transition-all duration-200',
-      'hover:shadow-sm hover:-translate-y-0.5',
-      accentStyles[accent],
-    )}>
+    <SECard
+      interactive
+      className={cn(
+        'group flex items-start gap-3.5 p-4 transition-colors duration-200',
+        accentStyles[accent],
+      )}
+    >
       <div className={cn(
         'flex size-10 shrink-0 items-center justify-center rounded-xl transition-transform group-hover:scale-105',
         iconStyles[accent],
@@ -112,25 +122,25 @@ function ActionCard({
       </div>
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2">
-          <p className="font-serif text-sm font-semibold tracking-tight text-foreground">
+          <p className={cn(SE_H, 'text-sm text-se-ink')}>
             {label}
           </p>
           {badge && (
-            <Badge variant="secondary" className="h-4 px-1.5 text-xs">
+            <span className="inline-flex h-4 shrink-0 items-center rounded-full bg-se-paper2 px-1.5 text-[10px] font-semibold text-se-ink2">
               {badge}
-            </Badge>
+            </span>
           )}
         </div>
-        <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">
+        <p className="mt-0.5 text-xs leading-relaxed text-se-ink3">
           {description}
         </p>
       </div>
       {external ? (
-        <ExternalLink className="size-3.5 shrink-0 text-muted-foreground/40 transition-colors group-hover:text-muted-foreground" />
+        <ExternalLink className="size-3.5 shrink-0 text-se-ink3/60 transition-colors group-hover:text-se-ink3" />
       ) : (
-        <ChevronRight className="size-4 shrink-0 text-muted-foreground/40 transition-colors group-hover:text-muted-foreground" />
+        <ChevronRight className="size-4 shrink-0 text-se-ink3/60 transition-colors group-hover:text-se-ink3" />
       )}
-    </div>
+    </SECard>
   );
 
   if (onClick) {
@@ -185,17 +195,21 @@ function SetupPanel({ show, showId }: { show: Show; showId: string }) {
   const checklist: ChecklistItem[] = [];
 
   const isChampionship = show.showType === 'championship';
+  // SV/WUSV regionals aren't RKC-licensed and don't need RKC's Open + Limit
+  // class requirements (Amanda 2026-05-24).
+  const isSvShow = (show as { showRuleset?: string }).showRuleset === 'wusv';
 
   const autoKeys: { key: string; label: string }[] = [
     { key: 'classes_created', label: 'Classes created' },
-    ...(isChampionship ? [{ key: 'championship_classes_complete', label: 'Open + Limit classes for each sex' }] : []),
+    ...(isChampionship && !isSvShow ? [{ key: 'championship_classes_complete', label: 'Open + Limit classes for each sex' }] : []),
     { key: 'judges_assigned', label: 'Judge assigned' },
     { key: 'entry_fees_set', label: 'Entry fees set' },
     { key: 'entry_close_date_set', label: 'Entry close date set' },
     { key: 'secretary_details_set', label: 'Secretary details added' },
     { key: 'guarantors_added', label: 'Guarantors added' },
     { key: 'venue_set', label: 'Venue confirmed' },
-    { key: 'kc_licence_recorded', label: 'RKC licence recorded' },
+    ...(isSvShow ? [] : [{ key: 'kc_licence_recorded', label: 'RKC licence recorded' }]),
+    { key: 'sundry_items_reviewed', label: 'Sundry items added' },
   ];
 
   if (autoDetect) {
@@ -211,6 +225,7 @@ function SetupPanel({ show, showId }: { show: Show; showId: string }) {
         if (ak.key === 'venue_set' && b.key === 'no_venue') return true;
         if (ak.key === 'kc_licence_recorded' && b.key === 'no_rkc_licence') return true;
         if (ak.key === 'championship_classes_complete' && b.key === 'championship_missing_classes') return true;
+        if (ak.key === 'sundry_items_reviewed' && b.key === 'no_sundry_items') return true;
         return false;
       });
 
@@ -247,26 +262,26 @@ function SetupPanel({ show, showId }: { show: Show; showId: string }) {
   };
 
   return (
-    <div className="overflow-hidden rounded-2xl border border-amber-200/60 bg-gradient-to-br from-amber-50/80 via-white to-orange-50/40 shadow-sm dark:border-amber-800/30 dark:from-amber-950/20 dark:via-background dark:to-orange-950/10">
+    <SECard className="overflow-hidden border-se-honey-line/60 bg-se-honey-soft/30">
       <div className="px-5 pb-5 pt-5 sm:px-6">
         {/* Header with progress */}
         <div className="flex items-center justify-between gap-3">
           <div className="flex items-center gap-3">
-            <div className="flex size-10 items-center justify-center rounded-xl bg-amber-100 dark:bg-amber-900/40">
-              <ClipboardList className="size-5 text-amber-700 dark:text-amber-400" />
+            <div className="flex size-10 items-center justify-center rounded-xl bg-se-honey-soft">
+              <ClipboardList className="size-5 text-se-honey-deep" />
             </div>
             <div>
-              <h3 className="font-serif text-base font-semibold tracking-tight">
+              <h3 className={cn(SE_H, 'text-base text-se-ink')}>
                 Getting ready
               </h3>
-              <p className="text-xs text-muted-foreground">
+              <p className="text-xs text-se-ink3">
                 {completedCount} of {totalCount} items complete
               </p>
             </div>
           </div>
           {totalCount > 0 && (
             <div className="text-right">
-              <span className="text-2xl font-bold tracking-tight text-amber-700 dark:text-amber-400">
+              <span className={cn(SE_H, 'text-2xl text-se-honey-deep tabular-nums')}>
                 {progressPct}%
               </span>
             </div>
@@ -275,9 +290,9 @@ function SetupPanel({ show, showId }: { show: Show; showId: string }) {
 
         {/* Progress bar */}
         {totalCount > 0 && (
-          <div className="mt-4 h-1.5 overflow-hidden rounded-full bg-amber-100 dark:bg-amber-900/30">
+          <div className="mt-4 h-1.5 overflow-hidden rounded-full bg-se-honey-soft">
             <div
-              className="h-full rounded-full bg-amber-500 transition-all duration-500 ease-out"
+              className="h-full rounded-full bg-se-honey transition-all duration-500 ease-out"
               style={{ width: `${progressPct}%` }}
             />
           </div>
@@ -286,32 +301,32 @@ function SetupPanel({ show, showId }: { show: Show; showId: string }) {
         {/* Checklist */}
         {isLoading ? (
           <div className="mt-4 flex items-center gap-2 py-4">
-            <Loader2 className="size-4 animate-spin text-muted-foreground" />
-            <span className="text-sm text-muted-foreground">Checking requirements...</span>
+            <Loader2 className="size-4 animate-spin text-se-ink3" />
+            <span className="text-sm text-se-ink3">Checking requirements...</span>
           </div>
         ) : (
           <div className="mt-4 space-y-1">
             {checklist.map((item) => (
               <div
                 key={item.key}
-                className="flex items-center gap-2.5 rounded-lg px-2 py-2 transition-colors hover:bg-white/60 dark:hover:bg-white/5 min-h-[2.75rem]"
+                className="flex items-center gap-2.5 rounded-lg px-2 py-2 transition-colors hover:bg-se-surface/60 min-h-[2.75rem]"
               >
                 {item.done ? (
-                  <div className="flex size-5 shrink-0 items-center justify-center rounded-full bg-emerald-100 dark:bg-emerald-900/30">
-                    <Check className="size-3 text-emerald-600" />
+                  <div className="flex size-5 shrink-0 items-center justify-center rounded-full bg-se-fresh-soft">
+                    <Check className="size-3 text-se-fresh-deep" />
                   </div>
                 ) : (
                   <div className={cn(
                     'flex size-5 shrink-0 items-center justify-center rounded-full',
                     item.severity === 'required'
                       ? 'bg-destructive/10'
-                      : 'bg-muted',
+                      : 'bg-se-paper2',
                   )}>
                     <X className={cn(
                       'size-3',
                       item.severity === 'required'
                         ? 'text-destructive'
-                        : 'text-muted-foreground',
+                        : 'text-se-ink3',
                     )} />
                   </div>
                 )}
@@ -319,18 +334,18 @@ function SetupPanel({ show, showId }: { show: Show; showId: string }) {
                 <span className={cn(
                   'flex-1 text-sm',
                   item.done
-                    ? 'text-muted-foreground line-through'
+                    ? 'text-se-ink3 line-through'
                     : item.severity === 'required'
-                      ? 'text-foreground font-medium'
-                      : 'text-muted-foreground',
+                      ? 'font-medium text-se-ink'
+                      : 'text-se-ink3',
                 )}>
                   {item.label}
                 </span>
 
                 {item.auto && item.done && (
-                  <Badge variant="secondary" className="h-4 shrink-0 px-1.5 py-0 text-xs">
+                  <Chip tone="fresh" className="h-4 shrink-0 px-1.5 text-[10px]">
                     Auto
-                  </Badge>
+                  </Chip>
                 )}
 
                 {!item.done && item.actionPath && (
@@ -348,10 +363,11 @@ function SetupPanel({ show, showId }: { show: Show; showId: string }) {
         )}
 
         {/* Action area */}
-        <div className="mt-4 flex flex-col gap-3 border-t border-amber-200/40 pt-4 sm:flex-row sm:items-center sm:justify-between dark:border-amber-800/20">
-          <Button
+        <div className="mt-4 flex flex-col gap-3 border-t border-se-honey-line/50 pt-4 sm:flex-row sm:items-center sm:justify-between">
+          <SEButton
+            variant={canOpen ? 'fresh' : 'ghost'}
             size="default"
-            className="w-full sm:w-auto min-h-[2.75rem]"
+            className="w-full disabled:pointer-events-none disabled:opacity-50 sm:w-auto"
             disabled={!canOpen || isLoading || updateMutation.isPending}
             onClick={handleOpenEntries}
           >
@@ -365,11 +381,11 @@ function SetupPanel({ show, showId }: { show: Show; showId: string }) {
             ) : (
               `Complete ${requiredBlockerCount} required item${requiredBlockerCount !== 1 ? 's' : ''} to open`
             )}
-          </Button>
+          </SEButton>
           <Button
             variant="ghost"
             size="sm"
-            className="text-xs text-muted-foreground"
+            className="text-xs text-se-ink3"
             asChild
           >
             <Link href={`/secretary/shows/${showId}/checklist`}>
@@ -379,7 +395,7 @@ function SetupPanel({ show, showId }: { show: Show; showId: string }) {
           </Button>
         </div>
       </div>
-    </div>
+    </SECard>
   );
 }
 
@@ -416,12 +432,12 @@ function EntriesOpenPanel({ show, showId }: { show: Show; showId: string }) {
     <div className="space-y-3">
       {/* Overdue warning banner — entries should have closed but haven't been */}
       {closeInfo?.overdue && (
-        <div className="overflow-hidden rounded-xl border border-rose-300 bg-rose-50 dark:border-rose-800/60 dark:bg-rose-950/30">
+        <SECard className="overflow-hidden border-destructive/30 bg-destructive/5">
           <div className="flex flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex items-start gap-2.5">
-              <AlertTriangle className="mt-0.5 size-5 shrink-0 text-rose-600 dark:text-rose-400" />
+              <AlertTriangle className="mt-0.5 size-5 shrink-0 text-destructive" />
               <div>
-                <p className="text-sm font-semibold text-rose-800 dark:text-rose-300">
+                <p className="text-sm font-semibold text-destructive">
                   Entries were scheduled to close on{' '}
                   {new Date(show.entryCloseDate!).toLocaleDateString('en-GB', {
                     day: 'numeric',
@@ -429,58 +445,47 @@ function EntriesOpenPanel({ show, showId }: { show: Show; showId: string }) {
                     year: 'numeric',
                   })}
                 </p>
-                <p className="mt-0.5 text-xs text-rose-700/80 dark:text-rose-400/80">
+                <p className="mt-0.5 text-xs text-destructive/80">
                   Entries are still being accepted. Close them now or they will remain open.
                 </p>
               </div>
             </div>
-            <Button
-              size="sm"
-              variant="destructive"
-              className="w-full shrink-0 sm:w-auto min-h-[2.75rem]"
-              disabled={closeEntriesMutation.isPending}
-              onClick={handleCloseEntries}
-            >
-              {closeEntriesMutation.isPending ? (
-                <>
-                  <Loader2 className="size-4 animate-spin" />
-                  Closing...
-                </>
-              ) : (
-                'Close Entries Now'
-              )}
-            </Button>
+            <ConfirmCloseEntries onConfirm={handleCloseEntries}>
+              <Button
+                size="sm"
+                variant="destructive"
+                className="w-full shrink-0 sm:w-auto min-h-[2.75rem]"
+                disabled={closeEntriesMutation.isPending}
+              >
+                {closeEntriesMutation.isPending ? (
+                  <>
+                    <Loader2 className="size-4 animate-spin" />
+                    Closing...
+                  </>
+                ) : (
+                  'Close Entries Now'
+                )}
+              </Button>
+            </ConfirmCloseEntries>
           </div>
-        </div>
+        </SECard>
       )}
 
-      {/* Countdown strip — shown when not overdue */}
+      {/* Countdown — honey band once in the urgent window, otherwise a
+          quiet fresh strip */}
       {closeInfo && !closeInfo.overdue && (
-        <div className={cn(
-          'flex items-center gap-2.5 rounded-xl px-4 py-3',
-          closeInfo.urgent
-            ? 'bg-amber-50 border border-amber-200/60 dark:bg-amber-950/20 dark:border-amber-800/40'
-            : 'bg-emerald-50/60 border border-emerald-200/40 dark:bg-emerald-950/10 dark:border-emerald-800/30',
-        )}>
-          <span className="relative flex size-2.5">
-            <span className={cn(
-              'absolute inline-flex size-full animate-ping rounded-full opacity-75',
-              closeInfo.urgent ? 'bg-amber-400' : 'bg-emerald-400',
-            )} />
-            <span className={cn(
-              'relative inline-flex size-2.5 rounded-full',
-              closeInfo.urgent ? 'bg-amber-500' : 'bg-emerald-500',
-            )} />
-          </span>
-          <span className={cn(
-            'text-sm font-medium',
-            closeInfo.urgent
-              ? 'text-amber-700 dark:text-amber-400'
-              : 'text-emerald-700 dark:text-emerald-400',
-          )}>
-            {closeInfo.text}
-          </span>
-        </div>
+        closeInfo.urgent ? (
+          <HoneyBanner label="Entries close" date={closeInfo.text}>
+            <CountdownCells target={new Date(show.entryCloseDate!)} dark />
+          </HoneyBanner>
+        ) : (
+          <div className="flex items-center gap-2.5 rounded-xl border border-se-fresh-line/40 bg-se-fresh-soft/60 px-4 py-3">
+            <Pulse />
+            <span className="text-sm font-medium text-se-fresh-deep">
+              {closeInfo.text}
+            </span>
+          </div>
+        )
       )}
 
       {/* Action cards grid */}
@@ -518,19 +523,19 @@ function EntriesOpenPanel({ show, showId }: { show: Show; showId: string }) {
 
       {/* Quick links */}
       <div className="flex flex-wrap gap-2 pt-1">
-        <Button variant="ghost" size="sm" className="h-8 text-xs text-muted-foreground" asChild>
+        <Button variant="ghost" size="sm" className="h-8 text-xs text-se-ink3" asChild>
           <Link href={`/secretary/shows/${showId}/reports`}>
             Reports
             <ChevronRight className="size-3" />
           </Link>
         </Button>
-        <Button variant="ghost" size="sm" className="h-8 text-xs text-muted-foreground" asChild>
+        <Button variant="ghost" size="sm" className="h-8 text-xs text-se-ink3" asChild>
           <Link href={`/secretary/shows/${showId}/checklist`}>
             Checklist
             <ChevronRight className="size-3" />
           </Link>
         </Button>
-        <Button variant="ghost" size="sm" className="h-8 text-xs text-muted-foreground" asChild>
+        <Button variant="ghost" size="sm" className="h-8 text-xs text-se-ink3" asChild>
           <Link href={`/secretary/shows/${showId}/schedule`}>
             Schedule
             <ChevronRight className="size-3" />
@@ -562,26 +567,22 @@ function PreShowPanel({ show, showId }: { show: Show; showId: string }) {
     <div className="space-y-3">
       {/* Countdown strip */}
       {showDayInfo && (
-        <div className={cn(
-          'flex items-center justify-between gap-3 rounded-xl px-4 py-3',
-          showDayInfo.urgent
-            ? 'bg-amber-50 border border-amber-200/60 dark:bg-amber-950/20 dark:border-amber-800/40'
-            : 'bg-blue-50/60 border border-blue-200/40 dark:bg-blue-950/10 dark:border-blue-800/30',
-        )}>
-          <span className={cn(
-            'text-sm font-medium',
-            showDayInfo.urgent
-              ? 'text-amber-700 dark:text-amber-400'
-              : 'text-blue-700 dark:text-blue-400',
-          )}>
-            {showDayInfo.text}
-          </span>
-          {daysToGo && (
-            <Badge variant="secondary" className="text-xs">
-              {daysToGo}
-            </Badge>
-          )}
-        </div>
+        showDayInfo.urgent ? (
+          <HoneyBanner label="Show day" date={showDayInfo.text}>
+            <CountdownCells target={new Date(show.startDate)} dark />
+          </HoneyBanner>
+        ) : (
+          <div className="flex items-center justify-between gap-3 rounded-xl border border-primary/20 bg-primary/5 px-4 py-3">
+            <span className="text-sm font-medium text-primary">
+              {showDayInfo.text}
+            </span>
+            {daysToGo && (
+              <span className="shrink-0 rounded-full bg-se-surface px-2.5 py-1 text-xs font-semibold text-se-ink2 shadow-[inset_0_0_0_1px_var(--color-se-line)]">
+                {daysToGo}
+              </span>
+            )}
+          </div>
+        )
       )}
 
       {/* Action cards grid */}
@@ -620,19 +621,19 @@ function PreShowPanel({ show, showId }: { show: Show; showId: string }) {
 
       {/* Quick links */}
       <div className="flex flex-wrap gap-2 pt-1">
-        <Button variant="ghost" size="sm" className="h-8 text-xs text-muted-foreground" asChild>
+        <Button variant="ghost" size="sm" className="h-8 text-xs text-se-ink3" asChild>
           <Link href={`/secretary/shows/${showId}/entries`}>
             Entries
             <ChevronRight className="size-3" />
           </Link>
         </Button>
-        <Button variant="ghost" size="sm" className="h-8 text-xs text-muted-foreground" asChild>
+        <Button variant="ghost" size="sm" className="h-8 text-xs text-se-ink3" asChild>
           <Link href={`/secretary/shows/${showId}/reports`}>
             Reports
             <ChevronRight className="size-3" />
           </Link>
         </Button>
-        <Button variant="ghost" size="sm" className="h-8 text-xs text-muted-foreground" asChild>
+        <Button variant="ghost" size="sm" className="h-8 text-xs text-se-ink3" asChild>
           <Link href={`/secretary/shows/${showId}/documents`}>
             Documents
             <ChevronRight className="size-3" />
@@ -648,32 +649,36 @@ function PreShowPanel({ show, showId }: { show: Show; showId: string }) {
 function ShowDayPanel({ show, showId }: { show: Show; showId: string }) {
   return (
     <div className="space-y-3">
-      {/* Hero card for results */}
-      <div className="overflow-hidden rounded-2xl border border-primary/20 bg-gradient-to-br from-primary/10 via-primary/5 to-transparent shadow-sm">
+      {/* Hero card for results — the show's most exciting moment gets the
+          fresh/live treatment */}
+      <SECard className="overflow-hidden border-se-fresh-line/60 bg-gradient-to-br from-se-fresh-soft via-se-surface to-se-surface">
         <div className="px-5 py-6 sm:px-6">
           <div className="flex items-center gap-4">
-            <div className="flex size-14 items-center justify-center rounded-2xl bg-primary/15">
-              <Gavel className="size-7 text-primary" />
+            <div className="flex size-14 items-center justify-center rounded-2xl bg-se-fresh-soft">
+              <Gavel className="size-7 text-se-fresh-deep" />
             </div>
             <div className="min-w-0 flex-1">
-              <h3 className="font-serif text-lg font-bold tracking-tight">
-                Judging is underway
-              </h3>
-              <p className="mt-0.5 text-sm text-muted-foreground">
+              <div className="flex items-center gap-2">
+                <Pulse />
+                <h3 className={cn(SE_H, 'text-lg text-se-ink')}>
+                  Judging is underway
+                </h3>
+              </div>
+              <p className="mt-0.5 text-sm text-se-ink3">
                 Record results as each class is judged
               </p>
             </div>
           </div>
           <div className="mt-5">
-            <Button size="lg" className="w-full sm:w-auto min-h-[2.75rem] gap-2" asChild>
+            <SEButton variant="fresh" size="default" className="w-full sm:w-auto" asChild>
               <Link href={`/secretary/shows/${showId}/results`}>
                 <Trophy className="size-4" />
                 Record Results
               </Link>
-            </Button>
+            </SEButton>
           </div>
         </div>
-      </div>
+      </SECard>
 
       {/* Secondary actions */}
       <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
@@ -709,7 +714,7 @@ function PostShowPanel({ show, showId }: { show: Show; showId: string }) {
   const markRkcSubmitted = trpc.secretary.markRkcSubmitted.useMutation({
     onSuccess: () => {
       utils.shows.getById.invalidate({ id: showId });
-      toast.success('Marked as submitted to RKC');
+      toast.success('Recorded as sent to the RKC');
     },
     onError: (err) => toast.error(err.message),
   });
@@ -718,44 +723,42 @@ function PostShowPanel({ show, showId }: { show: Show; showId: string }) {
   const rkcDeadline = new Date(show.endDate);
   rkcDeadline.setDate(rkcDeadline.getDate() + 14);
   const rkcInfo = rkcSubmitted
-    ? { text: `Submitted to RKC on ${new Date(rkcSubmittedAt!).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}`, urgent: false, overdue: false }
+    ? { text: `Marked as sent to RKC on ${new Date(rkcSubmittedAt!).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}`, urgent: false, overdue: false }
     : formatDeadline(rkcDeadline, 'RKC submission deadline');
 
   // Count completed tasks
   const tasks = [
     { done: resultsPublished, label: 'Publish results' },
-    { done: rkcSubmitted, label: 'Submit to RKC' },
+    { done: rkcSubmitted, label: 'Mark RKC return as sent' },
   ];
   const completedCount = tasks.filter(t => t.done).length;
 
   return (
     <div className="space-y-3">
       {/* Completion progress strip */}
-      <div className="flex items-center justify-between gap-3 rounded-xl border border-border/60 bg-muted/30 px-4 py-3">
+      <SECard className="flex items-center justify-between gap-3 border-se-line bg-se-paper2/50 px-4 py-3">
         <div className="flex items-center gap-2.5">
           <CheckCircle className={cn(
             'size-5',
-            completedCount === tasks.length ? 'text-emerald-600' : 'text-muted-foreground',
+            completedCount === tasks.length ? 'text-se-fresh-deep' : 'text-se-ink3',
           )} />
-          <span className="text-sm font-medium">
+          <span className="text-sm font-medium text-se-ink">
             {completedCount === tasks.length
               ? 'All post-show tasks complete'
               : `${completedCount} of ${tasks.length} tasks complete`}
           </span>
         </div>
         {rkcSubmitted ? (
-          <Badge className="bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400 border-0">
-            RKC submitted
-          </Badge>
+          <Chip tone="fresh">RKC marked as sent</Chip>
         ) : (
           <span className={cn(
             'text-xs font-medium',
-            rkcInfo.overdue ? 'text-destructive' : rkcInfo.urgent ? 'text-amber-600 dark:text-amber-400' : 'text-muted-foreground',
+            rkcInfo.overdue ? 'text-destructive' : rkcInfo.urgent ? 'text-se-honey-deep' : 'text-se-ink3',
           )}>
             {rkcInfo.text}
           </span>
         )}
-      </div>
+      </SECard>
 
       {/* Action cards */}
       <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
@@ -783,7 +786,7 @@ function PostShowPanel({ show, showId }: { show: Show; showId: string }) {
           <ActionCard
             icon={Send}
             label="Mark RKC Submitted"
-            description="Record that you've sent the marked catalogue to the RKC"
+            description="Remi doesn't send it — tick this once you have"
             accent="blue"
             onClick={() => markRkcSubmitted.mutate({ showId })}
           />
@@ -821,18 +824,18 @@ function PostShowPanel({ show, showId }: { show: Show; showId: string }) {
 
 function CancelledPanel() {
   return (
-    <div className="flex items-center gap-3 rounded-2xl border border-destructive/20 bg-destructive/5 px-5 py-4">
+    <SECard className="flex items-center gap-3 border-destructive/20 bg-destructive/5 px-5 py-4">
       <div className="flex size-10 items-center justify-center rounded-xl bg-destructive/10">
         <X className="size-5 text-destructive" />
       </div>
       <div>
-        <h3 className="font-serif text-base font-semibold tracking-tight text-foreground">
+        <h3 className={cn(SE_H, 'text-base text-se-ink')}>
           Show cancelled
         </h3>
-        <p className="mt-0.5 text-xs text-muted-foreground">
+        <p className="mt-0.5 text-xs text-se-ink3">
           This show has been cancelled and is no longer visible to exhibitors.
         </p>
       </div>
-    </div>
+    </SECard>
   );
 }

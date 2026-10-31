@@ -60,12 +60,12 @@ export function ResultsPublishAction({ showId }: ActionPanelProps) {
     <div className="space-y-3">
       {/* Status */}
       {published ? (
-        <div className="flex items-center gap-2 rounded-lg bg-green-50 p-3 text-sm text-green-800">
+        <div className="flex items-center gap-2 rounded-lg bg-se-fresh-soft p-3 text-sm text-se-fresh-deep">
           <Globe className="size-4 shrink-0" />
           <div>
             <p className="font-medium">Results are published</p>
             {publishedAt && (
-              <p className="text-xs text-green-600">
+              <p className="text-xs text-se-fresh-deep">
                 Published {new Date(publishedAt).toLocaleString('en-GB', {
                   day: 'numeric',
                   month: 'short',
@@ -76,10 +76,10 @@ export function ResultsPublishAction({ showId }: ActionPanelProps) {
               </p>
             )}
           </div>
-          <Lock className="ml-auto size-4 text-green-600" />
+          <Lock className="ml-auto size-4 text-se-fresh-deep" />
         </div>
       ) : (
-        <div className="flex items-center gap-2 rounded-lg bg-amber-50 p-3 text-sm text-amber-800">
+        <div className="flex items-center gap-2 rounded-lg bg-se-honey-soft p-3 text-sm text-se-honey-deep">
           <Unlock className="size-4 shrink-0" />
           <p className="font-medium">Results not yet published</p>
         </div>
@@ -88,9 +88,9 @@ export function ResultsPublishAction({ showId }: ActionPanelProps) {
       {/* Judge approval progress */}
       {approvals.total > 0 && (
         <div className="flex items-center gap-2 text-xs text-muted-foreground">
-          <CheckCircle2 className="size-3.5 text-green-500" />
+          <CheckCircle2 className="size-3.5 text-se-fresh-deep" />
           {approvals.approved} of {approvals.total} judges approved
-          {approvals.pending > 0 && <span className="text-amber-600">({approvals.pending} pending)</span>}
+          {approvals.pending > 0 && <span className="text-se-honey-deep">({approvals.pending} pending)</span>}
         </div>
       )}
 
@@ -101,7 +101,7 @@ export function ResultsPublishAction({ showId }: ActionPanelProps) {
             <Button
               variant="outline"
               size="sm"
-              className="w-full border-red-200 text-red-700 hover:bg-red-50"
+              className="w-full border-destructive text-destructive hover:bg-destructive/10"
               disabled={unpublishMutation.isPending}
             >
               {unpublishMutation.isPending ? (
@@ -123,7 +123,7 @@ export function ResultsPublishAction({ showId }: ActionPanelProps) {
               <AlertDialogCancel>Cancel</AlertDialogCancel>
               <AlertDialogAction
                 onClick={() => unpublishMutation.mutate({ showId })}
-                className="bg-red-600 hover:bg-red-700"
+                className="bg-destructive hover:bg-destructive/90"
               >
                 Unpublish
               </AlertDialogAction>
@@ -135,7 +135,7 @@ export function ResultsPublishAction({ showId }: ActionPanelProps) {
           <AlertDialogTrigger asChild>
             <Button
               size="sm"
-              className="w-full bg-green-700 hover:bg-green-800"
+              className="w-full bg-se-fresh hover:bg-se-fresh/90"
               disabled={!canPublish || publishMutation.isPending}
             >
               {publishMutation.isPending ? (
@@ -159,7 +159,7 @@ export function ResultsPublishAction({ showId }: ActionPanelProps) {
                 id="send-notifications"
                 checked={sendNotifications}
                 onChange={(e) => setSendNotifications(e.target.checked)}
-                className="size-4 rounded border-gray-300"
+                className="size-4 rounded border-input"
               />
               <label htmlFor="send-notifications" className="text-sm">
                 Send notification emails to exhibitors and followers
@@ -171,7 +171,7 @@ export function ResultsPublishAction({ showId }: ActionPanelProps) {
                 onClick={() =>
                   publishMutation.mutate({ showId, sendNotifications })
                 }
-                className="bg-green-700 hover:bg-green-800"
+                className="bg-se-fresh hover:bg-se-fresh/90"
               >
                 Publish
               </AlertDialogAction>

@@ -1,9 +1,11 @@
-import { index, pgTable, text, timestamp, unique, uuid } from 'drizzle-orm/pg-core';
+import { boolean, index, pgTable, text, timestamp, unique, uuid } from 'drizzle-orm/pg-core';
 import { relations } from 'drizzle-orm';
 import { shows } from './shows';
 import { judges } from './judges';
 import { breeds } from './breeds';
+import { breedGroups } from './breed-groups';
 import { rings } from './rings';
+import { judgeRoles } from './judge-roles';
 
 export const judgeAssignments = pgTable(
   'judge_assignments',
@@ -16,8 +18,30 @@ export const judgeAssignments = pgTable(
       .notNull()
       .references(() => judges.id),
     breedId: uuid('breed_id').references(() => breeds.id),
+    /** Multi-breed group-level assignments (Hound Group Judge, etc.) — null
+     *  for breed-level (single-breed shows + per-breed assignments at multi-
+     *  breed shows). Mutually exclusive with breedId in practice but not
+     *  schema-enforced; the renderer treats whichever is set. */
+    breedGroupId: uuid('breed_group_id').references(() => breedGroups.id),
+    /** What role this judge fills at this assignment level — Group Judge,
+     *  Puppy Group Judge, BIS Judge, etc. Null for breed-level assignments
+     *  on multi-breed shows (the breed defines what the judge is doing). */
+    judgeRoleId: uuid('judge_role_id').references(() => judgeRoles.id),
     ringId: uuid('ring_id').references(() => rings.id),
     sex: text('sex'), // null = both, 'dog' = dogs only, 'bitch' = bitches only
+    /** Marks this assignment as the "Special Awards Classes" judge — the
+     *  up-and-coming judge given the lunchtime SAC classes. When true,
+     *  breedId/sex are ignored on the schedule, and the line renders as
+     *  "Judge: <name> - special awards classes" per Amanda's spec (2026-05-14).
+     *  This judge covers any showClasses whose class definition name starts
+     *  with "Special Award Class". */
+    isSpecialAwardsClassesJudge: boolean('is_special_awards_classes_judge').notNull().default(false),
+    /** When true, the schedule appends "(subject to RKC approval)" after
+     *  the judge's name. Used when a club has nominated a judge but the
+     *  RKC hasn't confirmed yet — e.g. South Western GSD 55th 2026
+     *  (Amanda 2026-05-24). Catalogue and other documents are unaffected
+     *  per Amanda's scope. */
+    subjectToRkcApproval: boolean('subject_to_rkc_approval').notNull().default(false),
     // Results approval fields
     approvalToken: uuid('approval_token'),
     approvalStatus: text('approval_status'), // null | 'pending' | 'approved' | 'declined'
@@ -59,6 +83,14 @@ export const judgeAssignmentsRelations = relations(
     breed: one(breeds, {
       fields: [judgeAssignments.breedId],
       references: [breeds.id],
+    }),
+    breedGroup: one(breedGroups, {
+      fields: [judgeAssignments.breedGroupId],
+      references: [breedGroups.id],
+    }),
+    judgeRole: one(judgeRoles, {
+      fields: [judgeAssignments.judgeRoleId],
+      references: [judgeRoles.id],
     }),
     ring: one(rings, {
       fields: [judgeAssignments.ringId],

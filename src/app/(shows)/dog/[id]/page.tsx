@@ -1,7 +1,9 @@
 import type { Metadata } from 'next';
-import { eq, and, isNull, sql } from 'drizzle-orm';
+import { notFound } from 'next/navigation';
+import { eq, and, isNull } from 'drizzle-orm';
 import { db } from '@/server/db';
-import { dogs, dogPhotos, dogTitles, entries, entryClasses, results } from '@/server/db/schema';
+import { dogs, dogPhotos, dogTitles } from '@/server/db/schema';
+import { getPublicDogSummary } from '@/server/services/public-dog-summary';
 import { DogProfileClient } from './dog-profile-client';
 
 const BASE_URL = 'https://remishowmanager.co.uk';
@@ -30,10 +32,8 @@ export async function generateMetadata({
     db?.select({ title: dogTitles.title })
       .from(dogTitles)
       .where(eq(dogTitles.dogId, id)),
-    db?.select({ count: sql<number>`count(distinct ${entries.showId})` })
-      .from(entries)
-      .where(and(eq(entries.dogId, id), eq(entries.status, 'confirmed'), isNull(entries.deletedAt)))
-      .then((r) => r?.[0]?.count ?? 0),
+    // Only shows the public may see — never an upcoming entry (Mandy, 1 Oct 2026).
+    db ? getPublicDogSummary(db, id).then((s) => s.shows) : 0,
   ]);
 
   if (!dog) {
@@ -54,7 +54,9 @@ export async function generateMetadata({
   parts.push(`${dog.sex === 'dog' ? 'Male' : 'Female'} ${breedName}`);
   if (groupName) parts[0] += ` (${groupName})`;
   if (dog.breederName) parts.push(`Bred by ${dog.breederName}`);
-  if ((showCount ?? 0) > 0) parts.push(`${showCount} show${showCount === 1 ? '' : 's'} entered`);
+  // Shows it was actually shown at — never an upcoming entry or one it was
+  // absent from (Mandy, 1–2 Oct 2026).
+  if ((showCount ?? 0) > 0) parts.push(`Shown at ${showCount} show${showCount === 1 ? '' : 's'}`);
   if ((titles ?? []).length > 0) parts.push(`${titles!.length} title${titles!.length === 1 ? '' : 's'} held`);
   const description = parts.join(' · ') + ' — View full profile on Remi.';
 
@@ -85,5 +87,10 @@ export default async function DogProfilePage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
+  const exists = await db?.query.dogs.findFirst({
+    where: and(eq(dogs.id, id), isNull(dogs.deletedAt)),
+    columns: { id: true },
+  });
+  if (!exists) notFound();
   return <DogProfileClient id={id} />;
 }

@@ -1,19 +1,12 @@
 import type { Metadata } from 'next';
+import { notFound } from 'next/navigation';
 import { db } from '@/server/db';
 import { eq } from 'drizzle-orm';
 import { shows } from '@/server/db/schema';
 import { isUuid } from '@/lib/slugify';
+import { displayShowTypeTitle } from '@/lib/show-types';
 
 export const revalidate = 3600;
-
-const SHOW_TYPE_LABELS: Record<string, string> = {
-  companion: 'Companion Show',
-  primary: 'Primary Show',
-  limited: 'Limited Show',
-  open: 'Open Show',
-  premier_open: 'Premier Open Show',
-  championship: 'Championship Show',
-};
 
 export async function generateMetadata({
   params,
@@ -27,9 +20,7 @@ export async function generateMetadata({
     with: { venue: true, organisation: true },
   });
 
-  if (!show) {
-    return { title: 'Results Not Found' };
-  }
+  if (!show) notFound();
 
   const showDate = new Date(show.startDate).toLocaleDateString('en-GB', {
     day: 'numeric',
@@ -37,7 +28,7 @@ export async function generateMetadata({
     year: 'numeric',
   });
 
-  const showType = SHOW_TYPE_LABELS[show.showType] ?? show.showType;
+  const showType = displayShowTypeTitle(show.showType, show.showRuleset);
   const title = `Results — ${show.name}`;
   const description = `${showType} results from ${showDate}${show.venue?.name ? ` at ${show.venue.name}` : ''}${show.organisation?.name ? `, hosted by ${show.organisation.name}` : ''}. View placements, critiques, and awards.`;
 

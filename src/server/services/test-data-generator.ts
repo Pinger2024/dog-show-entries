@@ -8,6 +8,7 @@
 import { db } from '@/server/db';
 import { eq, asc, sql, and, isNull, inArray } from 'drizzle-orm';
 import * as schema from '@/server/db/schema';
+import { VETERAN_MIN_AGE_MONTHS } from '@/lib/date-utils';
 
 // ── Realistic UK kennel prefixes and suffixes ──
 
@@ -264,7 +265,7 @@ function generateDateOfBirth(ageCategory: 'puppy' | 'yearling' | 'junior' | 'adu
     case 'yearling': monthsOld = randomInt(12, 23); break;
     case 'junior': monthsOld = randomInt(6, 17); break;
     case 'adult': monthsOld = randomInt(24, 72); break;
-    case 'veteran': monthsOld = randomInt(84, 132); break;
+    case 'veteran': monthsOld = randomInt(VETERAN_MIN_AGE_MONTHS, 132); break;
   }
   d.setMonth(d.getMonth() - monthsOld);
   d.setDate(randomInt(1, 28));
@@ -736,12 +737,12 @@ export async function populateShowWithTestData(opts: PopulateOptions): Promise<P
     const judgeNames = pickN(JUDGE_NAMES, numJudges);
 
     // Create judges (or find existing) — batch lookup + batch insert
-    const existingJudges = judgeNames.length > 0
+    const existingJudgeRows = judgeNames.length > 0
       ? await db.query.judges.findMany({
           where: inArray(schema.judges.name, judgeNames),
         })
       : [];
-    const existingByName = new Map(existingJudges.map(j => [j.name, j.id]));
+    const existingByName = new Map(existingJudgeRows.map(j => [j.name, j.id]));
     const newJudgeValues = judgeNames
       .filter(name => !existingByName.has(name))
       .map(name => ({
@@ -1015,6 +1016,7 @@ export async function populateShowWithTestData(opts: PopulateOptions): Promise<P
           classSponsorshipValues.push({
             showClassId: sc.id,
             showSponsorId: insertedShowSponsors[i].id,
+            sponsorName: sponsorData[i].name,
             trophyName: `${sponsorData[i].name} ${pick(trophyNames)}`,
             prizeDescription: `Sponsored by ${sponsorData[i].name}`,
           });
@@ -1035,9 +1037,9 @@ export async function populateShowWithTestData(opts: PopulateOptions): Promise<P
 
   if (existingSundry.length === 0) {
     const sundryData = [
-      { name: 'Catalogue', description: 'Pre-order a show catalogue to collect on the day', priceInPence: 500, maxPerOrder: 5, sortOrder: 0 },
-      { name: 'Car Park Pass', description: 'Reserved parking space close to the showground', priceInPence: 300, maxPerOrder: 2, sortOrder: 1 },
-      { name: 'Rosette Pack', description: 'Set of 5 rosettes (1st-5th) for your dog\'s collection', priceInPence: 1000, maxPerOrder: 3, sortOrder: 2 },
+      { name: 'Catalogue', kind: 'printed_catalogue' as const, description: 'Pre-order a show catalogue to collect on the day', priceInPence: 500, maxPerOrder: 5, sortOrder: 0 },
+      { name: 'Car Park Pass', kind: 'parking' as const, description: 'Reserved parking space close to the showground', priceInPence: 300, maxPerOrder: 2, sortOrder: 1 },
+      { name: 'Rosette Pack', kind: 'other' as const, description: 'Set of 5 rosettes (1st-5th) for your dog\'s collection', priceInPence: 1000, maxPerOrder: 3, sortOrder: 2 },
     ];
 
     await db.insert(schema.sundryItems).values(

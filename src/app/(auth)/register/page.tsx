@@ -9,13 +9,13 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
 import {
-  Card,
   CardContent,
   CardDescription,
   CardFooter,
   CardHeader,
   CardTitle,
 } from '@/components/ui/card';
+import { SECard, Wordmark } from '@/components/show-experience/kit';
 
 function GoogleIcon({ className }: { className?: string }) {
   return (
@@ -50,6 +50,7 @@ export default function RegisterPage() {
   const [googleLoading, setGoogleLoading] = useState(false);
   const [emailSent, setEmailSent] = useState(false);
   const [error, setError] = useState('');
+  const [notice, setNotice] = useState('');
 
   async function handleGoogleSignIn() {
     setGoogleLoading(true);
@@ -59,6 +60,7 @@ export default function RegisterPage() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError('');
+    setNotice('');
     setLoading(true);
 
     if (wantsPassword) {
@@ -84,6 +86,15 @@ export default function RegisterPage() {
         if (!res.ok) {
           const data = await res.json();
           setError(data.error ?? 'Unable to create account');
+          setLoading(false);
+          return;
+        }
+
+        const created = await res.json();
+        if (created?.setPasswordEmailed) {
+          // Already on Remi without a password: a link to set one is on its
+          // way. Do not try to sign in.
+          setNotice("This email is already on Remi. We've emailed you a link to set your password.");
           setLoading(false);
           return;
         }
@@ -119,8 +130,8 @@ export default function RegisterPage() {
 
   if (emailSent) {
     return (
-      <div className="flex min-h-screen items-center justify-center px-3 sm:px-4">
-        <Card className="w-full max-w-sm">
+      <div className="flex min-h-screen items-center justify-center bg-se-paper px-3 sm:px-4">
+        <SECard className="flex w-full max-w-sm flex-col gap-6">
           <CardHeader className="text-center">
             <div className="mx-auto mb-3 flex size-12 items-center justify-center rounded-full bg-primary/10">
               <Mail className="size-6 text-primary" />
@@ -137,25 +148,25 @@ export default function RegisterPage() {
               Use a different email
             </Button>
           </CardFooter>
-        </Card>
+        </SECard>
       </div>
     );
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center px-3 sm:px-4">
+    <div className="flex min-h-screen items-center justify-center bg-se-paper px-3 sm:px-4">
       <div className="w-full max-w-sm space-y-4 sm:space-y-5">
         {/* Logo */}
         <div className="text-center">
-          <Link href="/" className="font-serif text-2xl sm:text-3xl font-bold tracking-tight text-primary">
-            Remi
+          <Link href="/" className="inline-flex justify-center">
+            <Wordmark size={26} />
           </Link>
           <p className="mt-2 text-sm sm:text-base text-muted-foreground">
             Create your free account to start entering shows
           </p>
         </div>
 
-        <Card>
+        <SECard className="flex flex-col gap-6">
           <CardHeader className="text-center">
             <CardTitle className="font-serif text-lg sm:text-xl">Create Your Account</CardTitle>
             <CardDescription className="text-sm sm:text-[0.9375rem]">
@@ -271,11 +282,17 @@ export default function RegisterPage() {
                 </div>
               )}
 
+              {notice && (
+                <div role="status" className="rounded-lg border border-primary/20 bg-primary/10 px-4 py-3 text-sm">
+                  {notice}
+                </div>
+              )}
+
               {error && (
-                <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+                <div className="rounded-lg border border-destructive/20 bg-destructive/10 px-4 py-3 text-sm text-destructive">
                   <p>{error}</p>
                   {error.includes('signing in') && (
-                    <Link href="/login" className="mt-1 block font-medium text-red-900 underline hover:no-underline">
+                    <Link href="/login" className="mt-1 block font-medium text-destructive underline hover:no-underline">
                       Go to sign in page
                     </Link>
                   )}
@@ -298,7 +315,7 @@ export default function RegisterPage() {
               </Link>
             </p>
           </CardFooter>
-        </Card>
+        </SECard>
       </div>
     </div>
   );

@@ -46,7 +46,7 @@ export default function StewardError({
           >
             Remi
           </a>
-          <span className="rounded-md bg-blue-100 px-2 py-0.5 text-xs font-semibold text-blue-700">
+          <span className="rounded-md bg-se-fresh-soft px-2 py-0.5 text-xs font-semibold text-se-fresh-deep">
             Steward
           </span>
         </div>

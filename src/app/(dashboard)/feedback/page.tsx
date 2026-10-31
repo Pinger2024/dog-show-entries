@@ -37,22 +37,22 @@ const statusConfig: Record<
 > = {
   pending: {
     label: 'Pending',
-    color: 'bg-amber-100 text-amber-800',
+    color: 'bg-se-honey-soft text-se-honey-deep',
     icon: AlertCircle,
   },
   in_progress: {
     label: 'In Progress',
-    color: 'bg-blue-100 text-blue-800',
+    color: 'bg-primary/10 text-primary',
     icon: Clock,
   },
   completed: {
     label: 'Completed',
-    color: 'bg-emerald-100 text-emerald-800',
+    color: 'bg-se-fresh-soft text-se-fresh-deep',
     icon: CheckCircle2,
   },
   dismissed: {
     label: 'Dismissed',
-    color: 'bg-gray-100 text-gray-600',
+    color: 'bg-muted text-muted-foreground',
     icon: XCircle,
   },
 };
@@ -225,7 +225,7 @@ export default function FeedbackPage() {
                             {item.subject || '(No subject)'}
                           </p>
                           {item.source === 'widget' && (
-                            <Badge variant="outline" className="text-xs border-violet-300 text-violet-700 bg-violet-50">
+                            <Badge variant="outline" className="text-xs border-se-fresh-line text-se-fresh-deep bg-se-fresh-soft">
                               Widget
                             </Badge>
                           )}
@@ -268,9 +268,9 @@ export default function FeedbackPage() {
                       <div className="border-t px-3 py-3 sm:px-4 sm:py-4">
                         {/* Workflow banner for widget submissions */}
                         {item.source === 'widget' && (
-                          <div className="mb-3 rounded-lg border border-violet-200 bg-violet-50 p-3 text-sm">
-                            <p className="font-medium text-violet-900">User support request</p>
-                            <p className="mt-0.5 text-xs text-violet-700">
+                          <div className="mb-3 rounded-lg border border-se-fresh-line bg-se-fresh-soft p-3 text-sm">
+                            <p className="font-medium text-se-fresh-deep">User support request</p>
+                            <p className="mt-0.5 text-xs text-se-fresh-deep">
                               Submitted via the Help & Feedback widget. If you need more info, contact Michael & Amanda — not the user directly. Email the user at <strong>{item.fromEmail}</strong> once resolved.
                             </p>
                           </div>
