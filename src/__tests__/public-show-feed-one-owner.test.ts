@@ -34,6 +34,8 @@ describe('public show feed — one owner', () => {
     expect(service).toMatch(/showResultsState\(/);
     // A regional must not print as a Championship Show.
     expect(service).toMatch(/displayShowTypeTitle\(/);
+    // "23:59", never "midnight" (Mandy, 23 July 2026).
+    expect(service).toMatch(/formatCloseTimeUK\(/);
     // Club columns by allow-list — bank details leaked once.
     expect(service).toMatch(/publicOrgColumns/);
   });

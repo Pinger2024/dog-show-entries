@@ -13,7 +13,7 @@ import {
 } from '@/lib/show-status';
 import { displayShowTypeTitle } from '@/lib/show-types';
 import { entryCloseExtendedNotice } from '@/lib/entry-close-rules';
-import { londonCalendarDateStr, todayInLondon } from '@/lib/date-utils';
+import { formatCloseTimeUK, londonCalendarDateStr, todayInLondon } from '@/lib/date-utils';
 import { canonicalUrl } from '@/lib/app-url';
 import { showIdsWithPublishedResults } from './results-shows';
 
@@ -74,6 +74,25 @@ export type PublicShowFeedItem = {
    * static site builder wanting "closes 1 Nov" wants this field.
    */
   entryCloseDateLondon: string | null;
+  /**
+   * The closing time in Europe/London **as Remi words it for a reader** —
+   * `formatCloseTimeUK`, the owner of Mandy's rule (23 July 2026): print
+   * "23:59", never "midnight", *because midnight is ambiguous about which
+   * day it belongs to*.
+   *
+   * It ships beside the date because a date ALONE walks straight back into
+   * that ambiguity: a show closing at 00:00 has a calendar date one day after
+   * the last evening anyone would think to enter. Print the pair — "1
+   * November, 23:59" — and there is nothing left to misread.
+   *
+   * ⚠️ A LABEL, NOT A TIME. It is "23:59" and "00:00" only at those two
+   * edges; otherwise it is prose — "noon", "5pm", "5:30pm". Hence the name:
+   * sitting next to `entryCloseDateLondon` a `...TimeLondon` would read as
+   * machine-comparable, and the first consumer of this feed duly tried to
+   * compare against it. **Anything deciding whether the window has passed
+   * uses `entryCloseDate`, the instant.** This field is for printing.
+   */
+  entryCloseTimeLabel: string | null;
   /** The public "entries have been extended" sentence, or null. */
   entriesExtendedNotice: string | null;
   /** The status as the public should read it, close-date lag included. */
@@ -135,6 +154,7 @@ export async function listPublicShowFeed(
       endDate: row.endDate,
       entryCloseDate: row.entryCloseDate ? row.entryCloseDate.toISOString() : null,
       entryCloseDateLondon: row.entryCloseDate ? londonCalendarDateStr(row.entryCloseDate) : null,
+      entryCloseTimeLabel: row.entryCloseDate ? formatCloseTimeUK(row.entryCloseDate) : null,
       entriesExtendedNotice: entryCloseExtendedNotice(row.entryCloseDate, row.entryCloseExtendedFrom),
       status: publicShowStatus(row, today),
       entriesOpen: entryWindowOpen(row),

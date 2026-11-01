@@ -61,6 +61,7 @@ type FeedItem = {
   endDate: string | null;
   entryCloseDate: string | null;
   entryCloseDateLondon: string | null;
+  entryCloseTimeLabel: string | null;
   entriesExtendedNotice: string | null;
   status: string;
   entriesOpen: boolean;
@@ -157,6 +158,71 @@ describe('GET /api/shows — the public show feed', () => {
     expect(item?.entryCloseDate).toBe('2030-08-10T23:00:00.000Z');
     expect(item?.entryCloseDateLondon).toBe('2030-08-11');
     expect(item?.entriesOpen).toBe(true);
+  });
+
+  it('publishes the closing time as Remi WORDS it — a label, never a value to compare', async () => {
+    // Mandy, 23 July 2026 (formatCloseTimeUK, lib/date-utils.ts): show "23:59"
+    // rather than "midnight", because midnight is ambiguous about WHICH day it
+    // belongs to. A feed that published only the calendar date threw that
+    // decision away: on a show closing at 00:00 the date is the day AFTER the
+    // last evening anyone could realistically enter.
+    //
+    // The four shows below are the whole shape of that owner, and the reason
+    // this field is called `entryCloseTimeLabel` and not `entryCloseTimeLondon`:
+    // at the two edges it reads like a 24-hour clock, and everywhere else it is
+    // prose. The first consumer of this feed (the GSD Breed Council site,
+    // 1 Nov 2026) was told the old name and set about comparing against it —
+    // which would have worked on both shows that existed at the time and
+    // broken on the first show closing at noon. Whether the window has passed
+    // is `entryCloseDate`'s job, the instant; this field only ever prints.
+    const org = await makeOrg();
+    const lateEvening = await makeShow({
+      organisationId: org.id,
+      status: 'entries_open',
+      startDate: '2030-02-20',
+      endDate: '2030-02-20',
+      entryCloseDate: new Date('2030-02-06T23:59:00Z'), // 23:59 GMT
+    });
+    const midnight = await makeShow({
+      organisationId: org.id,
+      status: 'entries_open',
+      startDate: '2030-02-21',
+      endDate: '2030-02-21',
+      entryCloseDate: new Date('2030-02-07T00:00:00Z'), // 00:00 GMT
+    });
+    const middayShow = await makeShow({
+      organisationId: org.id,
+      status: 'entries_open',
+      startDate: '2030-02-22',
+      endDate: '2030-02-22',
+      entryCloseDate: new Date('2030-02-08T12:00:00Z'), // 12:00 GMT
+    });
+    const teatime = await makeShow({
+      organisationId: org.id,
+      status: 'entries_open',
+      startDate: '2030-02-23',
+      endDate: '2030-02-23',
+      entryCloseDate: new Date('2030-02-09T17:00:00Z'), // 17:00 GMT
+    });
+
+    const body = await feed();
+    const late = body.shows.find((s) => s.id === lateEvening.id);
+    expect(late?.entryCloseDateLondon).toBe('2030-02-06');
+    expect(late?.entryCloseTimeLabel).toBe('23:59');
+
+    const mid = body.shows.find((s) => s.id === midnight.id);
+    expect(mid?.entryCloseDateLondon).toBe('2030-02-07');
+    expect(mid?.entryCloseTimeLabel).toBe('00:00');
+
+    // The two that prove it is prose, so nobody parses it.
+    const noon = body.shows.find((s) => s.id === middayShow.id);
+    expect(noon?.entryCloseTimeLabel).toBe('noon');
+
+    const tea = body.shows.find((s) => s.id === teatime.id);
+    expect(tea?.entryCloseTimeLabel).toBe('5pm');
+
+    // And the field anything mechanical should use instead is right there.
+    expect(tea?.entryCloseDate).toBe('2030-02-09T17:00:00.000Z');
   });
 
   it('carries the club, the venue and a usable show link — and no bank details', async () => {
