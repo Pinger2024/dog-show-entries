@@ -1,5 +1,6 @@
 'use client';
 
+import { canonicalUrl } from '@/lib/app-url';
 import { useState, useMemo, useEffect, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
@@ -75,7 +76,7 @@ import { CatalogueNote } from './catalogue-note';
 import { cn } from '@/lib/utils';
 import { isGsdOnlyClass, isGsdBreed } from '@/lib/class-templates';
 import { catalogueNoteFor, includesParkingPass } from '@/lib/sundry-kind';
-import { entryWindowOpen } from '@/lib/show-status';
+import { entryWindowOpen, showHref } from '@/lib/show-status';
 import {
   useEntryCart,
   getPaymentKey,
@@ -2859,7 +2860,7 @@ export default function EnterShowPage() {
                   : standardEntries.length > 1
                     ? 'my dogs'
                     : 'my entry';
-              const showUrl = `https://remishowmanager.co.uk/shows/${show?.slug ?? idOrSlug}`;
+              const showUrl = canonicalUrl(showHref({ id: idOrSlug, slug: show?.slug }));
               const shareText = `I've just entered ${dogLabel} into ${show?.name ?? 'a show'}! \u{1F415} ${showUrl}`;
               const whatsappUrl = `https://wa.me/?text=${encodeURIComponent(shareText)}`;
 

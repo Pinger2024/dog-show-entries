@@ -14,14 +14,17 @@ import { manualPaymentPhrase, type ManualPaymentMethod } from '@/lib/manual-paym
 import { buildClassLabelMap } from '@/lib/class-labels';
 import { BRAND } from '@/lib/brand';
 import { FEEDBACK_REPLY_TO } from '@/lib/email-addresses';
+import { APP_URL } from '@/lib/app-url';
 
 export const resend = new Resend(process.env.RESEND_API_KEY);
 
 export const FROM =
   process.env.EMAIL_FROM ?? 'Remi <noreply@remishowmanager.co.uk>';
 
-export const APP_URL =
-  process.env.NEXTAUTH_URL ?? 'https://remishowmanager.co.uk';
+// One owner, lib/app-url.ts. Imported (not bare re-exported) because this
+// module builds links with APP_URL itself, and re-exported so the many call
+// sites that read it from here stay as they are.
+export { APP_URL };
 
 function formatFee(pence: number) {
   return `£${(pence / 100).toFixed(2)}`;

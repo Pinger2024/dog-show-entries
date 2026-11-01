@@ -100,6 +100,37 @@ describe('isPublicRoute allows the unauthenticated health probe', () => {
 });
 
 /**
+ * /api/shows (2026-11-01): the fourth time this list has bitten. `/shows` is a
+ * public prefix, but `/api/shows` does not start with it, so BOTH routes under
+ * it were redirected to /login for anyone not signed in:
+ *
+ *  - `/api/shows/<id>/calendar`, the "Add to calendar" .ics download linked
+ *    from every public show page. Live bug, found by curling it rather than by
+ *    any test: the route itself has always been written as public (it refuses
+ *    draft and cancelled shows and uses `publicOrgColumns`), but no anonymous
+ *    visitor ever reached it.
+ *  - `/api/shows`, the public show feed the GSD Breed Council's static site
+ *    reads. An unauthenticated consumer getting a 307 to /login is the whole
+ *    feature failing.
+ *
+ * Route tests call the handler directly, so they cannot see this. Only the
+ * allowlist can.
+ */
+describe('isPublicRoute allows the public show API', () => {
+  it('treats the public show feed as public', () => {
+    expect(isPublicRoute('/api/shows')).toBe(true);
+  });
+
+  it('treats the .ics calendar download as public', () => {
+    expect(isPublicRoute('/api/shows/winter-spectacular-2026-2026/calendar')).toBe(true);
+  });
+
+  it('still protects the secretary show pages', () => {
+    expect(isPublicRoute('/secretary/shows/abc-123')).toBe(false);
+  });
+});
+
+/**
  * /reviews (2026-09-15): the footer has linked to /reviews since the page was
  * added, but it was never in the public allowlist — every logged-out visitor
  * who clicked "Reviews" was sent to /login, so the testimonials were only ever

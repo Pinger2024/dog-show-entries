@@ -7,7 +7,10 @@ import type { SundryKind } from '@/lib/sundry-kind';
  */
 
 export interface ScheduleShowInfo {
-  slug: string;
+  /** The show's id — the URL fallback for a show with no slug yet, which
+   *  printed as "/shows/null" before (one owner: showHref). */
+  id?: string;
+  slug: string | null;
   name: string;
   showType: string;
   showScope: string;

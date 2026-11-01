@@ -378,6 +378,7 @@ export async function generateSchedulePdf(showId: string): Promise<Buffer> {
   })));
 
   const showInfo: ScheduleShowInfo = {
+    id: show.id,
     slug: show.slug,
     name: show.name,
     showType: show.showType,

@@ -1,5 +1,7 @@
 'use client';
 
+import { showHref } from '@/lib/show-status';
+import { canonicalUrl } from '@/lib/app-url';
 import { useState } from 'react';
 import { Copy, Check, ExternalLink } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
@@ -30,7 +32,7 @@ export function ShareShowAction({ actionKey }: ActionPanelProps) {
 
   if (!show) return null;
 
-  const showUrl = `https://remishowmanager.co.uk/shows/${show.slug ?? showId}`;
+  const showUrl = canonicalUrl(showHref({ id: showId, slug: show.slug }));
   const resultsUrl = `${showUrl}/results`;
   const shareUrl = actionKey === 'share_results' ? resultsUrl : showUrl;
 

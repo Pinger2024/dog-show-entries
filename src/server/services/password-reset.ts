@@ -8,10 +8,10 @@ import { emailHeader } from './email';
 import { findPersonByEmail } from './people';
 import { BRAND } from '@/lib/brand';
 import { FEEDBACK_REPLY_TO } from '@/lib/email-addresses';
+import { APP_URL } from '@/lib/app-url';
 
 const resend = new Resend(process.env.RESEND_API_KEY);
 const FROM = process.env.EMAIL_FROM ?? 'Remi <noreply@remishowmanager.co.uk>';
-const APP_URL = process.env.NEXTAUTH_URL ?? 'https://remishowmanager.co.uk';
 
 /**
  * The words of the email. A person who has never had a password (they bought

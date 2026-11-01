@@ -1,3 +1,5 @@
+import { showResultsHref } from '@/lib/show-status';
+import { canonicalUrl } from '@/lib/app-url';
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import { db } from '@/server/db';
@@ -32,7 +34,7 @@ export async function generateMetadata({
   const title = `Results — ${show.name}`;
   const description = `${showType} results from ${showDate}${show.venue?.name ? ` at ${show.venue.name}` : ''}${show.organisation?.name ? `, hosted by ${show.organisation.name}` : ''}. View placements, critiques, and awards.`;
 
-  const canonical = `https://remishowmanager.co.uk/shows/${show.slug ?? show.id}/results`;
+  const canonical = canonicalUrl(showResultsHref(show));
 
   return {
     title,

@@ -298,6 +298,7 @@ export async function GET(
     })));
 
   const showInfo: ScheduleShowInfo = {
+    id: show.id,
     slug: show.slug,
     name: show.name,
     showType: show.showType,

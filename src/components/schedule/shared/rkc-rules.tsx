@@ -253,6 +253,14 @@ export function RkcNumberedRules({ show, multiBreed }: { show: ScheduleShowInfo;
           : 'Dogs will not be benched. Exhibits may be removed from the Show after their judging has been completed.'}{' '}
         The Show will close half an hour after all judging has been completed. Exhibits may not be removed any earlier unless by written order of the veterinary surgeon, veterinary practitioner or of the Show Management and then only in very exceptional and unforeseen circumstances which must be reported to the Royal Kennel Club.
       </Rule>
+      {/* DELIBERATELY hand-written, and the only place left that is: this is
+          PRINT text, not a link. react-pdf treats each JSX node as a line-break
+          opportunity, so splitting it into {CANONICAL_HOST}{showHref(show)} keeps
+          the URL whole, wraps a line earlier and pushes the whole numbered-rules
+          block 11pt down the page on every RKC schedule. The words are identical;
+          only the layout of a club's printed, RKC-compliance document moves — not
+          a change to make for tidiness, and not without Mandy looking at it.
+          Absolute show URLs everywhere else go through lib/app-url.ts + showHref. */}
       <Rule num="5">
         ENTRY FEES: {entryFees(show)}. Online entry at remishowmanager.co.uk/shows/{show.slug}. A handling fee of £1.00 plus 1% of the order subtotal is shown before online payment.
       </Rule>

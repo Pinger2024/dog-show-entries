@@ -1,5 +1,7 @@
 'use client';
 
+import { showHref } from '@/lib/show-status';
+import { canonicalUrl } from '@/lib/app-url';
 import Link from 'next/link';
 import { fireDogConfetti } from '@/lib/confetti';
 import {
@@ -406,7 +408,7 @@ function EntriesOpenPanel({ show, showId }: { show: Show; showId: string }) {
     ? formatDeadline(show.entryCloseDate, 'Entries close')
     : null;
 
-  const showUrl = `https://remishowmanager.co.uk/shows/${show.slug ?? showId}`;
+  const showUrl = canonicalUrl(showHref({ id: showId, slug: show.slug }));
 
   const utils = trpc.useUtils();
   const closeEntriesMutation = trpc.shows.update.useMutation({

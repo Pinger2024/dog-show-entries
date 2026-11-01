@@ -1,3 +1,4 @@
+import { canonicalUrl } from '@/lib/app-url';
 import type { Metadata } from 'next';
 import { notFound, redirect } from 'next/navigation';
 import { db } from '@/server/db';
@@ -6,7 +7,7 @@ import { shows } from '@/server/db/schema';
 import { ShowPreviewClient } from './preview/show-preview';
 import { buildShowJsonLd } from '@/lib/show-json-ld';
 import { isUuid } from '@/lib/slugify';
-import { publicShowStatus } from '@/lib/show-status';
+import { publicShowStatus, showHref } from '@/lib/show-status';
 import { displayShowTypeTitle } from '@/lib/show-types';
 
 /** Resolve a show by UUID or slug */
@@ -73,7 +74,7 @@ export async function generateMetadata({
     .filter(Boolean)
     .join(' · ');
 
-  const canonical = `https://remishowmanager.co.uk/shows/${show.slug ?? show.id}`;
+  const canonical = canonicalUrl(showHref(show));
 
   return {
     title,
@@ -120,7 +121,7 @@ export default async function ShowDetailPage({
 
   if (!show) notFound();
 
-  const showUrl = `https://remishowmanager.co.uk/shows/${show.slug ?? id}`;
+  const showUrl = canonicalUrl(showHref({ id, slug: show.slug }));
 
   const jsonLd = JSON.stringify(buildShowJsonLd(show, showUrl, show.showSponsors));
 

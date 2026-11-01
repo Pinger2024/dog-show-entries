@@ -1,5 +1,6 @@
 'use client';
 
+import { canonicalUrl } from '@/lib/app-url';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { format, parseISO, differenceInDays } from 'date-fns';
@@ -41,7 +42,7 @@ import { ShareKitDialog } from '@/components/show/share-kit-dialog';
 import { ShareKitCard } from '@/components/show/share-kit';
 import { cn } from '@/lib/utils';
 import { captureReferralSource } from '@/lib/referral-source';
-import { effectiveShowStatus, showResultsHref, showResultsState } from '@/lib/show-status';
+import { effectiveShowStatus, showResultsHref, showResultsState, showHref } from '@/lib/show-status';
 import { entryCloseExtendedNotice } from '@/lib/entry-close-rules';
 import { what3wordsAddress, what3wordsUrl } from '@/lib/what3words';
 import { useCountdown } from '@/components/show-experience/use-countdown';
@@ -1029,7 +1030,7 @@ export function ShowPreviewClient() {
               shareUrl={
                 typeof window !== 'undefined'
                   ? `${window.location.origin}/shows/${slug}`
-                  : `https://remishowmanager.co.uk/shows/${slug}`
+                  : canonicalUrl(showHref({ slug }))
               }
               onShare={(channel) => {
                 fetch('/api/share-events', {
@@ -1246,7 +1247,7 @@ export function ShowPreviewClient() {
                 shareUrl={
                   typeof window !== 'undefined'
                     ? `${window.location.origin}/shows/${slug}`
-                    : `https://remishowmanager.co.uk/shows/${slug}`
+                    : canonicalUrl(showHref({ slug }))
                 }
                 onShare={(channel) => {
                   fetch('/api/share-events', {
@@ -1780,7 +1781,7 @@ export function ShowPreviewClient() {
             shareUrl={
               typeof window !== 'undefined'
                 ? `${window.location.origin}/shows/${slug}`
-                : `https://remishowmanager.co.uk/shows/${slug}`
+                : canonicalUrl(showHref({ slug }))
             }
             onShare={(channel) => {
               // Fire-and-forget — never block the share UX.

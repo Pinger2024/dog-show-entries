@@ -139,7 +139,15 @@ export function showResultsState(
   return hasPublishedResults ? 'available' : 'none';
 }
 
+/** Where a show's public page is — slug when it has one, id otherwise. One
+ *  place builds the link, so nothing hand-writes `/shows/${slug ?? id}` and
+ *  forgets the fallback (the calendar route and the share-image routes both
+ *  used to carry their own copy). */
+export function showHref(show: { id?: string | null; slug?: string | null }): string {
+  return `/shows/${show.slug ?? show.id}`;
+}
+
 /** Where a show's results page is — one place builds the link. */
 export function showResultsHref(show: { id: string; slug?: string | null }): string {
-  return `/shows/${show.slug ?? show.id}/results`;
+  return `${showHref(show)}/results`;
 }

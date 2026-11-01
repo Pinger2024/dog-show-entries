@@ -1,3 +1,5 @@
+import { showHref } from '@/lib/show-status';
+import { canonicalUrl } from '@/lib/app-url';
 import { Document, Page, Text, View, Image, Link } from '@react-pdf/renderer';
 import { sponsorLogoSrc } from '@/lib/sponsor-logo';
 import { formatCurrency } from '@/lib/date-utils';
@@ -76,7 +78,7 @@ export function ShowSchedule({
   const sd = show.scheduleData;
   const dockingStatement = getDockingStatement(sd);
   const estimationDate = getEstimationDate(show.entryCloseDate);
-  const showPageUrl = `https://remishowmanager.co.uk/shows/${show.slug}`;
+  const showPageUrl = canonicalUrl(showHref({ id: show.id, slug: show.slug }));
 
   // Deduplicate Junior Handler classes — they may exist with both sex='dog' and sex='bitch'
   // in the DB from old bulk-create logic. Keep only one per classDefinitionId, treating as mixed.
