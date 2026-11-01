@@ -30,6 +30,7 @@ import { computeJudgeCoverage } from '@/server/services/judge-coverage';
 import { priceManualEntry } from '@/server/services/manual-entry-pricing';
 import { formatAtcNumber } from '@/lib/registration-flags';
 import { computePrizeCardCounts } from '@/lib/prize-card-counts';
+import { optionalTypedText, requiredTypedText } from '@/lib/typed-text';
 import { BRAND } from '@/lib/brand';
 import { FEEDBACK_REPLY_TO } from '@/lib/email-addresses';
 import { checkOwnerRecord, type OwnerCheckIssue } from '@/lib/catalogue-data-checks';
@@ -484,9 +485,14 @@ export const secretaryRouter = createTRPCRouter({
   createVenue: secretaryProcedure
     .input(
       z.object({
-        name: z.string().min(1).max(255),
-        address: z.string().optional(),
-        postcode: z.string().optional(),
+        // Venue text prints on the club's RKC schedule, on the public show
+        // page and in `/api/shows`, so it is tidied here — the only path that
+        // writes it — rather than in each of those renderers. `tidyTypedText`
+        // owns the rule; see `lib/typed-text.ts` for the production dirt that
+        // prompted it.
+        name: requiredTypedText(255),
+        address: optionalTypedText(),
+        postcode: optionalTypedText(),
         indoorOutdoor: z.string().optional(),
         organisationId: z.string().uuid(),
       })
