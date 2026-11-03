@@ -51,7 +51,7 @@ import { syncCatalogueNumbers } from '@/server/services/catalogue-numbering';
 import { getDockingStatementFromScheduleData } from '@/lib/rkc-compliance';
 import { buildClassLabelMap, buildCatalogueClassDefinitions, sortEntryClassesByShowClassOrder } from '@/lib/class-labels';
 import { isJuniorHandlingClass } from '@/components/catalogue/catalogue-utils';
-import { buildScheduleJudges, aggregateJudgeAssignments } from '@/lib/schedule-judges';
+import { buildScheduleJudges, aggregateJudgeAssignments, judgeListForCatalogue } from '@/lib/schedule-judges';
 import { prepareAdvertsForRender } from '@/lib/advert-orientation';
 import { padPdfToMultiple, stripUnembeddedBase14Fonts } from '@/lib/pdf-pad';
 import { getTonalWash } from '@/server/services/sv-tonal-wash';
@@ -330,6 +330,30 @@ export async function buildCatalogueSnapshot(db: Database, showId: string): Prom
     orderBy: [asc(schema.showDonations.displayOrder), asc(schema.showDonations.createdAt)],
   });
 
+  // The judges — role, order and naming — come from ONE owner,
+  // lib/schedule-judges.ts (Mandy, 3 Nov 2026: Winter Spectacular printed its
+  // Junior Handling judge first, without affixes, and as the breed judge).
+  const { entries: catJudgeEntries, specialAwardsJudges: catSpecialAwardsJudges } =
+    aggregateJudgeAssignments(judgeAssignmentRows);
+  const catJudges = buildScheduleJudges(catJudgeEntries.values(), catSpecialAwardsJudges, {
+    hasJuniorHandlerClasses: showClassRows.some((sc) => sc.classDefinition?.type === 'junior_handler'),
+    juniorClassBreedIds: new Set(
+      showClassRows.filter((sc) => sc.breedId && sc.classDefinition?.type === 'junior_handler').map((sc) => sc.breedId!),
+    ),
+    breedClassBreedIds: new Set(
+      showClassRows.filter((sc) => sc.breedId && sc.classDefinition?.type !== 'junior_handler').map((sc) => sc.breedId!),
+    ),
+  });
+  const judgeDisplayList = catJudges
+    .map((j) => j.displayLabel)
+    .filter((label): label is string => !!label);
+  const judgeList = judgeListForCatalogue(catJudges);
+  // A Junior-Handling-only or Special Awards judge is never "the judge" of a
+  // breed, even when their assignment row names it.
+  const breedJudgeNames = new Set(
+    catJudges.filter((j) => j.role !== 'Junior Handling' && j.role !== 'Special Awards Classes').map((j) => j.name),
+  );
+
   const judgesByBreedName: Record<string, string> = {};
   const judgeBios: Record<string, string> = {};
   const judgePhotos: Record<string, string> = {};
@@ -338,18 +362,11 @@ export async function buildCatalogueSnapshot(db: Database, showId: string): Prom
     if (!ja.judge?.name) continue;
     if (ja.judge.bio && !judgeBios[ja.judge.name]) judgeBios[ja.judge.name] = ja.judge.bio;
     if (ja.judge.photoUrl && !judgePhotos[ja.judge.name]) judgePhotos[ja.judge.name] = ja.judge.photoUrl;
-    if (ja.breed?.name) {
+    if (ja.breed?.name && !ja.isSpecialAwardsClassesJudge && breedJudgeNames.has(ja.judge.name)) {
       judgesByBreedName[ja.breed.name] = ja.judge.name;
       if (ja.ring?.number) judgeRingNumbers[ja.breed.name] = String(ja.ring.number);
     }
   }
-
-  const { entries: catJudgeEntries, specialAwardsJudges: catSpecialAwardsJudges } =
-    aggregateJudgeAssignments(judgeAssignmentRows);
-  const catHasJuniorHandlerClasses = showClassRows.some((sc) => sc.classDefinition?.type === 'junior_handler');
-  const judgeDisplayList = buildScheduleJudges(catJudgeEntries.values(), catSpecialAwardsJudges, catHasJuniorHandlerClasses)
-    .map((j) => j.displayLabel)
-    .filter((label): label is string => !!label);
 
   const classDefinitions = buildCatalogueClassDefinitions(showClassRows);
   const classLabelMap = buildClassLabelMap(showClassRows, show.showRuleset);
@@ -553,6 +570,7 @@ export async function buildCatalogueSnapshot(db: Database, showId: string): Prom
     judgedOnGroupSystem: scheduleData?.judgedOnGroupSystem === true ? true : undefined,
     judgesByBreedName,
     judgeDisplayList: judgeDisplayList.length > 0 ? judgeDisplayList : undefined,
+    judgeList: judgeList.length > 0 ? judgeList : undefined,
     judgeBios: Object.keys(judgeBios).length > 0 ? judgeBios : undefined,
     judgePhotos: Object.keys(judgePhotos).length > 0 ? judgePhotos : undefined,
     judgeRingNumbers: Object.keys(judgeRingNumbers).length > 0 ? judgeRingNumbers : undefined,

@@ -24,6 +24,7 @@ import { SV, ss, SV_FONTS } from '@/components/schedule/shared/sv-styles';
 import { Numero } from '@/components/schedule/shared/numero';
 import type { CatalogueShowInfo, ShowClassInfo, ShowSponsorInfo } from './catalogue-types';
 import { SV_AGE_ORDER } from '@/lib/class-labels';
+import { regionalAwardsLines } from '@/lib/regional-awards';
 
 const PAGE_STYLE = {
   backgroundColor: SV.paper,
@@ -120,12 +121,9 @@ export function SvAcknowledgementsPage({ show }: { show: CatalogueShowInfo }) {
   // here so a show-tier sponsor never appears twice on the page.
   const showTierSponsors = sponsors.filter((s) => s.name && s.tier === 'show');
   const namedSponsors = sponsors.filter((s) => s.name && s.tier !== 'show');
-  const awardsLines = [
-    'WUSV-GSDL-BRG Grading Cards for all classes',
-    'Trophies for 1st place',
-    'Medals for 2nd & 3rd place',
-    'Junior Handling goody bags',
-  ];
+  // The secretary's own awards text, as the schedule prints it — ONE owner,
+  // lib/regional-awards.ts (Mandy, 3 Nov 2026: four fixed lines printed here).
+  const awardsLines = regionalAwardsLines(show.awardsDescription);
 
   return (
     <Page size="A5" style={PAGE_STYLE}>
@@ -543,14 +541,18 @@ export function SvClassificationPage({ show }: { show: CatalogueShowInfo }) {
 // ── PAGE 4 — JUDGES BIOS ─────────────────────────────────────────────────
 
 export function SvJudgesPage({ show }: { show: CatalogueShowInfo }) {
-  // judgesByBreedName is the canonical "{breed} → judge name" map. We
-  // unique-fy across that + judgeDisplayList to get the cover judges.
-  const judgeNames = [
-    ...new Set([
-      ...(show.judgeDisplayList ?? []).map((s) => s.replace(/^.*—\s*/, '').trim()),
-      ...Object.values(show.judgesByBreedName ?? {}),
-    ]),
-  ];
+  // The judges in running order — breed judge first, then Special Awards,
+  // then Junior Handling — printed with their affix (lib/schedule-judges.ts,
+  // Mandy 3 Nov 2026). `name` keys the bio and photo; `displayName` prints.
+  // Older stored snapshots have no judgeList: fall back to the labels.
+  const judgeEntries: Array<{ name: string; displayName: string }> =
+    show.judgeList ??
+    [
+      ...new Set([
+        ...(show.judgeDisplayList ?? []).map((s) => s.replace(/^.*—\s*/, '').trim()),
+        ...Object.values(show.judgesByBreedName ?? {}),
+      ]),
+    ].map((name) => ({ name, displayName: name }));
   const bios = show.judgeBios ?? {};
 
   return (
@@ -568,7 +570,7 @@ export function SvJudgesPage({ show }: { show: CatalogueShowInfo }) {
       </View>
 
       <View style={{ marginTop: 14 }}>
-        {judgeNames.map((name, i) => {
+        {judgeEntries.map(({ name, displayName }, i) => {
           const bio = bios[name];
           // Judge photos have always printed on the RKC front matter; this
           // page ignored show.judgePhotos until both NE Regional judges
@@ -597,7 +599,7 @@ export function SvJudgesPage({ show }: { show: CatalogueShowInfo }) {
               ) : null}
               <View style={{ flex: 1 }}>
               <Text style={{ fontFamily: SV_FONTS.serif, fontSize: 14, color: SV.ink }}>
-                {name}
+                {displayName}
               </Text>
               {/* No bio → just the name, deliberately. "Biography to follow."
                   printed in a FINAL catalogue promises something that never

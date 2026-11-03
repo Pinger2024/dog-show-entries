@@ -3,7 +3,9 @@ import { buildScheduleJudges, pickSvCoverJudges, type JudgeAggregate } from '@/l
 
 function agg(overrides: Partial<JudgeAggregate> & { name: string }): JudgeAggregate {
   return {
+    affix: null,
     breeds: new Set<string>(),
+    breedIds: new Set<string>(),
     sexes: new Set<string>(),
     hasNullSexAssignment: false,
     hasJhAssignment: false,
@@ -25,7 +27,7 @@ describe('buildScheduleJudges', () => {
       ],
     ]);
 
-    const judges = buildScheduleJudges(entries.values(), [], true);
+    const judges = buildScheduleJudges(entries.values(), [], { hasJuniorHandlerClasses: true });
 
     expect(judges.map((j) => j.displayLabel)).toEqual([
       'Dogs & Bitches — Daniel Hanswillemenke',
@@ -41,7 +43,7 @@ describe('buildScheduleJudges', () => {
       ['a-breed', agg({ name: 'Amy Breed', sexes: new Set(['bitch']) })],
     ]);
 
-    const judges = buildScheduleJudges(entries.values(), [], true);
+    const judges = buildScheduleJudges(entries.values(), [], { hasJuniorHandlerClasses: true });
 
     expect(judges.map((j) => j.name)).toEqual([
       'Amy Breed',
@@ -51,7 +53,10 @@ describe('buildScheduleJudges', () => {
     ]);
   });
 
-  it('appends Special Awards Classes entries after the breed/JH tiers', () => {
+  // Running order (Mandy 2026-07-28; again 3 Nov 2026 for Winter
+  // Spectacular): the breed judge first, then Special Awards, then Junior
+  // Handling — Special Awards used to land after the Junior Handling judge.
+  it('lists breed judges, then Special Awards, then Junior Handling', () => {
     const entries = new Map<string, JudgeAggregate>([
       ['jh', agg({ name: 'Jo JH', hasNullSexAssignment: true })],
       ['breed', agg({ name: 'Bea Breed', sexes: new Set(['dog', 'bitch']) })],
@@ -60,13 +65,13 @@ describe('buildScheduleJudges', () => {
     const judges = buildScheduleJudges(
       entries.values(),
       [{ name: 'Sam SAC', subjectToRkcApproval: false }],
-      true,
+      { hasJuniorHandlerClasses: true },
     );
 
     expect(judges.map((j) => j.displayLabel)).toEqual([
       'Dogs & Bitches — Bea Breed',
-      'Junior Handling — Jo JH',
       'Special Awards Classes — Sam SAC',
+      'Junior Handling — Jo JH',
     ]);
   });
 
@@ -81,7 +86,7 @@ describe('buildScheduleJudges', () => {
     const judges = buildScheduleJudges(
       entries.values(),
       [{ name: 'Sam SAC', subjectToRkcApproval: false }],
-      true,
+      { hasJuniorHandlerClasses: true },
     );
 
     expect(judges.map((j) => j.displayLabel)).toEqual([
@@ -96,7 +101,7 @@ describe('buildScheduleJudges', () => {
       ['solo', agg({ name: 'Solo Judge', hasNullSexAssignment: true })],
     ]);
 
-    const judges = buildScheduleJudges(entries.values(), [], false);
+    const judges = buildScheduleJudges(entries.values(), [], { hasJuniorHandlerClasses: false });
 
     expect(judges).toHaveLength(1);
     expect(judges[0].role).toBeUndefined();
@@ -129,5 +134,28 @@ describe('pickSvCoverJudges', () => {
 
   it('returns Judge TBC for an empty list', () => {
     expect(pickSvCoverJudges([])).toEqual(['Judge TBC']);
+  });
+});
+
+describe('judge naming — one owner', () => {
+  it('prints the affix after the name, then the RKC approval note', () => {
+    const entries = new Map<string, JudgeAggregate>([
+      ['sami', agg({ name: 'Sami Baggstrom', affix: 'Sensen Mann', sexes: new Set(['dog', 'bitch']), subjectToRkcApproval: true })],
+      ['lynne', agg({ name: 'Lynne Harvey', affix: 'Muscava', breeds: new Set(['German Shepherd Dog']), breedIds: new Set(['gsd']), hasNullSexAssignment: true })],
+    ]);
+    const judges = buildScheduleJudges(entries.values(), [{ name: 'Sam SAC', affix: 'Sacaffix', subjectToRkcApproval: false }], {
+      hasJuniorHandlerClasses: true,
+      juniorClassBreedIds: new Set(['gsd']),
+      breedClassBreedIds: new Set(['gsd']),
+    });
+    // Lynne's Junior Handling row also names the breed — she is still the
+    // Junior Handling judge, and comes after the breed judge (Winter
+    // Spectacular, Mandy 3 Nov 2026).
+    expect(judges.map((j) => j.displayLabel)).toEqual([
+      'Dogs & Bitches — Sami Baggstrom (Sensen Mann) (subject to RKC approval)',
+      'Special Awards Classes — Sam SAC (Sacaffix)',
+      'Junior Handling — Lynne Harvey (Muscava)',
+    ]);
+    expect(judges.map((j) => j.affix)).toEqual(['Sensen Mann', 'Sacaffix', 'Muscava']);
   });
 });

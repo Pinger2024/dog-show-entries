@@ -181,6 +181,10 @@ export interface CatalogueShowInfo {
   judgesByBreedName?: Record<string, string>;
   /** Sex-annotated judge labels: ["Dogs — Mr A Winfrow", "Bitches — Ms A Swift"] */
   judgeDisplayList?: string[];
+  /** The judges in running order (breed → Special Awards → Junior Handling),
+   *  one per person: `name` keys judgeBios/judgePhotos, `displayName` prints
+   *  (lib/schedule-judges.ts judgeListForCatalogue). */
+  judgeList?: Array<{ name: string; displayName: string; roles: string[] }>;
   /** Judge name -> bio text */
   judgeBios?: Record<string, string>;
   /** Breed name -> ring number */

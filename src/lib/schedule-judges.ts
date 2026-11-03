@@ -3,7 +3,12 @@ import type { ScheduleJudge } from '@/components/schedule/shared/types';
 /** One judge's assignments, aggregated across all their rows for a show. */
 export interface JudgeAggregate {
   name: string;
+  /** The judge's RKC kennel affix, printed after their name. */
+  affix: string | null;
   breeds: Set<string>;
+  /** Ids of the same breeds — to tell a Junior-Handling-only breed row from a
+   *  breed-class one (see {@link JudgeRoleContext}). */
+  breedIds: Set<string>;
   sexes: Set<string>;
   /** Any assignment with no sex (a "both sexes" breed row sets this too). */
   hasNullSexAssignment: boolean;
@@ -16,12 +21,36 @@ export interface JudgeAggregate {
 const approvalSuffix = (subjectToRkcApproval: boolean) =>
   subjectToRkcApproval ? ' (subject to RKC approval)' : '';
 
+/**
+ * How a judge is named on every printed document: "Name (Affix)", then
+ * " (subject to RKC approval)" while that is pending. ONE owner — the
+ * catalogue once printed bare names while the schedule printed affixes
+ * (Mandy, 3 Nov 2026: Sami Baggstrom's "Sensen Mann" missing).
+ */
+export function judgeDisplayName(judge: {
+  name: string;
+  affix?: string | null;
+  subjectToRkcApproval?: boolean | null;
+}): string {
+  const base = judge.affix ? `${judge.name} (${judge.affix})` : judge.name;
+  return `${base}${approvalSuffix(judge.subjectToRkcApproval === true)}`;
+}
+
+/** What a judge's role is judged against: the show's classes. */
+export interface JudgeRoleContext {
+  hasJuniorHandlerClasses: boolean;
+  /** Breed ids that appear on Junior Handling classes. */
+  juniorClassBreedIds?: ReadonlySet<string>;
+  /** Breed ids that appear on breed (non-JH) classes. */
+  breedClassBreedIds?: ReadonlySet<string>;
+}
+
 /** Minimal shape of a judge-assignment row that {@link aggregateJudgeAssignments}
  *  reads. The catalogue and schedule DB queries each return a wider row; this
  *  captures only the fields the aggregation needs. */
 export interface JudgeAssignmentRow {
-  judge?: { id?: string | null; name?: string | null } | null;
-  breed?: { name?: string | null } | null;
+  judge?: { id?: string | null; name?: string | null; kennelClubAffix?: string | null } | null;
+  breed?: { id?: string | null; name?: string | null } | null;
   sex?: string | null;
   isSpecialAwardsClassesJudge?: boolean | null;
   subjectToRkcApproval?: boolean | null;
@@ -39,15 +68,15 @@ export function aggregateJudgeAssignments(
   rows: Iterable<JudgeAssignmentRow>,
 ): {
   entries: Map<string, JudgeAggregate>;
-  specialAwardsJudges: Array<{ name: string; subjectToRkcApproval: boolean }>;
+  specialAwardsJudges: Array<{ name: string; affix: string | null; subjectToRkcApproval: boolean }>;
 } {
   const entries = new Map<string, JudgeAggregate>();
-  const specialAwardsJudges: Array<{ name: string; subjectToRkcApproval: boolean }> = [];
+  const specialAwardsJudges: Array<{ name: string; affix: string | null; subjectToRkcApproval: boolean }> = [];
   for (const ja of rows) {
     if (!ja.judge?.id || !ja.judge?.name) continue;
     const subjectToRkcApproval = ja.subjectToRkcApproval === true;
     if (ja.isSpecialAwardsClassesJudge) {
-      specialAwardsJudges.push({ name: ja.judge.name, subjectToRkcApproval });
+      specialAwardsJudges.push({ name: ja.judge.name, affix: ja.judge.kennelClubAffix ?? null, subjectToRkcApproval });
       continue;
     }
     if (ja.judgeRoleId) continue; // panel judges handled elsewhere
@@ -56,6 +85,7 @@ export function aggregateJudgeAssignments(
     const existing = entries.get(key);
     if (existing) {
       if (ja.breed?.name) existing.breeds.add(ja.breed.name);
+      if (ja.breed?.id) existing.breedIds.add(ja.breed.id);
       if (ja.sex) existing.sexes.add(ja.sex);
       else existing.hasNullSexAssignment = true;
       if (isJhAssignment) existing.hasJhAssignment = true;
@@ -63,7 +93,9 @@ export function aggregateJudgeAssignments(
     } else {
       entries.set(key, {
         name: ja.judge.name,
+        affix: ja.judge.kennelClubAffix ?? null,
         breeds: new Set(ja.breed?.name ? [ja.breed.name] : []),
+        breedIds: new Set(ja.breed?.id ? [ja.breed.id] : []),
         sexes: new Set(ja.sex ? [ja.sex] : []),
         hasNullSexAssignment: !ja.sex,
         hasJhAssignment: isJhAssignment,
@@ -91,19 +123,34 @@ export function aggregateJudgeAssignments(
  */
 export function buildScheduleJudges(
   judgeEntries: Iterable<JudgeAggregate>,
-  specialAwardsJudges: Array<{ name: string; subjectToRkcApproval: boolean }>,
-  hasJuniorHandlerClasses: boolean,
+  specialAwardsJudges: Array<{ name: string; affix?: string | null; subjectToRkcApproval: boolean }>,
+  context: JudgeRoleContext,
 ): ScheduleJudge[] {
   const entries = [...judgeEntries];
+  const { hasJuniorHandlerClasses } = context;
 
-  const judges: ScheduleJudge[] = entries.map((j) => {
-    const breedArr = Array.from(j.breeds);
-    const isJH =
-      breedArr.length === 0 &&
-      j.sexes.size === 0 &&
-      j.hasNullSexAssignment &&
-      hasJuniorHandlerClasses;
-    const role = isJH
+  // Who is a Junior Handling judge — the schedule route's rule, which is the
+  // one that gets it right: no Dogs/Bitches assignment, and either a no-sex
+  // assignment at a show with Junior Handling classes (on a single-breed
+  // show the breed judges are assigned by sex, so a no-sex row there IS the
+  // Junior Handling one — even when it also names the breed, as Lynne
+  // Harvey's did at Winter Spectacular, Mandy 3 Nov 2026), or breeds that
+  // appear only on Junior Handling classes.
+  const isJuniorOnly = (j: JudgeAggregate): boolean => {
+    const onlyJhBreeds =
+      j.breedIds.size > 0 &&
+      [...j.breedIds].every(
+        (id) => context.juniorClassBreedIds?.has(id) === true && context.breedClassBreedIds?.has(id) !== true,
+      );
+    const nullSexInJhShow = hasJuniorHandlerClasses && j.hasNullSexAssignment && j.sexes.size === 0;
+    return onlyJhBreeds || nullSexInJhShow;
+  };
+
+  const breedJudges: ScheduleJudge[] = [];
+  const jhJudges: ScheduleJudge[] = [];
+  for (const j of entries) {
+    const jhOnly = isJuniorOnly(j);
+    const role = jhOnly
       ? 'Junior Handling'
       : j.sexes.has('dog') && j.sexes.has('bitch')
         ? 'Dogs & Bitches'
@@ -112,10 +159,11 @@ export function buildScheduleJudges(
           : j.sexes.has('bitch')
             ? 'Bitches'
             : null;
-    const namePart = `${j.name}${approvalSuffix(j.subjectToRkcApproval)}`;
-    return {
+    const namePart = judgeDisplayName(j);
+    const judge: ScheduleJudge = {
       name: j.name,
-      breeds: breedArr,
+      affix: j.affix,
+      breeds: Array.from(j.breeds),
       sex: j.sexes.size === 1 ? (Array.from(j.sexes)[0] as 'dog' | 'bitch') : null,
       // role MUST be set so the schedule can route this judge to the right
       // section — a Junior Handling judge belongs in the JH block, not the
@@ -123,33 +171,32 @@ export function buildScheduleJudges(
       role: role ?? undefined,
       displayLabel: role ? `${role} — ${namePart}` : namePart,
     };
-  });
+    (jhOnly ? jhJudges : breedJudges).push(judge);
+  }
 
-  // Breed-role judges first, alphabetical by name; Junior-Handling-only
-  // judges after, also alphabetical. Every consumer of this list (the
-  // schedule route, the catalogue snapshot, the print pipeline) relies on
-  // this ordering — without it, whichever judge's assignment row happened
-  // to be inserted first could print as the "breed judge" on the SV cover
-  // (Mandy 2026-09-04). SAC and "also does JH" entries are appended below
-  // with their existing semantics unchanged.
-  judges.sort((a, b) => {
-    const aJh = a.role === 'Junior Handling';
-    const bJh = b.role === 'Junior Handling';
-    if (aJh !== bJh) return aJh ? 1 : -1;
-    return a.name.localeCompare(b.name);
-  });
+  // Order (Mandy, 3 Nov 2026: "the first judge should be Sami"): the breed
+  // judge(s) first, then Special Awards, then Junior Handling — the show's
+  // running order. Alphabetical within each. Every consumer of this list
+  // relies on it: the first label used to be whichever judge sorted first by
+  // name, and a Junior Handling judge printed as the breed judge (Mandy
+  // 2026-09-04, and again 3 Nov).
+  const byName = (a: ScheduleJudge, b: ScheduleJudge) => a.name.localeCompare(b.name);
+  const judges: ScheduleJudge[] = breedJudges.sort(byName);
 
-  // Special Awards Classes judges — appended with the explicit role label so
-  // the dedicated SAC block can find them even when they also judge breeds.
+  // Special Awards Classes judges — the explicit role label lets the
+  // dedicated SAC block find them even when they also judge breeds.
   for (const sac of specialAwardsJudges) {
     judges.push({
       name: sac.name,
+      affix: sac.affix ?? null,
       breeds: [],
       sex: null,
       role: 'Special Awards Classes',
-      displayLabel: `Special Awards Classes — ${sac.name}${approvalSuffix(sac.subjectToRkcApproval)}`,
+      displayLabel: `Special Awards Classes — ${judgeDisplayName(sac)}`,
     });
   }
+
+  judges.push(...jhJudges.sort(byName));
 
   // Junior Handling judges who ALSO judge breeds (got a breed role above) —
   // surface them as an additional JH entry so the JH block stops showing TBC.
@@ -161,15 +208,38 @@ export function buildScheduleJudges(
       if (!j.hasJhAssignment || alreadyJh.has(j.name)) continue;
       judges.push({
         name: j.name,
+        affix: j.affix,
         breeds: [],
         sex: null,
         role: 'Junior Handling',
-        displayLabel: `Junior Handling — ${j.name}${approvalSuffix(j.subjectToRkcApproval)}`,
+        displayLabel: `Junior Handling — ${judgeDisplayName(j)}`,
       });
     }
   }
 
   return judges;
+}
+
+/**
+ * The judges as one list per person, in the order buildScheduleJudges gives
+ * (breed → Special Awards → Junior Handling): the bare `name` keys bios and
+ * photos, `displayName` is what prints (affix, "subject to RKC approval"),
+ * `roles` are every role they hold ("Dogs & Bitches", "Junior Handling").
+ * Renderers read this rather than splitting display labels — a label's name
+ * part carries the affix, so it never matched the bio's key.
+ */
+export function judgeListForCatalogue(
+  judges: readonly ScheduleJudge[],
+): Array<{ name: string; displayName: string; roles: string[] }> {
+  const byName = new Map<string, { name: string; displayName: string; roles: string[] }>();
+  for (const j of judges) {
+    const label = j.displayLabel ?? j.name;
+    const displayName = j.role && label.startsWith(`${j.role} — `) ? label.slice(j.role.length + 3) : label;
+    const entry = byName.get(j.name) ?? { name: j.name, displayName, roles: [] };
+    if (j.role && !entry.roles.includes(j.role)) entry.roles.push(j.role);
+    byName.set(j.name, entry);
+  }
+  return [...byName.values()];
 }
 
 const JH_ROLE_PREFIX = 'Junior Handling — ';

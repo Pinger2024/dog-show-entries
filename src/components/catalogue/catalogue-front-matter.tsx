@@ -1412,24 +1412,32 @@ export function JudgesListContent({ show }: FrontMatterProps) {
     // separator) or `"<Name>"`. Parser below assumes em-dashes don't
     // appear inside RKC judge names (held in practice). If the format
     // ever changes, switch judgeDisplayList to a structured array.
+    // Structured judges (lib/schedule-judges.ts judgeListForCatalogue): the
+    // bare name keys the bio/photo, the display name (with affix) prints.
+    // Splitting labels lost every bio once the affix joined the name (3 Nov
+    // 2026) — and always had for a judge "subject to RKC approval". Older
+    // stored snapshots without judgeList keep the label parse.
     const LABEL_SEPARATOR = ' \u2014 ';
-    const labelsByJudge = new Map<string, string[]>();
-    for (const label of show.judgeDisplayList) {
-      const sepIdx = label.indexOf(LABEL_SEPARATOR);
-      const role = sepIdx >= 0 ? label.slice(0, sepIdx) : null;
-      const name = sepIdx >= 0 ? label.slice(sepIdx + LABEL_SEPARATOR.length) : label;
-      const list = labelsByJudge.get(name) ?? [];
-      list.push(role ?? name);
-      labelsByJudge.set(name, list);
-    }
-
-    const judgeEntries = Array.from(labelsByJudge.entries());
+    const judgeEntries: Array<[string, string[], string]> = show.judgeList
+      ? show.judgeList.map((j) => [j.name, j.roles.length > 0 ? j.roles : [j.name], j.displayName])
+      : (() => {
+          const labelsByJudge = new Map<string, string[]>();
+          for (const label of show.judgeDisplayList ?? []) {
+            const sepIdx = label.indexOf(LABEL_SEPARATOR);
+            const role = sepIdx >= 0 ? label.slice(0, sepIdx) : null;
+            const name = sepIdx >= 0 ? label.slice(sepIdx + LABEL_SEPARATOR.length) : label;
+            const list = labelsByJudge.get(name) ?? [];
+            list.push(role ?? name);
+            labelsByJudge.set(name, list);
+          }
+          return Array.from(labelsByJudge.entries()).map(([name, roles]) => [name, roles, name] as [string, string[], string]);
+        })();
 
     // Render a single judge's row. Extracted so the first judge can be
     // rendered inside the wrap=false banner block (keeping banner and
     // first judge atomic, so the banner never orphans at the bottom of
     // a page) while subsequent judges render as normal flowing cards.
-    const renderJudgeCard = (name: string, roles: string[], key: string | number) => {
+    const renderJudgeCard = (name: string, roles: string[], displayName: string, key: string | number) => {
       const bio = judgeBios[name];
       const photoUrl = show.judgePhotos?.[name];
       const roleLabel = roles.includes(name)
@@ -1443,7 +1451,7 @@ export function JudgesListContent({ show }: FrontMatterProps) {
             )}
             <View style={{ flex: 1 }}>
               <Text style={{ fontFamily: 'Inter', fontSize: 11, fontWeight: 'bold', color: C.textDark }}>
-                {name}
+                {displayName}
               </Text>
               {roleLabel && (
                 <Text style={{ fontFamily: 'Inter', fontSize: 9, fontStyle: 'italic', color: C.textMedium }}>
@@ -1469,10 +1477,10 @@ export function JudgesListContent({ show }: FrontMatterProps) {
         <KeepTogether>
           <SectionBand title="List of Judges" />
           {judgeEntries.length > 0 &&
-            renderJudgeCard(judgeEntries[0][0], judgeEntries[0][1], 0)}
+            renderJudgeCard(judgeEntries[0][0], judgeEntries[0][1], judgeEntries[0][2], 0)}
         </KeepTogether>
-        {judgeEntries.slice(1).map(([name, roles], i) =>
-          renderJudgeCard(name, roles, i + 1)
+        {judgeEntries.slice(1).map(([name, roles, displayName], i) =>
+          renderJudgeCard(name, roles, displayName, i + 1)
         )}
       </>
     );
@@ -1492,8 +1500,15 @@ export function JudgesListContent({ show }: FrontMatterProps) {
   // a specific breed — e.g. JH judges, or dog/bitch-only judges on a
   // single-breed show. Amanda flagged in testing (msg 863) that these
   // weren't appearing at all because the breed table skipped them.
-  const otherJudges: Array<{ name: string; roles: string[] }> = [];
-  if (show.judgeDisplayList && show.judgeDisplayList.length > 0) {
+  const otherJudges: Array<{ name: string; roles: string[]; displayName?: string }> = [];
+  if (show.judgeList) {
+    // Structured judges: the bare name keys the bio, the display name prints
+    // (lib/schedule-judges.ts judgeListForCatalogue).
+    for (const j of show.judgeList) {
+      if (breedKeyedJudgeNames.has(normaliseJudgeName(j.name))) continue;
+      otherJudges.push({ name: j.name, roles: j.roles, displayName: j.displayName });
+    }
+  } else if (show.judgeDisplayList && show.judgeDisplayList.length > 0) {
     const LABEL_SEPARATOR = ' \u2014 '; // " — " with explicit em-dash
     const rolesByJudge = new Map<string, string[]>();
     for (const label of show.judgeDisplayList) {
@@ -1571,7 +1586,7 @@ export function JudgesListContent({ show }: FrontMatterProps) {
           table. Each gets a card-style row with photo + name + role +
           bio — matching the single-breed branch layout above. */}
       {otherJudges.length > 0 && (() => {
-        const renderOtherJudge = ({ name, roles }: { name: string; roles: string[] }, i: number) => {
+        const renderOtherJudge = ({ name, roles, displayName }: { name: string; roles: string[]; displayName?: string }, i: number) => {
           const bio = judgeBios[name];
           const photoUrl = show.judgePhotos?.[name];
           const roleLabel = roles.length > 0 ? roles.join(' & ') : null;
@@ -1596,7 +1611,7 @@ export function JudgesListContent({ show }: FrontMatterProps) {
                       synthetic-stress-rkc-champ's catalogue-by-class,
                       which shares this JudgesListContent component. */}
                   <Text style={{ fontFamily: 'Inter', fontSize: 10, fontWeight: 'bold', lineHeight: 1.3, color: C.textDark }}>
-                    {name}
+                    {displayName ?? name}
                   </Text>
                   {roleLabel && (
                     <Text style={{ fontFamily: 'Inter', fontSize: 8, fontStyle: 'italic', lineHeight: 1.3, color: C.textMedium }}>

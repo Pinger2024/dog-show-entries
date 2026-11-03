@@ -54,6 +54,7 @@ import { SV_RULES } from '@/lib/sv-rules';
 import { formatLondonLongDate, formatLondonAbbrevDate } from '@/lib/date-utils';
 import { what3wordsAddress } from '@/lib/what3words';
 import { isCatalogueKind } from '@/lib/sundry-kind';
+import { regionalAwardsText } from '@/lib/regional-awards';
 
 // ── Formatting helpers ─────────────────────────────────────────────────────
 //
@@ -523,8 +524,7 @@ function SvOverview({
             </View>
           ))}
           <Text style={{ fontFamily: SV_FONTS.serif, fontSize: dense ? 7 : 7.5, color: SV.ink3, marginTop: dense ? 2 : 4, fontStyle: 'italic' }}>
-            {show.scheduleData?.awardsDescription?.trim() ||
-              'Trophies for 1st · Medals 1st–3rd · GSDL-BRG Grading Cards for all classes.'}
+            {regionalAwardsText(show.scheduleData?.awardsDescription)}
           </Text>
         </View>
 
