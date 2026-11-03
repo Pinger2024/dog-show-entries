@@ -41,7 +41,15 @@ beforeEach(async () => {
 });
 
 afterEach(() => {
-  process.env = { ...ORIGINAL_ENV };
+  // Put back only the two keys these tests touch, ON the real process.env.
+  // Replacing the whole object with a copy leaves every later file in
+  // the fork (singleFork) with a plain copy, where setting TZ no longer
+  // changes the zone — that was london-datetime-input.test.ts's random
+  // 10-test failure (1 Nov 2026). Guard: guards/process-env-not-replaced.test.ts.
+  for (const key of ['RENDER_API_KEY', 'RENDER_RENDER_CRON_ID']) {
+    if (ORIGINAL_ENV[key] === undefined) delete process.env[key];
+    else process.env[key] = ORIGINAL_ENV[key];
+  }
   resetRenderWorkerKickFetch();
 });
 

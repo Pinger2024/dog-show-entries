@@ -16,9 +16,10 @@
  * machine running it — see also `TZ=UTC` passed on the command line for
  * the same effect at the process level.
  */
+const ORIGINAL_TZ = process.env.TZ;
 process.env.TZ = 'UTC';
 
-import { describe, it, expect, vi, beforeAll } from 'vitest';
+import { describe, it, expect, vi, beforeAll, afterAll } from 'vitest';
 import { execFileSync } from 'node:child_process';
 import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -56,6 +57,13 @@ describe('schedule dates are Europe/London, not process-local (TZ=UTC repro)', (
     process.env.TZ = 'UTC';
     expect(new Date().getTimezoneOffset()).toBe(0); // sanity: really running as UTC
     await cleanDb();
+  });
+
+  // Hand the zone back: files share one process, so a leaked UTC would decide
+  // which zone every later file runs in.
+  afterAll(() => {
+    if (ORIGINAL_TZ === undefined) delete process.env.TZ;
+    else process.env.TZ = ORIGINAL_TZ;
   });
 
   it('BAGSD: entries open/close print the correct UK dates (27 April / 19 June 2026), not the UTC-shifted ones', async () => {
