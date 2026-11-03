@@ -585,39 +585,38 @@ export function SvJudgesPage({ show }: { show: CatalogueShowInfo }) {
                 paddingVertical: 8,
                 borderTopWidth: i === 0 ? 1 : 0.5,
                 borderTopColor: i === 0 ? SV.ink : SV.rule,
-                flexDirection: 'row',
-                alignItems: 'flex-start',
-                gap: 10,
+                // The photo sits in a fixed left margin (absolute, below) rather
+                // than a row column: when a long bio runs on to the next page,
+                // a split row lost its column offset and the run-on lines
+                // jumped to the page edge.
+                paddingLeft: photoUrl ? 66 : 0,
               }}
-              wrap={false}
+              // A judge with a bio may run on to the next page — kept whole,
+              // a long first bio left the "our esteemed judges" page empty
+              // once the breed judge came first (Winter Spectacular, 3 Nov
+              // 2026). The name and bio are ONE text below, so `orphans`
+              // never leaves the name alone at the foot of a page.
+              wrap={!!bio}
             >
               {photoUrl ? (
                 <Image
                   src={photoUrl}
-                  style={{ width: 56, height: 56, borderRadius: 28, objectFit: 'cover', marginTop: 2 }}
+                  style={{ position: 'absolute', left: 0, top: 10, width: 56, height: 56, borderRadius: 28, objectFit: 'cover' }}
                 />
               ) : null}
-              <View style={{ flex: 1 }}>
-              <Text style={{ fontFamily: SV_FONTS.serif, fontSize: 14, color: SV.ink }}>
-                {displayName}
-              </Text>
+              <View>
               {/* No bio → just the name, deliberately. "Biography to follow."
                   printed in a FINAL catalogue promises something that never
                   arrives — Nikki Farley declined a bio for the NE Regional and
                   the placeholder would have gone to print (Mandy 2026-08-24). */}
-              {bio ? (
-                <Text
-                  style={{
-                    fontFamily: SV_FONTS.sans,
-                    fontSize: 8.5,
-                    color: SV.ink2,
-                    lineHeight: 1.5,
-                    marginTop: 3,
-                  }}
-                >
-                  {bio}
+              <Text orphans={4} widows={2} style={{ fontFamily: SV_FONTS.sans, fontSize: 8.5, color: SV.ink2, lineHeight: 1.5 }}>
+                <Text style={{ fontFamily: SV_FONTS.serif, fontSize: 14, lineHeight: 1.45, color: SV.ink }}>
+                  {displayName}
                 </Text>
-              ) : null}
+                {/* A tab (pasted bullet lists carry "•\t") draws as a box
+                    inside a run of text — print it as a space. */}
+                {bio ? `\n${bio.replace(/\t/g, ' ')}` : null}
+              </Text>
               </View>
             </View>
           );
