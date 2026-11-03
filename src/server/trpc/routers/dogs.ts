@@ -303,7 +303,7 @@ export const dogsRouter = createTRPCRouter({
             },
           },
           titles: true,
-          achievements: { with: { show: { columns: { showType: true, showScope: true } } } },
+          achievements: { with: { show: { columns: { showType: true, showScope: true, showRuleset: true } } } },
           owners: {
             columns: { userId: true },
           },
@@ -319,9 +319,9 @@ export const dogsRouter = createTRPCRouter({
 
       // A Best Dog/Bitch at a single-breed championship IS the CC, so surface an
       // `effectiveType` the profile displays + counts as (Mandy 2026-07-09).
-      const withEffectiveType = <T extends { type: string; show?: { showType: string | null; showScope: string | null } | null }>(a: T) => {
+      const withEffectiveType = <T extends { type: string; show?: { showType: string | null; showScope: string | null; showRuleset: string | null } | null }>(a: T) => {
         const { show, ...rest } = a;
-        return { ...rest, effectiveType: effectiveCcType(a.type, show?.showType, show?.showScope) };
+        return { ...rest, effectiveType: effectiveCcType(a.type, show) };
       };
 
       // Fetch show history: entries → entryClasses → showClass → classDefinition + result
@@ -1121,11 +1121,11 @@ export const dogsRouter = createTRPCRouter({
       // 2026-07-09). Fetch with show type/scope so the mapping can apply.
       const ccAchs = await ctx.db.query.achievements.findMany({
         where: eq(achievements.dogId, input.dogId),
-        with: { show: { columns: { showType: true, showScope: true } } },
+        with: { show: { columns: { showType: true, showScope: true, showRuleset: true } } },
       });
       const ccFromAchievements = ccAchs.some((a) =>
         isVisibleToViewer(a, viewerMaySeeUnpublished) &&
-        isCcType(effectiveCcType(a.type, a.show?.showType, a.show?.showScope)),
+        isCcType(effectiveCcType(a.type, a.show)),
       );
 
       // A dog can arrive on Remi with no recorded wins at all — imported,

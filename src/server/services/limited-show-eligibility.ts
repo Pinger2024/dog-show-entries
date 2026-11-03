@@ -50,10 +50,10 @@ export async function getLimitedShowEligibility(
   // type/scope so the mapping can apply.
   const limitedAchs = await database.query.achievements.findMany({
     where: eq(achievements.dogId, dogId),
-    with: { show: { columns: { showType: true, showScope: true } } },
+    with: { show: { columns: { showType: true, showScope: true, showRuleset: true } } },
   });
   const limEffType = (a: (typeof limitedAchs)[number]) =>
-    effectiveCcType(a.type, a.show?.showType, a.show?.showScope);
+    effectiveCcType(a.type, a.show);
   const ccCount = limitedAchs.filter((a) => isCcType(limEffType(a))).length;
 
   // Count RCCs with distinct judges.

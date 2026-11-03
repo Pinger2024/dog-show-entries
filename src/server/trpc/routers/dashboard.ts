@@ -166,6 +166,8 @@ export const dashboardRouter = createTRPCRouter({
               // counts as the CC it is (Mandy 2026-07-09).
               showType: shows.showType,
               showScope: shows.showScope,
+              // A regional (wusv) never awards a CC, though stored 'championship'.
+              showRuleset: shows.showRuleset,
             })
             .from(achievements)
             .leftJoin(shows, eq(achievements.showId, shows.id))
@@ -431,7 +433,7 @@ export const dashboardRouter = createTRPCRouter({
         const hasCc = allAchievements.some(
           (a) =>
             a.dogId === entry.dogId &&
-            isCcType(effectiveCcType(a.type, a.showType, a.showScope)) &&
+            isCcType(effectiveCcType(a.type, a)) &&
             a.date === entry.show.startDate
         );
 
@@ -498,7 +500,7 @@ export const dashboardRouter = createTRPCRouter({
         const dogTitlesList = titlesByDog.get(dog.id) ?? [];
 
         const dEff = (a: (typeof dogAchievements)[number]) =>
-          effectiveCcType(a.type, a.showType, a.showScope);
+          effectiveCcType(a.type, a);
         const ccCount = dogAchievements.filter((a) => isCcType(dEff(a))).length;
 
         const rccCount = dogAchievements.filter((a) => isRccType(dEff(a))).length;

@@ -43,7 +43,7 @@ export async function loadTitleAwards(
 }> {
   const rows = await db.query.achievements.findMany({
     where: eq(achievements.dogId, dogId),
-    with: { show: { columns: { name: true, showType: true, showScope: true } } },
+    with: { show: { columns: { name: true, showType: true, showScope: true, showRuleset: true } } },
   });
   const visible = rows.filter((a) => isVisibleToViewer(a, viewerMaySeeUnpublished));
 
@@ -65,9 +65,9 @@ export async function loadTitleAwards(
     const showName = a.show?.name ?? details.showName ?? '';
     const judgeName = (a.judgeId ? judgeNames.get(a.judgeId) : null) ?? details.judgeName ?? null;
     const addedByOwner = !a.showId && details.selfReported === true;
-    // A single-breed championship show's Best Dog / Best Bitch IS the CC
-    // (Mandy, 2026-07-09).
-    const type = effectiveCcType(a.type, a.show?.showType, a.show?.showScope);
+    // An RKC single-breed championship show's Best Dog / Best Bitch IS the CC
+    // (Mandy, 2026-07-09) — never a regional's (lib/effective-achievement-type.ts).
+    const type = effectiveCcType(a.type, a.show);
     if (isCcType(type)) awards.push({ kind: 'cc', date: a.date, judgeName, showName, addedByOwner });
     else if (isRccType(type)) awards.push({ kind: 'rcc', date: a.date, judgeName, showName, addedByOwner });
     if (a.type === 'best_of_breed') bobs.push({ showName, date: a.date, addedByOwner });
