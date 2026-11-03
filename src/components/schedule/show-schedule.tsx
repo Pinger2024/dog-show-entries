@@ -21,6 +21,8 @@ import {
   getEstimationDate,
   getDockingStatement,
   s,
+  coverStyles,
+  type CoverDensity,
 } from './shared/styles';
 import { SectionBand, InfoCard, ImportantShowNotices, GoldRule, Rule, TwoColSectionHeader, INFO_CARD_LIST_WRAP_THRESHOLD } from './shared/elements';
 import { sortOfficers } from './shared/officers';
@@ -53,6 +55,8 @@ export function ShowSchedule({
   sponsors = [],
   adverts = [],
   format = 'standard',
+  coverDensity = 'normal',
+  coverOnly = false,
 }: {
   show: ScheduleShowInfo;
   classes: ScheduleClass[];
@@ -64,6 +68,10 @@ export function ShowSchedule({
    *  panel judges. The dispatcher passes this prop to both renderers so the
    *  call signatures stay symmetrical; multi-breed component consumes it. */
   panelJudges?: unknown;
+  /** 'compact' tightens the cover so it fits one page (see coverStyles). */
+  coverDensity?: CoverDensity;
+  /** Render only the cover — renderScheduleWithFit's fit check. */
+  coverOnly?: boolean;
 }) {
   const rkcProfile = getRkcScheduleProfile({
     showType: show.showType,
@@ -154,216 +162,231 @@ export function ShowSchedule({
 
 
 
+  // The cover on its own, so renderScheduleWithFit can check it fits one page
+  // (`coverOnly`) and ask for the compact cover when it does not.
+  const cs = coverStyles(coverDensity);
+  const coverPage = (
+    <Page size="A5" style={cs.coverPage}>
+      {/* Cover top band — Remi green for RKC shows, BRG red for SV shows. */}
+      {show.organisation && (
+        <View style={[cs.coverTopBand, isWusv ? { backgroundColor: CSv.primary } : {}]}>
+          <Text style={cs.coverOrgName}>{show.organisation.name}</Text>
+        </View>
+      )}
+      {!show.organisation && <View style={{ height: 12 }} />}
+
+      {/* ── Main cover content ── */}
+      <View style={cs.coverContent}>
+        {/* Logo */}
+        {show.organisation?.logoUrl && (
+          <Image src={show.organisation.logoUrl} style={cs.coverLogo} />
+        )}
+
+        {/* Title sponsor logo — prominent, above the show name */}
+        {(() => {
+          const titleSponsor = sponsors.find((sp) => sp.tier === 'title' && sponsorLogoSrc(sp));
+          if (!titleSponsor) return null;
+          return (
+            <View style={{ alignItems: 'center', marginBottom: 4 }}>
+              <Text style={{ fontFamily: 'Inter', fontSize: 6, color: C.textLight, letterSpacing: 1, textTransform: 'uppercase', marginBottom: 3 }}>
+                {titleSponsor.customTitle ?? 'Sponsored by'}
+              </Text>
+              <Image src={sponsorLogoSrc(titleSponsor)!} style={{ maxWidth: 120, maxHeight: 40, objectFit: 'contain' }} />
+            </View>
+          );
+        })()}
+
+        {/* Show name */}
+        <Text style={cs.coverShowName}>{show.name}</Text>
+
+        {/* Show type badge */}
+        <View style={[cs.coverBadge, isWusv ? { backgroundColor: CSv.primary } : {}]}>
+          <Text style={cs.coverBadgeText}>{isWusv ? displayShowTypeLabel(show.showType, show.showRuleset) : rkcProfile.title}</Text>
+        </View>
+        {!isWusv && <Text style={cs.coverSpecimen}>RKC specimen · {rkcProfile.specimenVersion}</Text>}
+
+        {/* Show-level sponsor logos below badge */}
+        {(() => {
+          const showSponsors = sponsors.filter((sp) => sp.tier === 'show' && sponsorLogoSrc(sp));
+          if (showSponsors.length === 0) return null;
+          return (
+            <View style={{ flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 12, marginTop: 4, flexWrap: 'wrap' }}>
+              {showSponsors.map((sp, i) => (
+                <View key={i} style={{ alignItems: 'center' }}>
+                  <Image src={sponsorLogoSrc(sp)!} style={{ maxWidth: 80, maxHeight: 28, objectFit: 'contain' }} />
+                  <Text style={{ fontFamily: 'Inter', fontSize: 5.5, color: C.textLight, marginTop: 1 }}>
+                    {sp.customTitle ?? sp.name}
+                  </Text>
+                </View>
+              ))}
+            </View>
+          );
+        })()}
+
+        {/* Class count — SV shows use the GSDL "{N} Class Regional Show"
+            subtitle and the WUSV/GSDL jurisdiction line (Amanda 2026-05-19). */}
+        <Text style={cs.coverClassCount}>
+          {isWusv && svGroups
+            ? `${svGroups.totalCount} Class Regional Show`
+            : `${classCount} Class${classCount !== 1 ? 'es' : ''}`}
+        </Text>
+
+        <Text style={cs.coverRegulatory}>
+          {isWusv
+            ? 'Held under GSDL British Regional Group Rules and Regulations based on those of the WUSV'
+            : 'Held under Royal Kennel Club Limited Rules & Regulations'}
+        </Text>
+        {!isWusv && sd?.judgedOnGroupSystem && (
+          <Text style={cs.coverRegulatory}>Judged on the Group System</Text>
+        )}
+        {isWusv && (
+          <Text style={[cs.coverRegulatory, { color: '#c0392b', fontWeight: 'bold' }]}>
+            To be Judged Outside — please dress appropriately for the weather
+          </Text>
+        )}
+
+        <GoldRule variant={variant} density={coverDensity} />
+
+        {/* ── Key details card ── */}
+        <View style={[cs.coverDetailCard, isWusv ? { borderLeftColor: CSv.streak, backgroundColor: CSv.cardBg } : {}]}>
+          <View style={cs.coverDetailRow}>
+            <Text style={cs.coverDetailLabel}>Date</Text>
+            <Text style={cs.coverDetailValue}>{showDate}</Text>
+          </View>
+          {show.venue && (
+            <View style={cs.coverDetailRow}>
+              <Text style={cs.coverDetailLabel}>Venue</Text>
+              <Text style={cs.coverDetailValue}>
+                {formatVenue(show.venue.name, show.venue.address, show.venue.postcode)}
+              </Text>
+            </View>
+          )}
+          {judges.length > 0 && judges.map((j, i) => (
+            <View key={i} style={cs.coverDetailRow}>
+              <Text style={cs.coverDetailLabel}>{i === 0 ? (judges.length === 1 ? 'Judge' : 'Judges') : ''}</Text>
+              <Text style={cs.coverDetailValue}>
+                {j.displayLabel ?? j.name}
+              </Text>
+            </View>
+          ))}
+          {show.showOpenTime && (
+            <View style={cs.coverDetailRow}>
+              <Text style={cs.coverDetailLabel}>Show Opens</Text>
+              <Text style={cs.coverDetailValue}>{formatTime(show.showOpenTime)}</Text>
+            </View>
+          )}
+          {show.startTime && (
+            <View style={cs.coverDetailRow}>
+              <Text style={cs.coverDetailLabel}>Judging Starts</Text>
+              <Text style={cs.coverDetailValue}>{formatTime(show.startTime)}</Text>
+            </View>
+          )}
+          {sd?.latestArrivalTime && (
+            <View style={cs.coverDetailRow}>
+              <Text style={cs.coverDetailLabel}>Dogs by</Text>
+              <Text style={cs.coverDetailValue}>{formatTime(sd.latestArrivalTime)}</Text>
+            </View>
+          )}
+          {show.kcLicenceNo && (
+            <View style={cs.coverDetailRow}>
+              <Text style={cs.coverDetailLabel}>Licence</Text>
+              <Text style={cs.coverDetailValue}>{show.kcLicenceNo}</Text>
+            </View>
+          )}
+        </View>
+
+        {/* ── Secretary details ── */}
+        {(show.secretaryName || show.secretaryEmail) && (
+          <View style={{ ...cs.coverDetailCard, borderLeftColor: isWusv ? CSv.primary : C.primary, ...(isWusv ? { backgroundColor: CSv.cardBg } : {}) }}>
+            <Text style={[cs.coverSectionLabel, isWusv ? { color: CSv.primary } : {}]}>Show Secretary</Text>
+            {show.secretaryName && (
+              <Text style={cs.coverSectionText}>{show.secretaryName}</Text>
+            )}
+            {show.secretaryAddress && (
+              <Text style={cs.coverSectionText}>{show.secretaryAddress}</Text>
+            )}
+            {show.secretaryPhone && (
+              <Text style={cs.coverSectionText}>Tel: {show.secretaryPhone}</Text>
+            )}
+            {show.secretaryEmail && (
+              <Text style={cs.coverSectionText}>{show.secretaryEmail}</Text>
+            )}
+          </View>
+        )}
+
+        {/* On-call vet */}
+        {show.onCallVet && (
+          <View style={{ width: '100%', marginBottom: 4 }}>
+            <Text style={[cs.coverSectionLabel, isWusv ? { color: CSv.primary } : {}]}>On-Call Veterinary Surgeon</Text>
+            <Text style={cs.coverSectionText}>{show.onCallVet}</Text>
+          </View>
+        )}
+
+        {/* First Aider(s) — RKC compliance, Amanda 2026-05-14 */}
+        {sd?.firstAiders && sd.firstAiders.length > 0 && (
+          <View style={{ width: '100%', marginBottom: 4 }}>
+            <Text style={[cs.coverSectionLabel, isWusv ? { color: CSv.primary } : {}]}>
+              {sd.firstAiders.length === 1 ? 'First Aider' : 'First Aiders'}
+            </Text>
+            <Text style={cs.coverSectionText}>{sd.firstAiders.join(', ')}</Text>
+          </View>
+        )}
+
+        {/* Show Manager — labelled "Event Manager" on SV shows per the
+            GSDL convention (Amanda 2026-05-20). */}
+        {sd?.showManager && (
+          <View style={{ width: '100%', marginBottom: 4 }}>
+            <Text style={[cs.coverSectionLabel, isWusv ? { color: CSv.primary } : {}]}>{isWusv ? 'Event Manager' : 'Show Manager'}</Text>
+            <Text style={cs.coverSectionText}>{sd.showManager}</Text>
+          </View>
+        )}
+
+        <GoldRule variant={variant} density={coverDensity} />
+
+        {/* Docking statement — MANDATORY on front cover per F(1)7.c(2) */}
+        <Text style={cs.coverDocking}>{dockingStatement}</Text>
+
+        {/* Outside attraction notice — prominent on cover */}
+        {sd?.outsideAttraction && (
+          <Text style={{ fontFamily: 'Inter', fontSize: 7.5, fontWeight: 'bold', color: C.textDark, textAlign: 'center', textTransform: 'uppercase', marginTop: 6 }}>
+            Please Note: Outside Attraction — RKC Regulation F(1) 16h will be strictly enforced
+          </Text>
+        )}
+
+        {/* Wet weather */}
+        {sd?.wetWeatherAccommodation === false && (
+          <Text style={{ fontFamily: 'Inter', fontSize: 7.5, fontWeight: 'bold', color: C.textDark, textAlign: 'center', marginTop: 4 }}>
+            NO WET WEATHER ACCOMMODATION IS PROVIDED
+          </Text>
+        )}
+        {sd?.wetWeatherAccommodation === true && (
+          <Text style={{ fontFamily: 'Inter', fontSize: 7, color: C.textMedium, textAlign: 'center', marginTop: 4 }}>
+            Wet weather accommodation is available
+          </Text>
+        )}
+
+      </View>
+
+      {/* Green bottom band */}
+      <View style={[cs.coverBottomBand, isWusv ? { backgroundColor: CSv.primary } : {}]} />
+    </Page>
+  );
+
+  if (coverOnly) {
+    return (
+      <Document title={`Schedule — ${show.name}`} author="Remi Show Manager">
+        {coverPage}
+      </Document>
+    );
+  }
+
   return (
     <Document title={`Schedule — ${show.name}`} author="Remi Show Manager">
 
       {/* ════════════════════════════════════════════════════════════════════════
           COVER PAGE
           ════════════════════════════════════════════════════════════════════ */}
-      <Page size="A5" style={s.coverPage}>
-        {/* Cover top band — Remi green for RKC shows, BRG red for SV shows. */}
-        {show.organisation && (
-          <View style={[s.coverTopBand, isWusv ? { backgroundColor: CSv.primary } : {}]}>
-            <Text style={s.coverOrgName}>{show.organisation.name}</Text>
-          </View>
-        )}
-        {!show.organisation && <View style={{ height: 12 }} />}
-
-        {/* ── Main cover content ── */}
-        <View style={s.coverContent}>
-          {/* Logo */}
-          {show.organisation?.logoUrl && (
-            <Image src={show.organisation.logoUrl} style={s.coverLogo} />
-          )}
-
-          {/* Title sponsor logo — prominent, above the show name */}
-          {(() => {
-            const titleSponsor = sponsors.find((sp) => sp.tier === 'title' && sponsorLogoSrc(sp));
-            if (!titleSponsor) return null;
-            return (
-              <View style={{ alignItems: 'center', marginBottom: 4 }}>
-                <Text style={{ fontFamily: 'Inter', fontSize: 6, color: C.textLight, letterSpacing: 1, textTransform: 'uppercase', marginBottom: 3 }}>
-                  {titleSponsor.customTitle ?? 'Sponsored by'}
-                </Text>
-                <Image src={sponsorLogoSrc(titleSponsor)!} style={{ maxWidth: 120, maxHeight: 40, objectFit: 'contain' }} />
-              </View>
-            );
-          })()}
-
-          {/* Show name */}
-          <Text style={s.coverShowName}>{show.name}</Text>
-
-          {/* Show type badge */}
-          <View style={[s.coverBadge, isWusv ? { backgroundColor: CSv.primary } : {}]}>
-            <Text style={s.coverBadgeText}>{isWusv ? displayShowTypeLabel(show.showType, show.showRuleset) : rkcProfile.title}</Text>
-          </View>
-          {!isWusv && <Text style={s.coverSpecimen}>RKC specimen · {rkcProfile.specimenVersion}</Text>}
-
-          {/* Show-level sponsor logos below badge */}
-          {(() => {
-            const showSponsors = sponsors.filter((sp) => sp.tier === 'show' && sponsorLogoSrc(sp));
-            if (showSponsors.length === 0) return null;
-            return (
-              <View style={{ flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 12, marginTop: 4, flexWrap: 'wrap' }}>
-                {showSponsors.map((sp, i) => (
-                  <View key={i} style={{ alignItems: 'center' }}>
-                    <Image src={sponsorLogoSrc(sp)!} style={{ maxWidth: 80, maxHeight: 28, objectFit: 'contain' }} />
-                    <Text style={{ fontFamily: 'Inter', fontSize: 5.5, color: C.textLight, marginTop: 1 }}>
-                      {sp.customTitle ?? sp.name}
-                    </Text>
-                  </View>
-                ))}
-              </View>
-            );
-          })()}
-
-          {/* Class count — SV shows use the GSDL "{N} Class Regional Show"
-              subtitle and the WUSV/GSDL jurisdiction line (Amanda 2026-05-19). */}
-          <Text style={s.coverClassCount}>
-            {isWusv && svGroups
-              ? `${svGroups.totalCount} Class Regional Show`
-              : `${classCount} Class${classCount !== 1 ? 'es' : ''}`}
-          </Text>
-
-          <Text style={s.coverRegulatory}>
-            {isWusv
-              ? 'Held under GSDL British Regional Group Rules and Regulations based on those of the WUSV'
-              : 'Held under Royal Kennel Club Limited Rules & Regulations'}
-          </Text>
-          {!isWusv && sd?.judgedOnGroupSystem && (
-            <Text style={s.coverRegulatory}>Judged on the Group System</Text>
-          )}
-          {isWusv && (
-            <Text style={[s.coverRegulatory, { color: '#c0392b', fontWeight: 'bold' }]}>
-              To be Judged Outside — please dress appropriately for the weather
-            </Text>
-          )}
-
-          <GoldRule variant={variant} />
-
-          {/* ── Key details card ── */}
-          <View style={[s.coverDetailCard, isWusv ? { borderLeftColor: CSv.streak, backgroundColor: CSv.cardBg } : {}]}>
-            <View style={s.coverDetailRow}>
-              <Text style={s.coverDetailLabel}>Date</Text>
-              <Text style={s.coverDetailValue}>{showDate}</Text>
-            </View>
-            {show.venue && (
-              <View style={s.coverDetailRow}>
-                <Text style={s.coverDetailLabel}>Venue</Text>
-                <Text style={s.coverDetailValue}>
-                  {formatVenue(show.venue.name, show.venue.address, show.venue.postcode)}
-                </Text>
-              </View>
-            )}
-            {judges.length > 0 && judges.map((j, i) => (
-              <View key={i} style={s.coverDetailRow}>
-                <Text style={s.coverDetailLabel}>{i === 0 ? (judges.length === 1 ? 'Judge' : 'Judges') : ''}</Text>
-                <Text style={s.coverDetailValue}>
-                  {j.displayLabel ?? j.name}
-                </Text>
-              </View>
-            ))}
-            {show.showOpenTime && (
-              <View style={s.coverDetailRow}>
-                <Text style={s.coverDetailLabel}>Show Opens</Text>
-                <Text style={s.coverDetailValue}>{formatTime(show.showOpenTime)}</Text>
-              </View>
-            )}
-            {show.startTime && (
-              <View style={s.coverDetailRow}>
-                <Text style={s.coverDetailLabel}>Judging Starts</Text>
-                <Text style={s.coverDetailValue}>{formatTime(show.startTime)}</Text>
-              </View>
-            )}
-            {sd?.latestArrivalTime && (
-              <View style={s.coverDetailRow}>
-                <Text style={s.coverDetailLabel}>Dogs by</Text>
-                <Text style={s.coverDetailValue}>{formatTime(sd.latestArrivalTime)}</Text>
-              </View>
-            )}
-            {show.kcLicenceNo && (
-              <View style={s.coverDetailRow}>
-                <Text style={s.coverDetailLabel}>Licence</Text>
-                <Text style={s.coverDetailValue}>{show.kcLicenceNo}</Text>
-              </View>
-            )}
-          </View>
-
-          {/* ── Secretary details ── */}
-          {(show.secretaryName || show.secretaryEmail) && (
-            <View style={{ ...s.coverDetailCard, borderLeftColor: isWusv ? CSv.primary : C.primary, ...(isWusv ? { backgroundColor: CSv.cardBg } : {}) }}>
-              <Text style={[s.coverSectionLabel, isWusv ? { color: CSv.primary } : {}]}>Show Secretary</Text>
-              {show.secretaryName && (
-                <Text style={s.coverSectionText}>{show.secretaryName}</Text>
-              )}
-              {show.secretaryAddress && (
-                <Text style={s.coverSectionText}>{show.secretaryAddress}</Text>
-              )}
-              {show.secretaryPhone && (
-                <Text style={s.coverSectionText}>Tel: {show.secretaryPhone}</Text>
-              )}
-              {show.secretaryEmail && (
-                <Text style={s.coverSectionText}>{show.secretaryEmail}</Text>
-              )}
-            </View>
-          )}
-
-          {/* On-call vet */}
-          {show.onCallVet && (
-            <View style={{ width: '100%', marginBottom: 4 }}>
-              <Text style={[s.coverSectionLabel, isWusv ? { color: CSv.primary } : {}]}>On-Call Veterinary Surgeon</Text>
-              <Text style={s.coverSectionText}>{show.onCallVet}</Text>
-            </View>
-          )}
-
-          {/* First Aider(s) — RKC compliance, Amanda 2026-05-14 */}
-          {sd?.firstAiders && sd.firstAiders.length > 0 && (
-            <View style={{ width: '100%', marginBottom: 4 }}>
-              <Text style={[s.coverSectionLabel, isWusv ? { color: CSv.primary } : {}]}>
-                {sd.firstAiders.length === 1 ? 'First Aider' : 'First Aiders'}
-              </Text>
-              <Text style={s.coverSectionText}>{sd.firstAiders.join(', ')}</Text>
-            </View>
-          )}
-
-          {/* Show Manager — labelled "Event Manager" on SV shows per the
-              GSDL convention (Amanda 2026-05-20). */}
-          {sd?.showManager && (
-            <View style={{ width: '100%', marginBottom: 4 }}>
-              <Text style={[s.coverSectionLabel, isWusv ? { color: CSv.primary } : {}]}>{isWusv ? 'Event Manager' : 'Show Manager'}</Text>
-              <Text style={s.coverSectionText}>{sd.showManager}</Text>
-            </View>
-          )}
-
-          <GoldRule variant={variant} />
-
-          {/* Docking statement — MANDATORY on front cover per F(1)7.c(2) */}
-          <Text style={s.coverDocking}>{dockingStatement}</Text>
-
-          {/* Outside attraction notice — prominent on cover */}
-          {sd?.outsideAttraction && (
-            <Text style={{ fontFamily: 'Inter', fontSize: 7.5, fontWeight: 'bold', color: C.textDark, textAlign: 'center', textTransform: 'uppercase', marginTop: 6 }}>
-              Please Note: Outside Attraction — RKC Regulation F(1) 16h will be strictly enforced
-            </Text>
-          )}
-
-          {/* Wet weather */}
-          {sd?.wetWeatherAccommodation === false && (
-            <Text style={{ fontFamily: 'Inter', fontSize: 7.5, fontWeight: 'bold', color: C.textDark, textAlign: 'center', marginTop: 4 }}>
-              NO WET WEATHER ACCOMMODATION IS PROVIDED
-            </Text>
-          )}
-          {sd?.wetWeatherAccommodation === true && (
-            <Text style={{ fontFamily: 'Inter', fontSize: 7, color: C.textMedium, textAlign: 'center', marginTop: 4 }}>
-              Wet weather accommodation is available
-            </Text>
-          )}
-
-        </View>
-
-        {/* Green bottom band */}
-        <View style={[s.coverBottomBand, isWusv ? { backgroundColor: CSv.primary } : {}]} />
-      </Page>
+      {coverPage}
 
       {/* Inside-front-cover adverts — render right after the cover page. */}
       {selectAdverts(adverts, 'schedule', 'inside_front').map((ad) => (

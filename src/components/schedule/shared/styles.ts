@@ -721,3 +721,42 @@ export const s = StyleSheet.create({
     marginTop: 6,
   },
 });
+
+// ── Cover density ──────────────────────────────────────────────────────────────
+//
+// The cover is ONE A5 page, and the docking statement on it is required on the
+// FRONT COVER (F(1)7.c(2)). When a show's cover carries enough — venue, several
+// judges "(subject to RKC approval)", secretary, vet, first aider, show manager,
+// notices — React-PDF quietly carries the end of it onto a near-blank second page
+// (Mandy, 3 Nov 2026, GSD Club of Scotland 2027). So the cover has a compact
+// density: the same content, tighter. renderScheduleWithFit
+// (server/services/schedule-render.ts) renders the cover on its own and only
+// asks for 'compact' when 'normal' ran past one page — a cover that fits is
+// printed exactly as before.
+
+export type CoverDensity = 'normal' | 'compact';
+
+const compactCover = StyleSheet.create({
+  coverTopBand: { ...s.coverTopBand, paddingVertical: 8 },
+  coverContent: { ...s.coverContent, paddingTop: 10 },
+  coverLogo: { ...s.coverLogo, maxHeight: 52, marginBottom: 6 },
+  coverShowName: { ...s.coverShowName, fontSize: 16, marginBottom: 6 },
+  coverBadge: { ...s.coverBadge, paddingVertical: 4, marginBottom: 2 },
+  coverSpecimen: { ...s.coverSpecimen, marginBottom: 3 },
+  coverClassCount: { ...s.coverClassCount, marginBottom: 2 },
+  coverRegulatory: { ...s.coverRegulatory, marginBottom: 1 },
+  coverGoldRule: { ...s.coverGoldRule, marginVertical: 5 },
+  coverDetailCard: { ...s.coverDetailCard, padding: '6 12', marginBottom: 5 },
+  coverDetailRow: { ...s.coverDetailRow, marginVertical: 0.75 },
+  coverSectionText: { ...s.coverSectionText, lineHeight: 1.25 },
+  coverDocking: { ...s.coverDocking, marginTop: 2 },
+});
+
+const compactCoverStyles: typeof s = { ...s, ...compactCover };
+
+/** The style sheet a schedule cover renders with, at the given density. Every
+ *  cover style the two RKC covers use comes from here, so they tighten
+ *  together (guards/schedule-cover-fit-one-owner.test.ts). */
+export function coverStyles(density: CoverDensity = 'normal'): typeof s {
+  return density === 'compact' ? compactCoverStyles : s;
+}

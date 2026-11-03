@@ -1,6 +1,6 @@
 import { View, Text } from '@react-pdf/renderer';
 import React from 'react';
-import { s, CSv } from './styles';
+import { s, CSv, coverStyles, type CoverDensity } from './styles';
 
 /**
  * Small reusable rendering primitives shared by both the single-breed and
@@ -133,9 +133,9 @@ export function TwoColSectionHeader({ title }: { title: string }) {
   );
 }
 
-export function GoldRule({ variant = 'rkc' }: { variant?: Variant } = {}) {
+export function GoldRule({ variant = 'rkc', density = 'normal' }: { variant?: Variant; density?: CoverDensity } = {}) {
   return (
-    <View style={[s.coverGoldRule, variant === 'sv' && { backgroundColor: CSv.streak }]} />
+    <View style={[coverStyles(density).coverGoldRule, variant === 'sv' && { backgroundColor: CSv.streak }]} />
   );
 }
 

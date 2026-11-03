@@ -56,3 +56,13 @@ export function designedSchedulePageCount(
 ): number | null {
   return showRuleset === 'wusv' ? svSchedulePageCount(adverts) : null;
 }
+
+/**
+ * Does this schedule renderer have a cover that renderScheduleWithFit checks
+ * fits one page (and a compact cover to fall back to)? The two RKC renderers
+ * do; the SV schedule fits its whole designed page count instead
+ * (`designedSchedulePageCount`).
+ */
+export function scheduleCoverFits(Component: unknown): boolean {
+  return Component === ShowSchedule || Component === ShowScheduleMultibreed;
+}
