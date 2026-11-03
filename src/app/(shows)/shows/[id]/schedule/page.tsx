@@ -18,7 +18,8 @@ import {
 import { trpc } from '@/lib/trpc/client';
 import { formatCurrency, parseLocalDate } from '@/lib/date-utils';
 import { displayShowTypeLabel } from '@/lib/show-types';
-import { buildClassLabelMap, sectionClasses } from '@/lib/class-labels';
+import { buildClassLabelMap, CLASS_SECTION_SCREEN_TITLES, sectionClasses } from '@/lib/class-labels';
+import { breedClassGroups } from './_lib/breed-class-groups';
 import { sortOfficers } from '@/components/schedule/shared/officers';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -72,48 +73,27 @@ export default function SchedulePage({
     [sectionedClasses],
   );
 
+  // Classes by breed, each breed split Mixed → Dog → Bitch → Junior Handling
+  // by the running-order owner (breedClassGroups → sectionClasses).
   const breedGroups = useMemo(() => {
-    if (!show?.showClasses) return [];
-    const map = new Map<string, {
-      groupSortOrder: number;
-      judgeNames: string[];
-      dogClasses: typeof show.showClasses;
-      bitchClasses: typeof show.showClasses;
-      combinedClasses: typeof show.showClasses;
-    }>();
-
-    for (const sc of show.showClasses) {
-      // SAC classes get their own dedicated section, not lumped under a breed.
-      if (specialAwardClassIds.has(sc.id)) continue;
-      const breedName = sc.breed?.name ?? 'Any Breed';
-      if (!map.has(breedName)) {
-        map.set(breedName, {
-          groupSortOrder: sc.breed?.group?.sortOrder ?? 999,
-          judgeNames: [],
-          dogClasses: [],
-          bitchClasses: [],
-          combinedClasses: [],
-        });
-      }
-      const group = map.get(breedName)!;
-      const sex = sc.classDefinition?.sex;
-      if (sex === 'dog') group.dogClasses.push(sc);
-      else if (sex === 'bitch') group.bitchClasses.push(sc);
-      else group.combinedClasses.push(sc);
-    }
+    const groups = breedClassGroups(show?.showClasses ?? [], specialAwardClassIds).map((g) => ({
+      ...g,
+      judgeNames: [] as string[],
+    }));
+    const byBreed = new Map(groups.map((g) => [g.breedName, g]));
 
     // Attach judge names from assignments
-    for (const ja of show.judgeAssignments ?? []) {
+    for (const ja of show?.judgeAssignments ?? []) {
       const breedName = ja.breed?.name;
       const judgeName = ja.judge?.name;
-      if (breedName && judgeName && map.has(breedName)) {
-        const group = map.get(breedName)!;
+      if (breedName && judgeName && byBreed.has(breedName)) {
+        const group = byBreed.get(breedName)!;
         if (!group.judgeNames.includes(judgeName)) {
           group.judgeNames.push(judgeName);
         }
       } else if (!breedName && judgeName) {
         // All-breeds judge — add to every breed
-        for (const group of map.values()) {
+        for (const group of groups) {
           if (!group.judgeNames.includes(judgeName)) {
             group.judgeNames.push(judgeName);
           }
@@ -121,12 +101,7 @@ export default function SchedulePage({
       }
     }
 
-    return Array.from(map.entries())
-      .sort(([a, aData], [b, bData]) => {
-        if (aData.groupSortOrder !== bData.groupSortOrder)
-          return aData.groupSortOrder - bData.groupSortOrder;
-        return a.localeCompare(b);
-      });
+    return groups;
   }, [show?.showClasses, show?.judgeAssignments, specialAwardClassIds]);
 
   // Special Award Classes — surface as a dedicated section after the
@@ -335,10 +310,10 @@ export default function SchedulePage({
         <section>
           <SectionHeading icon={Ticket} title="Classes" />
           <div className="space-y-6">
-            {breedGroups.map(([breedName, group]) => (
-              <div key={breedName}>
+            {breedGroups.map((group) => (
+              <div key={group.breedName}>
                 <div className="flex items-center justify-between mb-2">
-                  <h3 className="font-serif text-base font-bold">{breedName}</h3>
+                  <h3 className="font-serif text-base font-bold">{group.breedName}</h3>
                   {group.judgeNames.length > 0 && (
                     <span className="text-xs text-muted-foreground">
                       Judge: {group.judgeNames.join(', ')}
@@ -346,24 +321,15 @@ export default function SchedulePage({
                   )}
                 </div>
 
-                {/* Dog classes */}
-                {group.dogClasses.length > 0 && (
-                  <ClassList label="Dog Classes" classes={group.dogClasses} labelMap={classLabelMap} />
-                )}
-
-                {/* Bitch classes */}
-                {group.bitchClasses.length > 0 && (
-                  <ClassList label="Bitch Classes" classes={group.bitchClasses} labelMap={classLabelMap} />
-                )}
-
-                {/* Combined / unsexed classes */}
-                {group.combinedClasses.length > 0 && (
+                {/* A breed with only mixed classes needs no heading */}
+                {group.sections.map((section) => (
                   <ClassList
-                    label={group.dogClasses.length > 0 || group.bitchClasses.length > 0 ? 'Open to Dog & Bitch' : undefined}
-                    classes={group.combinedClasses}
+                    key={section.key}
+                    label={group.sections.length === 1 && section.key === 'mixed' ? undefined : CLASS_SECTION_SCREEN_TITLES[section.key]}
+                    classes={section.classes}
                     labelMap={classLabelMap}
                   />
-                )}
+                ))}
               </div>
             ))}
           </div>

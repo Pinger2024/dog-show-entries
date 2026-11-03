@@ -1498,7 +1498,7 @@ export const dogsRouter = createTRPCRouter({
               with: {
                 showClass: {
                   with: {
-                    classDefinition: { columns: { name: true, sex: true } },
+                    classDefinition: { columns: { name: true } },
                   },
                 },
                 result: true,
@@ -1551,7 +1551,7 @@ export const dogsRouter = createTRPCRouter({
             showDate: entry.show.startDate,
             className: ec.showClass.classDefinition.name,
             classNumber: ec.showClass.classNumber,
-            sex: ec.showClass.classDefinition.sex ?? '',
+            sex: ec.showClass.sex ?? '',
             placement: ec.result!.placement!,
             specialAward: ec.result!.specialAward,
             critiqueText: ec.result!.critiqueText,
@@ -1559,11 +1559,12 @@ export const dogsRouter = createTRPCRouter({
           }))
       );
 
-      // Sort by show date descending, then class number
+      // Sort by show date descending, then class number (an unnumbered
+      // Special Award class sorts as 0, as it always has)
       flatResults.sort((a, b) => {
         const dateCompare = b.showDate.localeCompare(a.showDate);
         if (dateCompare !== 0) return dateCompare;
-        return a.classNumber - b.classNumber;
+        return (a.classNumber ?? 0) - (b.classNumber ?? 0);
       });
 
       return flatResults;
