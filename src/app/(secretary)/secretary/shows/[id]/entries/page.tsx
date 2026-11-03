@@ -825,8 +825,9 @@ function AddEntryDialog({
 
   const createEntryMutation = trpc.secretary.createManualEntry.useMutation({
     onSuccess: (result) => {
-      // The entry is saved either way — a postal entry is already in her hand
-      // and often paid for, so we never refuse it (Michael 2026-09-11). But
+      // Missing details never stop the save — a postal entry is already in her
+      // hand and often paid for (Michael 2026-09-11). (An under-age dog in a
+      // competition class IS refused, by the server's age gate — onError.) But
       // the missing details print blank in the catalogue, so say so plainly
       // and keep it on screen long enough to write down. The entries list
       // marks the row too, so it can be found again after the toast has gone.

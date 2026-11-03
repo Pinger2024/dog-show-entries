@@ -89,7 +89,7 @@ import {
 import { getStripe } from '@/server/services/stripe';
 import { executeStripeRefund } from '@/server/services/stripe-refunds';
 import { recordTopAward, removeTopAwardHolder } from '@/server/services/achievements';
-import { penceToPoundsString } from '@/lib/date-utils';
+import { entryAgeError, penceToPoundsString } from '@/lib/date-utils';
 import { Resend } from 'resend';
 import { searchKcJudges, fetchKcJudgeProfile } from '@/server/services/kc-judges';
 import { syncCatalogueNumbers, resortCatalogueNumbers, renumberAfterRemoval } from '@/server/services/catalogue-numbering';
@@ -3717,8 +3717,9 @@ export const secretaryRouter = createTRPCRouter({
           eq(showClasses.showId, input.showId)
         ),
         // `name` as well as `type`: the regional flat-fee rule (Baby Puppy priced
-        // away from the scale) matches on the class name.
-        with: { classDefinition: { columns: { type: true, name: true } } },
+        // away from the scale) matches on the class name. The age window is
+        // for the age gate below.
+        with: { classDefinition: { columns: { type: true, name: true, minAgeMonths: true, maxAgeMonths: true } } },
       });
 
       if (selectedClasses.length !== input.classIds.length) {
@@ -3726,6 +3727,24 @@ export const secretaryRouter = createTRPCRouter({
           code: 'BAD_REQUEST',
           message: 'One or more classes are invalid for this show',
         });
+      }
+
+      // The age gate — refused, not warned. Unlike a missing pedigree field
+      // (warned below), an under-age dog in a competition class is an RKC
+      // breach that cannot be put right later, and the online paths refuse
+      // it. ONE owner: entryAgeError (src/lib/date-utils.ts); this path had
+      // no copy until 3 Nov 2026 (integration/manual-entry-age-gate.test.ts).
+      if (dog.dateOfBirth) {
+        const ageError = entryAgeError({
+          dogName: dog.registeredName ?? 'This dog',
+          dob: new Date(dog.dateOfBirth),
+          showDate: new Date(show.startDate),
+          isNfc: input.isNfc,
+          classes: selectedClasses.map((sc) => sc.classDefinition),
+        });
+        if (ageError) {
+          throw new TRPCError({ code: 'BAD_REQUEST', message: ageError });
+        }
       }
 
       // What this dog is missing for this show. The secretary is WARNED and

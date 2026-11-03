@@ -37,11 +37,12 @@ import { join } from 'node:path';
 
 const ENTRIES_ROUTER = join(process.cwd(), 'src/server/trpc/routers/entries.ts');
 const ORDERS_ROUTER = join(process.cwd(), 'src/server/trpc/routers/orders.ts');
+const SECRETARY_ROUTER = join(process.cwd(), 'src/server/trpc/routers/secretary.ts');
 const ENTER_PAGE = join(process.cwd(), 'src/app/(shows)/shows/[id]/enter/page.tsx');
 const DATE_UTILS = join(process.cwd(), 'src/lib/date-utils.ts');
 
 describe('NFC minimum age — one owner', () => {
-  for (const file of [ENTRIES_ROUTER, ORDERS_ROUTER]) {
+  for (const file of [ENTRIES_ROUTER, ORDERS_ROUTER, SECRETARY_ROUTER]) {
     const rel = file.slice(join(process.cwd(), 'src').length + 1);
 
     it(`${rel} does not hand-type the "< 12" NFC age check`, () => {
@@ -52,10 +53,12 @@ describe('NFC minimum age — one owner', () => {
       expect(src).not.toMatch(/ageWeeks\s*<\s*12\b/);
     });
 
+    // 3 Nov 2026: the NFC floor and the competition rule are one decision,
+    // `entryAgeError`, which calls isOldEnoughForNfc + nfcMinAgeMessage
+    // (guards/entry-age-gate-one-owner.test.ts).
     it(`${rel} calls the owner for the NFC age gate`, () => {
       const src = readFileSync(file, 'utf8');
-      expect(src).toContain('isOldEnoughForNfc');
-      expect(src).toContain('nfcMinAgeMessage');
+      expect(src).toMatch(/\bentryAgeError\(/);
     });
   }
 
@@ -70,6 +73,7 @@ describe('NFC minimum age — one owner', () => {
     expect(owner).toContain('export const NFC_MIN_AGE_WEEKS = 12');
     expect(owner).toContain('export function isOldEnoughForNfc');
     expect(owner).toContain('export function nfcMinAgeMessage');
+    expect(owner).toContain('export function entryAgeError');
   });
 });
 

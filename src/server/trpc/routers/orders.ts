@@ -4,7 +4,6 @@ import { resolveEntryMembership } from '@/server/services/entry-membership';
 import { SHOW_COLUMNS_FOR_PUBLIC_INCLUDE } from '../public-show-fields';
 import { TRPCError } from '@trpc/server';
 import { and, eq, isNull, inArray, desc, sql, asc } from 'drizzle-orm';
-import { differenceInWeeks } from 'date-fns';
 import { protectedProcedure, publicProcedure } from '../procedures';
 import { createTRPCRouter } from '../init';
 import type { Database } from '@/server/db';
@@ -57,7 +56,7 @@ import {
 } from '@/lib/regional-fee-calc';
 import { entryRequirements, pedigreeRequirementsMissing, entryBlockedMessage } from '@/lib/entry-requirements';
 import { hasJudgingConflict } from '@/lib/judge-exhibitor-conflict';
-import { getCompetitionAgeError, isOldEnoughForNfc, nfcMinAgeMessage } from '@/lib/date-utils';
+import { entryAgeError } from '@/lib/date-utils';
 import { PARKING_KINDS } from '@/lib/sundry-kind';
 import { isExtrasOnlyOrder } from '@/lib/extras-only-order';
 import { formatAtcNumber } from '@/lib/registration-flags';
@@ -405,29 +404,19 @@ async function placeOrder(
       const dob = new Date(dog.dateOfBirth);
       const dogName = dog.registeredName ?? 'This dog';
 
-      if (entryInput.isNfc) {
-        // NFC entries: minimum 12 weeks (RKC 2026 regulations). ONE
-        // owner — src/lib/date-utils.ts (CLAUDE.md, "One owner per rule").
-        if (!isOldEnoughForNfc(dob, showDate)) {
-          const ageWeeks = differenceInWeeks(showDate, dob);
-          throw new TRPCError({
-            code: 'BAD_REQUEST',
-            message: nfcMinAgeMessage(dogName, ageWeeks),
-          });
-        }
-      } else {
-        const classes = entryInput.classIds
+      // ONE owner for the NFC floor and the competition rule:
+      // entryAgeError (src/lib/date-utils.ts).
+      const ageError = entryAgeError({
+        dogName,
+        dob,
+        showDate,
+        isNfc: entryInput.isNfc,
+        classes: entryInput.classIds
           .map((cid) => ageCheckClassMap.get(cid))
-          .filter((c): c is NonNullable<typeof c> => !!c);
-        const ageError = getCompetitionAgeError({
-          dogName,
-          dob,
-          showDate,
-          classes,
-        });
-        if (ageError) {
-          throw new TRPCError({ code: 'BAD_REQUEST', message: ageError });
-        }
+          .filter((c): c is NonNullable<typeof c> => !!c),
+      });
+      if (ageError) {
+        throw new TRPCError({ code: 'BAD_REQUEST', message: ageError });
       }
     }
   }

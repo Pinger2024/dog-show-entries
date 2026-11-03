@@ -239,6 +239,32 @@ export function nfcMinAgeMessage(dogName: string, ageWeeks: number): string {
 }
 
 /**
+ * THE age gate for an entry — the one every server path that creates an
+ * entry calls (`entries.create`, `orders.checkout`, `secretary.createManualEntry`).
+ * An NFC entry needs {@link NFC_MIN_AGE_WEEKS}; a competition entry is judged
+ * against its classes by {@link getCompetitionAgeError}. Returns the message
+ * to refuse with, or null.
+ *
+ * One owner because the manual-entry path once had no copy of this at all: a
+ * secretary could record a four-month-old in Open (3 Nov 2026,
+ * guards/entry-age-gate-one-owner.test.ts).
+ */
+export function entryAgeError(params: {
+  dogName: string;
+  dob: string | Date;
+  showDate: string | Date;
+  isNfc: boolean;
+  classes: EntryClassForAgeCheck[];
+}): string | null {
+  const { dogName, dob, showDate, isNfc, classes } = params;
+  if (!isNfc) return getCompetitionAgeError({ dogName, dob, showDate, classes });
+  if (isOldEnoughForNfc(dob, showDate)) return null;
+  const born = typeof dob === 'string' ? parseLocalDate(dob) : dob;
+  const show = typeof showDate === 'string' ? parseLocalDate(showDate) : showDate;
+  return nfcMinAgeMessage(dogName, differenceInWeeks(show, born));
+}
+
+/**
  * Computes a handler's age in whole years on the show date.
  */
 export function handlerAgeYearsOnDate(handlerDob: string, showDate: string): number {

@@ -2,7 +2,6 @@ import { z } from 'zod';
 import { SHOW_COLUMNS_FOR_PUBLIC_INCLUDE } from '../public-show-fields';
 import { TRPCError } from '@trpc/server';
 import { and, or, eq, isNull, inArray, notInArray, asc, desc, sql } from 'drizzle-orm';
-import { differenceInWeeks } from 'date-fns';
 import {
   protectedProcedure,
   secretaryProcedure,
@@ -40,7 +39,7 @@ import { executeStripeRefund } from '@/server/services/stripe-refunds';
 import { amountChargedPence } from '@/lib/fee-calc';
 import { entryRequirements, pedigreeRequirementsMissing, entryBlockedMessage } from '@/lib/entry-requirements';
 import { hasJudgingConflict } from '@/lib/judge-exhibitor-conflict';
-import { getCompetitionAgeError, isOldEnoughForNfc, nfcMinAgeMessage } from '@/lib/date-utils';
+import { entryAgeError } from '@/lib/date-utils';
 import { svCoatDisplayName } from '@/lib/class-labels';
 import { dogAccessCondition } from '@/server/dog-access';
 
@@ -176,26 +175,17 @@ export const entriesRouter = createTRPCRouter({
         const dob = new Date(dog.dateOfBirth);
         const dogName = dog.registeredName ?? 'This dog';
 
-        if (input.isNfc) {
-          // NFC entries: minimum 12 weeks (RKC 2026 regulations). ONE
-          // owner — src/lib/date-utils.ts (CLAUDE.md, "One owner per rule").
-          if (!isOldEnoughForNfc(dob, showDate)) {
-            const ageWeeks = differenceInWeeks(showDate, dob);
-            throw new TRPCError({
-              code: 'BAD_REQUEST',
-              message: nfcMinAgeMessage(dogName, ageWeeks),
-            });
-          }
-        } else {
-          const ageError = getCompetitionAgeError({
-            dogName,
-            dob,
-            showDate,
-            classes: entryShowClasses.map((sc) => sc.classDefinition),
-          });
-          if (ageError) {
-            throw new TRPCError({ code: 'BAD_REQUEST', message: ageError });
-          }
+        // ONE owner for the NFC floor and the competition rule:
+        // entryAgeError (src/lib/date-utils.ts).
+        const ageError = entryAgeError({
+          dogName,
+          dob,
+          showDate,
+          isNfc: input.isNfc,
+          classes: entryShowClasses.map((sc) => sc.classDefinition),
+        });
+        if (ageError) {
+          throw new TRPCError({ code: 'BAD_REQUEST', message: ageError });
         }
       }
 
