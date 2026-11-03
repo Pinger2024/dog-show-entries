@@ -90,6 +90,7 @@ import { getStripe } from '@/server/services/stripe';
 import { executeStripeRefund } from '@/server/services/stripe-refunds';
 import { recordTopAward, removeTopAwardHolder } from '@/server/services/achievements';
 import { entryAgeError, penceToPoundsString } from '@/lib/date-utils';
+import { refineOwnerName } from '@/lib/owner-name';
 import { Resend } from 'resend';
 import { searchKcJudges, fetchKcJudgeProfile } from '@/server/services/kc-judges';
 import { syncCatalogueNumbers, resortCatalogueNumbers, renumberAfterRemoval } from '@/server/services/catalogue-numbering';
@@ -3543,12 +3544,15 @@ export const secretaryRouter = createTRPCRouter({
         breederName: z.string().optional(),
         colour: z.string().optional(),
         exhibitorEmail: z.string().email(),
-        ownerName: z.string().min(1),
+        ownerName: z.string().min(1).superRefine(refineOwnerName('owner')),
         ownerAddress: z.string().min(1),
+        /** A postal entry's second owner — same address, recorded as Joint
+         *  Owner 2 (Mandy, 3 Nov 2026: two names in one box are refused). */
+        jointOwnerName: z.string().trim().max(255).superRefine(refineOwnerName('owner')).optional(),
       })
     )
     .mutation(async ({ ctx, input }) => {
-      const { exhibitorEmail, ownerName, ownerAddress, ...dogData } = input;
+      const { exhibitorEmail, ownerName, ownerAddress, jointOwnerName, ...dogData } = input;
 
       // The exhibitor by email — the same lookup the entry itself uses.
       const { exhibitorId, onRemi } = await manualEntryExhibitor(ctx.db, exhibitorEmail, ctx.session.user.id);
@@ -3603,6 +3607,17 @@ export const secretaryRouter = createTRPCRouter({
         isPrimary: true,
         sortOrder: 0,
       });
+      if (jointOwnerName) {
+        await ctx.db.insert(dogOwners).values({
+          dogId: dog!.id,
+          userId: null,
+          ownerName: jointOwnerName,
+          ownerAddress,
+          ownerEmail: exhibitorEmail,
+          isPrimary: false,
+          sortOrder: 1,
+        });
+      }
 
       return dog!;
     }),

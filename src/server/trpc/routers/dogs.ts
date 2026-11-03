@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { refineOwnerName } from '@/lib/owner-name';
 import { isVisibleToViewer } from '@/lib/result-visibility';
 import { classOutcome, historyCounts, publicDogHistory, visibleResult } from '@/lib/public-dog-history';
 import { searchDogsWithPublicHistory } from '@/server/services/public-dog-summary';
@@ -266,6 +267,20 @@ function externalResultDetails(input: z.infer<typeof externalResultInput>): Exte
   };
 }
 
+
+/**
+ * One owner row, as dogs.create and dogs.update both take it. The name is
+ * refused while it holds two people or an address (lib/owner-name.ts —
+ * Mandy, 3 Nov 2026: "I'd stop them till they sort it").
+ */
+const dogOwnerInput = z.object({
+  ownerTitle: z.string().optional(),
+  ownerName: z.string().min(1, 'Owner name is required').superRefine(refineOwnerName('owner')),
+  ownerAddress: z.string().min(1, 'Owner address is required'),
+  ownerEmail: z.string().email(),
+  ownerPhone: z.string().optional(),
+  isPrimary: z.boolean().default(false),
+});
 export const dogsRouter = createTRPCRouter({
   // ── Find a Dog (public search) ──────────────────────────
   // Only dogs the public may already see a show for — never one known only
@@ -521,14 +536,7 @@ export const dogsRouter = createTRPCRouter({
         damName: z.string().optional(),
         breederName: z.string().optional(),
         colour: z.string().optional(),
-        owners: z.array(z.object({
-          ownerTitle: z.string().optional(),
-          ownerName: z.string().min(1, 'Owner name is required'),
-          ownerAddress: z.string().min(1, 'Owner address is required'),
-          ownerEmail: z.string().email(),
-          ownerPhone: z.string().optional(),
-          isPrimary: z.boolean().default(false),
-        }))
+        owners: z.array(dogOwnerInput)
           .min(1, 'At least one owner with name and address is required')
           // Same sanity bound as update — see the comment there.
           .max(10, 'Up to 10 owners are allowed'),
@@ -698,14 +706,7 @@ export const dogsRouter = createTRPCRouter({
         // untouched (every caller before 2026-08-03 does this — Edit Dog had
         // no way to fix a mis-entered owner, e.g. "Andy & Ann Johnstone"
         // crammed into one slot; Mandy asked for this the same day).
-        owners: z.array(z.object({
-          ownerTitle: z.string().optional(),
-          ownerName: z.string().min(1, 'Owner name is required'),
-          ownerAddress: z.string().min(1, 'Owner address is required'),
-          ownerEmail: z.string().email(),
-          ownerPhone: z.string().optional(),
-          isPrimary: z.boolean().default(false),
-        }))
+        owners: z.array(dogOwnerInput)
           .min(1, 'At least one owner with name and address is required')
           // Sanity bound only, NOT a domain rule — the RKC doesn't cap joint
           // owners at anything Remi should second-guess. The old max(4)

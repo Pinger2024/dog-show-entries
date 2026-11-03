@@ -75,8 +75,11 @@ describe('dogs.update — editing a dog\'s saved owners', () => {
     const breed = await makeBreed();
     const caller = createTestCaller(mandy);
 
-    // Created the pre-fix way: row 0 linked to Mandy's account, row 1 a
-    // single guest slot holding both joint owners' names crammed together.
+    // Saved the pre-fix way: row 0 linked to Mandy's account, row 1 a single
+    // guest slot holding both joint owners' names crammed together. Since
+    // 3 Nov 2026 no screen or procedure can save that (lib/owner-name.ts), so
+    // the old row is written straight to the table — such rows still exist,
+    // and Edit Dog must be able to split them.
     const dog = await caller.dogs.create({
       registeredName: 'Xano',
       breedId: breed.id,
@@ -85,8 +88,11 @@ describe('dogs.update — editing a dog\'s saved owners', () => {
       ...pedigree,
       owners: [
         { ownerName: 'Mandy McAteer', ownerAddress: '1 High St', ownerEmail: 'mandy@test.local', isPrimary: true },
-        { ownerName: 'Andy & Ann Johnstone', ownerAddress: '2 Low St', ownerEmail: 'andy@test.local', isPrimary: false },
       ],
+    });
+    await testDb.insert(dogOwners).values({
+      dogId: dog.id, userId: null, ownerName: 'Andy & Ann Johnstone', ownerAddress: '2 Low St',
+      ownerEmail: 'andy@test.local', isPrimary: false, sortOrder: 1,
     });
 
     let owners = await loadOwners(dog.id);
@@ -176,7 +182,8 @@ describe('dogs.update — editing a dog\'s saved owners', () => {
     await caller.dogs.update({
       id: dog.id,
       owners: Array.from({ length: 5 }, (_, i) => ({
-        ownerName: `Owner ${i + 1}`,
+        // Words, not digits: a digit in a name reads as an address (lib/owner-name.ts).
+        ownerName: `Owner ${['One', 'Two', 'Three', 'Four', 'Five'][i]}`,
         ownerAddress: `${i + 1} St`,
         ownerEmail: `o${i + 1}@test.local`,
         isPrimary: i === 0,
@@ -205,7 +212,7 @@ describe('dogs.update — editing a dog\'s saved owners', () => {
       caller.dogs.update({
         id: dog.id,
         owners: Array.from({ length: 11 }, (_, i) => ({
-          ownerName: `Owner ${i + 1}`,
+          ownerName: `Owner ${['One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine', 'Ten', 'Eleven'][i]}`,
           ownerAddress: `${i + 1} St`,
           ownerEmail: `o${i + 1}@test.local`,
           isPrimary: i === 0,

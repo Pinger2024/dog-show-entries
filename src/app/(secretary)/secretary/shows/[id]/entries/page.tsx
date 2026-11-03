@@ -68,6 +68,7 @@ import { SECard, Eyebrow } from '@/components/show-experience/kit';
 import { SE_H } from '@/components/show-experience/tokens';
 import { EntryItem, entryStatusConfig, formatDate, formatDogsEnteredParts, classEntriesLabel } from '../_lib/show-utils';
 import { useShowId } from '../_lib/show-context';
+import { ownerNameIssue, ownerNameProblem, splitJointOwnerName } from '@/lib/owner-name';
 
 /* Entry status pill — same fresh/honey/light pill language as the rest of
  * the Show Experience surfaces (dashboard's getStatusPill, section nav's
@@ -771,6 +772,12 @@ function AddEntryDialog({
   const [regDam, setRegDam] = useState('');
   const [regOwnerName, setRegOwnerName] = useState('');
   const [regOwnerAddress, setRegOwnerAddress] = useState('');
+  // A postal entry's second owner (Mandy, 3 Nov 2026): two names in the one
+  // owner box are refused (lib/owner-name.ts), so joint owners go in here.
+  const [regJointOwnerName, setRegJointOwnerName] = useState('');
+  const regOwnerIssue = ownerNameIssue(regOwnerName);
+  const regJointOwnerIssue = ownerNameIssue(regJointOwnerName);
+  const regOwnerSplit = splitJointOwnerName(regOwnerName);
 
   const utils = trpc.useUtils();
 
@@ -1007,8 +1014,34 @@ function AddEntryDialog({
               <p className="mb-3 text-sm font-medium">Owner Details</p>
               <div className="grid gap-3 sm:grid-cols-2">
                 <div className="space-y-1">
-                  <label className="text-xs font-medium">Owner Name *</label>
-                  <Input value={regOwnerName} onChange={(e) => setRegOwnerName(e.target.value)} />
+                  <label className="text-xs font-medium">Owner&apos;s name (one person) *</label>
+                  <Input
+                    value={regOwnerName}
+                    onChange={(e) => setRegOwnerName(e.target.value)}
+                    aria-invalid={regOwnerIssue ? true : undefined}
+                  />
+                  {regOwnerIssue && (
+                    <p className="text-xs text-destructive">
+                      {ownerNameProblem(regOwnerName) === 'two_people'
+                        ? 'This looks like two people. Put one name here and the other in Joint owner below — the catalogue shows both together.'
+                        : regOwnerIssue}
+                    </p>
+                  )}
+                  {regOwnerSplit && !regJointOwnerName && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="min-h-11"
+                      onClick={() => {
+                        setRegOwnerName(regOwnerSplit[0]);
+                        setRegJointOwnerName(regOwnerSplit[1]);
+                      }}
+                    >
+                      <Plus className="size-4" />
+                      Make it two owners
+                    </Button>
+                  )}
                 </div>
                 <div className="space-y-1">
                   <label className="text-xs font-medium">Owner Email *</label>
@@ -1023,6 +1056,15 @@ function AddEntryDialog({
                   <label className="text-xs font-medium">Owner Address *</label>
                   <Input value={regOwnerAddress} onChange={(e) => setRegOwnerAddress(e.target.value)} />
                 </div>
+                <div className="sm:col-span-2 space-y-1">
+                  <label className="text-xs font-medium">Joint owner (optional, same address)</label>
+                  <Input
+                    value={regJointOwnerName}
+                    onChange={(e) => setRegJointOwnerName(e.target.value)}
+                    aria-invalid={regJointOwnerIssue ? true : undefined}
+                  />
+                  {regJointOwnerIssue && <p className="text-xs text-destructive">{regJointOwnerIssue}</p>}
+                </div>
               </div>
             </div>
 
@@ -1034,6 +1076,7 @@ function AddEntryDialog({
                 disabled={
                   !regName || !regBreed || !regSex || !regDob ||
                   !regOwnerName || !exhibitorEmail || !regOwnerAddress ||
+                  !!regOwnerIssue || !!regJointOwnerIssue ||
                   registerDogMutation.isPending
                 }
                 onClick={() =>
@@ -1048,6 +1091,7 @@ function AddEntryDialog({
                     exhibitorEmail,
                     ownerName: regOwnerName,
                     ownerAddress: regOwnerAddress,
+                    jointOwnerName: regJointOwnerName.trim() || undefined,
                   })
                 }
               >

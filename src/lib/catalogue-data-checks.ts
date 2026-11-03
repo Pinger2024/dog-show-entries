@@ -11,12 +11,19 @@
  * "Karen" living at "Smith, 4 The Lane, Trowbridge" — the surname read as
  * part of the address, not the owner.
  *
+ * Two people in one owner slot, and an address typed into the name, are
+ * now REFUSED at entry as well (Mandy, 3 Nov 2026: "I'd stop them till they
+ * sort it") — lib/owner-name.ts owns that detection and this list calls it,
+ * so it still catches records saved before the rule.
+ *
  * These rules are deliberately dumb: false positives are fine (a secretary
  * skims a short list and either fixes the record or ignores it), false
  * negatives just mean the list didn't catch everything. Don't add "clever"
  * heuristics (initials detection, name dictionaries, address parsing) —
  * that's gate-shaped complexity this feature explicitly avoids.
  */
+
+import { ownerNameProblem } from './owner-name';
 
 export type OwnerCheckIssue =
   | 'single_word_name'
@@ -44,10 +51,6 @@ export interface OwnerCheckInput {
  *  surname) apart from "4" or "12a" (a house number/name). */
 const SINGLE_ALPHA_WORD = /^[a-z'-]+$/i;
 
-/** An "&" or "and" joining what look like two separate people's names. */
-const MULTI_PERSON_RE = /\s(?:&|and)\s/i;
-/** A joint title on one name — "Mr & Mrs D Smith" — which prints fine. */
-const TITLE_PAIR_RE = /^\s*(?:mr|mrs|miss|ms|dr)\.?\s*&\s*(?:mr|mrs|miss|ms|dr)\.?\b/i;
 
 function tokenCount(value: string): number {
   return value.split(/\s+/).filter(Boolean).length;
@@ -68,7 +71,7 @@ export function checkOwnerRecord(input: OwnerCheckInput): OwnerCheckIssue[] {
     // more tokens ("Mrs Smith", "Karen Smith") pass — we don't try to be
     // clever about initials ("J Smith" is fine, two tokens).
     issues.push('single_word_name');
-  } else if (MULTI_PERSON_RE.test(name) && !TITLE_PAIR_RE.test(name)) {
+  } else if (ownerNameProblem(name) === 'two_people') {
     // "Andy & Ann Johnstone" in ONE owner slot — the catalogue heading
     // treats each slot as one person, so it printed "JOHNSTONE, A" and
     // Ann vanished (Xano, Clyde Valley, 2026-08-03). Each person needs

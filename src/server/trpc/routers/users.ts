@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { refineOwnerName } from '@/lib/owner-name';
 import { TRPCError } from '@trpc/server';
 import { eq } from 'drizzle-orm';
 import { Resend } from 'resend';
@@ -32,7 +33,7 @@ export const usersRouter = createTRPCRouter({
   updateProfile: protectedProcedure
     .input(
       z.object({
-        name: z.string().min(1).max(255).optional(),
+        name: z.string().min(1).max(255).superRefine(refineOwnerName('account')).optional(),
         address: z.string().nullable().optional(),
         postcode: z.string().nullable().optional(),
         phone: z.string().nullable().optional(),

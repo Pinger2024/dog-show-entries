@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { refineOwnerName } from '@/lib/owner-name';
 import { eq, count } from 'drizzle-orm';
 import { createTRPCRouter } from '../init';
 import { protectedProcedure } from '../procedures';
@@ -48,7 +49,7 @@ export const onboardingRouter = createTRPCRouter({
   saveProfile: protectedProcedure
     .input(
       z.object({
-        name: z.string().min(1, 'Name is required'),
+        name: z.string().min(1, 'Name is required').superRefine(refineOwnerName('account')),
         address: z.string().min(1, 'Address is required'),
         postcode: z.string().min(1, 'Postcode is required'),
         phone: z.string().optional(),

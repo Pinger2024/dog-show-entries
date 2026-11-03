@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
+import { refineOwnerName } from '@/lib/owner-name';
 import { format } from 'date-fns';
 import {
   CalendarIcon,
@@ -150,7 +151,7 @@ function StepIndicator({
 
 // ── Schemas ─────────────────────────────────────────────────────
 const profileSchema = z.object({
-  name: z.string().min(1, 'Name is required'),
+  name: z.string().min(1, 'Name is required').superRefine(refineOwnerName('account')),
   address: z.string().min(1, 'Address is required'),
   postcode: z.string().min(1, 'Postcode is required'),
   phone: z.string().optional(),

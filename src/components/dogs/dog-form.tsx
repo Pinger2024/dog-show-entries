@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useForm, useFieldArray, useWatch, type Control } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
+import { refineOwnerName, splitJointOwnerName } from '@/lib/owner-name';
 import { format, parse, isValid } from 'date-fns';
 import { CalendarIcon, Check, ChevronsUpDown, Loader2, Plus, Trash2, Award, Search, UserPlus } from 'lucide-react';
 import { toast } from 'sonner';
@@ -64,7 +65,7 @@ import {
 
 const ownerSchema = z.object({
   ownerTitle: z.string().optional(),
-  ownerName: z.string().min(1, 'Name is required'),
+  ownerName: z.string().min(1, 'Name is required').superRefine(refineOwnerName('owner')),
   ownerAddress: z.string().min(1, 'Address is required'),
   ownerEmail: z.string().email('Valid email required'),
   ownerPhone: z.string().optional(),
@@ -621,7 +622,7 @@ export function DogForm({ mode, defaultValues, dogId, svSection, returnTo, isReg
     }
   }, [breeds, form]);
 
-  const { fields: ownerFields, append: appendOwner, remove: removeOwner } =
+  const { fields: ownerFields, append: appendOwner, insert: insertOwner, remove: removeOwner } =
     useFieldArray({ control: form.control, name: 'owners' });
 
   // Keep every ticked joint owner's address tracking Owner 1's, live. The
@@ -629,6 +630,26 @@ export function DogForm({ mode, defaultValues, dogId, svSection, returnTo, isReg
   // empty — value that would fail validation behind a tick nobody can see.
   const watchedOwners = useWatch({ control: form.control, name: 'owners' });
   const primaryAddress = watchedOwners?.[0]?.ownerAddress ?? '';
+
+  // "Make it two owners" — two people typed into one owner's name box are
+  // refused (lib/owner-name.ts, Mandy 3 Nov 2026), so offer the split in one
+  // tap: this row keeps the first person, a new joint owner gets the second
+  // at the same address, and the email is left for them to fill in, exactly
+  // as Add Joint Owner does.
+  const makeTwoOwners = (index: number, [first, second]: [string, string]) => {
+    form.setValue(`owners.${index}.ownerName`, first, { shouldValidate: true });
+    const row = form.getValues(`owners.${index}`);
+    const sharesPrimary = index === 0 || row.sameAddressAsPrimary === true;
+    insertOwner(index + 1, {
+      ownerTitle: '',
+      ownerName: second,
+      ownerAddress: sharesPrimary ? primaryAddress : row.ownerAddress,
+      ownerEmail: '',
+      ownerPhone: '',
+      isPrimary: false,
+      sameAddressAsPrimary: sharesPrimary,
+    });
+  };
 
   // Live registered name, to show the "we'll treat this as a Champion"
   // hint the moment a title prefix is typed (parseChampionPrefix — see
@@ -1646,15 +1667,37 @@ export function DogForm({ mode, defaultValues, dogId, svSection, returnTo, isReg
                   <FormField
                     control={form.control}
                     name={`owners.${index}.ownerName`}
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Name</FormLabel>
-                        <FormControl>
-                          <Input placeholder="Full name" {...field} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
+                    render={({ field }) => {
+                      const split = splitJointOwnerName(field.value);
+                      return (
+                        <FormItem>
+                          <FormLabel>Owner&apos;s name (one person)</FormLabel>
+                          <FormControl>
+                            <Input
+                              placeholder="Full name"
+                              {...field}
+                              onBlur={() => {
+                                field.onBlur();
+                                void form.trigger(`owners.${index}.ownerName`);
+                              }}
+                            />
+                          </FormControl>
+                          <FormMessage />
+                          {split && ownerFields.length < 10 && (
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              className="min-h-11"
+                              onClick={() => makeTwoOwners(index, split)}
+                            >
+                              <Plus className="size-4" />
+                              Make it two owners
+                            </Button>
+                          )}
+                        </FormItem>
+                      );
+                    }}
                   />
                 </div>
                 <div className="grid gap-3 sm:grid-cols-1">
