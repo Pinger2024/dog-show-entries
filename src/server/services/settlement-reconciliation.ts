@@ -1,4 +1,5 @@
-import { and, eq, isNotNull, isNull, sql } from 'drizzle-orm';
+import { and, eq, inArray, isNotNull, isNull, ne, sql } from 'drizzle-orm';
+import { CAPTURED_CHARGE_STATUSES } from '@/lib/order-payment-summary';
 import { orders, payments } from '@/server/db/schema';
 import type { Database } from '@/server/db';
 import { computeShowMetrics } from './show-metrics';
@@ -20,10 +21,11 @@ import { computeSettlementItemisation, type SettlementItemisation } from './sett
  *     that becomes `via_remi_total_pence` on the invoice, see
  *     admin-invoices.ts `issueInvoiceRow`).
  *  2. The itemisation's `cardFeeTotalPence` vs an independently-scoped sum of
- *     `payments.fee_pence` on the paid orders' *initial* payments only (the
- *     existing query has no `type` filter at all).
+ *     `payments.fee_pence` on the paid orders' charges, leaving out refund
+ *     rows and fully refunded charges (the itemisation query has no `type`
+ *     filter at all).
  *  3. What Stripe actually captured — `payments.amount` on the paid orders'
- *     initial payments, less Remi's platform fee and the refunds Stripe
+ *     charges, less Remi's platform fee and the refunds Stripe
  *     actually made on those orders (`payments` of type 'refund') — vs
  *     `viaRemi.totalPence` again, this time validated against the RAW charge
  *     and refund amounts rather than our entry/sundry bookkeeping.
@@ -32,6 +34,12 @@ import { computeSettlementItemisation, type SettlementItemisation } from './sett
  *     withdrawn entry on a still-paid order. North Eastern Championship 2026,
  *     1 Oct: Jackie Billson's refunded £18 Junior entry made a correct
  *     statement read "difference £18.00 — cannot issue".)
+ *
+ * Checks 2 and 3 count every charge on an order, not only the first. An order
+ * can carry a later top-up (orders.addExtras, type 'adjustment'). They used to
+ * sum 'initial' rows alone, so on Winter Spectacular 2026 (6 Nov) a £5 catalogue
+ * bought after entering made a correct statement read "difference £6.05" and
+ * "difference £0.29", which is Stripe's fee on that top-up.
  *
  * One known, EXPLAINED difference between (1)'s two sides is carved out
  * rather than flagged as a bug: `computeShowMetrics` has no concept of an
@@ -62,10 +70,10 @@ export type SettlementReconciliation = {
   deltaPence: number;
   /** settlement.cardFeeTotalPence */
   cardFeeItemisedPence: number;
-  /** Independent sum(payments.fee_pence) on the paid orders' initial payments. */
+  /** Independent sum(payments.fee_pence) on the paid orders' fee-bearing charges. */
   cardFeeIndependentPence: number;
   cardFeeDeltaPence: number;
-  /** sum(payments.amount) on paid orders' initial payments, orders with a Stripe intent. */
+  /** sum(payments.amount) on paid orders' captured charges, orders with a Stripe intent. */
   stripeGrossPence: number;
   /** sum(orders.platform_fee_pence) over the same paid, online-order population. */
   stripePlatformFeePence: number;
@@ -76,11 +84,17 @@ export type SettlementReconciliation = {
   /** stripeGrossPence - stripePlatformFeePence - stripeRefundedPence. */
   stripeCollectedPence: number;
   stripeDeltaPence: number;
-  /** Paid, online, initial payments still missing captured fee_pence after the heal — must be zero to issue. */
+  /** Paid, online, fee-bearing charges still missing captured fee_pence after the heal — must be zero to issue. */
   missingFeeCount: number;
   ok: boolean;
   lines: SettlementReconciliationLine[];
 };
+
+/** Money Stripe took: the first payment or a later top-up, never one abandoned or declined. */
+const capturedCharge = and(ne(payments.type, 'refund'), inArray(payments.status, [...CAPTURED_CHARGE_STATUSES]));
+
+/** The statement charges no card fee on a fully refunded charge (settlement-itemisation), so the fee checks leave it out. */
+const feeBearingCharge = and(capturedCharge, ne(payments.status, 'refunded'));
 
 function money(pence: number): string {
   const sign = pence < 0 ? '-' : '';
@@ -118,7 +132,7 @@ export async function reconcileSettlement(
     .select({ total: sql<number>`COALESCE(SUM(${payments.feePence}), 0)::int` })
     .from(payments)
     .innerJoin(orders, eq(payments.orderId, orders.id))
-    .where(and(eq(orders.showId, showId), eq(orders.status, 'paid'), eq(payments.type, 'initial')));
+    .where(and(eq(orders.showId, showId), eq(orders.status, 'paid'), feeBearingCharge));
   const cardFeeIndependentPence = cardFeeRow?.total ?? 0;
   const cardFeeItemisedPence = itemisation.cardFeeTotalPence;
   const cardFeeDeltaPence = cardFeeItemisedPence - cardFeeIndependentPence;
@@ -127,7 +141,7 @@ export async function reconcileSettlement(
     .select({ total: sql<number>`COALESCE(SUM(${payments.amount}), 0)::int` })
     .from(payments)
     .innerJoin(orders, eq(payments.orderId, orders.id))
-    .where(and(paidOnlineOrders, eq(payments.type, 'initial')));
+    .where(and(paidOnlineOrders, capturedCharge));
   const stripeGrossPence = stripeRow?.total ?? 0;
 
   const [platformFeeRow] = await db
@@ -154,7 +168,7 @@ export async function reconcileSettlement(
     .select({ count: sql<number>`count(*)::int` })
     .from(payments)
     .innerJoin(orders, eq(payments.orderId, orders.id))
-    .where(and(paidOnlineOrders, eq(payments.type, 'initial'), isNull(payments.feePence)));
+    .where(and(paidOnlineOrders, feeBearingCharge, isNull(payments.feePence)));
   const missingFeeCount = missingRow?.count ?? 0;
 
   const ok = deltaPence === 0 && cardFeeDeltaPence === 0 && stripeDeltaPence === 0 && missingFeeCount === 0;

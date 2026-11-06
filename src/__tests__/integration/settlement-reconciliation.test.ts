@@ -45,8 +45,8 @@ async function seedPayment(opts: {
   orderId: string;
   amount: number;
   feePence?: number | null;
-  type?: 'initial' | 'refund';
-  status?: 'succeeded' | 'refunded' | 'partially_refunded';
+  type?: 'initial' | 'adjustment' | 'refund';
+  status?: 'pending' | 'failed' | 'succeeded' | 'refunded' | 'partially_refunded';
   refundAmount?: number | null;
   stripePaymentId?: string | null;
 }) {
@@ -259,5 +259,97 @@ describe('reconcileSettlement — a refund whose entry is off the statement (Nor
     expect(result.ok).toBe(true);
     // The club gets the two kept entries less the £2 refund — never the £18.
     expect(result.itemisedPence).toBe(1800 + 1800 - 200);
+  });
+});
+
+/**
+ * Winter Spectacular, 6 Nov 2026 (Mandy's screenshot, Telegram 8214): an
+ * exhibitor bought a £5 catalogue after entering, so one order carries two
+ * charges, £28.27 then a £6.05 top-up (orders.addExtras, type 'adjustment').
+ * The statement was right. The checks only summed 'initial' rows, so it read
+ * "difference £6.05" and "difference £0.29" (Stripe's fee on the top-up) and
+ * refused to issue.
+ */
+describe('reconcileSettlement — a top-up paid after the first payment (Winter Spectacular, Nov 2026)', () => {
+  async function paidOrderWithEntry(amount: number, platformFeePence: number) {
+    const breed = await makeBreed();
+    const exhibitor = await makeUser({ role: 'exhibitor' });
+    const org = await makeOrg({ name: 'Test Winter Club' });
+    const show = await makeShow({ organisationId: org.id, breedId: breed.id });
+    const dog = await makeDog({ ownerId: exhibitor.id, breedId: breed.id });
+    const order = await seedOrder({ showId: show.id, exhibitorId: exhibitor.id, amount, platformFeePence });
+    await testDb.insert(entries).values({
+      showId: show.id, dogId: dog!.id, exhibitorId: exhibitor.id, orderId: order.id, status: 'confirmed', totalFee: amount,
+    });
+    return { show, order };
+  }
+
+  it('reconciles: the first payment and the top-up are both money Stripe took', async () => {
+    const { show, order } = await paidOrderWithEntry(3200, 232);
+    await seedPayment({ orderId: order.id, amount: 2827, feePence: 62 });
+    await seedPayment({ orderId: order.id, amount: 605, feePence: 29, type: 'adjustment' });
+
+    const result = await reconcileSettlement(testDb, show.id);
+    expect(result.stripeGrossPence).toBe(3432);
+    expect(result.cardFeeItemisedPence).toBe(91);
+    expect(result.cardFeeDeltaPence).toBe(0);
+    expect(result.stripeDeltaPence).toBe(0);
+    expect(result.deltaPence).toBe(0);
+    expect(result.ok).toBe(true);
+  });
+
+  it('ignores a top-up that was never paid: abandoned or declined', async () => {
+    const { show, order } = await paidOrderWithEntry(1800, 118);
+    await seedPayment({ orderId: order.id, amount: 1918, feePence: 49 });
+    await seedPayment({ orderId: order.id, amount: 605, type: 'adjustment', status: 'pending' });
+    await seedPayment({ orderId: order.id, amount: 605, type: 'adjustment', status: 'failed' });
+
+    const result = await reconcileSettlement(testDb, show.id);
+    expect(result.stripeGrossPence).toBe(1918);
+    expect(result.missingFeeCount).toBe(0);
+    expect(result.ok).toBe(true);
+  });
+
+  it('refuses to issue while a paid top-up has no captured Stripe fee', async () => {
+    const { show, order } = await paidOrderWithEntry(3200, 232);
+    await seedPayment({ orderId: order.id, amount: 2827, feePence: 62 });
+    await seedPayment({ orderId: order.id, amount: 605, feePence: null, type: 'adjustment' });
+
+    const result = await reconcileSettlement(testDb, show.id);
+    expect(result.stripeDeltaPence).toBe(0);
+    expect(result.missingFeeCount).toBe(1);
+    expect(result.ok).toBe(false);
+  });
+
+  it('refuses, rather than misstates, a paid class-change top-up that is not linked to its order', async () => {
+    // entries.update inserts the top-up with entryId alone, so no order-scoped
+    // query can see it, while the webhook still bumps the order's totals.
+    const { show, order } = await paidOrderWithEntry(1200, 26);
+    await seedPayment({ orderId: order.id, amount: 800, feePence: 32 });
+    const entry = await testDb.query.entries.findFirst({ where: eq(entries.orderId, order.id) });
+    await testDb.insert(payments).values({
+      entryId: entry!.id, stripePaymentId: `pi_${randomUUID()}`, amount: 426, status: 'succeeded', type: 'adjustment', feePence: 26,
+    });
+
+    const result = await reconcileSettlement(testDb, show.id);
+    expect(result.stripeDeltaPence).toBe(426);
+    expect(result.ok).toBe(false);
+  });
+
+  it('reconciles a top-up that was charged and then fully refunded', async () => {
+    const { show, order } = await paidOrderWithEntry(2300, 223);
+    await seedPayment({ orderId: order.id, amount: 1918, feePence: 49 });
+    await seedPayment({ orderId: order.id, amount: 605, feePence: 29, type: 'adjustment', status: 'refunded', refundAmount: 605 });
+    await seedPayment({ orderId: order.id, amount: 605, feePence: 0, type: 'refund', status: 'refunded' });
+
+    const result = await reconcileSettlement(testDb, show.id);
+    // The charge happened and so did the refund: both count, so they cancel.
+    expect(result.stripeGrossPence).toBe(2523);
+    expect(result.stripeRefundedPence).toBe(605);
+    expect(result.stripeDeltaPence).toBe(0);
+    // The statement charges no fee on a fully refunded payment, and neither must the check.
+    expect(result.cardFeeItemisedPence).toBe(49);
+    expect(result.cardFeeDeltaPence).toBe(0);
+    expect(result.ok).toBe(true);
   });
 });

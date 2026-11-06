@@ -19,14 +19,17 @@ export interface PaymentRowLike {
   stripePaymentId: string | null;
 }
 
+/** Statuses of a charge Stripe actually took. Includes 'refunded' deliberately:
+ *  the money was taken, and giving it back is its own row. Pending and failed
+ *  charges never took anything. */
+export const CAPTURED_CHARGE_STATUSES = ['succeeded', 'partially_refunded', 'refunded'] as const;
+
 /** The order's settled charge row — never a refund row. Includes status
  *  'refunded' deliberately, so a fully-refunded order still reports what
  *  was originally paid. */
 export function chargePayment<T extends PaymentRowLike>(payments: T[]): T | undefined {
   return payments.find(
-    (p) =>
-      p.type !== 'refund' &&
-      (p.status === 'succeeded' || p.status === 'partially_refunded' || p.status === 'refunded'),
+    (p) => p.type !== 'refund' && (CAPTURED_CHARGE_STATUSES as readonly string[]).includes(p.status),
   );
 }
 
