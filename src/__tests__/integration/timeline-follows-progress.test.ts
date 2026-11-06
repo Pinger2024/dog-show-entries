@@ -6,6 +6,7 @@ import { createTestCaller } from '../helpers/context';
 import {
   makeUser,
   makeDog,
+  makeJudge,
 } from '../helpers/factories';
 
 describe('timeline.createPost', () => {
@@ -238,5 +239,164 @@ describe('dogs.getTitleProgress', () => {
         dogId: '00000000-0000-0000-0000-000000000000',
       }),
     ).rejects.toThrow(/Dog not found/);
+  });
+});
+
+/**
+ * Paula Ingham, 2 Oct 2026 (via Mandy): her Bali's title progress showed
+ * "0 Unique Judges" with a CC and a Reserve CC she had added by hand — the
+ * judges she typed in were never counted. And the public dog page used its
+ * own "1 CC + 7 RCCs" route. One rule now (lib/rkc-titles.ts), one loader
+ * (services/title-awards.ts), both views.
+ */
+describe("title progress — the owner's own CCs and judges count, on both views", () => {
+  async function paulasBali() {
+    const owner = await makeUser({ role: 'exhibitor', proSubscriptionStatus: 'active' });
+    const dog = await makeDog({ ownerId: owner.id, dateOfBirth: '2023-08-14' });
+    const caller = createTestCaller(owner);
+    await caller.dogs.addExternalResult({
+      dogId: dog.id, type: 'cc', date: '2026-07-03',
+      showName: 'Boston & District Canine Society', judgeName: 'Josh Henderson',
+    });
+    await caller.dogs.addExternalResult({
+      dogId: dog.id, type: 'reserve_cc', date: '2026-01-17',
+      showName: 'Manchester CH Show', judgeName: 'Andy Foreman',
+    });
+    return { owner, dog, caller };
+  }
+
+  it('the dashboard counts the two judges she typed in', async () => {
+    const { dog, caller } = await paulasBali();
+    const progress = await caller.dogs.getTitleProgress({ dogId: dog.id });
+    expect(progress.stats).toMatchObject({ ccs: 1, reserveCCs: 1, uniqueJudges: 2 });
+    const champion = progress.titleProgress.find((t) => t.code === 'ch')!;
+    expect(champion.routes?.[1]?.detail).toBe('1/2 CCs + 1/5 RCCs under 2/7 judges');
+  });
+
+  it("the public dog page's box uses the same rule — 2 CCs + 5 RCCs, not 1 + 7", async () => {
+    const { dog, caller } = await paulasBali();
+    const box = await caller.pro.getChampionshipProgress({ dogId: dog.id });
+    expect(box.championship.alternative).toMatchObject({ requiredCCs: 2, requiredRCCs: 5, requiredJudges: 7, ccs: 1, rccs: 1, uniqueJudges: 2 });
+    expect(box.championship.classic).toMatchObject({ ccs: 1, uniqueJudges: 1 });
+    expect(box.awards.ccs[0]?.showName).toBe('Boston & District Canine Society');
+  });
+
+  it('a judge recorded by Remi on show day and the same judge typed by hand count once', async () => {
+    const { owner, dog, caller } = await paulasBali();
+    const judge = await makeJudge({ name: 'Josh Henderson' });
+    await testDb.insert(achievements).values({
+      dogId: dog.id, type: 'reserve_cc', date: '2026-08-01', judgeId: judge.id, publishedAt: new Date(),
+    });
+    const progress = await createTestCaller(owner).dogs.getTitleProgress({ dogId: dog.id });
+    expect(progress.stats.uniqueJudges).toBe(2);
+    void caller;
+  });
+});
+
+/**
+ * Mandy, 5 Oct 2026 (Paula's Bali): the Add Result form asks what kind of
+ * show it was and, for a group placing, the place — so Remi can work out the
+ * RKC Show Certificate of Excellence points the way Paula does by hand — and
+ * results the owner adds show on the dog's public page, marked "added by
+ * owner".
+ */
+describe('owner-added results — Show Certificate of Excellence points and the public page', () => {
+  async function paulasBaliWithShows() {
+    const owner = await makeUser({ role: 'exhibitor', proSubscriptionStatus: 'active' });
+    const dog = await makeDog({ ownerId: owner.id, dateOfBirth: '2023-08-14' });
+    const caller = createTestCaller(owner);
+    const add = (input: Parameters<typeof caller.dogs.addExternalResult>[0]) => caller.dogs.addExternalResult(input);
+    await add({ dogId: dog.id, type: 'best_of_breed', date: '2025-06-01', showName: 'Ripon & District canine society', showKind: 'open_general' });
+    await add({ dogId: dog.id, type: 'best_of_breed', date: '2025-06-18', showName: 'Royal Cheshire Premier Open Show', showKind: 'premier_open' });
+    await add({ dogId: dog.id, type: 'best_of_breed', date: '2025-07-13', showName: 'Durham county Canine Society', showKind: 'open_general' });
+    await add({ dogId: dog.id, type: 'best_of_breed', date: '2025-07-19', showName: 'Eston and Barnaby Premier Open Show', showKind: 'premier_open' });
+    await add({ dogId: dog.id, type: 'group_placement', date: '2025-07-19', showName: 'Eston and Barnaby Premier Open Show', showKind: 'premier_open', groupPlace: 2 });
+    return { owner, dog, caller };
+  }
+
+  it("Paula's four shows count 7 points — her own figure", async () => {
+    const { dog, caller } = await paulasBaliWithShows();
+    const progress = await caller.dogs.getTitleProgress({ dogId: dog.id });
+    expect(progress.stats.shcexPoints).toBe(7);
+    expect(progress.titleProgress.find((t) => t.code === 'shcex')?.detail).toBe(
+      '7/50 points · 3 from group competition (5 needed)',
+    );
+  });
+
+  it("Paula's entries as she really made them — Eston as Group 2nd only — still count 7, and say why", async () => {
+    // Mandy, 5 Oct 2026: "it's given me 6 for 3 BOB and 1 with group 2 but I have that as 7".
+    const owner = await makeUser({ role: 'exhibitor', proSubscriptionStatus: 'active' });
+    const dog = await makeDog({ ownerId: owner.id, dateOfBirth: '2023-08-14' });
+    const caller = createTestCaller(owner);
+    const add = (input: Parameters<typeof caller.dogs.addExternalResult>[0]) => caller.dogs.addExternalResult(input);
+    await add({ dogId: dog.id, type: 'best_of_breed', date: '2025-06-01', showName: 'Ripon & District canine society', showKind: 'open_general' });
+    await add({ dogId: dog.id, type: 'best_of_breed', date: '2025-06-18', showName: 'Royal Cheshire Premier Open Show', showKind: 'premier_open' });
+    await add({ dogId: dog.id, type: 'best_of_breed', date: '2025-07-13', showName: 'Durham county Canine Society', showKind: 'open_general' });
+    await add({ dogId: dog.id, type: 'group_placement', date: '2025-07-19', showName: 'Eston & Barnaby Premier Open', showKind: 'premier_open', groupPlace: 2 });
+    const progress = await caller.dogs.getTitleProgress({ dogId: dog.id });
+    expect(progress.stats.shcexPoints).toBe(7);
+    expect(progress.titleProgress.find((t) => t.code === 'shcex')?.detail).toBe(
+      '7/50 points · 3 from group competition (5 needed) · includes 1 point for the Best of Breed won before the group',
+    );
+  });
+
+  it('the form must say what kind of show it was, and the group place for a group placing', async () => {
+    const owner = await makeUser({ role: 'exhibitor' });
+    const dog = await makeDog({ ownerId: owner.id });
+    const caller = createTestCaller(owner);
+    await expect(
+      caller.dogs.addExternalResult({ dogId: dog.id, type: 'best_of_breed', date: '2025-06-01', showName: 'Ripon' }),
+    ).rejects.toThrow(/kind of show/);
+    await expect(
+      caller.dogs.addExternalResult({ dogId: dog.id, type: 'group_placement', date: '2025-06-01', showName: 'Ripon', showKind: 'open_general' }),
+    ).rejects.toThrow(/place in the group/);
+    // A CC is always a championship show — no need to ask.
+    await caller.dogs.addExternalResult({ dogId: dog.id, type: 'cc', date: '2025-06-01', showName: 'Crufts' });
+  });
+
+  it('a result added before Remi asked can be completed with Edit — then it counts', async () => {
+    const owner = await makeUser({ role: 'exhibitor', proSubscriptionStatus: 'active' });
+    const dog = await makeDog({ ownerId: owner.id, dateOfBirth: '2023-08-14' });
+    // Added the old way: no show type.
+    const [old] = await testDb.insert(achievements).values({
+      dogId: dog.id, type: 'best_of_breed', date: '2025-06-01',
+      details: { showName: 'Ripon & District canine society', selfReported: true },
+    }).returning();
+    const caller = createTestCaller(owner);
+    let progress = await caller.dogs.getTitleProgress({ dogId: dog.id });
+    expect(progress.stats.shcexPoints).toBe(0);
+    expect(progress.titleProgress.find((t) => t.code === 'shcex')?.detail).toContain('1 result needs the type of show');
+
+    await caller.dogs.updateExternalResult({
+      id: old!.id, type: 'best_of_breed', date: '2025-06-01', showName: 'Ripon & District canine society', showKind: 'open_general',
+    });
+    progress = await caller.dogs.getTitleProgress({ dogId: dog.id });
+    expect(progress.stats.shcexPoints).toBe(1);
+  });
+
+  it("only the dog's owner can change a result", async () => {
+    const { dog } = await paulasBaliWithShows();
+    const row = await testDb.query.achievements.findFirst({ where: eq(achievements.dogId, dog.id) });
+    const stranger = await makeUser({ role: 'exhibitor' });
+    await expect(
+      createTestCaller(stranger).dogs.updateExternalResult({
+        id: row!.id, type: 'best_of_breed', date: '2025-06-01', showName: 'Mine now', showKind: 'open_general',
+      }),
+    ).rejects.toThrow(/Not your dog/);
+  });
+
+  it("owner-added results show on the dog's public page and championship box, marked added by owner", async () => {
+    const { owner, dog } = await paulasBaliWithShows();
+    await createTestCaller(owner).dogs.addExternalResult({
+      dogId: dog.id, type: 'cc', date: '2026-07-03', showName: 'Boston & District Canine Society', judgeName: 'Josh Henderson',
+    });
+    const anon = createTestCaller(null);
+    const profile = await anon.dogs.getPublicProfile({ id: dog.id });
+    expect(profile.achievements).toHaveLength(6);
+    expect((profile.achievements[0]!.details as { selfReported?: boolean }).selfReported).toBe(true);
+
+    const box = await anon.pro.getChampionshipProgress({ dogId: dog.id });
+    expect(box.championship.classic.ccs).toBe(1);
+    expect(box.awards.ccs[0]).toMatchObject({ showName: 'Boston & District Canine Society', addedByOwner: true });
   });
 });

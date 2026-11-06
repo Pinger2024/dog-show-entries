@@ -7,12 +7,18 @@ import type { Database } from '@/server/db';
  * Verify that a user is a member of the organisation that owns the given show.
  * Admins bypass the membership check and can access any show.
  * Throws FORBIDDEN if they don't have access. Returns the show record.
+ *
+ * `opts.callerIsAdmin` is deliberately REQUIRED: it used to be optional and
+ * call sites kept forgetting it, so admins got FORBIDDEN on whichever
+ * screens happened to omit the flag (catalogue adverts and schedule data —
+ * both found live, July 2026). Pass `{ callerIsAdmin: ctx.callerIsAdmin }`;
+ * the compile error when you forget is the point.
  */
 export async function verifyShowAccess(
   db: Database,
   userId: string,
   showId: string,
-  opts?: { callerIsAdmin?: boolean }
+  opts: { callerIsAdmin: boolean }
 ) {
   const show = await db.query.shows.findFirst({
     where: eq(shows.id, showId),
@@ -24,7 +30,7 @@ export async function verifyShowAccess(
   }
 
   // Admins can access any show without org membership
-  if (opts?.callerIsAdmin) return show;
+  if (opts.callerIsAdmin) return show;
 
   const membership = await db.query.memberships.findFirst({
     where: and(

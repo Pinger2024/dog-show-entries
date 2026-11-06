@@ -1,5 +1,8 @@
 import { Document, Page, Text, View, Image, StyleSheet, Font } from '@react-pdf/renderer';
 import path from 'path';
+import { formatLondonLongDate } from '@/lib/date-utils';
+import '@/lib/pdf-hyphenation';
+import { displayShowTypeTitle } from '@/lib/show-types';
 
 /**
  * Prize Card OVERPRINT layer — text/logo-only PDF designed to be
@@ -31,12 +34,13 @@ Font.register({
     { src: path.join(fontsDir, 'times-new-roman-italic.ttf'), fontStyle: 'italic' },
   ],
 });
-Font.registerHyphenationCallback((word) => [word]);
 
 export interface OverprintShowInfo {
   clubName: string;
   showName: string;
   showType: string;
+  /** 'wusv' prints a regional as "Regional" (displayShowTypeLabel owns the rule). */
+  showRuleset?: string | null;
   date: string; // ISO yyyy-mm-dd
   logoUrl: string | null;
   /** Main breed judges (excludes JH and other non-breed roles).
@@ -48,15 +52,6 @@ export interface OverprintShowInfo {
 interface OverprintProps {
   show: OverprintShowInfo;
 }
-
-const SHOW_TYPE_LABELS: Record<string, string> = {
-  companion: 'Companion Show',
-  primary: 'Primary Show',
-  limited: 'Limited Show',
-  open: 'Open Show',
-  premier_open: 'Premier Open Show',
-  championship: 'Championship Show',
-};
 
 // Mixam A5 landscape: 595 × 420 pts
 // The cream overprint zone on the base card (measured from the
@@ -116,13 +111,9 @@ const styles = StyleSheet.create({
 });
 
 export function PrizeCardOverprint({ show }: OverprintProps) {
-  const showDate = new Date(show.date).toLocaleDateString('en-GB', {
-    weekday: 'long',
-    day: 'numeric',
-    month: 'long',
-    year: 'numeric',
-  });
-  const showTypeLabel = SHOW_TYPE_LABELS[show.showType] ?? show.showType;
+  // Always Europe/London, never the process's own timezone (Michael 2026-09-03).
+  const showDate = formatLondonLongDate(show.date);
+  const showTypeLabel = displayShowTypeTitle(show.showType, show.showRuleset);
 
   const formatJudge = (j: { name: string; affix?: string | null }) =>
     j.affix ? `${j.name} (${j.affix})` : j.name;

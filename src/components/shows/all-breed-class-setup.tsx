@@ -33,12 +33,15 @@ export interface AllBreedClassData {
   classDefinitionIds: string[];
   /** Per-breed class overrides: breedId -> class definition IDs (if customised) */
   breedClassOverrides: Record<string, string[]>;
+  /** Championship breeds for which Dog and Bitch CCs are allocated. */
+  ccBreedIds: string[];
 }
 
 interface AllBreedClassSetupProps {
   value: AllBreedClassData;
   onChange: (data: AllBreedClassData) => void;
   classDefinitions: { id: string; name: string }[];
+  showType: string;
 }
 
 // ── Canonical breed group ordering ─────────────────────────
@@ -66,6 +69,7 @@ export function AllBreedClassSetup({
   value,
   onChange,
   classDefinitions,
+  showType,
 }: AllBreedClassSetupProps) {
   const [subStep, setSubStep] = useState<SubStep>('breeds');
   const [search, setSearch] = useState('');
@@ -132,7 +136,11 @@ export function AllBreedClassSetup({
       } else {
         newSet.add(breedId);
       }
-      onChange({ ...value, selectedBreedIds: Array.from(newSet) });
+      onChange({
+        ...value,
+        selectedBreedIds: Array.from(newSet),
+        ccBreedIds: value.ccBreedIds.filter((id) => newSet.has(id)),
+      });
     },
     [value, onChange]
   );
@@ -151,7 +159,11 @@ export function AllBreedClassSetup({
         for (const id of groupBreedIds) newSet.add(id);
       }
 
-      onChange({ ...value, selectedBreedIds: Array.from(newSet) });
+      onChange({
+        ...value,
+        selectedBreedIds: Array.from(newSet),
+        ccBreedIds: value.ccBreedIds.filter((id) => newSet.has(id)),
+      });
     },
     [value, onChange, selectedBreedSet]
   );
@@ -161,7 +173,14 @@ export function AllBreedClassSetup({
   }, [value, onChange, allBreedIds]);
 
   const deselectAllBreeds = useCallback(() => {
-    onChange({ ...value, selectedBreedIds: [] });
+    onChange({ ...value, selectedBreedIds: [], ccBreedIds: [] });
+  }, [value, onChange]);
+
+  const toggleCcBreed = useCallback((breedId: string) => {
+    const next = new Set(value.ccBreedIds);
+    if (next.has(breedId)) next.delete(breedId);
+    else next.add(breedId);
+    onChange({ ...value, ccBreedIds: Array.from(next) });
   }, [value, onChange]);
 
   const toggleGroupExpanded = useCallback((groupId: string) => {
@@ -583,6 +602,34 @@ export function AllBreedClassSetup({
                   <Badge key={cd.id} variant="secondary" className="text-xs">
                     {cd.name}
                   </Badge>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {showType === 'championship' && (
+            <div className="rounded-lg border border-primary/20 bg-primary/5 p-4">
+              <p className="text-sm font-semibold">Challenge Certificates</p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Tick only breeds for which the RKC has allocated Dog and Bitch Challenge Certificates at this show.
+                Remi will print the declaration and enforce the extra class requirements.
+              </p>
+              <div className="mt-3 max-h-64 space-y-3 overflow-y-auto pr-1">
+                {selectedBreedsByGroup.map((group) => (
+                  <div key={`cc-${group.id}`}>
+                    <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">{group.name}</p>
+                    <div className="grid grid-cols-1 gap-1 sm:grid-cols-2 lg:grid-cols-3">
+                      {group.breeds.map((breed) => (
+                        <label key={breed.id} className="flex cursor-pointer items-center gap-2 rounded-md bg-background px-2.5 py-2 text-sm">
+                          <Checkbox
+                            checked={value.ccBreedIds.includes(breed.id)}
+                            onCheckedChange={() => toggleCcBreed(breed.id)}
+                          />
+                          <span>{breed.name}</span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
                 ))}
               </div>
             </div>

@@ -2,6 +2,7 @@ import {
   boolean,
   index,
   integer,
+  pgEnum,
   pgTable,
   text,
   timestamp,
@@ -9,6 +10,10 @@ import {
 } from 'drizzle-orm/pg-core';
 import { relations } from 'drizzle-orm';
 import { shows } from './shows';
+import { SUNDRY_KINDS } from '@/lib/sundry-kind';
+
+/** What a sundry IS. Meaning lives in src/lib/sundry-kind.ts — the one owner. */
+export const sundryKindEnum = pgEnum('sundry_kind', SUNDRY_KINDS);
 
 export const sundryItems = pgTable(
   'sundry_items',
@@ -20,6 +25,7 @@ export const sundryItems = pgTable(
     name: text('name').notNull(),
     description: text('description'),
     priceInPence: integer('price_in_pence').notNull(),
+    kind: sundryKindEnum('kind').notNull().default('other'),
     maxPerOrder: integer('max_per_order'), // null = unlimited, 1 = single checkbox
     sortOrder: integer('sort_order').notNull().default(0),
     enabled: boolean('enabled').notNull().default(true),

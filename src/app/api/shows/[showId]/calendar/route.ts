@@ -1,9 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { publicOrgColumns } from '@/server/trpc/public-org-columns';
 import { eq, or } from 'drizzle-orm';
 import { db } from '@/server/db';
 import { shows } from '@/server/db/schema';
 import { isUuid, sanitizeFilename } from '@/lib/slugify';
 import { generateIcs } from '@/lib/generate-ics';
+import { canonicalUrl } from '@/lib/app-url';
+import { showHref } from '@/lib/show-status';
 
 export async function GET(
   _req: NextRequest,
@@ -22,7 +25,7 @@ export async function GET(
   const show = await db.query.shows.findFirst({
     where: whereClause,
     with: {
-      organisation: true,
+      organisation: { columns: publicOrgColumns },
       venue: true,
     },
   });
@@ -36,7 +39,8 @@ export async function GET(
     return NextResponse.json({ error: 'Show not found' }, { status: 404 });
   }
 
-  const showUrl = `https://remishowmanager.co.uk/shows/${show.slug ?? show.id}`;
+  // One owner for both halves of this link: lib/app-url.ts and showHref.
+  const showUrl = canonicalUrl(showHref(show));
 
   const icsContent = generateIcs({
     name: show.name,

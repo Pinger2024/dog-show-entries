@@ -9,8 +9,23 @@ export async function getCurrentUser() {
   const session = await auth();
   if (!session?.user) return null;
 
-  // When impersonating, return the impersonated user's identity
-  const impersonatedUserId = await getImpersonatedUserId();
+  // When impersonating, return the impersonated user's identity.
+  //
+  // The cookie is a RAW, UNSIGNED user id (lib/impersonation.ts) — httpOnly
+  // stops JavaScript, not devtools or curl — so the REAL session's role is the
+  // only thing that makes it trustworthy. The admin check on
+  // /api/admin/impersonate is not that guard: an attacker sets the cookie
+  // directly instead of calling the route. Without this condition any
+  // logged-in account could act as any user it could name, through every
+  // caller below — requireAuth / requireRole / requireAnyRole (the dashboard,
+  // secretary and steward layouts) and authenticatePdfRequest, which passes
+  // this id to resolvePdfAccessForUser and hands back that user's club's
+  // secretary-only documents (found 2026-09-11).
+  //
+  // server/trpc/init.ts and /api/dog-autosave/[dogId] carry the same check.
+  // Three readers, one rule: keep them in step.
+  const callerIsAdmin = session.user.role === 'admin';
+  const impersonatedUserId = callerIsAdmin ? await getImpersonatedUserId() : null;
 
   // Read from DB when impersonating, or for exhibitors whose role may be
   // stale in the JWT (e.g. right after secretary registration)

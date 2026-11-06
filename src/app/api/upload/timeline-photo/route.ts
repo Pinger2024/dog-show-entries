@@ -5,6 +5,7 @@ import { auth } from '@/lib/auth';
 import { validateUpload, uploadToR2, getPublicUrl } from '@/server/services/storage';
 import { db } from '@/server/db';
 import { dogs } from '@/server/db/schema';
+import { dogAccessCondition } from '@/server/dog-access';
 
 export async function POST(request: NextRequest) {
   try {
@@ -38,9 +39,9 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: validation.error }, { status: 400 });
     }
 
-    // Verify ownership
+    // Verify access (account holder or linked co-owner)
     const dog = await db.query.dogs.findFirst({
-      where: and(eq(dogs.id, dogId), eq(dogs.ownerId, session.user.id), isNull(dogs.deletedAt)),
+      where: and(eq(dogs.id, dogId), dogAccessCondition(db, session.user.id), isNull(dogs.deletedAt)),
     });
 
     if (!dog) {

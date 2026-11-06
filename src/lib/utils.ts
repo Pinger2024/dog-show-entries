@@ -37,7 +37,7 @@ export function getTitleDisplay(title: string): string {
 /**
  * Formats a dog's name with title prefix(es).
  * Shows the highest-ranking title as prefix.
- * e.g. "Ch. Dorabella Dancing Queen"
+ * e.g. "Ch. Thornfield Silver Dream"
  */
 export function formatDogName(
   dog: { registeredName: string; titles?: { title: string }[] | null }

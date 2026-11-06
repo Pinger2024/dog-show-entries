@@ -18,6 +18,13 @@ import {
 } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import {
+  SUNDRY_KINDS,
+  SUNDRY_KIND_LABELS,
+  inferSundryKindFromName,
+  isSundryKind,
+  type SundryKind,
+} from '@/lib/sundry-kind';
+import {
   Table,
   TableBody,
   TableCell,
@@ -44,14 +51,60 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 
-const COMMON_SUNDRY_PRESETS = [
-  { name: 'Printed Catalogue', description: 'Receive a printed show catalogue on the day', maxPerOrder: 1 },
-  { name: 'Online Catalogue', description: 'Access to the digital show catalogue', maxPerOrder: 1 },
-  { name: 'Donation', description: 'Support the club with a voluntary donation' },
-  { name: 'Club Membership — Sole', description: 'Annual single membership', maxPerOrder: 1 },
-  { name: 'Club Membership — Joint', description: 'Annual joint membership', maxPerOrder: 1 },
-  { name: 'Club Membership — Family', description: 'Annual family membership', maxPerOrder: 1 },
+const COMMON_SUNDRY_PRESETS: Array<{
+  name: string;
+  kind: SundryKind;
+  description: string;
+  maxPerOrder?: number;
+}> = [
+  { name: 'Printed Catalogue', kind: 'printed_catalogue', description: 'Receive a printed show catalogue on the day', maxPerOrder: 1 },
+  { name: 'Online Catalogue', kind: 'online_catalogue', description: 'Access to the digital show catalogue', maxPerOrder: 1 },
+  { name: 'Pre-paid Parking Pass', kind: 'parking', description: 'Car parking at the venue. Your pass is emailed a week before the show.', maxPerOrder: 1 },
+  { name: 'Donation', kind: 'donation', description: 'Support the club with a voluntary donation' },
+  { name: 'Club Membership — Sole', kind: 'membership', description: 'Annual single membership', maxPerOrder: 1 },
+  { name: 'Club Membership — Joint', kind: 'membership', description: 'Annual joint membership', maxPerOrder: 1 },
+  { name: 'Club Membership — Family', kind: 'membership', description: 'Annual family membership', maxPerOrder: 1 },
+  { name: 'Club Membership — Junior', kind: 'membership', description: 'Annual membership for under-16s', maxPerOrder: 1 },
 ];
+
+/** "What is this?" - the secretary says what an extra is; Remi never guesses
+ *  it from the name afterwards (src/lib/sundry-kind.ts). Native select: it
+ *  behaves best on a phone. */
+function KindSelect({
+  id,
+  value,
+  onChange,
+}: {
+  id: string;
+  value: SundryKind | '';
+  onChange: (kind: SundryKind) => void;
+}) {
+  return (
+    <div className="space-y-2">
+      <Label htmlFor={id}>What is this?</Label>
+      <select
+        id={id}
+        className="h-11 w-full rounded-md border border-input bg-background px-3 text-base"
+        value={value}
+        onChange={(e) => {
+          if (isSundryKind(e.target.value)) onChange(e.target.value);
+        }}
+      >
+        <option value="" disabled>
+          Choose one...
+        </option>
+        {SUNDRY_KINDS.map((k) => (
+          <option key={k} value={k}>
+            {SUNDRY_KIND_LABELS[k]}
+          </option>
+        ))}
+      </select>
+      <p className="text-xs text-muted-foreground">
+        This tells Remi what to do with it, for example send parking passes or unlock the catalogue.
+      </p>
+    </div>
+  );
+}
 
 function PresetPicker({
   presets,
@@ -165,6 +218,7 @@ export function SundryItemManager({ showId }: { showId: string }) {
   const [editItem, setEditItem] = useState<{
     id: string;
     name: string;
+    kind: SundryKind;
     description: string | null;
     priceInPence: number;
     maxPerOrder: number | null;
@@ -197,12 +251,17 @@ export function SundryItemManager({ showId }: { showId: string }) {
 
   // Form state
   const [formName, setFormName] = useState('');
+  const [formKind, setFormKind] = useState<SundryKind | ''>('');
+  // Once the secretary picks a kind herself, typing the name stops changing it.
+  const [kindTouched, setKindTouched] = useState(false);
   const [formDescription, setFormDescription] = useState('');
   const [formPrice, setFormPrice] = useState('');
   const [formMaxPerOrder, setFormMaxPerOrder] = useState('');
 
   function resetForm() {
     setFormName('');
+    setFormKind('');
+    setKindTouched(false);
     setFormDescription('');
     setFormPrice('');
     setFormMaxPerOrder('');
@@ -259,11 +318,22 @@ export function SundryItemManager({ showId }: { showId: string }) {
     onError: (err) => toast.error(err.message),
   });
 
+  // Suggest a kind from the name as she types - a suggestion only; she can change it.
+  function changeName(name: string) {
+    setFormName(name);
+    if (!kindTouched) {
+      const guess = inferSundryKindFromName(name);
+      setFormKind(guess === 'other' ? '' : guess);
+    }
+  }
+
   function handleAdd() {
+    if (!formKind) return;
     const priceInPence = poundsToPence(parseFloat(formPrice) || 0);
     createMutation.mutate({
       showId,
       name: formName,
+      kind: formKind,
       description: formDescription || undefined,
       priceInPence,
       maxPerOrder: formMaxPerOrder ? parseInt(formMaxPerOrder) : undefined,
@@ -271,12 +341,13 @@ export function SundryItemManager({ showId }: { showId: string }) {
   }
 
   function handleUpdate() {
-    if (!editItem) return;
+    if (!editItem || !formKind) return;
     const priceInPence = poundsToPence(parseFloat(formPrice) || 0);
     updateMutation.mutate({
       id: editItem.id,
       showId,
       name: formName,
+      kind: formKind,
       description: formDescription || null,
       priceInPence,
       maxPerOrder: formMaxPerOrder ? parseInt(formMaxPerOrder) : null,
@@ -286,6 +357,8 @@ export function SundryItemManager({ showId }: { showId: string }) {
   function openEditDialog(item: NonNullable<typeof editItem>) {
     setEditItem(item);
     setFormName(item.name);
+    setFormKind(item.kind);
+    setKindTouched(true);
     setFormDescription(item.description ?? '');
     setFormPrice(penceToPoundsString(item.priceInPence));
     setFormMaxPerOrder(item.maxPerOrder?.toString() ?? '');
@@ -310,6 +383,7 @@ export function SundryItemManager({ showId }: { showId: string }) {
       showId,
       items: selected.map((p) => ({
         name: p.name,
+        kind: p.kind,
         description: p.description,
         priceInPence: poundsToPence(parseFloat(presetSelections[p.name]!.price)),
         maxPerOrder: p.maxPerOrder,
@@ -373,12 +447,12 @@ export function SundryItemManager({ showId }: { showId: string }) {
                   return (
                     <div key={item.id} className={cn(
                       'flex items-center justify-between gap-3 rounded-lg border p-3',
-                      needsPrice && 'border-amber-300 bg-amber-50/50 dark:border-amber-700 dark:bg-amber-950/20',
+                      needsPrice && 'border-se-honey-line bg-se-honey-soft',
                     )}>
                       <div className="min-w-0 flex-1">
                         <p className="font-medium truncate">{item.name}</p>
                         {needsPrice ? (
-                          <p className="flex items-center gap-1 text-xs font-medium text-amber-600 dark:text-amber-400">
+                          <p className="flex items-center gap-1 text-xs font-medium text-se-honey-deep">
                             <AlertCircle className="size-3" />
                             Set a price
                           </p>
@@ -451,7 +525,7 @@ export function SundryItemManager({ showId }: { showId: string }) {
                     {enabledItems.map((item) => {
                       const needsPrice = item.priceInPence === 0;
                       return (
-                        <TableRow key={item.id} className={needsPrice ? 'bg-amber-50/50 dark:bg-amber-950/20' : undefined}>
+                        <TableRow key={item.id} className={needsPrice ? 'bg-se-honey-soft' : undefined}>
                           <TableCell>
                             <div>
                               <p className="font-medium">{item.name}</p>
@@ -462,7 +536,7 @@ export function SundryItemManager({ showId }: { showId: string }) {
                           </TableCell>
                           <TableCell>
                             {needsPrice ? (
-                              <span className="flex items-center gap-1 text-sm font-medium text-amber-600 dark:text-amber-400">
+                              <span className="flex items-center gap-1 text-sm font-medium text-se-honey-deep">
                                 <AlertCircle className="size-3.5" />
                                 Set price
                               </span>
@@ -566,6 +640,8 @@ export function SundryItemManager({ showId }: { showId: string }) {
                         )}
                         onClick={() => {
                           setFormName(preset.name);
+                          setFormKind(preset.kind);
+                          setKindTouched(true);
                           setFormDescription(preset.description);
                           setFormMaxPerOrder(preset.maxPerOrder?.toString() ?? '');
                           // Don't set price — that's what the secretary needs to decide
@@ -585,9 +661,17 @@ export function SundryItemManager({ showId }: { showId: string }) {
                 id="sundry-name"
                 placeholder="e.g. Printed Catalogue"
                 value={formName}
-                onChange={(e) => setFormName(e.target.value)}
+                onChange={(e) => changeName(e.target.value)}
               />
             </div>
+            <KindSelect
+              id="sundry-kind"
+              value={formKind}
+              onChange={(k) => {
+                setFormKind(k);
+                setKindTouched(true);
+              }}
+            />
             <div className="space-y-2">
               <Label htmlFor="sundry-desc">Description (optional)</Label>
               <Input
@@ -630,7 +714,7 @@ export function SundryItemManager({ showId }: { showId: string }) {
             <Button variant="outline" onClick={() => setShowAddDialog(false)}>Cancel</Button>
             <Button
               onClick={handleAdd}
-              disabled={!formName || !formPrice || createMutation.isPending}
+              disabled={!formName || !formKind || !formPrice || createMutation.isPending}
             >
               {createMutation.isPending && <Loader2 className="size-4 animate-spin" />}
               Add Item
@@ -654,6 +738,14 @@ export function SundryItemManager({ showId }: { showId: string }) {
                 onChange={(e) => setFormName(e.target.value)}
               />
             </div>
+            <KindSelect
+              id="edit-sundry-kind"
+              value={formKind}
+              onChange={(k) => {
+                setFormKind(k);
+                setKindTouched(true);
+              }}
+            />
             <div className="space-y-2">
               <Label htmlFor="edit-sundry-desc">Description</Label>
               <Input
@@ -693,7 +785,7 @@ export function SundryItemManager({ showId }: { showId: string }) {
             <Button variant="outline" onClick={() => setEditItem(null)}>Cancel</Button>
             <Button
               onClick={handleUpdate}
-              disabled={!formName || !formPrice || updateMutation.isPending}
+              disabled={!formName || !formKind || !formPrice || updateMutation.isPending}
             >
               {updateMutation.isPending && <Loader2 className="size-4 animate-spin" />}
               Save Changes

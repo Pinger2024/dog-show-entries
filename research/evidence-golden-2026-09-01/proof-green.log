@@ -1,0 +1,25 @@
+
+> remi@0.1.0 golden
+> vitest run src/__tests__/golden/documents.golden.test.ts
+
+
+ RUN  v3.2.4 /Users/michaeljames/Projects/dog-show-entries/.claude/worktrees/agent-a1709f8acdfb60424
+
+stderr | src/__tests__/golden/documents.golden.test.ts > golden documents: 'synthetic-rkc-champ'
+Node of type IMAGE can't wrap between pages and it's bigger than available page height
+Node of type IMAGE can't wrap between pages and it's bigger than available page height
+
+stderr | src/__tests__/golden/documents.golden.test.ts > golden documents: 'synthetic-rkc-champ'
+Node of type IMAGE can't wrap between pages and it's bigger than available page height
+Node of type IMAGE can't wrap between pages and it's bigger than available page height
+
+stdout | src/__tests__/golden/documents.golden.test.ts > golden documents: 'synthetic-rkc-champ'
+Prize cards PDF for show c2a36af6-279a-48e6-b594-62fbf20e6216: 43 pages, 1200KB
+
+ ✓ src/__tests__/golden/documents.golden.test.ts (17 tests) 7050ms
+
+ Test Files  1 passed (1)
+      Tests  17 passed (17)
+   Start at  20:54:20
+   Duration  9.13s (transform 478ms, setup 392ms, collect 1.56s, tests 7.05s, environment 0ms, prepare 32ms)
+

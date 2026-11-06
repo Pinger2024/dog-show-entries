@@ -441,8 +441,8 @@ async function main() {
 
   // Sundry items
   await db.insert(s.sundryItems).values([
-    { showId: show1Id, name: 'Catalogue', description: 'Official printed show catalogue', priceInPence: pence(3), maxPerOrder: 2, sortOrder: 1 },
-    { showId: show1Id, name: 'Car Parking', description: 'On-site parking permit', priceInPence: pence(5), maxPerOrder: 1, sortOrder: 2 },
+    { showId: show1Id, name: 'Catalogue', kind: 'printed_catalogue', description: 'Official printed show catalogue', priceInPence: pence(3), maxPerOrder: 2, sortOrder: 1 },
+    { showId: show1Id, name: 'Car Parking', kind: 'parking', description: 'On-site parking permit', priceInPence: pence(5), maxPerOrder: 1, sortOrder: 2 },
   ]);
 
   // Exhibitors, dogs, entries
@@ -833,9 +833,9 @@ async function main() {
 
   // Sundry items
   await db.insert(s.sundryItems).values([
-    { showId: show2Id, name: 'Catalogue', description: 'Official Championship Show catalogue (176 pages)', priceInPence: pence(8), maxPerOrder: 3, sortOrder: 1 },
-    { showId: show2Id, name: 'VIP Ringside Pass', description: 'Priority ringside seating for both days', priceInPence: pence(25), maxPerOrder: 2, sortOrder: 2 },
-    { showId: show2Id, name: 'Breed Critique Booklet', description: 'Post-show judge critiques for your breed (posted)', priceInPence: pence(5), maxPerOrder: 1, sortOrder: 3 },
+    { showId: show2Id, name: 'Catalogue', kind: 'printed_catalogue', description: 'Official Championship Show catalogue (176 pages)', priceInPence: pence(8), maxPerOrder: 3, sortOrder: 1 },
+    { showId: show2Id, name: 'VIP Ringside Pass', kind: 'other', description: 'Priority ringside seating for both days', priceInPence: pence(25), maxPerOrder: 2, sortOrder: 2 },
+    { showId: show2Id, name: 'Breed Critique Booklet', kind: 'other', description: 'Post-show judge critiques for your breed (posted)', priceInPence: pence(5), maxPerOrder: 1, sortOrder: 3 },
   ]);
 
   // Create entries for the multi-breed show — 3 entries per breed (36 total)

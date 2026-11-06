@@ -64,6 +64,162 @@ export function formatCompactRevenue(pence: number): string {
   return pounds >= 1000 ? `£${(pounds / 1000).toFixed(1)}k` : `£${pounds.toFixed(0)}`;
 }
 
+/** Whole pounds, comma-grouped, no pence — for the "workings" sub-lines
+ *  (e.g. "£1,687 fees + £26 kept + £90 sundries") where showing ".00"
+ *  everywhere would just be noise next to the full-precision headline. */
+export function formatWholePounds(pence: number): string {
+  return `£${Math.round(pence / 100).toLocaleString('en-GB')}`;
+}
+
+/** Joins non-empty parts with " + ", dropping any null/zero terms — the
+ *  "omit zero terms" rule the financial-clarity redesign uses everywhere
+ *  a total is shown as its workings (e.g. "£1,687 fees + £26 kept"). */
+export function joinWorkings(parts: Array<string | null | undefined | false>): string {
+  return parts.filter((p): p is string => !!p).join(' + ');
+}
+
+/** The parts a dogsEntered headline is made of — e.g.
+ *  `["74 paid", "4 not for competition"]`. Collapses to a single "all paid"
+ *  entry when there's nothing else to show (no NFC/otherOrderless, and —
+ *  when a withdrawn count is passed — no withdrawn either). The single
+ *  source both the plain-text sub-lines (dashboard, entries tile, banner —
+ *  join with " · ") and the Financial page's reconciliation strip (joins
+ *  with a styled "+" operator) read from, so the split/collapse rule can't
+ *  drift between them. `paidLabel`/`allPaidLabel` let a caller use
+ *  different wording (e.g. "paid through Remi") for the same rule. */
+export function dogsEnteredParts(opts: {
+  paid: number;
+  notForCompetition: number;
+  otherOrderless: number;
+  withdrawn?: number;
+  paidLabel?: (n: number) => string;
+  allPaidLabel?: string;
+}): string[] {
+  const extras: string[] = [];
+  if (opts.notForCompetition > 0) extras.push(`${opts.notForCompetition} not for competition`);
+  if (opts.otherOrderless > 0) extras.push(`${opts.otherOrderless} added without online payment`);
+  if (extras.length === 0 && !opts.withdrawn) {
+    return [opts.allPaidLabel ?? 'all paid'];
+  }
+  const paidLabel = opts.paidLabel ?? ((n: number) => `${n} paid`);
+  return [paidLabel(opts.paid), ...extras];
+}
+
+/** `dogsEnteredParts` joined with " · " for the plain-text sub-lines. */
+export function formatDogsEnteredParts(opts: {
+  paid: number;
+  notForCompetition: number;
+  otherOrderless: number;
+  withdrawn?: number;
+}): string {
+  return dogsEnteredParts(opts).join(' · ');
+}
+
+/**
+ * The "Entries by Class" footer, as text.
+ *
+ * Mandy 2026-07-27 read it as "156 class entries across 160 dogs" — nonsense,
+ * because it printed the column total (class entries PLUS not-for-competition)
+ * where a dog count belonged. Extracted from the page so the sentence itself
+ * can be asserted: as inline JSX no test could fail on the bug, only on an
+ * invariant near it.
+ */
+export function classBreakdownFooterText(opts: {
+  totalLines: number;
+  classEntries: number;
+  notForCompetition: number;
+  dogsEntered?: number | null;
+}): string {
+  const parts = [`${opts.classEntries} class ${opts.classEntries === 1 ? 'entry' : 'entries'}`];
+  if (opts.notForCompetition > 0) parts.push(`${opts.notForCompetition} not for competition`);
+  const from =
+    opts.dogsEntered != null
+      ? `, from ${opts.dogsEntered} ${opts.dogsEntered === 1 ? 'dog' : 'dogs'}`
+      : '';
+  return (
+    `${opts.totalLines} lines = ${parts.join(' + ')}${from}` +
+    `. A dog entered in more than one class is counted in each of them.`
+  );
+}
+
+/**
+ * The parts that make up a show's class-entry total, e.g.
+ * `["82 breed classes", "24 special awards", "4 junior handling"]`.
+ *
+ * Mandy 2026-07-27: "I almost think i want to show 110 entries in that bold
+ * number and then in smaller detail a breakdown … but that wont fit every
+ * show". So it builds itself from what the show actually has — Clyde Valley
+ * has no special awards, so that part simply doesn't appear.
+ */
+export function classEntryBreakdownParts(stats: {
+  classEntriesBreed?: number;
+  classEntriesSpecialAwards?: number;
+  classEntriesJuniorHandling?: number;
+} | undefined): string[] {
+  if (!stats) return [];
+  const parts: string[] = [];
+  if (stats.classEntriesBreed) parts.push(`${stats.classEntriesBreed} breed classes`);
+  if (stats.classEntriesSpecialAwards) parts.push(`${stats.classEntriesSpecialAwards} special awards`);
+  if (stats.classEntriesJuniorHandling) parts.push(`${stats.classEntriesJuniorHandling} junior handling`);
+  return parts;
+}
+
+/**
+ * The dog-side line under the headline, e.g. "86 dogs · 4 not for competition".
+ * Junior Handlers are deliberately NOT folded in — a JH entry has no dog, and
+ * Mandy's RKC return counts dogs (2026-07-27).
+ */
+export function dogCountParts(stats: {
+  dogCount?: number;
+  nfcDogCount?: number;
+} | undefined): string[] {
+  if (!stats?.dogCount) return [];
+  const parts = [`${stats.dogCount} ${stats.dogCount === 1 ? 'dog' : 'dogs'}`];
+  if (stats.nfcDogCount) parts.push(`${stats.nfcDogCount} not for competition`);
+  return parts;
+}
+
+/**
+ * "109 class entries" — the judges'-book unit, shown next to the dogs count
+ * whenever the two differ. Mandy 2026-07-27: the dashboard said 93 and the
+ * Class Breakdown report said 109, and with neither naming its unit the two
+ * looked like a contradiction. Omitted when they're equal (every dog in a
+ * single class), because then it says nothing.
+ */
+export function classEntriesLabel(
+  dogsEntered: number,
+  classEntries: number | undefined,
+): string | null {
+  if (classEntries == null || classEntries <= dogsEntered) return null;
+  return `${classEntries} class entries`;
+}
+
+/** The lifecycle banner's breakdown line — dogsEnteredParts plus a
+ *  withdrawn suffix, e.g. "74 paid · 4 not for competition · 1 withdrawn
+ *  (fee kept)". Shared by every phase variant that shows an entry count
+ *  (EntriesOpenContent, its overdue variant, PreShowContent) so they can't
+ *  drift into different wording. */
+export function formatBannerBreakdown(entryStats: {
+  confirmed: number;
+  notForCompetitionEntries: number;
+  otherOrderlessEntries: number;
+  withdrawn: number;
+  dogsEntered?: number;
+  classEntries?: number;
+} | undefined): string {
+  if (!entryStats) return '';
+  const parts = dogsEnteredParts({
+    paid: entryStats.confirmed,
+    notForCompetition: entryStats.notForCompetitionEntries,
+    otherOrderless: entryStats.otherOrderlessEntries,
+    withdrawn: entryStats.withdrawn,
+  });
+  if (entryStats.withdrawn > 0) parts.push(`${entryStats.withdrawn} withdrawn (fee kept)`);
+  const classes = classEntriesLabel(entryStats.dogsEntered ?? 0, entryStats.classEntries);
+  if (classes) parts.push(classes);
+  return parts.join(' · ');
+}
+
 export function daysUntil(dateStr: string) {
   const target = new Date(dateStr);
   const now = new Date();

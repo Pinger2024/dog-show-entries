@@ -39,27 +39,27 @@ const statusConfig: Record<
 > = {
   awaiting_feedback: {
     label: 'Awaiting Feedback',
-    color: 'bg-amber-100 text-amber-800',
+    color: 'bg-se-honey-soft text-se-honey-deep',
     icon: MessageSquare,
   },
   planned: {
     label: 'Planned',
-    color: 'bg-violet-100 text-violet-800',
+    color: 'bg-se-fresh-soft text-se-fresh-deep',
     icon: ListTodo,
   },
   in_progress: {
     label: 'In Progress',
-    color: 'bg-blue-100 text-blue-800',
+    color: 'bg-se-honey-soft text-se-honey-deep',
     icon: Clock,
   },
   completed: {
     label: 'Completed',
-    color: 'bg-emerald-100 text-emerald-800',
+    color: 'bg-se-fresh-soft text-se-fresh-deep',
     icon: CheckCircle2,
   },
   dismissed: {
     label: 'Dismissed',
-    color: 'bg-gray-100 text-gray-600',
+    color: 'bg-muted text-muted-foreground',
     icon: XCircle,
   },
 };
@@ -72,9 +72,9 @@ const statCards: { key: BacklogStatus; label: string; icon: typeof Clock }[] = [
 ];
 
 const priorityConfig = {
-  high: { label: 'High', icon: Flame, color: 'text-orange-600' },
-  medium: { label: 'Medium', icon: Target, color: 'text-blue-600' },
-  low: { label: 'Low', icon: FileText, color: 'text-gray-500' },
+  high: { label: 'High', icon: Flame, color: 'text-se-honey-deep' },
+  medium: { label: 'Medium', icon: Target, color: 'text-se-fresh-deep' },
+  low: { label: 'Low', icon: FileText, color: 'text-muted-foreground' },
 };
 
 export default function BacklogPage() {
@@ -273,7 +273,7 @@ export default function BacklogPage() {
                             <label className="mb-1 block text-sm font-medium text-muted-foreground">
                               Questions Asked
                             </label>
-                            <pre className="whitespace-pre-wrap rounded-lg bg-blue-50 p-3 text-sm dark:bg-blue-950/30">
+                            <pre className="whitespace-pre-wrap rounded-lg bg-se-fresh-soft text-se-fresh-deep p-3 text-sm">
                               {item.questions}
                             </pre>
                           </div>

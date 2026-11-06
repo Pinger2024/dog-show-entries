@@ -11,6 +11,8 @@ import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { useShowId } from '../_lib/show-context';
 import type { ScheduleData } from '@/server/db/schema/shows';
+import { cn } from '@/lib/utils';
+import { SE_H } from '@/components/show-experience/tokens';
 
 export default function CatalogueSettingsPage() {
   const showId = useShowId();
@@ -82,7 +84,7 @@ export default function CatalogueSettingsPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="flex items-center gap-2 text-2xl font-bold">
+        <h1 className={cn(SE_H, 'flex items-center gap-2 text-2xl')}>
           <BookOpen className="size-6 text-primary" />
           Catalogue Settings
         </h1>
@@ -273,7 +275,7 @@ function JudgeProfileEditor({ judge, onSaved, updateJudgeMutation }: JudgeProfil
             <input
               ref={fileInputRef}
               type="file"
-              accept="image/*"
+              accept="image/jpeg,image/png,image/webp"
               className="hidden"
               onChange={(e) => {
                 const file = e.target.files?.[0];

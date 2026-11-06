@@ -123,6 +123,14 @@ export const classSponsorships = pgTable(
     trophyDonor: text('trophy_donor'),
     prizeMoney: integer('prize_money'),
     prizeDescription: text('prize_description'),
+    /** Optional landscape banner image (e.g. HUNDARK, ROBASDAN festive
+     *  strip) rendered above the class header in the catalogue when this
+     *  sponsor is backing the class. Scoped to one banner per
+     *  (show, sponsor) pair — server propagates uploads to every sibling
+     *  class_sponsorship in the same show belonging to the same sponsor
+     *  (Amanda 2026-05-23). */
+    bannerImageStorageKey: text('banner_image_storage_key'),
+    bannerImageUrl: text('banner_image_url'),
     createdAt: timestamp('created_at', { withTimezone: true })
       .defaultNow()
       .notNull(),

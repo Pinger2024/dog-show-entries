@@ -17,9 +17,14 @@ import {
 } from 'lucide-react';
 import { trpc } from '@/lib/trpc/client';
 import { formatCurrency, parseLocalDate } from '@/lib/date-utils';
-import { showTypeLabels } from '@/lib/show-types';
+import { displayShowTypeLabel } from '@/lib/show-types';
+import { buildClassLabelMap, CLASS_SECTION_SCREEN_TITLES, sectionClasses } from '@/lib/class-labels';
+import { breedClassGroups } from './_lib/breed-class-groups';
+import { sortOfficers } from '@/components/schedule/shared/officers';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { SE_H } from '@/components/show-experience/tokens';
+import { cn } from '@/lib/utils';
 import type { ScheduleData } from '@/server/db/schema/shows';
 
 const showScopeLabels: Record<string, string> = {
@@ -47,46 +52,48 @@ export default function SchedulePage({
   const { id } = use(params);
   const { data: show, isLoading } = trpc.shows.getById.useQuery({ id });
 
-  const breedGroups = useMemo(() => {
-    if (!show?.showClasses) return [];
-    const map = new Map<string, {
-      groupSortOrder: number;
-      judgeNames: string[];
-      dogClasses: typeof show.showClasses;
-      bitchClasses: typeof show.showClasses;
-      combinedClasses: typeof show.showClasses;
-    }>();
+  // Shared JHA/JHB resolver — non-JH classes display their classNumber,
+  // JH classes get JHA/JHB/... labels outside the RKC-licensed count.
+  const classLabelMap = useMemo(
+    () => buildClassLabelMap(show?.showClasses ?? [], show?.showRuleset),
+    [show?.showClasses, show?.showRuleset],
+  );
 
-    for (const sc of show.showClasses) {
-      const breedName = sc.breed?.name ?? 'Any Breed';
-      if (!map.has(breedName)) {
-        map.set(breedName, {
-          groupSortOrder: sc.breed?.group?.sortOrder ?? 999,
-          judgeNames: [],
-          dogClasses: [],
-          bitchClasses: [],
-          combinedClasses: [],
-        });
-      }
-      const group = map.get(breedName)!;
-      const sex = sc.classDefinition?.sex;
-      if (sex === 'dog') group.dogClasses.push(sc);
-      else if (sex === 'bitch') group.bitchClasses.push(sc);
-      else group.combinedClasses.push(sc);
-    }
+  // Shared bucketing (lib/class-labels.ts) so the Special Award Classes
+  // pulled out of the by-breed grouping below and the dedicated SAC section
+  // (sacClasses, further down) can never disagree about which classes are
+  // special awards — one predicate-driven decision instead of two places
+  // independently filtering with `isSpecialAwardClass`.
+  const sectionedClasses = useMemo(
+    () => sectionClasses(show?.showClasses ?? [], (c) => c),
+    [show?.showClasses],
+  );
+  const specialAwardClassIds = useMemo(
+    () => new Set((sectionedClasses.find((s) => s.key === 'special')?.classes ?? []).map((c) => c.id)),
+    [sectionedClasses],
+  );
+
+  // Classes by breed, each breed split Mixed → Dog → Bitch → Junior Handling
+  // by the running-order owner (breedClassGroups → sectionClasses).
+  const breedGroups = useMemo(() => {
+    const groups = breedClassGroups(show?.showClasses ?? [], specialAwardClassIds).map((g) => ({
+      ...g,
+      judgeNames: [] as string[],
+    }));
+    const byBreed = new Map(groups.map((g) => [g.breedName, g]));
 
     // Attach judge names from assignments
-    for (const ja of show.judgeAssignments ?? []) {
+    for (const ja of show?.judgeAssignments ?? []) {
       const breedName = ja.breed?.name;
       const judgeName = ja.judge?.name;
-      if (breedName && judgeName && map.has(breedName)) {
-        const group = map.get(breedName)!;
+      if (breedName && judgeName && byBreed.has(breedName)) {
+        const group = byBreed.get(breedName)!;
         if (!group.judgeNames.includes(judgeName)) {
           group.judgeNames.push(judgeName);
         }
       } else if (!breedName && judgeName) {
         // All-breeds judge — add to every breed
-        for (const group of map.values()) {
+        for (const group of groups) {
           if (!group.judgeNames.includes(judgeName)) {
             group.judgeNames.push(judgeName);
           }
@@ -94,13 +101,32 @@ export default function SchedulePage({
       }
     }
 
-    return Array.from(map.entries())
-      .sort(([a, aData], [b, bData]) => {
-        if (aData.groupSortOrder !== bData.groupSortOrder)
-          return aData.groupSortOrder - bData.groupSortOrder;
-        return a.localeCompare(b);
-      });
-  }, [show?.showClasses, show?.judgeAssignments]);
+    return groups;
+  }, [show?.showClasses, show?.judgeAssignments, specialAwardClassIds]);
+
+  // Special Award Classes — surface as a dedicated section after the
+  // breed classes, with letter labels and the lunch-break preamble.
+  const sacClasses = useMemo(
+    () => sectionedClasses.find((s) => s.key === 'special')?.classes ?? [],
+    [sectionedClasses],
+  );
+
+  // The SAC judge sits in a separate assignment lane — pull names from
+  // the show's judgeAssignments where the assignment is tagged as the
+  // Special Awards Classes judge.
+  const sacJudgeNames = useMemo(() => {
+    if (!show?.judgeAssignments) return [] as string[];
+    const seen = new Set<string>();
+    for (const ja of show.judgeAssignments as Array<{
+      isSpecialAwardsClassesJudge?: boolean | null;
+      judge?: { name?: string | null } | null;
+    }>) {
+      if (!ja.isSpecialAwardsClassesJudge) continue;
+      const name = ja.judge?.name;
+      if (name) seen.add(name);
+    }
+    return Array.from(seen);
+  }, [show?.judgeAssignments]);
 
   // Unique judges
   const judges = useMemo(() => {
@@ -164,7 +190,7 @@ export default function SchedulePage({
       <div>
         <div className="flex flex-wrap items-center gap-2 mb-2">
           <Badge variant="secondary" className="text-xs">
-            {showTypeLabels[show.showType] ?? show.showType}
+            {displayShowTypeLabel(show.showType, show.showRuleset)}
           </Badge>
           {show.showScope && (
             <Badge variant="outline" className="text-xs">
@@ -172,7 +198,7 @@ export default function SchedulePage({
             </Badge>
           )}
         </div>
-        <h1 className="font-serif text-2xl font-bold tracking-tight sm:text-3xl">
+        <h1 className={cn(SE_H, 'text-2xl sm:text-3xl')}>
           {show.name}
         </h1>
         <p className="mt-1 text-muted-foreground">
@@ -284,10 +310,10 @@ export default function SchedulePage({
         <section>
           <SectionHeading icon={Ticket} title="Classes" />
           <div className="space-y-6">
-            {breedGroups.map(([breedName, group]) => (
-              <div key={breedName}>
+            {breedGroups.map((group) => (
+              <div key={group.breedName}>
                 <div className="flex items-center justify-between mb-2">
-                  <h3 className="font-serif text-base font-bold">{breedName}</h3>
+                  <h3 className="font-serif text-base font-bold">{group.breedName}</h3>
                   {group.judgeNames.length > 0 && (
                     <span className="text-xs text-muted-foreground">
                       Judge: {group.judgeNames.join(', ')}
@@ -295,26 +321,60 @@ export default function SchedulePage({
                   )}
                 </div>
 
-                {/* Dog classes */}
-                {group.dogClasses.length > 0 && (
-                  <ClassList label="Dog Classes" classes={group.dogClasses} />
-                )}
-
-                {/* Bitch classes */}
-                {group.bitchClasses.length > 0 && (
-                  <ClassList label="Bitch Classes" classes={group.bitchClasses} />
-                )}
-
-                {/* Combined / unsexed classes */}
-                {group.combinedClasses.length > 0 && (
+                {/* A breed with only mixed classes needs no heading */}
+                {group.sections.map((section) => (
                   <ClassList
-                    label={group.dogClasses.length > 0 || group.bitchClasses.length > 0 ? 'Open to Dog & Bitch' : undefined}
-                    classes={group.combinedClasses}
+                    key={section.key}
+                    label={group.sections.length === 1 && section.key === 'mixed' ? undefined : CLASS_SECTION_SCREEN_TITLES[section.key]}
+                    classes={section.classes}
+                    labelMap={classLabelMap}
                   />
-                )}
+                ))}
               </div>
             ))}
           </div>
+        </section>
+      )}
+
+      {/* ── Special Award Classes ── */}
+      {sacClasses.length > 0 && (
+        <section>
+          <SectionHeading icon={Ticket} title="Special Award Classes" />
+          <p className="text-xs text-muted-foreground mb-2">
+            To be held during the lunch break.
+            {sacJudgeNames.length > 0 && (
+              <> Judge: <span className="font-semibold">{sacJudgeNames.join(', ')}</span>.</>
+            )}
+          </p>
+          <div className="space-y-1">
+            {sacClasses
+              .toSorted((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0))
+              .map((sc) => {
+                const display = classLabelMap.get(sc.id);
+                const baseName = (sc.classDefinition?.name ?? '').replace(
+                  /^Special Award Class\s*-\s*/,
+                  'Special Award ',
+                );
+                return (
+                  <div key={sc.id} className="flex items-baseline gap-2 py-1 text-sm">
+                    {display && (
+                      <span className="w-8 shrink-0 text-right text-xs font-bold text-muted-foreground">
+                        {display}
+                      </span>
+                    )}
+                    <div className="min-w-0">
+                      <span className="font-medium">{baseName} Dog or Bitch</span>
+                      {sc.classDefinition?.description && (
+                        <span className="ml-1.5 text-xs text-muted-foreground">— {sc.classDefinition.description}</span>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+          </div>
+          <p className="mt-3 text-xs italic text-muted-foreground leading-relaxed">
+            Special Awards are scheduled by kind permission of the Royal Kennel Club to enable aspiring judges to gain more experience. Exhibits beaten in Special Awards but unbeaten in the main show classes are deemed to remain unbeaten when competing for Best in Show in the main show. Entries must be made on the entry form in the usual way.
+          </p>
         </section>
       )}
 
@@ -323,7 +383,7 @@ export default function SchedulePage({
         <section>
           <SectionHeading icon={Users} title="Officers" />
           <div className="grid gap-2 grid-cols-1 sm:grid-cols-2">
-            {sd.officers.map((officer, i) => (
+            {sortOfficers(sd.officers).map((officer, i) => (
               <div key={i} className="rounded-lg border p-3">
                 <p className="text-xs font-medium text-muted-foreground">{officer.position}</p>
                 <p className="text-sm font-semibold">{officer.name}</p>
@@ -410,7 +470,19 @@ function InfoCard({ label, value }: { label: string; value: string }) {
   );
 }
 
-function ClassList({ label, classes }: { label?: string; classes: { id: string; classNumber?: number | null; classDefinition?: { name?: string | null; description?: string | null } | null }[] }) {
+function ClassList({
+  label,
+  classes,
+  labelMap,
+}: {
+  label?: string;
+  classes: {
+    id: string;
+    classNumber?: number | null;
+    classDefinition?: { name?: string | null; description?: string | null } | null;
+  }[];
+  labelMap: Map<string, string>;
+}) {
   return (
     <div className="mb-3">
       {label && (
@@ -419,21 +491,24 @@ function ClassList({ label, classes }: { label?: string; classes: { id: string; 
       <div className="space-y-1">
         {classes
           .toSorted((a, b) => (a.classNumber ?? 999) - (b.classNumber ?? 999))
-          .map((cls) => (
-            <div key={cls.id} className="flex items-baseline gap-2 py-1 text-sm">
-              {cls.classNumber != null && (
-                <span className="w-6 shrink-0 text-right text-xs font-bold text-muted-foreground">
-                  {cls.classNumber}
-                </span>
-              )}
-              <div className="min-w-0">
-                <span className="font-medium">{cls.classDefinition?.name ?? 'Class'}</span>
-                {cls.classDefinition?.description && (
-                  <span className="ml-1.5 text-xs text-muted-foreground">— {cls.classDefinition.description}</span>
+          .map((cls) => {
+            const display = labelMap.get(cls.id);
+            return (
+              <div key={cls.id} className="flex items-baseline gap-2 py-1 text-sm">
+                {display && (
+                  <span className="w-8 shrink-0 text-right text-xs font-bold text-muted-foreground">
+                    {display}
+                  </span>
                 )}
+                <div className="min-w-0">
+                  <span className="font-medium">{cls.classDefinition?.name ?? 'Class'}</span>
+                  {cls.classDefinition?.description && (
+                    <span className="ml-1.5 text-xs text-muted-foreground">— {cls.classDefinition.description}</span>
+                  )}
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
       </div>
     </div>
   );

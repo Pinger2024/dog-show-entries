@@ -20,6 +20,7 @@ import { toast } from 'sonner';
 import { trpc } from '@/lib/trpc';
 import { useShowId } from '../../_lib/show-context';
 import { formatCurrency } from '@/lib/date-utils';
+import { cn } from '@/lib/utils';
 import { CANCELLABLE_STATUSES, formatOrderRef } from '@/lib/print-products';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -29,6 +30,7 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card';
+import { SE_H } from '@/components/show-experience/tokens';
 
 const STATUS_STEPS = [
   { key: 'draft', label: 'Created', icon: Clock },
@@ -128,7 +130,7 @@ export default function PrintOrderDetailPage({
               Back to Print Shop
             </Link>
           </Button>
-          <h2 className="mt-1 font-serif text-lg font-semibold">
+          <h2 className={cn(SE_H, 'mt-1 font-serif text-lg')}>
             Order #{formatOrderRef(order.id)}
           </h2>
           <p className="text-sm text-muted-foreground">
@@ -232,7 +234,9 @@ export default function PrintOrderDetailPage({
               <div className="min-w-0 flex-1">
                 <p className="font-medium">{item.documentLabel}</p>
                 <p className="text-xs text-muted-foreground">
-                  {item.quantity} copies × {formatCurrency(item.unitSellingPrice)}
+                  {item.lineTotal > 0
+                    ? `${item.quantity} copies × ${formatCurrency(item.unitSellingPrice)}`
+                    : `${item.quantity > 1 ? `${item.quantity} copies · ` : ''}Included in package`}
                 </p>
                 {item.pdfPublicUrl && (
                   <a
@@ -246,7 +250,9 @@ export default function PrintOrderDetailPage({
                   </a>
                 )}
               </div>
-              <p className="font-medium">{formatCurrency(item.lineTotal)}</p>
+              <p className="font-medium">
+                {item.lineTotal > 0 ? formatCurrency(item.lineTotal) : 'Included'}
+              </p>
             </div>
           ))}
           <div className="border-t pt-3 flex items-center justify-between">

@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { signOut } from 'next-auth/react';
-import { Menu, Dog, Ticket, LayoutDashboard, LogOut, Eye, ClipboardList, Settings, Sparkles, Megaphone, PoundSterling, HelpCircle, LogIn } from 'lucide-react';
+import { Menu, Dog, Ticket, Trophy, LayoutDashboard, LogOut, Eye, ClipboardList, Settings, Sparkles, Megaphone, PoundSterling, HelpCircle, LogIn } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   Sheet,
@@ -49,6 +49,22 @@ export function MobileNav({ user, isSecretary, isSteward }: MobileNavProps) {
           >
             <Eye className="size-5" />
             Find a Show
+          </Link>
+          <Link
+            href="/results"
+            onClick={() => setOpen(false)}
+            className="flex items-center gap-3 rounded-lg px-3 py-3 text-[0.9375rem] font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+          >
+            <Trophy className="size-5" />
+            Results
+          </Link>
+          <Link
+            href="/dog"
+            onClick={() => setOpen(false)}
+            className="flex items-center gap-3 rounded-lg px-3 py-3 text-[0.9375rem] font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+          >
+            <Dog className="size-5" />
+            Find a Dog
           </Link>
           <Link
             href="/features"
