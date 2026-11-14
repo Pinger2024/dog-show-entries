@@ -234,3 +234,24 @@ describe('the accept page shows the same Breed and Classification rows as the of
     expect(page).toContain('<td class="label">Classification</td><td>Junior Handling</td>');
   });
 });
+
+describe('every judge-facing page uses 16px+ body text', () => {
+  // Judges are often older and on a phone. Only the small "Powered by Remi"
+  // footer may be under 16px. (A browser check was also run at 375px.)
+  function smallSizes(page: string): string[] {
+    const withoutFooterRule = page.replace(/\.footer \{[^}]*\}/, '');
+    return withoutFooterRule.match(/font-size:\s*1[0-5]px/g) ?? [];
+  }
+
+  it('offer, refused, decline, accepted and declined pages', async () => {
+    const pages: string[] = [];
+    const a = await offer();
+    pages.push(await (await GET(getReq(a.token), params(a.token))).text());
+    pages.push(await (await POST(postReq(a.token, { action: 'accept' }), params(a.token))).text());
+    pages.push(await (await GET(new NextRequest(`http://localhost/api/judge-contract/${a.token}?action=decline`), params(a.token))).text());
+    pages.push(await (await POST(postReq(a.token, { action: 'accept', alreadyAgreed: 'no' }), params(a.token))).text());
+    const b = await offer();
+    pages.push(await (await POST(postReq(b.token, { action: 'decline', reason: 'Away' }), params(b.token))).text());
+    for (const page of pages) expect(smallSizes(page)).toEqual([]);
+  });
+});

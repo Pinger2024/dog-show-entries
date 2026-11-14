@@ -60,9 +60,9 @@ function renderPage(title: string, body: SafeHtml): string {
       color: ${BRAND.cream};
     }
     .banner h2 { font-size: 22px; font-weight: 700; }
-    .banner .sub { color: rgba(243, 236, 220, 0.78); font-size: 14px; margin-top: 8px; }
+    .banner .sub { color: rgba(243, 236, 220, 0.85); font-size: 16px; margin-top: 8px; }
     .body { padding: 24px; }
-    .body p { font-size: 15px; line-height: 1.6; color: ${BRAND.ink}; margin-bottom: 16px; }
+    .body p { font-size: 16px; line-height: 1.6; color: ${BRAND.ink}; margin-bottom: 16px; }
     .detail-table { width: 100%; border-collapse: collapse; margin: 20px 0; }
     .detail-table td { padding: 10px 12px; border-bottom: 1px solid ${BRAND.line}; }
     .detail-table .label { font-weight: 600; color: ${BRAND.ink}; width: 120px; }
@@ -251,7 +251,7 @@ async function offerPage(
           ${show.showType ? html`<tr><td class="label">Show Type</td><td>${displayShowTypeLabel(show.showType, show.showRuleset)}</td></tr>` : ''}
         </table>
 
-        ${contract.notes ? html`<p style="padding: 12px; background: ${BRAND.paper}; border-radius: 8px; font-size: 14px; color: ${BRAND.ink2};">${contract.notes}</p>` : ''}
+        ${contract.notes ? html`<p style="padding: 12px; background: ${BRAND.paper}; border-radius: 8px; font-size: 16px; color: ${BRAND.ink2};">${contract.notes}</p>` : ''}
 
         ${termsSection(terms)}
 
@@ -363,7 +363,7 @@ export async function GET(
           <p>If you have a reason you'd like to share, please enter it below (optional):</p>
           <form method="POST" action="/api/judge-contract/${token}">
             <input type="hidden" name="action" value="decline">
-            <textarea name="reason" rows="3" placeholder="Reason for declining (optional)" style="width: 100%; padding: 10px; border: 1px solid ${BRAND.line}; border-radius: 8px; font-size: 14px; font-family: inherit; resize: vertical; margin-bottom: 16px;"></textarea>
+            <textarea name="reason" rows="3" placeholder="Reason for declining (optional)" style="width: 100%; padding: 10px; border: 1px solid ${BRAND.line}; border-radius: 8px; font-size: 16px; font-family: inherit; resize: vertical; margin-bottom: 16px;"></textarea>
             <div class="buttons">
               <button type="submit" class="btn btn-danger">Yes, Decline</button>
               <a href="/api/judge-contract/${token}" class="btn btn-outline">Go Back</a>
@@ -544,7 +544,7 @@ export async function POST(
         <div class="body">
           <p>Thank you for accepting the invitation to judge at <strong>${show.name}</strong>.</p>
           <p>${orgName} has been notified and will send your formal confirmation letter shortly.</p>
-          <p style="color: ${BRAND.ink2}; font-size: 14px;">You can safely close this page.</p>
+          <p style="color: ${BRAND.ink2}; font-size: 16px;">You can safely close this page.</p>
         </div>
       `),
       { headers: { 'Content-Type': 'text/html' } }
@@ -634,7 +634,7 @@ export async function POST(
         <div class="body">
           <p>You have declined the invitation to judge at <strong>${show.name}</strong>.</p>
           <p>${orgName} has been notified.</p>
-          <p style="color: ${BRAND.ink2}; font-size: 14px;">You can safely close this page.</p>
+          <p style="color: ${BRAND.ink2}; font-size: 16px;">You can safely close this page.</p>
         </div>
       `),
       { headers: { 'Content-Type': 'text/html' } }
