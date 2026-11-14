@@ -92,6 +92,10 @@ const s = StyleSheet.create({
   title: {
     fontSize: 22,
     fontWeight: 'bold',
+    // Its own line height: the page's 1.5 is inherited as the 11pt body's
+    // 16.5pt, so a show name that wrapped drew its second line on top of the
+    // date line under it.
+    lineHeight: 1.25,
   },
   subtitle: {
     fontSize: 11,
