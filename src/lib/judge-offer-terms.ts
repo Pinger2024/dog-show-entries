@@ -48,6 +48,9 @@ export const SOCIETY_TERMS_HEADING = "The Society's terms";
 export const ALREADY_AGREED_LABEL = 'Appointments already agreed';
 /** What the judge's "No" reads as. */
 export const ALREADY_AGREED_NONE = 'None declared';
+/** A Yes with no list — the accept gate prevents it, but if it ever exists it
+ *  must never read as the opposite of what the judge said. */
+export const ALREADY_AGREED_YES_NO_DETAILS = 'Yes (no details given)';
 /** The prompt over the text box when the judge answers Yes. */
 export const ALREADY_AGREED_DETAILS_PROMPT = 'Please list each show and its date.';
 
@@ -197,7 +200,7 @@ export function alreadyAgreedAnswerText(contract: {
 }): string | null {
   if (contract.alreadyAgreedElsewhere == null) return null;
   if (!contract.alreadyAgreedElsewhere) return ALREADY_AGREED_NONE;
-  return contract.alreadyAgreedDetails?.trim() || ALREADY_AGREED_NONE;
+  return contract.alreadyAgreedDetails?.trim() || ALREADY_AGREED_YES_NO_DETAILS;
 }
 
 /** The answer as one line — "Appointments already agreed: none declared" or the
@@ -208,5 +211,5 @@ export function alreadyAgreedSentence(contract: {
 }): string | null {
   const text = alreadyAgreedAnswerText(contract);
   if (text == null) return null;
-  return `${ALREADY_AGREED_LABEL}: ${text === ALREADY_AGREED_NONE ? 'none declared' : text}`;
+  return `${ALREADY_AGREED_LABEL}: ${contract.alreadyAgreedElsewhere ? text : 'none declared'}`;
 }

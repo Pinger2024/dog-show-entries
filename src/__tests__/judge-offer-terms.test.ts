@@ -253,3 +253,14 @@ describe('alreadyAgreedSentence — the line in the secretary\'s email', () => {
       .toBe('Appointments already agreed: Show A, 1 May');
   });
 });
+
+describe('a Yes is never shown as "None declared"', () => {
+  it('Yes with blank details reads "Yes (no details given)"', () => {
+    expect(alreadyAgreedAnswerText({ alreadyAgreedElsewhere: true, alreadyAgreedDetails: null })).toBe('Yes (no details given)');
+    expect(alreadyAgreedAnswerText({ alreadyAgreedElsewhere: true, alreadyAgreedDetails: '   ' })).toBe('Yes (no details given)');
+  });
+  it('the sentence follows', () => {
+    expect(alreadyAgreedSentence({ alreadyAgreedElsewhere: true, alreadyAgreedDetails: '' }))
+      .toBe('Appointments already agreed: Yes (no details given)');
+  });
+});
