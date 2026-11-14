@@ -3,6 +3,12 @@ import path from 'node:path';
 import { formatCurrency, formatLondonLongDate, formatLondonShortDate } from '@/lib/date-utils';
 import '@/lib/pdf-hyphenation';
 import { displayShowTypeTitle } from '@/lib/show-types';
+import {
+  JUDGE_OFFER_TERMS_HEADING,
+  SOCIETY_TERMS_HEADING,
+  ALREADY_AGREED_LABEL,
+  type JudgeOfferTerms,
+} from '@/lib/judge-offer-terms';
 
 const fontsDir = path.join(process.cwd(), 'public', 'fonts');
 Font.register({
@@ -46,7 +52,15 @@ export type JudgeContractPdfData = {
     otherPence: number | null;
     notes: string | null;
   };
+  /** The secretary's notes — printed as "Additional Terms". */
   terms: string | null;
+  /** The standard terms exactly as stored on the contract when the offer was
+   *  sent (src/lib/judge-offer-terms.ts). Null for a regional, or an offer
+   *  sent before the terms existed: the section is then absent. */
+  standardTerms?: JudgeOfferTerms | null;
+  /** The judge's answer about appointments already agreed, as words
+   *  ("None declared" or their text); null when they were never asked. */
+  alreadyAgreed?: string | null;
   dates: {
     offerSentAt: Date | null;
     acceptedAt: Date;
@@ -114,6 +128,17 @@ const s = StyleSheet.create({
   rowValue: {
     flex: 1,
     fontWeight: 'bold',
+  },
+  termRow: {
+    flexDirection: 'row',
+    marginBottom: 6,
+  },
+  termNumber: {
+    width: 18,
+  },
+  termText: {
+    flex: 1,
+    textAlign: 'justify',
   },
   expensesTable: {
     marginTop: 6,
@@ -385,6 +410,34 @@ export function JudgeContractPdf({ data }: { data: JudgeContractPdfData }) {
             {data.expenses.notes && (
               <View style={{ marginTop: 8 }}>
                 <Text style={s.notesBlock}>{data.expenses.notes}</Text>
+              </View>
+            )}
+          </View>
+        )}
+
+        {data.standardTerms && (
+          <View style={s.section}>
+            <SectionHeading>{JUDGE_OFFER_TERMS_HEADING}</SectionHeading>
+            {/* No wrap={false}: these paragraphs are long and must be free to
+                break across a page. */}
+            {data.standardTerms.invitationParagraphs.map((p, i) => (
+              <Text key={`inv-${i}`} style={s.paragraph}>{p}</Text>
+            ))}
+            {data.standardTerms.societyTerms.length > 0 && (
+              <>
+                <Text style={{ fontWeight: 'bold', marginTop: 4, marginBottom: 4 }}>{SOCIETY_TERMS_HEADING}</Text>
+                {data.standardTerms.societyTerms.map((t, i) => (
+                  <View key={`soc-${i}`} style={s.termRow}>
+                    <Text style={s.termNumber}>{i + 1}.</Text>
+                    <Text style={s.termText}>{t}</Text>
+                  </View>
+                ))}
+              </>
+            )}
+            {data.alreadyAgreed != null && (
+              <View style={[s.row, { marginTop: 6 }]}>
+                <Text style={s.rowLabel}>{ALREADY_AGREED_LABEL}</Text>
+                <Text style={s.rowValue}>{data.alreadyAgreed}</Text>
               </View>
             )}
           </View>
