@@ -491,7 +491,7 @@ export function JudgeOffersAction({ showId }: ActionPanelProps) {
                 <div
                   key={j.judgeId}
                   className={cn(
-                    'flex items-center gap-3 rounded-md border px-3 py-2.5',
+                    'flex flex-wrap items-center gap-3 rounded-md border px-3 py-2.5',
                     stage === 'declined' && 'opacity-50'
                   )}
                 >
@@ -515,9 +515,6 @@ export function JudgeOffersAction({ showId }: ActionPanelProps) {
                         <> — accepted {formatRelativeDate(new Date(j.acceptedAt))}</>
                       )}
                     </div>
-                    {(stage === 'offer_accepted' || stage === 'confirmed') && (
-                      <AlreadyAgreedAnswer contract={j} className="mt-1.5 text-xs" />
-                    )}
                   </div>
 
                   <div className="flex gap-1 shrink-0">
@@ -563,6 +560,11 @@ export function JudgeOffersAction({ showId }: ActionPanelProps) {
                       <Check className="size-4 text-se-fresh-deep" />
                     )}
                   </div>
+                  {/* Full width under the row: in the name column it could be
+                      squeezed narrow on a phone. */}
+                  {(stage === 'offer_accepted' || stage === 'confirmed') && (
+                    <AlreadyAgreedAnswer contract={j} className="basis-full text-xs" />
+                  )}
                 </div>
               );
             })}

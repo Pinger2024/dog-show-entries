@@ -502,7 +502,9 @@ export function JudgesSection({ showId }: { showId: string }) {
 
                 return (
                   <div key={j.judgeId} className="rounded-lg border p-4">
-                    <div className="flex items-start justify-between gap-3">
+                    {/* Stacks on a phone: details full width, actions in their own
+                        row below. Side by side from sm up. */}
+                    <div data-judge-card-row className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2 flex-wrap">
                           <span className="font-semibold">{j.name}</span>
@@ -586,7 +588,7 @@ export function JudgesSection({ showId }: { showId: string }) {
                           </span>
                         </label>
                       </div>
-                      <div className="flex items-center gap-1.5 shrink-0">
+                      <div data-judge-card-actions className="flex flex-wrap items-center gap-1.5 max-sm:[&>button]:min-h-11 sm:shrink-0">
                         {!contract && (
                           <Button
                             size="sm"
