@@ -19,7 +19,7 @@
 import { html, rawHtml } from '@/lib/html-escape';
 import { BRAND } from '@/lib/brand';
 import { formatCurrency } from '@/lib/date-utils';
-import { displayShowTypeLabel } from '@/lib/show-types';
+import { displayShowTypeLabel, isRegionalShow } from '@/lib/show-types';
 import {
   buildJudgeBreedAndClassification,
   showBreedNamesForJudging,
@@ -142,6 +142,11 @@ export function renderJudgeOfferEmail(input: JudgeOfferEmailInput): { subject: s
   // A regional is stored as `championship`; the label owner prints "Regional".
   const showTypeText = show.showType ? displayShowTypeLabel(show.showType, show.showRuleset) : null;
   const expenses = expensesText(contract);
+  // A regional is held under GSDL/WUSV rules, not the RKC's: its offer must
+  // not mention the RKC.
+  const formalOfferLine = isRegionalShow(show.showRuleset)
+    ? 'This is the formal written offer of this appointment.'
+    : 'This constitutes the formal written offer as required under Royal Kennel Club regulations.';
   const terms = readStoredJudgeOfferTerms(contract.offerTerms);
   const expiry = contract.tokenExpiresAt
     ? contract.tokenExpiresAt.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })
@@ -191,7 +196,7 @@ export function renderJudgeOfferEmail(input: JudgeOfferEmailInput): { subject: s
         ${termsBlock(terms)}
 
         <p style="${para}">
-          If you are willing to accept this appointment, please confirm by clicking the button below. This constitutes the formal written offer as required under Royal Kennel Club regulations.
+          If you are willing to accept this appointment, please confirm by clicking the button below. ${formalOfferLine}
         </p>
 
         <div style="text-align: center; margin: 28px 0;">

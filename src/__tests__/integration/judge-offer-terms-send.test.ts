@@ -200,3 +200,47 @@ describe('an open-show appointment that names no breed (Junior Handling only)', 
     expect(row!.alreadyAgreedElsewhere).toBeNull();
   });
 });
+
+describe('a regional\'s offer never mentions the RKC', () => {
+  const RKC = /Royal Kennel Club|\bRKC\b/;
+  const REGIONAL_OFFER_LINE = 'This is the formal written offer of this appointment.';
+
+  it('sendJudgeOffer', async () => {
+    const { caller, show, judge } = await setup({ showType: 'championship', showRuleset: 'wusv' });
+    await caller.secretary.sendJudgeOffer({ showId: show.id, judgeId: judge.id, judgeEmail: 'judge@test.local' });
+    expect(lastEmail().html).not.toMatch(RKC);
+    expect(lastEmail().html).toContain(REGIONAL_OFFER_LINE);
+  });
+
+  it('sendBulkJudgeOffers', async () => {
+    const { caller, show, judge } = await setup({ showType: 'championship', showRuleset: 'wusv' });
+    await caller.secretary.sendBulkJudgeOffers({ showId: show.id, judgeIds: [judge.id] });
+    expect(lastEmail().html).not.toMatch(RKC);
+    expect(lastEmail().html).toContain(REGIONAL_OFFER_LINE);
+  });
+
+  it('resendJudgeOffer', async () => {
+    const { caller, show, judge } = await setup({ showType: 'championship', showRuleset: 'wusv' });
+    const contract = await caller.secretary.sendJudgeOffer({ showId: show.id, judgeId: judge.id, judgeEmail: 'judge@test.local' });
+    await caller.secretary.resendJudgeOffer({ contractId: contract.id });
+    expect(lastEmail().html).not.toMatch(RKC);
+    expect(lastEmail().html).toContain(REGIONAL_OFFER_LINE);
+  });
+
+  it('the accept page and its decline page', async () => {
+    const { caller, show, judge } = await setup({ showType: 'championship', showRuleset: 'wusv' });
+    const contract = await caller.secretary.sendJudgeOffer({ showId: show.id, judgeId: judge.id, judgeEmail: 'judge@test.local' });
+    const { GET } = await import('@/app/api/judge-contract/[token]/route');
+    const t = contract.offerToken;
+    for (const q of ['', '?action=decline']) {
+      const page = await (await GET(new NextRequest(`http://localhost/api/judge-contract/${t}${q}`), { params: Promise.resolve({ token: t }) })).text();
+      expect(page).not.toMatch(RKC);
+    }
+  });
+
+  it('an RKC show keeps the RKC sentence', async () => {
+    const { caller, show, judge } = await setup({ showType: 'championship' });
+    await caller.secretary.sendJudgeOffer({ showId: show.id, judgeId: judge.id, judgeEmail: 'judge@test.local' });
+    expect(lastEmail().html).toContain('This constitutes the formal written offer as required under Royal Kennel Club regulations.');
+  });
+});
