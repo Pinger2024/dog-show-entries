@@ -30,6 +30,10 @@ export interface JudgeBreedAndClassification {
    *  judge-section.tsx assignments card) that lay classifications out as
    *  separate items instead of a single " / "-joined string. */
   classifications: string[];
+  /** The breeds this appointment names, in order — empty when it names none
+   *  (breedLine then falls back to the show's breeds or name). The judge-offer
+   *  terms take their breed wording from here (src/lib/judge-offer-terms.ts). */
+  breedNames: string[];
 }
 
 export function buildJudgeBreedAndClassification(
@@ -99,5 +103,6 @@ export function buildJudgeBreedAndClassification(
     breedLine: breeds.size > 0 ? [...breeds].join(', ') : fallbackBreed,
     classificationLine: classificationList.length > 0 ? classificationList.join(' / ') : 'TBC',
     classifications: classificationList,
+    breedNames: [...breeds],
   };
 }

@@ -196,3 +196,32 @@ describe('alreadyAgreedAnswerText', () => {
     expect(alreadyAgreedAnswerText({ alreadyAgreedElsewhere: true, alreadyAgreedDetails: 'Show A, 1 May' })).toBe('Show A, 1 May');
   });
 });
+
+describe('the breed names come from the breed line\'s own builder', () => {
+  // buildJudgeBreedAndClassification (src/lib/judge-breed-classification.ts)
+  // owns the offer's breed line; the terms take their {breed} from its
+  // `breedNames`, never from a second derivation or from splitting breedLine
+  // (which falls back to the show's NAME when no breed is named).
+  it('named breeds', async () => {
+    const { buildJudgeBreedAndClassification } = await import('@/lib/judge-breed-classification');
+    const r = buildJudgeBreedAndClassification(
+      [{ breed: { name: 'Beagle' }, sex: 'dog' }, { breed: { name: 'Basset Hound' }, sex: null }],
+      ['Beagle', 'Basset Hound'],
+      'Spring Open Show',
+    );
+    expect(r.breedNames).toEqual(['Beagle', 'Basset Hound']);
+  });
+
+  it('a single-breed show whose assignment has no breed id still names the breed', async () => {
+    const { buildJudgeBreedAndClassification } = await import('@/lib/judge-breed-classification');
+    const r = buildJudgeBreedAndClassification([{ breed: null, sex: 'bitch' }], GSD, 'Spring Open Show');
+    expect(r.breedNames).toEqual(GSD);
+  });
+
+  it('no named breed → empty, never the show name', async () => {
+    const { buildJudgeBreedAndClassification } = await import('@/lib/judge-breed-classification');
+    const r = buildJudgeBreedAndClassification([], [], 'Spring Open Show');
+    expect(r.breedLine).toBe('Spring Open Show');
+    expect(r.breedNames).toEqual([]);
+  });
+});
