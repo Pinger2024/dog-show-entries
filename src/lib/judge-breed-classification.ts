@@ -36,6 +36,18 @@ export interface JudgeBreedAndClassification {
   breedNames: string[];
 }
 
+/** The show's breeds, as the breed line needs them: a single-breed show's
+ *  breed, else the distinct breeds on its classes. Used by the offer send
+ *  paths (src/server/services/judge-offer-email.ts) and the secretary's
+ *  judges card + offer preview (judge-section.tsx), which used to mirror it. */
+export function showBreedNamesForJudging(show: {
+  breed?: { name: string } | null;
+  showClasses?: { breed?: { name: string } | null }[] | null;
+}): string[] {
+  if (show.breed?.name) return [show.breed.name];
+  return [...new Set((show.showClasses ?? []).filter((sc) => sc.breed).map((sc) => sc.breed!.name))];
+}
+
 export function buildJudgeBreedAndClassification(
   assignments: JudgeAssignmentForClassification[],
   showBreedNames: string[],

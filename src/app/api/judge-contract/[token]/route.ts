@@ -96,7 +96,9 @@ function renderPage(title: string, body: SafeHtml): string {
     form.accept-form { display: block; }
     .question { border: 2px solid ${BRAND.line}; border-radius: 12px; padding: 16px; margin: 0 0 20px; min-width: 0; }
     .question.has-error { border-color: #dc2626; }
-    .question legend { font-size: 17px; font-weight: 700; line-height: 1.5; padding: 0 4px; }
+    /* float keeps the long question inside the box instead of sitting on its border */
+    .question legend { float: left; width: 100%; font-size: 17px; font-weight: 700; line-height: 1.5; padding: 0; }
+    .question .error, .question .choice { clear: both; }
     .question .error { color: #b91c1c; font-size: 16px; font-weight: 600; margin: 8px 0 4px; }
     .choice-input { position: absolute; opacity: 0; width: 1px; height: 1px; }
     .choice {

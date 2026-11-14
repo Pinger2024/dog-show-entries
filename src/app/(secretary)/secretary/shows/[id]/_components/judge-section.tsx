@@ -21,7 +21,7 @@ import {
 import { toast } from 'sonner';
 import { trpc } from '@/lib/trpc';
 import { cn } from '@/lib/utils';
-import { buildJudgeBreedAndClassification } from '@/lib/judge-breed-classification';
+import { buildJudgeBreedAndClassification, showBreedNamesForJudging } from '@/lib/judge-breed-classification';
 import { formatCurrency, poundsToPence, penceToPoundsString } from '@/lib/date-utils';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -78,6 +78,8 @@ import { JudgeCoverageDashboard } from '@/components/judges/judge-coverage-dashb
 import { AddJudgeWizard } from '@/components/judges/add-judge-wizard';
 import { GroupJudgesPanel } from '@/components/judges/group-judges-panel';
 import { displayShowTypeLabel } from '@/lib/show-types';
+import { judgeOfferTerms } from '@/lib/judge-offer-terms';
+import { JudgeOfferTermsPreview, AlreadyAgreedAnswer } from '@/components/judges/judge-offer-terms-view';
 
 function formatContractTimeline(contract: {
   offerSentAt: Date | string | null;
@@ -114,6 +116,9 @@ export function JudgesSection({ showId }: { showId: string }) {
   const [offerTravel, setOfferTravel] = useState('');
   const [offerOther, setOfferOther] = useState('');
   const [offerExpenseNotes, setOfferExpenseNotes] = useState('');
+  // The standard-terms block in the offer dialog starts open on a wide
+  // screen and closed on a phone, where it would push the form out of sight.
+  const [offerTermsOpen, setOfferTermsOpen] = useState(false);
   // RKC judge search state
   const [kcSearchSurname, setKcSearchSurname] = useState('');
   const [kcSearchBreed, setKcSearchBreed] = useState('');
@@ -402,14 +407,9 @@ export function JudgesSection({ showId }: { showId: string }) {
     return Array.from(seen.values());
   }, [assignments]);
 
-  // The show's breed list for buildJudgeBreedAndClassification — mirrors the
-  // server derivation in secretary.ts (sendJudgeOffer etc): a single-breed
-  // show's breed comes straight off the shows row; a general show's breed
-  // list comes from the distinct breeds on its showClasses.
-  const showBreedNames = useMemo(() => {
-    if (showData?.breed?.name) return [showData.breed.name];
-    return [...new Set((showData?.showClasses ?? []).filter((sc) => sc.breed).map((sc) => sc.breed!.name))];
-  }, [showData]);
+  // The show's breed list for buildJudgeBreedAndClassification — the same
+  // function the offer send paths use (it used to be mirrored here).
+  const showBreedNames = useMemo(() => showBreedNamesForJudging(showData ?? {}), [showData]);
 
   // Build the breed + classification labels Amanda wants shown on the
   // assignments card and inside the offer email preview (2026-05-15).
@@ -421,17 +421,19 @@ export function JudgesSection({ showId }: { showId: string }) {
   function deriveJudgeLabels(j: typeof uniqueJudges[number]): {
     breedLine: string;
     classificationLines: string[];
+    breedNames: string[];
   } {
     const judgeAssignments = (assignments ?? []).filter((a) => a.judgeId === j.judgeId && !a.judgeRole);
-    const { breedLine, classifications } = buildJudgeBreedAndClassification(
+    const { breedLine, classifications, breedNames } = buildJudgeBreedAndClassification(
       judgeAssignments,
       showBreedNames,
       showData?.name,
     );
-    return { breedLine, classificationLines: classifications };
+    return { breedLine, classificationLines: classifications, breedNames };
   }
 
   function openOfferDialog(judgeId: string, email: string) {
+    setOfferTermsOpen(typeof window !== 'undefined' && window.matchMedia('(min-width: 640px)').matches);
     setOfferJudgeId(judgeId);
     setOfferEmail(email);
     setOfferNotes('');
@@ -547,6 +549,9 @@ export function JudgesSection({ showId }: { showId: string }) {
                           <p className="mt-1 text-xs text-muted-foreground">
                             {formatContractTimeline(contract)}
                           </p>
+                        )}
+                        {contract && (stage === 'offer_accepted' || stage === 'confirmed') && (
+                          <AlreadyAgreedAnswer contract={contract} className="mt-2" />
                         )}
                         {contract?.contractPdfKey && (
                           <a
@@ -787,7 +792,7 @@ export function JudgesSection({ showId }: { showId: string }) {
           {/* Email preview */}
           {(() => {
             const judge = uniqueJudges.find((j) => j.judgeId === offerJudgeId);
-            const labels = judge ? deriveJudgeLabels(judge) : { breedLine: '—', classificationLines: [] };
+            const labels = judge ? deriveJudgeLabels(judge) : { breedLine: '—', classificationLines: [], breedNames: [] };
             const breedLine = labels.breedLine;
             const classificationText = labels.classificationLines.length > 0
               ? labels.classificationLines.join(' / ')
@@ -853,6 +858,19 @@ export function JudgesSection({ showId }: { showId: string }) {
                 </div>
               </div>
             );
+          })()}
+
+          {/* The standard terms this offer will carry — from the same owner
+              the send path stores them with (src/lib/judge-offer-terms.ts). */}
+          {(() => {
+            const judge = uniqueJudges.find((j) => j.judgeId === offerJudgeId);
+            if (!judge || !showData?.showType) return null;
+            const terms = judgeOfferTerms({
+              showType: showData.showType,
+              showRuleset: (showData as { showRuleset?: 'rkc' | 'wusv' }).showRuleset ?? null,
+              breedNames: deriveJudgeLabels(judge).breedNames,
+            });
+            return <JudgeOfferTermsPreview key={offerJudgeId} terms={terms} defaultOpen={offerTermsOpen} />;
           })()}
 
           <div className="space-y-4">

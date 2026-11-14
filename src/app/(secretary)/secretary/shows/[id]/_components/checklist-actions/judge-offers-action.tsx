@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { trpc } from '@/lib/trpc';
+import { AlreadyAgreedAnswer } from '@/components/judges/judge-offer-terms-view';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -511,6 +512,9 @@ export function JudgeOffersAction({ showId }: ActionPanelProps) {
                         <> — accepted {formatRelativeDate(new Date(j.acceptedAt))}</>
                       )}
                     </div>
+                    {(stage === 'offer_accepted' || stage === 'confirmed') && (
+                      <AlreadyAgreedAnswer contract={j} className="mt-1.5 text-xs" />
+                    )}
                   </div>
 
                   <div className="flex gap-1 shrink-0">

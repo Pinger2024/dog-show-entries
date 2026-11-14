@@ -5164,6 +5164,10 @@ export const secretaryRouter = createTRPCRouter({
           travelCost: contract?.travelCost ?? null,
           otherExpenses: contract?.otherExpenses ?? null,
           expenseNotes: contract?.expenseNotes ?? null,
+          // The judge's answer at acceptance about appointments already
+          // agreed — the secretary reads it before confirming.
+          alreadyAgreedElsewhere: contract?.alreadyAgreedElsewhere ?? null,
+          alreadyAgreedDetails: contract?.alreadyAgreedDetails ?? null,
           judgeEmail: contract?.judgeEmail ?? j.contactEmail,
         };
       });

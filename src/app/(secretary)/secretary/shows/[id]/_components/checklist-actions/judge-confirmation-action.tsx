@@ -6,6 +6,7 @@ import { trpc } from '@/lib/trpc';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { penceToPoundsString } from '@/lib/date-utils';
+import { AlreadyAgreedAnswer } from '@/components/judges/judge-offer-terms-view';
 import type { ActionPanelProps } from '../checklist-action-registry';
 
 export function JudgeConfirmationAction({ showId, entityId, entityName }: ActionPanelProps) {
@@ -59,6 +60,8 @@ export function JudgeConfirmationAction({ showId, entityId, entityName }: Action
           {' — '}Total £{penceToPoundsString(totalExpenses)}
         </div>
       )}
+
+      <AlreadyAgreedAnswer contract={contract} />
 
       {contract.stage === 'offer_accepted' && (
         <Button

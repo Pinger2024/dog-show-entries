@@ -40,7 +40,7 @@ async function offer(opts: { showType?: 'open' | 'championship'; showRuleset?: '
   const contract = await createTestCaller(user).secretary.sendJudgeOffer({
     showId: show.id, judgeId: judge.id, judgeEmail: 'judge@test.local',
   });
-  return { contract, token: contract.offerToken, breed, show };
+  return { contract, token: contract.offerToken, breed, show, user };
 }
 
 const params = (token: string) => ({ params: Promise.resolve({ token }) });
@@ -189,5 +189,21 @@ describe('POST accept — the question is the gate', () => {
     const row = await contractRow(contract.id);
     expect(row.stage).toBe('declined');
     expect(row.alreadyAgreedElsewhere).toBeNull();
+  });
+});
+
+describe('the secretary sees the answer before confirming', () => {
+  it('getJudgeContracts and getChecklistJudgeSummary both carry it', async () => {
+    const { token, show, user, contract } = await offer();
+    await POST(postReq(token, { action: 'accept', alreadyAgreed: 'yes', alreadyAgreedDetails: 'Spring Show, 3 May' }), params(token));
+    const caller = createTestCaller(user);
+    const contracts = await caller.secretary.getJudgeContracts({ showId: show.id });
+    expect(contracts.find((c) => c.id === contract.id)).toMatchObject({
+      alreadyAgreedElsewhere: true, alreadyAgreedDetails: 'Spring Show, 3 May',
+    });
+    const summary = await caller.secretary.getChecklistJudgeSummary({ showId: show.id });
+    expect(summary.judges.find((j) => j.contractId === contract.id)).toMatchObject({
+      alreadyAgreedElsewhere: true, alreadyAgreedDetails: 'Spring Show, 3 May',
+    });
   });
 });

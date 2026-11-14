@@ -10,8 +10,7 @@
  *
  * Also owns how a send path works out the appointment's breed line,
  * classification line and standard terms, so all three agree:
- * `judgeOfferShowWith` (what to load with the show), `judgeOfferShowBreedNames`
- * and `judgeOfferDetails`.
+ * `judgeOfferShowWith` (what to load with the show) and `judgeOfferDetails`.
  *
  * The standard terms are rendered from the copy stored on the contract
  * (`judge_contracts.offer_terms`) — the send path stores them first, then
@@ -23,6 +22,7 @@ import { formatCurrency } from '@/lib/date-utils';
 import { displayShowTypeLabel } from '@/lib/show-types';
 import {
   buildJudgeBreedAndClassification,
+  showBreedNamesForJudging,
   type JudgeAssignmentForClassification,
 } from '@/lib/judge-breed-classification';
 import {
@@ -53,13 +53,6 @@ export interface JudgeOfferShow {
   showClasses?: { breed?: { name: string } | null }[];
 }
 
-/** The show's breeds for the breed line: a single-breed show's breed, else the
- *  distinct breeds on its classes. */
-export function judgeOfferShowBreedNames(show: JudgeOfferShow): string[] {
-  if (show.breed) return [show.breed.name];
-  return [...new Set((show.showClasses ?? []).filter((sc) => sc.breed).map((sc) => sc.breed!.name))];
-}
-
 /** The breed line, classification line and standard terms for one judge's offer. */
 export function judgeOfferDetails(
   show: JudgeOfferShow,
@@ -67,7 +60,7 @@ export function judgeOfferDetails(
 ): { breedLine: string; classificationLine: string; terms: JudgeOfferTerms | null } {
   const { breedLine, classificationLine, breedNames } = buildJudgeBreedAndClassification(
     assignments,
-    judgeOfferShowBreedNames(show),
+    showBreedNamesForJudging(show),
     show.name,
   );
   const terms = judgeOfferTerms({
