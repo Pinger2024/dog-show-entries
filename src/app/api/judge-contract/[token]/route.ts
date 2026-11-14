@@ -12,6 +12,7 @@ import { BRAND } from '@/lib/brand';
 import { displayShowTypeLabel } from '@/lib/show-types';
 import { FEEDBACK_REPLY_TO } from '@/lib/email-addresses';
 import { isContractOfferExpired } from '@/lib/judge-contract-offer';
+import { buildJudgeBreedAndClassification, showBreedNamesForJudging } from '@/lib/judge-breed-classification';
 import {
   readStoredJudgeOfferTerms,
   checkAlreadyAgreedAnswer,
@@ -143,7 +144,15 @@ function loadContract(token: string) {
   return db.query.judgeContracts.findFirst({
     where: eq(judgeContracts.offerToken, token),
     with: {
-      show: { with: { venue: true, organisation: { columns: publicOrgColumns } } },
+      show: {
+        with: {
+          venue: true,
+          organisation: { columns: publicOrgColumns },
+          // For the Breed / Classification rows (one owner, as in the email).
+          breed: true,
+          showClasses: { with: { breed: true } },
+        },
+      },
       judge: true,
     },
   });
@@ -193,19 +202,23 @@ async function offerPage(
   token: string,
   state: { answer?: string; details?: string; error?: string } = {},
 ): Promise<string> {
-  // Get breed assignments for display
+  // The Breed and Classification rows come from the same owner as the offer
+  // email (src/lib/judge-breed-classification.ts). This page used to build its
+  // own breed list, which printed "All breeds" for a single-breed show's judge.
   const assignments = await db.query.judgeAssignments.findMany({
     where: and(
       eq(judgeAssignments.showId, contract.showId),
       eq(judgeAssignments.judgeId, contract.judgeId)
     ),
-    with: { breed: true, ring: true },
+    with: { breed: true },
   });
 
-  const breedNames = assignments.filter((a) => a.breed).map((a) => a.breed!.name);
-  const breedsText = breedNames.length > 0 ? breedNames.join(', ') : 'All breeds';
-
   const show = contract.show;
+  const { breedLine, classificationLine } = buildJudgeBreedAndClassification(
+    assignments,
+    showBreedNamesForJudging(show),
+    show.name,
+  );
   const orgName = show.organisation?.name ?? 'the Show Society';
   const terms = readStoredJudgeOfferTerms(contract.offerTerms);
 
@@ -233,7 +246,8 @@ async function offerPage(
           <tr><td class="label">Show</td><td>${show.name}</td></tr>
           <tr><td class="label">Date</td><td>${showDate}</td></tr>
           <tr><td class="label">Venue</td><td>${venue}</td></tr>
-          <tr><td class="label">Breeds</td><td>${breedsText}</td></tr>
+          <tr><td class="label">Breed</td><td>${breedLine}</td></tr>
+          <tr><td class="label">Classification</td><td>${classificationLine}</td></tr>
           ${show.showType ? html`<tr><td class="label">Show Type</td><td>${displayShowTypeLabel(show.showType, show.showRuleset)}</td></tr>` : ''}
         </table>
 

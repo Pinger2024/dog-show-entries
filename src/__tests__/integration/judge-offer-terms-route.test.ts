@@ -207,3 +207,30 @@ describe('the secretary sees the answer before confirming', () => {
     });
   });
 });
+
+describe('the accept page shows the same Breed and Classification rows as the offer email', () => {
+  async function pageFor(assign: { breedId?: string; sex: 'dog' | 'bitch' | null }[]) {
+    const { user, org, breed } = await makeSecretaryWithOrgAndBreed();
+    const show = await makeShow({ organisationId: org.id, breedId: breed.id, showType: 'open', showRuleset: 'rkc' });
+    const judge = await makeJudge({ contactEmail: 'judge@test.local' });
+    for (const a of assign) await makeJudgeAssignment({ showId: show.id, judgeId: judge.id, breedId: a.breedId, sex: a.sex });
+    const contract = await createTestCaller(user).secretary.sendJudgeOffer({
+      showId: show.id, judgeId: judge.id, judgeEmail: 'judge@test.local',
+    });
+    const t = contract.offerToken;
+    const page = await (await GET(getReq(t), params(t))).text();
+    return { page, breed };
+  }
+
+  it('single-breed show, breed-NULL dog and bitch assignments: the breed and its classes, never "All breeds"', async () => {
+    const { page, breed } = await pageFor([{ sex: 'dog' }, { sex: 'bitch' }]);
+    expect(page).toMatch(new RegExp(`<td class="label">Breed</td><td>${breed.name}</td>`));
+    expect(page).toContain(`<td class="label">Classification</td><td>${breed.name} Dogs &amp; Bitches classes</td>`);
+    expect(page).not.toContain('All breeds');
+  });
+
+  it('a Junior Handling-only judge shows "Junior Handling" as the classification', async () => {
+    const { page } = await pageFor([{ sex: null }]);
+    expect(page).toContain('<td class="label">Classification</td><td>Junior Handling</td>');
+  });
+});
