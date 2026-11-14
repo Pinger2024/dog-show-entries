@@ -54,8 +54,8 @@ export const judgeContracts = pgTable(
     // owns them). NULL = an offer sent before the terms existed, or a regional:
     // every surface then renders as it always did.
     offerTerms: jsonb('offer_terms').$type<JudgeOfferTerms>(),
-    // The judge's answer at acceptance to "have you already agreed to judge
-    // this breed anywhere before the date of this show?". NULL = never asked.
+    // The judge's answer at acceptance to the "already agreed" question
+    // (worded by src/lib/judge-offer-terms.ts). NULL = never asked.
     alreadyAgreedElsewhere: boolean('already_agreed_elsewhere'),
     alreadyAgreedDetails: text('already_agreed_details'),
     createdAt: timestamp('created_at', { withTimezone: true })
