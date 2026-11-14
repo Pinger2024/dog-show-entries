@@ -19,7 +19,7 @@ import {
   JUDGE_OFFER_TERMS_VERSION,
   ALREADY_AGREED_MAX_LENGTH,
 } from '@/lib/judge-offer-terms';
-import { isRkcOpenShow, isRegionalShow } from '@/lib/show-types';
+import { isRkcOpenShow, isRegionalShow, isRkcF1Show } from '@/lib/show-types';
 
 const F121B_PARAGRAPH_1 =
   'In accepting this invitation you agree to be bound by Royal Kennel Club Rules and Regulations and the Royal Kennel Club Code of Best Practice for Judges. In doing so you also recognise that you are obliged to notify us in writing of any change in your personal circumstances or additional information which may affect your ability and standing to fulfil this judging appointment.';
@@ -46,6 +46,22 @@ describe('show-types: regional and RKC open', () => {
   });
 });
 
+describe('show-types: held under RKC Regulation F(1)', () => {
+  // F(1) covers championship, open and limited shows; matches are F(2) and
+  // companion dog shows F(3). A regional is never an RKC show.
+  it('championship, open, premier open and limited are F(1) shows', () => {
+    for (const t of ['championship', 'open', 'premier_open', 'limited']) {
+      expect(isRkcF1Show(t, 'rkc')).toBe(true);
+      expect(isRkcF1Show(t, null)).toBe(true);
+    }
+  });
+  it('companion and primary are not; nor is any regional', () => {
+    expect(isRkcF1Show('companion', 'rkc')).toBe(false);
+    expect(isRkcF1Show('primary', 'rkc')).toBe(false);
+    expect(isRkcF1Show('championship', 'wusv')).toBe(false);
+  });
+});
+
 describe('judgeOfferTerms — which shows carry what', () => {
   it('a regional carries nothing, whatever its type', () => {
     for (const t of ['championship', 'open', 'limited']) {
@@ -53,8 +69,13 @@ describe('judgeOfferTerms — which shows carry what', () => {
     }
   });
 
-  it('an RKC championship (and every other non-open type) carries the F(1).21.b wording only', () => {
-    for (const t of ['championship', 'limited', 'companion', 'primary']) {
+  it('companion and primary shows (not F(1)) carry nothing', () => {
+    expect(judgeOfferTerms({ showType: 'companion', showRuleset: 'rkc', breedNames: GSD })).toBeNull();
+    expect(judgeOfferTerms({ showType: 'primary', showRuleset: 'rkc', breedNames: GSD })).toBeNull();
+  });
+
+  it('an RKC championship or limited show carries the F(1).21.b wording only', () => {
+    for (const t of ['championship', 'limited']) {
       const terms = judgeOfferTerms({ showType: t, showRuleset: 'rkc', breedNames: GSD });
       expect(terms).not.toBeNull();
       expect(terms!.invitationParagraphs).toEqual([F121B_PARAGRAPH_1, F121B_PARAGRAPH_2]);

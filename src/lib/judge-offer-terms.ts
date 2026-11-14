@@ -5,7 +5,9 @@
  * may contain a term's words.
  *
  *   Regional (ruleset wusv), any type      → no terms at all (null)
- *   RKC show that is not an open show      → the F(1).21.b invitation wording
+ *   RKC companion or primary show (not     → no terms at all (null)
+ *     held under Regulation F(1))
+ *   RKC championship or limited show       → the F(1).21.b invitation wording
  *   RKC open show (incl. premier open)     → the F(1).21.b wording, the
  *                                            Society's three terms, and the
  *                                            "already agreed" question
@@ -27,7 +29,7 @@
  *
  * Pure (no db / node imports): the secretary's offer dialog imports it too.
  */
-import { isRegionalShow, isRkcOpenShow } from './show-types';
+import { isRkcF1Show, isRkcOpenShow } from './show-types';
 
 /** Bump when the shape or the wording of the stored terms changes. */
 export const JUDGE_OFFER_TERMS_VERSION = 1;
@@ -95,7 +97,9 @@ export interface JudgeOfferTermsInput {
 
 /** What standard terms this judge's offer carries. Null = none (a regional). */
 export function judgeOfferTerms(input: JudgeOfferTermsInput): JudgeOfferTerms | null {
-  if (isRegionalShow(input.showRuleset)) return null;
+  // F(1).21.b binds only shows held under Regulation F(1); a regional,
+  // companion or primary show carries no standard terms at all.
+  if (!isRkcF1Show(input.showType, input.showRuleset)) return null;
 
   const invitationParagraphs = [...F121B_INVITATION_WORDING];
   if (!isRkcOpenShow(input.showType, input.showRuleset)) {

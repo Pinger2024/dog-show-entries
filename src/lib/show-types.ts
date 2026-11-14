@@ -33,6 +33,15 @@ export function isRegionalShow(showRuleset?: string | null): boolean {
   return showRuleset === 'wusv';
 }
 
+/** Is this show held under RKC Show Regulation F(1)? F(1) covers championship,
+ *  open (premier open included) and limited shows; matches are F(2) and
+ *  companion dog shows F(3), so companion and primary are not. A regional is
+ *  never an RKC show. */
+export function isRkcF1Show(showType: string | null | undefined, showRuleset?: string | null): boolean {
+  if (isRegionalShow(showRuleset)) return false;
+  return showType === 'championship' || showType === 'open' || showType === 'premier_open' || showType === 'limited';
+}
+
 /** Is this an RKC open show? A premier open show is an open show too (it is
  *  scheduled from the same class templates). A regional never is. */
 export function isRkcOpenShow(showType: string | null | undefined, showRuleset?: string | null): boolean {
