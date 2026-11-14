@@ -4,8 +4,9 @@
  * words; src/server/services/judge-offer-email.ts is the one renderer):
  * secretary.sendJudgeOffer, sendBulkJudgeOffers and resendJudgeOffer.
  */
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { eq } from 'drizzle-orm';
+import { NextRequest } from 'next/server';
 import { judgeContracts } from '@/server/db/schema';
 import { testDb } from '../helpers/db';
 import { createTestCaller } from '../helpers/context';
@@ -16,6 +17,11 @@ import {
   makeJudge,
   makeJudgeAssignment,
 } from '../helpers/factories';
+
+// The PDF archive is fire-and-forget on accept; keep it off the network.
+vi.mock('@/server/services/judge-contract-pdf', () => ({
+  generateJudgeContractPdf: vi.fn(async () => ({ status: 'generated' })),
+}));
 import { escapeHtml } from '@/lib/html-escape';
 import { judgeOfferTerms } from '@/lib/judge-offer-terms';
 
@@ -163,5 +169,34 @@ describe('resendJudgeOffer', () => {
     await caller.secretary.resendJudgeOffer({ contractId: contract.id });
     expect(await storedTerms(contract.id)).toBeNull();
     expect(lastEmail().html).not.toContain(F121B);
+  });
+});
+
+describe('an open-show appointment that names no breed (Junior Handling only)', () => {
+  it('stores the invitation wording with no Society terms and no question; the judge accepts with no answer', async () => {
+    const { user, org, breed } = await makeSecretaryWithOrgAndBreed();
+    const show = await makeShow({ organisationId: org.id, breedId: breed.id, showType: 'open', showRuleset: 'rkc' });
+    const judge = await makeJudge({ contactEmail: 'jh@test.local' });
+    await makeJudgeAssignment({ showId: show.id, judgeId: judge.id, sex: null }); // Junior Handling
+    const contract = await createTestCaller(user).secretary.sendJudgeOffer({
+      showId: show.id, judgeId: judge.id, judgeEmail: 'jh@test.local',
+    });
+    const stored = (await storedTerms(contract.id)) as { societyTerms: string[]; alreadyAgreedQuestion: string | null };
+    expect(stored.societyTerms).toEqual([]);
+    expect(stored.alreadyAgreedQuestion).toBeNull();
+    expect(lastEmail().html).toContain(F121B);
+    expect(lastEmail().html).not.toContain(LEVEL_2);
+
+    const { POST } = await import('@/app/api/judge-contract/[token]/route');
+    const fd = new FormData();
+    fd.append('action', 'accept');
+    const res = await POST(
+      new NextRequest(`http://localhost/api/judge-contract/${contract.offerToken}`, { method: 'POST', body: fd }),
+      { params: Promise.resolve({ token: contract.offerToken }) },
+    );
+    expect(res.status).toBe(200);
+    const row = await testDb.query.judgeContracts.findFirst({ where: eq(judgeContracts.id, contract.id) });
+    expect(row!.stage).toBe('offer_accepted');
+    expect(row!.alreadyAgreedElsewhere).toBeNull();
   });
 });

@@ -10,7 +10,10 @@
  *   RKC championship or limited show       → the F(1).21.b invitation wording
  *   RKC open show (incl. premier open)     → the F(1).21.b wording, the
  *                                            Society's three terms, and the
- *                                            "already agreed" question
+ *                                            "already agreed" question —
+ *                                            unless the appointment names no
+ *                                            breed (Junior Handling only):
+ *                                            then the wording alone
  *
  * RKC Show Regulations 2026, F(1).21.b: "Societies are required to include the
  * following wording in judges' invitation letters" — the two paragraphs below,
@@ -70,10 +73,10 @@ export interface JudgeOfferTerms {
  * The `{breed}` wording. A breed name is never pluralised:
  *  one named breed     → "this breed (German Shepherd Dog)"
  *  several             → "these breeds (A, B)" / "any of these breeds (A, B)"
- *  none named          → "the breeds in this appointment" / "any of the breeds …"
- * `one` reads after "for"; `any` reads after "to judge".
+ * `one` reads after "for"; `any` reads after "to judge". Null when no breed is
+ * named — such an appointment carries no breed terms at all.
  */
-export function breedPhrase(breedNames: readonly string[]): { one: string; any: string } {
+export function breedPhrase(breedNames: readonly string[]): { one: string; any: string } | null {
   const names = [...new Set(breedNames.map((b) => b.trim()).filter(Boolean))];
   if (names.length === 1) {
     const p = `this breed (${names[0]})`;
@@ -83,7 +86,7 @@ export function breedPhrase(breedNames: readonly string[]): { one: string; any: 
     const list = names.join(', ');
     return { one: `these breeds (${list})`, any: `any of these breeds (${list})` };
   }
-  return { one: 'the breeds in this appointment', any: 'any of the breeds in this appointment' };
+  return null;
 }
 
 export interface JudgeOfferTermsInput {
@@ -91,7 +94,7 @@ export interface JudgeOfferTermsInput {
   showRuleset: string | null | undefined;
   /** The named breeds of this judge's appointment — `breedNames` from
    *  buildJudgeBreedAndClassification, the same source as the offer's breed
-   *  line. Empty when the appointment names no breed. */
+   *  line. Empty when the appointment names no breed (no Society terms then). */
   breedNames: readonly string[];
 }
 
@@ -102,7 +105,10 @@ export function judgeOfferTerms(input: JudgeOfferTermsInput): JudgeOfferTerms | 
   if (!isRkcF1Show(input.showType, input.showRuleset)) return null;
 
   const invitationParagraphs = [...F121B_INVITATION_WORDING];
-  if (!isRkcOpenShow(input.showType, input.showRuleset)) {
+  // The Society's terms are about judging a breed: an appointment that names
+  // no breed (e.g. Junior Handling only) gets the invitation wording alone.
+  const breed = breedPhrase(input.breedNames);
+  if (!isRkcOpenShow(input.showType, input.showRuleset) || !breed) {
     return {
       version: JUDGE_OFFER_TERMS_VERSION,
       invitationParagraphs,
@@ -112,7 +118,6 @@ export function judgeOfferTerms(input: JudgeOfferTermsInput): JudgeOfferTerms | 
     };
   }
 
-  const breed = breedPhrase(input.breedNames);
   return {
     version: JUDGE_OFFER_TERMS_VERSION,
     invitationParagraphs,

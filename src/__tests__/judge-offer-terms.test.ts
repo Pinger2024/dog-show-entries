@@ -121,10 +121,6 @@ describe('the {breed} forms — never a plural breed name', () => {
       one: 'these breeds (Beagle, Basset Hound)',
       any: 'any of these breeds (Beagle, Basset Hound)',
     });
-    expect(breedPhrase([])).toEqual({
-      one: 'the breeds in this appointment',
-      any: 'any of the breeds in this appointment',
-    });
   });
 
   it('several named breeds read as correct English in every sentence', () => {
@@ -139,20 +135,16 @@ describe('the {breed} forms — never a plural breed name', () => {
     );
   });
 
-  it('no named breed reads "the breeds in this appointment"', () => {
+  it('an open-show appointment that names no breed (Junior Handling only) gets the invitation wording only', () => {
     const terms = judgeOfferTerms({ showType: 'open', showRuleset: 'rkc', breedNames: [] })!;
-    expect(terms.societyTerms).toEqual([
-      'The Judge confirms that they are at Level 2 or above of the Royal Kennel Club Judges Education Programme (JEP) for the breeds in this appointment. This does not apply to a judge who lives overseas.',
-      'From accepting this offer, the Judge will not accept any other appointment to judge any of the breeds in this appointment before the date of this show.',
-      'The Judge must tell the Society of every appointment to judge any of the breeds in this appointment that they have already agreed to. The Judge does this when accepting.',
-    ]);
-    expect(terms.alreadyAgreedQuestion).toBe(
-      'Have you already agreed to judge any of the breeds in this appointment anywhere before the date of this show?',
-    );
+    expect(terms.invitationParagraphs).toEqual([F121B_PARAGRAPH_1, F121B_PARAGRAPH_2]);
+    expect(terms.societyTerms).toEqual([]);
+    expect(terms.alreadyAgreedQuestion).toBeNull();
+    expect(terms.alreadyAgreedNotice).toBeNull();
   });
 
   it('a repeated breed name is listed once', () => {
-    expect(breedPhrase(['Beagle', 'Beagle']).one).toBe('this breed (Beagle)');
+    expect(breedPhrase(['Beagle', 'Beagle'])?.one).toBe('this breed (Beagle)');
   });
 });
 
