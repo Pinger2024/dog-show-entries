@@ -269,6 +269,15 @@ function formatDateShort(d: Date): string {
   return formatLondonShortDate(d);
 }
 
+function SocietyTerm({ n, text }: { n: number; text: string }) {
+  return (
+    <View style={s.termRow}>
+      <Text style={s.termNumber}>{n}.</Text>
+      <Text style={s.termText}>{text}</Text>
+    </View>
+  );
+}
+
 export function JudgeContractPdf({ data }: { data: JudgeContractPdfData }) {
   const showTypeLabel = data.show.showType
     ? displayShowTypeTitle(data.show.showType, data.show.showRuleset)
@@ -429,17 +438,25 @@ export function JudgeContractPdf({ data }: { data: JudgeContractPdfData }) {
             ))}
             {data.standardTerms.societyTerms.length > 0 && (
               <>
-                <Text style={{ fontWeight: 'bold', marginTop: 4, marginBottom: 4 }}>{SOCIETY_TERMS_HEADING}</Text>
-                {data.standardTerms.societyTerms.map((t, i) => (
-                  <View key={`soc-${i}`} style={s.termRow}>
-                    <Text style={s.termNumber}>{i + 1}.</Text>
-                    <Text style={s.termText}>{t}</Text>
+                {/* wrap={false}: the heading travels with the first term, and
+                    each term (two or three lines) stays whole — otherwise the
+                    number was left alone at the foot of a page with its text
+                    on the next. (minPresenceAhead does nothing inside a
+                    wrapper View, so the heading and term 1 share one.) */}
+                <View wrap={false}>
+                  <Text style={{ fontWeight: 'bold', marginTop: 4, marginBottom: 4 }}>{SOCIETY_TERMS_HEADING}</Text>
+                  <SocietyTerm n={1} text={data.standardTerms.societyTerms[0]!} />
+                </View>
+                {data.standardTerms.societyTerms.slice(1).map((t, i) => (
+                  <View key={`soc-${i + 2}`} wrap={false}>
+                    <SocietyTerm n={i + 2} text={t} />
                   </View>
                 ))}
               </>
             )}
             {data.alreadyAgreed != null && (
-              <View style={[s.row, { marginTop: 6 }]}>
+              // wrap={false}: the label never parts from the judge's answer.
+              <View style={[s.row, { marginTop: 6 }]} wrap={false}>
                 <Text style={s.rowLabel}>{ALREADY_AGREED_LABEL}</Text>
                 <Text style={s.rowValue}>{data.alreadyAgreed}</Text>
               </View>
