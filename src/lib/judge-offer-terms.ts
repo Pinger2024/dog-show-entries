@@ -213,3 +213,12 @@ export function alreadyAgreedSentence(contract: {
   if (text == null) return null;
   return `${ALREADY_AGREED_LABEL}: ${contract.alreadyAgreedElsewhere ? text : 'none declared'}`;
 }
+
+/** The line above "Confirm All Accepted" when accepted judges have declared
+ *  appointments already agreed. Null when none has. */
+export function alreadyAgreedConfirmNoticeText(count: number): string | null {
+  if (count <= 0) return null;
+  return count === 1
+    ? '1 judge has told you about appointments they have already agreed. Read their answer before you confirm.'
+    : `${count} judges have told you about appointments they have already agreed. Read their answers before you confirm.`;
+}

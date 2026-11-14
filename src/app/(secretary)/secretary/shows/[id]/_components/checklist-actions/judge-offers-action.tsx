@@ -15,7 +15,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { trpc } from '@/lib/trpc';
-import { AlreadyAgreedAnswer } from '@/components/judges/judge-offer-terms-view';
+import { AlreadyAgreedAnswer, AlreadyAgreedConfirmNotice } from '@/components/judges/judge-offer-terms-view';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -436,6 +436,9 @@ export function JudgeOffersAction({ showId }: ActionPanelProps) {
                 )}
                 Send All Pending Offers ({pendingOfferIds.length})
               </Button>
+            )}
+            {summary.accepted > 0 && (
+              <AlreadyAgreedConfirmNotice judges={data?.judges ?? []} className="basis-full" />
             )}
             {summary.accepted > 0 && (
               <Button

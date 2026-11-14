@@ -10,6 +10,7 @@ import { ChevronDown } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
   alreadyAgreedAnswerText,
+  alreadyAgreedConfirmNoticeText,
   ALREADY_AGREED_LABEL,
   JUDGE_OFFER_TERMS_HEADING,
   SOCIETY_TERMS_HEADING,
@@ -94,5 +95,30 @@ export function AlreadyAgreedAnswer({
       <span className="font-medium">{ALREADY_AGREED_LABEL}:</span>{' '}
       <span className="whitespace-pre-line break-words">{text}</span>
     </div>
+  );
+}
+
+/** Above "Confirm All Accepted": tells the secretary how many accepted judges
+ *  have declared appointments already agreed, so she reads them first.
+ *  Renders nothing when none has. */
+export function AlreadyAgreedConfirmNotice({
+  judges,
+  className,
+}: {
+  judges: { stage: string | null; alreadyAgreedElsewhere: boolean | null }[];
+  className?: string;
+}) {
+  const count = judges.filter((j) => j.stage === 'offer_accepted' && j.alreadyAgreedElsewhere === true).length;
+  const text = alreadyAgreedConfirmNoticeText(count);
+  if (!text) return null;
+  return (
+    <p
+      className={cn(
+        'rounded-md border border-se-honey-line bg-se-honey-soft px-3 py-2 text-sm text-se-honey-ink',
+        className,
+      )}
+    >
+      {text}
+    </p>
   );
 }
