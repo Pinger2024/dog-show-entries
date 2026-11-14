@@ -23,7 +23,21 @@ export function displayShowType(
   showType: string,
   showRuleset?: string | null,
 ): string {
-  return showRuleset === 'wusv' ? 'regional' : showType;
+  return isRegionalShow(showRuleset) ? 'regional' : showType;
+}
+
+/** Is this a regional (GSDL British Regional Group, WUSV rules) rather than an
+ *  RKC show? Keyed off the ruleset, never the stored type: a regional is stored
+ *  as `championship`. */
+export function isRegionalShow(showRuleset?: string | null): boolean {
+  return showRuleset === 'wusv';
+}
+
+/** Is this an RKC open show? A premier open show is an open show too (it is
+ *  scheduled from the same class templates). A regional never is. */
+export function isRkcOpenShow(showType: string | null | undefined, showRuleset?: string | null): boolean {
+  if (isRegionalShow(showRuleset)) return false;
+  return showType === 'open' || showType === 'premier_open';
 }
 
 /** Display key → label. The enum table plus the regional pseudo-type. */
