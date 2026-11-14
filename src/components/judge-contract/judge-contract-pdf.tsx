@@ -269,6 +269,17 @@ function formatDateShort(d: Date): string {
   return formatLondonShortDate(d);
 }
 
+/**
+ * Keep the "Appointments already agreed" label and answer together on one page
+ * only when the answer is short. A judge may type up to 2,000 characters,
+ * perhaps one appointment per line; an unbreakable block taller than a page is
+ * clipped by react-pdf, so a long answer must be free to flow onto the next
+ * page instead (only its first line stays with the label).
+ */
+function keepAnswerOnOnePage(answer: string): boolean {
+  return answer.length <= 600 && answer.split('\n').length <= 12;
+}
+
 function SocietyTerm({ n, text }: { n: number; text: string }) {
   return (
     <View style={s.termRow}>
@@ -454,13 +465,25 @@ export function JudgeContractPdf({ data }: { data: JudgeContractPdfData }) {
                 ))}
               </>
             )}
-            {data.alreadyAgreed != null && (
-              // wrap={false}: the label never parts from the judge's answer.
+            {data.alreadyAgreed != null && (keepAnswerOnOnePage(data.alreadyAgreed) ? (
               <View style={[s.row, { marginTop: 6 }]} wrap={false}>
                 <Text style={s.rowLabel}>{ALREADY_AGREED_LABEL}</Text>
                 <Text style={s.rowValue}>{data.alreadyAgreed}</Text>
               </View>
-            )}
+            ) : (
+              // A long answer: the label sits above it (a side-by-side row
+              // that splits across pages draws its label on the LAST page),
+              // and travels with the answer's first line; the rest flows on.
+              <View style={{ marginTop: 6 }}>
+                <View wrap={false}>
+                  <Text style={{ color: '#555' }}>{ALREADY_AGREED_LABEL}</Text>
+                  <Text style={{ fontWeight: 'bold' }}>{data.alreadyAgreed.split('\n')[0]}</Text>
+                </View>
+                {data.alreadyAgreed.includes('\n') && (
+                  <Text style={{ fontWeight: 'bold' }}>{data.alreadyAgreed.slice(data.alreadyAgreed.indexOf('\n') + 1)}</Text>
+                )}
+              </View>
+            ))}
           </View>
         )}
 
