@@ -190,3 +190,14 @@ export function alreadyAgreedAnswerText(contract: {
   if (!contract.alreadyAgreedElsewhere) return ALREADY_AGREED_NONE;
   return contract.alreadyAgreedDetails?.trim() || ALREADY_AGREED_NONE;
 }
+
+/** The answer as one line — "Appointments already agreed: none declared" or the
+ *  judge's text. Null when never asked. */
+export function alreadyAgreedSentence(contract: {
+  alreadyAgreedElsewhere: boolean | null;
+  alreadyAgreedDetails: string | null;
+}): string | null {
+  const text = alreadyAgreedAnswerText(contract);
+  if (text == null) return null;
+  return `${ALREADY_AGREED_LABEL}: ${text === ALREADY_AGREED_NONE ? 'none declared' : text}`;
+}

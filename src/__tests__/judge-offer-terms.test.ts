@@ -14,6 +14,7 @@ import {
   readStoredJudgeOfferTerms,
   checkAlreadyAgreedAnswer,
   alreadyAgreedAnswerText,
+  alreadyAgreedSentence,
   breedPhrase,
   JUDGE_OFFER_TERMS_VERSION,
   ALREADY_AGREED_MAX_LENGTH,
@@ -223,5 +224,19 @@ describe('the breed names come from the breed line\'s own builder', () => {
     const r = buildJudgeBreedAndClassification([], [], 'Spring Open Show');
     expect(r.breedLine).toBe('Spring Open Show');
     expect(r.breedNames).toEqual([]);
+  });
+});
+
+describe('alreadyAgreedSentence — the line in the secretary\'s email', () => {
+  it('never asked → null', () => {
+    expect(alreadyAgreedSentence({ alreadyAgreedElsewhere: null, alreadyAgreedDetails: null })).toBeNull();
+  });
+  it('No → none declared', () => {
+    expect(alreadyAgreedSentence({ alreadyAgreedElsewhere: false, alreadyAgreedDetails: null }))
+      .toBe('Appointments already agreed: none declared');
+  });
+  it('Yes → the judge\'s text', () => {
+    expect(alreadyAgreedSentence({ alreadyAgreedElsewhere: true, alreadyAgreedDetails: 'Show A, 1 May' }))
+      .toBe('Appointments already agreed: Show A, 1 May');
   });
 });
