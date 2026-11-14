@@ -65,6 +65,21 @@ export async function migrateSundryKinds(database: NonNullable<Database>): Promi
   return filled;
 }
 
+/**
+ * 2026-11-14: the standard terms on a judge's offer (RKC F(1).21.b wording; the
+ * Society's own terms on an open show) stored exactly as sent, and the judge's
+ * answer at acceptance about appointments already agreed. All nullable: NULL =
+ * an offer sent before this, which renders exactly as it always did.
+ */
+export async function migrateJudgeOfferTerms(database: NonNullable<Database>): Promise<void> {
+  await database.execute(sql`
+    ALTER TABLE judge_contracts
+      ADD COLUMN IF NOT EXISTS offer_terms JSONB,
+      ADD COLUMN IF NOT EXISTS already_agreed_elsewhere BOOLEAN,
+      ADD COLUMN IF NOT EXISTS already_agreed_details TEXT;
+  `);
+}
+
 export async function runStartupMigrations() {
   if (!db) {
     console.warn('[startup-migrations] db client unavailable, skipping');
@@ -366,6 +381,9 @@ export async function runStartupMigrations() {
   await db.execute(sql`
     ALTER TABLE shows ADD COLUMN IF NOT EXISTS entry_close_extended_from TIMESTAMPTZ;
   `);
+
+  // -- 2026-11-14: judge-offer terms + the judge's answer (see migrateJudgeOfferTerms above) --
+  await migrateJudgeOfferTerms(db);
 
   // -- 2026-10-15: sundry kind (see migrateSundryKinds above) --
   const sundryFilled = await migrateSundryKinds(db);
