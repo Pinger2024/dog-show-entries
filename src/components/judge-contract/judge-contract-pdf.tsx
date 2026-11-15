@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import { Document, Page, Text, View, StyleSheet, Font } from '@react-pdf/renderer';
 import path from 'node:path';
 import { formatCurrency, formatLondonLongDate, formatLondonShortDate } from '@/lib/date-utils';
@@ -241,13 +242,27 @@ const s = StyleSheet.create({
   },
 });
 
-/** Section heading that never strands at the foot of a page — the
- *  minPresenceAhead makes it move with its first content row (same pattern
- *  as SectionTitle in sv-show-schedule.tsx). */
-function SectionHeading({ children }: { children: string }) {
+/**
+ * A section heading kept on the same page as the first thing it heads.
+ *
+ * `children` is the section's first piece — a small table, a fixed
+ * paragraph, the signature block — and it shares one wrap={false} View with
+ * the heading, so the two always move to a new page together. This is the
+ * only reliable way in this document: react-pdf ignores minPresenceAhead on
+ * a heading nested inside a section View (see pdf-kit/flow.tsx), and even
+ * where it works it holds back only its own number of points, never a whole
+ * unbreakable block. Until 15 Nov 2026 every heading here used it and
+ * "TERMS OF THIS APPOINTMENT" or "ACCEPTANCE" could be the last line of a
+ * page (judge-contract-pdf-page-breaks.test.tsx).
+ *
+ * `children` must be well under a page tall — wrap={false} clips anything
+ * taller. Free-length text goes through splitForHeading first.
+ */
+function HeadedBlock({ heading, children }: { heading: string; children: ReactNode }) {
   return (
-    <View minPresenceAhead={28}>
-      <Text style={s.sectionHeading}>{children}</Text>
+    <View wrap={false}>
+      <Text style={s.sectionHeading}>{heading}</Text>
+      {children}
     </View>
   );
 }
@@ -270,14 +285,20 @@ function formatDateShort(d: Date): string {
 }
 
 /**
- * Keep the "Appointments already agreed" label and answer together on one page
- * only when the answer is short. A judge may type up to 2,000 characters,
- * perhaps one appointment per line; an unbreakable block taller than a page is
- * clipped by react-pdf, so a long answer must be free to flow onto the next
- * page instead (only its first line stays with the label).
+ * How much of a free-length text (the judge's "already agreed" answer, the
+ * secretary's Additional Terms — up to 2,000 characters each, perhaps one
+ * item per line) stays on the same page as its heading or label.
+ *
+ * A short text stays whole with it. A long one keeps only its first line
+ * there and the rest (`rest`) flows on across pages: an unbreakable block
+ * taller than a page is clipped by react-pdf. One line of 2,000 characters
+ * is about 21 printed lines, so `first` is always well under a page.
  */
-function keepAnswerOnOnePage(answer: string): boolean {
-  return answer.length <= 600 && answer.split('\n').length <= 12;
+function splitForHeading(text: string): { first: string; rest: string | null } {
+  if (text.length <= 600 && text.split('\n').length <= 12) return { first: text, rest: null };
+  const nl = text.indexOf('\n');
+  if (nl < 0) return { first: text, rest: null };
+  return { first: text.slice(0, nl), rest: text.slice(nl + 1) };
 }
 
 function SocietyTerm({ n, text }: { n: number; text: string }) {
@@ -303,6 +324,10 @@ export function JudgeContractPdf({ data }: { data: JudgeContractPdfData }) {
     (data.expenses.travelPence ?? 0) +
     (data.expenses.otherPence ?? 0);
   const hasExpenses = expenseTotal > 0 || data.expenses.notes;
+
+  const [firstInvitation, ...restInvitation] = data.standardTerms?.invitationParagraphs ?? [];
+  const alreadyAgreed = data.alreadyAgreed != null ? splitForHeading(data.alreadyAgreed) : null;
+  const additionalTerms = data.terms ? splitForHeading(data.terms) : null;
 
   const judgeName = data.judge.kennelClubAffix
     ? `${data.judge.name} (${data.judge.kennelClubAffix})`
@@ -334,103 +359,107 @@ export function JudgeContractPdf({ data }: { data: JudgeContractPdfData }) {
         </View>
 
         <View style={s.section}>
-          <SectionHeading>Show Details</SectionHeading>
-          <View style={s.row}>
-            <Text style={s.rowLabel}>Society</Text>
-            <Text style={s.rowValue}>{data.societyName}</Text>
-          </View>
-          <View style={s.row}>
-            <Text style={s.rowLabel}>Show</Text>
-            <Text style={s.rowValue}>{data.show.name}</Text>
-          </View>
-          <View style={s.row}>
-            <Text style={s.rowLabel}>Date</Text>
-            <Text style={s.rowValue}>{formatDate(data.show.startDate)}</Text>
-          </View>
-          <View style={s.row}>
-            <Text style={s.rowLabel}>Venue</Text>
-            <Text style={s.rowValue}>{venue}</Text>
-          </View>
-          {showTypeLabel && (
+          <HeadedBlock heading="Show Details">
             <View style={s.row}>
-              <Text style={s.rowLabel}>Show Type</Text>
-              <Text style={s.rowValue}>{showTypeLabel}</Text>
+              <Text style={s.rowLabel}>Society</Text>
+              <Text style={s.rowValue}>{data.societyName}</Text>
             </View>
-          )}
-        </View>
-
-        <View style={s.section}>
-          <SectionHeading>Judge</SectionHeading>
-          <View style={s.row}>
-            <Text style={s.rowLabel}>Name</Text>
-            <Text style={s.rowValue}>{judgeName}</Text>
-          </View>
-          <View style={s.row}>
-            <Text style={s.rowLabel}>Email</Text>
-            <Text style={s.rowValue}>{data.judge.email}</Text>
-          </View>
-          {data.judge.jepLevel != null && (
             <View style={s.row}>
-              <Text style={s.rowLabel}>JEP Level</Text>
-              <Text style={s.rowValue}>Level {data.judge.jepLevel}</Text>
+              <Text style={s.rowLabel}>Show</Text>
+              <Text style={s.rowValue}>{data.show.name}</Text>
             </View>
-          )}
-        </View>
-
-        <View style={s.section}>
-          <SectionHeading>Appointment</SectionHeading>
-          <View style={s.breedsBlock}>
-            {data.breedLine || data.classificationLine ? (
-              <>
-                <Text style={{ marginBottom: 3 }}>
-                  <Text style={{ fontWeight: 'bold' }}>Breed: </Text>
-                  {data.breedLine || 'All breeds scheduled at the show'}
-                </Text>
-                {data.classificationLine && (
-                  <Text>
-                    <Text style={{ fontWeight: 'bold' }}>Classification: </Text>
-                    {data.classificationLine}
-                  </Text>
-                )}
-              </>
-            ) : (
-              <>
-                <Text style={{ fontWeight: 'bold', marginBottom: 4 }}>Breeds to be judged</Text>
-                <Text>
-                  {data.breedsAssigned.length > 0
-                    ? data.breedsAssigned.join(', ')
-                    : 'All breeds scheduled at the show'}
-                </Text>
-              </>
+            <View style={s.row}>
+              <Text style={s.rowLabel}>Date</Text>
+              <Text style={s.rowValue}>{formatDate(data.show.startDate)}</Text>
+            </View>
+            <View style={s.row}>
+              <Text style={s.rowLabel}>Venue</Text>
+              <Text style={s.rowValue}>{venue}</Text>
+            </View>
+            {showTypeLabel && (
+              <View style={s.row}>
+                <Text style={s.rowLabel}>Show Type</Text>
+                <Text style={s.rowValue}>{showTypeLabel}</Text>
+              </View>
             )}
-          </View>
+          </HeadedBlock>
+        </View>
+
+        <View style={s.section}>
+          <HeadedBlock heading="Judge">
+            <View style={s.row}>
+              <Text style={s.rowLabel}>Name</Text>
+              <Text style={s.rowValue}>{judgeName}</Text>
+            </View>
+            <View style={s.row}>
+              <Text style={s.rowLabel}>Email</Text>
+              <Text style={s.rowValue}>{data.judge.email}</Text>
+            </View>
+            {data.judge.jepLevel != null && (
+              <View style={s.row}>
+                <Text style={s.rowLabel}>JEP Level</Text>
+                <Text style={s.rowValue}>Level {data.judge.jepLevel}</Text>
+              </View>
+            )}
+          </HeadedBlock>
+        </View>
+
+        <View style={s.section}>
+          <HeadedBlock heading="Appointment">
+            <View style={s.breedsBlock}>
+              {data.breedLine || data.classificationLine ? (
+                <>
+                  <Text style={{ marginBottom: 3 }}>
+                    <Text style={{ fontWeight: 'bold' }}>Breed: </Text>
+                    {data.breedLine || 'All breeds scheduled at the show'}
+                  </Text>
+                  {data.classificationLine && (
+                    <Text>
+                      <Text style={{ fontWeight: 'bold' }}>Classification: </Text>
+                      {data.classificationLine}
+                    </Text>
+                  )}
+                </>
+              ) : (
+                <>
+                  <Text style={{ fontWeight: 'bold', marginBottom: 4 }}>Breeds to be judged</Text>
+                  <Text>
+                    {data.breedsAssigned.length > 0
+                      ? data.breedsAssigned.join(', ')
+                      : 'All breeds scheduled at the show'}
+                  </Text>
+                </>
+              )}
+            </View>
+          </HeadedBlock>
         </View>
 
         {hasExpenses && (
           <View style={s.section}>
-            <SectionHeading>Agreed Expenses</SectionHeading>
-            {/* wrap={false}: max 4 rows (hotel/travel/other/total) — always
-                keep the expenses table together on one page. */}
-            <View style={s.expensesTable} wrap={false}>
-              <View style={s.expenseRow}>
-                <Text style={s.expenseLabel}>Hotel / accommodation</Text>
-                <Text style={s.expenseAmount}>{formatPence(data.expenses.hotelPence)}</Text>
-              </View>
-              <View style={s.expenseRow}>
-                <Text style={s.expenseLabel}>Travel</Text>
-                <Text style={s.expenseAmount}>{formatPence(data.expenses.travelPence)}</Text>
-              </View>
-              <View style={s.expenseRowLast}>
-                <Text style={s.expenseLabel}>Other expenses</Text>
-                <Text style={s.expenseAmount}>{formatPence(data.expenses.otherPence)}</Text>
-              </View>
-              {expenseTotal > 0 && (
-                <View style={s.totalRow}>
-                  <Text style={s.totalLabel}>Total</Text>
-                  <Text style={s.totalAmount}>{formatPence(expenseTotal)}</Text>
+            {/* The table is at most 4 rows (hotel/travel/other/total): it
+                stays whole, with its heading. */}
+            <HeadedBlock heading="Agreed Expenses">
+              <View style={s.expensesTable}>
+                <View style={s.expenseRow}>
+                  <Text style={s.expenseLabel}>Hotel / accommodation</Text>
+                  <Text style={s.expenseAmount}>{formatPence(data.expenses.hotelPence)}</Text>
                 </View>
-              )}
-            </View>
+                <View style={s.expenseRow}>
+                  <Text style={s.expenseLabel}>Travel</Text>
+                  <Text style={s.expenseAmount}>{formatPence(data.expenses.travelPence)}</Text>
+                </View>
+                <View style={s.expenseRowLast}>
+                  <Text style={s.expenseLabel}>Other expenses</Text>
+                  <Text style={s.expenseAmount}>{formatPence(data.expenses.otherPence)}</Text>
+                </View>
+                {expenseTotal > 0 && (
+                  <View style={s.totalRow}>
+                    <Text style={s.totalLabel}>Total</Text>
+                    <Text style={s.totalAmount}>{formatPence(expenseTotal)}</Text>
+                  </View>
+                )}
+              </View>
+            </HeadedBlock>
             {data.expenses.notes && (
               <View style={{ marginTop: 8 }}>
                 <Text style={s.notesBlock}>{data.expenses.notes}</Text>
@@ -441,19 +470,20 @@ export function JudgeContractPdf({ data }: { data: JudgeContractPdfData }) {
 
         {data.standardTerms && (
           <View style={s.section}>
-            <SectionHeading>{JUDGE_OFFER_TERMS_HEADING}</SectionHeading>
-            {/* No wrap={false}: these paragraphs are long and must be free to
-                break across a page. */}
-            {data.standardTerms.invitationParagraphs.map((p, i) => (
-              <Text key={`inv-${i}`} style={s.paragraph}>{p}</Text>
+            {/* The heading travels with the first invitation paragraph (a
+                fixed four lines); the rest is free to break across a page. */}
+            <HeadedBlock heading={JUDGE_OFFER_TERMS_HEADING}>
+              {firstInvitation != null && <Text style={s.paragraph}>{firstInvitation}</Text>}
+            </HeadedBlock>
+            {restInvitation.map((p, i) => (
+              <Text key={`inv-${i + 1}`} style={s.paragraph}>{p}</Text>
             ))}
             {data.standardTerms.societyTerms.length > 0 && (
               <>
                 {/* wrap={false}: the heading travels with the first term, and
                     each term (two or three lines) stays whole — otherwise the
                     number was left alone at the foot of a page with its text
-                    on the next. (minPresenceAhead does nothing inside a
-                    wrapper View, so the heading and term 1 share one.) */}
+                    on the next. */}
                 <View wrap={false}>
                   <Text style={{ fontWeight: 'bold', marginTop: 4, marginBottom: 4 }}>{SOCIETY_TERMS_HEADING}</Text>
                   <SocietyTerm n={1} text={data.standardTerms.societyTerms[0]!} />
@@ -465,10 +495,10 @@ export function JudgeContractPdf({ data }: { data: JudgeContractPdfData }) {
                 ))}
               </>
             )}
-            {data.alreadyAgreed != null && (keepAnswerOnOnePage(data.alreadyAgreed) ? (
+            {alreadyAgreed && (alreadyAgreed.rest == null ? (
               <View style={[s.row, { marginTop: 6 }]} wrap={false}>
                 <Text style={s.rowLabel}>{ALREADY_AGREED_LABEL}</Text>
-                <Text style={s.rowValue}>{data.alreadyAgreed}</Text>
+                <Text style={s.rowValue}>{alreadyAgreed.first}</Text>
               </View>
             ) : (
               // A long answer: the label sits above it (a side-by-side row
@@ -477,28 +507,33 @@ export function JudgeContractPdf({ data }: { data: JudgeContractPdfData }) {
               <View style={{ marginTop: 6 }}>
                 <View wrap={false}>
                   <Text style={{ color: '#555' }}>{ALREADY_AGREED_LABEL}</Text>
-                  <Text style={{ fontWeight: 'bold' }}>{data.alreadyAgreed.split('\n')[0]}</Text>
+                  <Text style={{ fontWeight: 'bold' }}>{alreadyAgreed.first}</Text>
                 </View>
-                {data.alreadyAgreed.includes('\n') && (
-                  <Text style={{ fontWeight: 'bold' }}>{data.alreadyAgreed.slice(data.alreadyAgreed.indexOf('\n') + 1)}</Text>
-                )}
+                <Text style={{ fontWeight: 'bold' }}>{alreadyAgreed.rest}</Text>
               </View>
             ))}
           </View>
         )}
 
-        {data.terms && (
+        {additionalTerms && (
           <View style={s.section}>
-            <SectionHeading>Additional Terms</SectionHeading>
-            <Text style={s.notesBlock}>{data.terms}</Text>
+            {/* A long note keeps its first line with the heading and flows
+                on; the two pieces share one box (no padding between). */}
+            <HeadedBlock heading="Additional Terms">
+              <Text style={additionalTerms.rest == null ? s.notesBlock : [s.notesBlock, { paddingBottom: 0 }]}>
+                {additionalTerms.first}
+              </Text>
+            </HeadedBlock>
+            {additionalTerms.rest != null && (
+              <Text style={[s.notesBlock, { paddingTop: 0 }]}>{additionalTerms.rest}</Text>
+            )}
           </View>
         )}
 
         <View style={s.section}>
-          <SectionHeading>Acceptance</SectionHeading>
-          {/* wrap={false}: the closing paragraph and both signature blocks
-              are small and belong together — never split across a page break. */}
-          <View wrap={false}>
+          {/* The closing paragraph and both signature blocks are small and
+              belong together with their heading — never split across a page. */}
+          <HeadedBlock heading="Acceptance">
             <Text style={s.paragraph}>
               By clicking &quot;Accept Appointment&quot; on the offer link sent to the Judge&apos;s email
               address, the Judge has confirmed acceptance of this appointment on the terms set out above.
@@ -525,7 +560,7 @@ export function JudgeContractPdf({ data }: { data: JudgeContractPdfData }) {
                 <Text style={s.signatureStamp}>{data.judge.email}</Text>
               </View>
             </View>
-          </View>
+          </HeadedBlock>
         </View>
 
         <View style={s.footer} fixed>
