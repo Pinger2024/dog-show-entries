@@ -45,7 +45,7 @@ function fixture(over: Partial<JudgeContractPdfData>, ruleset: 'rkc' | 'wusv' = 
     expenses: { hotelPence: 12000, travelPence: 8000, otherPence: null, notes: 'One night at the show hotel.' },
     terms: null,
     standardTerms:
-      ruleset === 'rkc' ? judgeOfferTerms({ showType: 'open', showRuleset: 'rkc', breedNames: ['German Shepherd Dog'] }) : null,
+      ruleset === 'rkc' ? judgeOfferTerms({ showType: 'open', showRuleset: 'rkc', breedNames: ['German Shepherd Dog'], judgeLivesOverseas: false }) : null,
     alreadyAgreed: ruleset === 'rkc' ? 'Clyde Valley GSD Club open show, 6 February 2027' : null,
     dates: { offerSentAt: new Date('2026-11-15T20:00:00Z'), acceptedAt: new Date('2026-11-15T20:05:00Z') },
     generatedAt: new Date('2026-11-15T20:05:00Z'),

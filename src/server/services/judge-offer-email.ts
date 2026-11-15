@@ -53,10 +53,13 @@ export interface JudgeOfferShow {
   showClasses?: { breed?: { name: string } | null }[];
 }
 
-/** The breed line, classification line and standard terms for one judge's offer. */
+/** The breed line, classification line and standard terms for one judge's offer.
+ *  `judge` is the judge's row as it is NOW: a resend re-stores the terms from
+ *  the current "lives overseas" flag. */
 export function judgeOfferDetails(
   show: JudgeOfferShow,
   assignments: JudgeAssignmentForClassification[],
+  judge: { livesOverseas: boolean },
 ): { breedLine: string; classificationLine: string; terms: JudgeOfferTerms | null } {
   const { breedLine, classificationLine, breedNames } = buildJudgeBreedAndClassification(
     assignments,
@@ -67,6 +70,7 @@ export function judgeOfferDetails(
     showType: show.showType,
     showRuleset: show.showRuleset ?? null,
     breedNames,
+    judgeLivesOverseas: judge.livesOverseas,
   });
   return { breedLine, classificationLine, terms };
 }

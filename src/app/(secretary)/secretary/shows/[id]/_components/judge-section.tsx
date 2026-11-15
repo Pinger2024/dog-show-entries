@@ -372,6 +372,7 @@ export function JudgesSection({ showId }: { showId: string }) {
       contactEmail: string | null;
       contactPhone: string | null;
       kennelClubAffix: string | null;
+      livesOverseas: boolean;
       rings: string[];
       assignmentIds: string[];
       subjectToRkcApproval: boolean;
@@ -398,6 +399,7 @@ export function JudgesSection({ showId }: { showId: string }) {
           contactEmail: a.judge.contactEmail,
           contactPhone: a.judge.contactPhone,
           kennelClubAffix: a.judge.kennelClubAffix,
+          livesOverseas: a.judge.livesOverseas,
           rings: a.ring ? [`Ring ${a.ring.number}`] : [],
           assignmentIds: [a.id],
           subjectToRkcApproval: (a as { subjectToRkcApproval?: boolean }).subjectToRkcApproval === true,
@@ -871,6 +873,7 @@ export function JudgesSection({ showId }: { showId: string }) {
               showType: showData.showType,
               showRuleset: (showData as { showRuleset?: 'rkc' | 'wusv' }).showRuleset ?? null,
               breedNames: deriveJudgeLabels(judge).breedNames,
+              judgeLivesOverseas: judge.livesOverseas,
             });
             return <JudgeOfferTermsPreview key={offerJudgeId} terms={terms} defaultOpen={offerTermsOpen} />;
           })()}

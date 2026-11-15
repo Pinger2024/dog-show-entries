@@ -2897,6 +2897,8 @@ export const secretaryRouter = createTRPCRouter({
         kcNumber: z.string().optional(),
         contactEmail: z.string().email().optional(),
         kennelClubAffix: z.string().max(100).optional(),
+        /** Omitted = the column default (lives in the UK). */
+        livesOverseas: z.boolean().optional(),
       })
     )
     .mutation(async ({ ctx, input }) => {
@@ -2907,6 +2909,7 @@ export const secretaryRouter = createTRPCRouter({
           kcNumber: input.kcNumber ?? null,
           contactEmail: input.contactEmail ?? null,
           kennelClubAffix: input.kennelClubAffix ?? null,
+          livesOverseas: input.livesOverseas,
         })
         .returning();
 
@@ -3085,6 +3088,8 @@ export const secretaryRouter = createTRPCRouter({
       bio: z.string().max(2000).optional(),
       photoUrl: z.union([z.string().url().max(500), z.literal('')]).optional(),
       kennelClubAffix: z.string().max(100).optional(),
+      // The Send Offer dialog saves this on its own the moment it is ticked.
+      livesOverseas: z.boolean().optional(),
     }))
     .mutation(async ({ ctx, input }) => {
       const { judgeId, ...updates } = input;
@@ -3111,6 +3116,7 @@ export const secretaryRouter = createTRPCRouter({
       if (updates.bio !== undefined) setValues.bio = updates.bio || null;
       if (updates.photoUrl !== undefined) setValues.photoUrl = updates.photoUrl || null;
       if (updates.kennelClubAffix !== undefined) setValues.kennelClubAffix = updates.kennelClubAffix || null;
+      if (updates.livesOverseas !== undefined) setValues.livesOverseas = updates.livesOverseas;
       if (Object.keys(setValues).length === 0) throw new TRPCError({ code: 'BAD_REQUEST', message: 'No fields to update' });
 
       const [updated] = await ctx.db.update(judges).set(setValues).where(eq(judges.id, judgeId)).returning();
@@ -3165,6 +3171,10 @@ export const secretaryRouter = createTRPCRouter({
       contactPhone: z.string().max(50).optional(),
       kcJudgeId: z.string().max(100).optional(),
       kennelClubAffix: z.string().max(100).optional(),
+      // Sent only when the secretary set it (or the wizard read it off the
+      // judge's own row). Omitted = a new judge lives in the UK; an existing
+      // judge keeps what is stored, so an untouched box never clears a "yes".
+      livesOverseas: z.boolean().optional(),
       // Assignment details — array of breed+sex combos
       assignments: z.array(z.object({
         breedId: z.string().uuid().nullable(),
@@ -3207,6 +3217,7 @@ export const secretaryRouter = createTRPCRouter({
           contactPhone: input.contactPhone || null,
           kcJudgeId: input.kcJudgeId || null,
           kennelClubAffix: input.kennelClubAffix || null,
+          livesOverseas: input.livesOverseas,
         }).returning();
         judge = created!;
       } else {
@@ -3225,6 +3236,7 @@ export const secretaryRouter = createTRPCRouter({
             contactPhone: input.contactPhone ?? judge.contactPhone,
             kcJudgeId: input.kcJudgeId ?? judge.kcJudgeId,
             kennelClubAffix: input.kennelClubAffix ?? judge.kennelClubAffix,
+            livesOverseas: input.livesOverseas ?? judge.livesOverseas,
           }).where(eq(judges.id, judge.id));
         }
       }
@@ -4764,7 +4776,8 @@ export const secretaryRouter = createTRPCRouter({
 
       // Breed + classification lines and the standard terms — one owner each
       // (src/server/services/judge-offer-email.ts, src/lib/judge-offer-terms.ts).
-      const { breedLine, classificationLine, terms } = judgeOfferDetails(show, assignments);
+      // The judge's own "lives overseas" flag decides the Society's terms.
+      const { breedLine, classificationLine, terms } = judgeOfferDetails(show, assignments, judge);
 
       // Token expires in 30 days
       const tokenExpiresAt = new Date();
@@ -4862,7 +4875,9 @@ export const secretaryRouter = createTRPCRouter({
       });
 
       const show = contract.show;
-      const { breedLine, classificationLine, terms } = judgeOfferDetails(show, assignments);
+      // The judge as they are now: marking a judge overseas after the first
+      // offer, then resending, re-stores the terms from the current flag.
+      const { breedLine, classificationLine, terms } = judgeOfferDetails(show, assignments, contract.judge);
 
       // Refresh token expiry, and re-store the terms this reminder sends
       const tokenExpiresAt = new Date();
@@ -5399,7 +5414,7 @@ export const secretaryRouter = createTRPCRouter({
         }
 
         const assignments = assignmentsByJudge.get(judgeId) ?? [];
-        const { breedLine, classificationLine, terms } = judgeOfferDetails(show, assignments);
+        const { breedLine, classificationLine, terms } = judgeOfferDetails(show, assignments, judge);
 
         const tokenExpiresAt = new Date();
         tokenExpiresAt.setDate(tokenExpiresAt.getDate() + 30);

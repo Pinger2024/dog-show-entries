@@ -29,13 +29,17 @@ import { GET, POST } from '@/app/api/judge-contract/[token]/route';
 
 const F121B = 'In accepting this invitation you agree to be bound by Royal Kennel Club Rules and Regulations';
 
-async function offer(opts: { showType?: 'open' | 'championship' | 'limited'; showRuleset?: 'rkc' | 'wusv' } = {}) {
+async function offer(opts: {
+  showType?: 'open' | 'championship' | 'limited';
+  showRuleset?: 'rkc' | 'wusv';
+  livesOverseas?: boolean;
+} = {}) {
   const { user, org, breed } = await makeSecretaryWithOrgAndBreed();
   const show = await makeShow({
     organisationId: org.id, breedId: breed.id,
     showType: opts.showType ?? 'open', showRuleset: opts.showRuleset ?? 'rkc',
   });
-  const judge = await makeJudge({ contactEmail: 'judge@test.local' });
+  const judge = await makeJudge({ contactEmail: 'judge@test.local', livesOverseas: opts.livesOverseas ?? false });
   await makeJudgeAssignment({ showId: show.id, judgeId: judge.id, breedId: breed.id });
   const contract = await createTestCaller(user).secretary.sendJudgeOffer({
     showId: show.id, judgeId: judge.id, judgeEmail: 'judge@test.local',
@@ -64,7 +68,7 @@ describe('GET — the accept page', () => {
   it('RKC open show: shows the stored terms in order, then the question with No and Yes', async () => {
     const { token, breed } = await offer();
     const page = await (await GET(getReq(token), params(token))).text();
-    const terms = judgeOfferTerms({ showType: 'open', showRuleset: 'rkc', breedNames: [breed.name] })!;
+    const terms = judgeOfferTerms({ showType: 'open', showRuleset: 'rkc', breedNames: [breed.name], judgeLivesOverseas: false })!;
     const order = [
       ...terms.invitationParagraphs,
       ...terms.societyTerms,
@@ -93,7 +97,7 @@ describe('GET — the accept page', () => {
   it('RKC championship: the stored Level 4 terms, then the question', async () => {
     const { token, breed } = await offer({ showType: 'championship' });
     const page = await (await GET(getReq(token), params(token))).text();
-    const terms = judgeOfferTerms({ showType: 'championship', showRuleset: 'rkc', breedNames: [breed.name] })!;
+    const terms = judgeOfferTerms({ showType: 'championship', showRuleset: 'rkc', breedNames: [breed.name], judgeLivesOverseas: false })!;
     expect(page).toContain(F121B);
     for (const t of terms.societyTerms) expect(page).toContain(escapeHtml(t));
     expect(page).toContain('Level 4 or above');
@@ -218,6 +222,31 @@ describe('POST accept — the question is the gate', () => {
     expect(row.stage).toBe('declined');
     expect(row.alreadyAgreedElsewhere).toBeNull();
   });
+});
+
+describe('a judge who lives overseas', () => {
+  for (const showType of ['open', 'championship'] as const) {
+    it(`${showType} show: the accept page shows the two paragraphs and no question`, async () => {
+      const { token } = await offer({ showType, livesOverseas: true });
+      const page = await (await GET(getReq(token), params(token))).text();
+      expect(page).toContain(F121B);
+      expect(page).not.toContain('Judges Education Programme');
+      expect(page).not.toContain("The Society&#39;s terms");
+      expect(page).not.toContain("The Society's terms");
+      expect(page).not.toContain('name="alreadyAgreed"');
+      expect(page).toContain('Accept Appointment');
+    });
+
+    it(`${showType} show: accepts with no answer`, async () => {
+      const { token, contract } = await offer({ showType, livesOverseas: true });
+      const res = await POST(postReq(token, { action: 'accept' }), params(token));
+      expect(res.status).toBe(200);
+      const row = await contractRow(contract.id);
+      expect(row.stage).toBe('offer_accepted');
+      expect(row.alreadyAgreedElsewhere).toBeNull();
+      expect(secretaryEmail()!.html).not.toContain('Appointments already agreed');
+    });
+  }
 });
 
 describe('a missing answer always reaches the server, which says what is wrong', () => {

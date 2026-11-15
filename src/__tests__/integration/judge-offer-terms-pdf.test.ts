@@ -56,6 +56,7 @@ function textOf(node: ReactNode): string {
 async function acceptedContract(opts: {
   showType?: 'open' | 'championship' | 'limited';
   showRuleset?: 'rkc' | 'wusv';
+  livesOverseas?: boolean;
   answer?: { alreadyAgreedElsewhere: boolean | null; alreadyAgreedDetails: string | null };
 } = {}) {
   const { user, org, breed } = await makeSecretaryWithOrgAndBreed();
@@ -63,7 +64,7 @@ async function acceptedContract(opts: {
     organisationId: org.id, breedId: breed.id,
     showType: opts.showType ?? 'open', showRuleset: opts.showRuleset ?? 'rkc',
   });
-  const judge = await makeJudge({ contactEmail: 'judge@test.local' });
+  const judge = await makeJudge({ contactEmail: 'judge@test.local', livesOverseas: opts.livesOverseas ?? false });
   await makeJudgeAssignment({ showId: show.id, judgeId: judge.id, breedId: breed.id });
   const contract = await createTestCaller(user).secretary.sendJudgeOffer({
     showId: show.id, judgeId: judge.id, judgeEmail: 'judge@test.local', notes: 'Lunch provided',
@@ -94,7 +95,7 @@ describe('contract PDF — standard terms', () => {
       answer: { alreadyAgreedElsewhere: true, alreadyAgreedDetails: 'Spring Show, 3 May' },
     });
     const { data, text } = await pdfFor(contract.id);
-    const expected = judgeOfferTerms({ showType: 'open', showRuleset: 'rkc', breedNames: [breed.name] })!;
+    const expected = judgeOfferTerms({ showType: 'open', showRuleset: 'rkc', breedNames: [breed.name], judgeLivesOverseas: false })!;
     expect(data.standardTerms).toEqual(expected);
     expect(data.alreadyAgreed).toBe('Spring Show, 3 May');
 
@@ -136,7 +137,7 @@ describe('contract PDF — standard terms', () => {
       answer: { alreadyAgreedElsewhere: false, alreadyAgreedDetails: null },
     });
     const { data, text } = await pdfFor(contract.id);
-    const expected = judgeOfferTerms({ showType: 'championship', showRuleset: 'rkc', breedNames: [breed.name] })!;
+    const expected = judgeOfferTerms({ showType: 'championship', showRuleset: 'rkc', breedNames: [breed.name], judgeLivesOverseas: false })!;
     expect(data.standardTerms).toEqual(expected);
     expect(data.alreadyAgreed).toBe('None declared');
     expect(text).toContain(F121B);
@@ -155,6 +156,22 @@ describe('contract PDF — standard terms', () => {
     expect(text).not.toContain('Judges Education Programme');
     expect(text).not.toContain('Appointments already agreed');
   });
+
+  for (const showType of ['open', 'championship'] as const) {
+    it(`a judge who lives overseas, ${showType} show: the two paragraphs, no numbered terms, no answer row`, async () => {
+      const { contract } = await acceptedContract({ showType, livesOverseas: true });
+      const { data, text } = await pdfFor(contract.id);
+      expect(data.standardTerms?.invitationParagraphs).toHaveLength(2);
+      expect(data.standardTerms?.societyTerms).toEqual([]);
+      expect(data.standardTerms?.alreadyAgreedQuestion).toBeNull();
+      expect(data.alreadyAgreed).toBeNull();
+      expect(text).toContain('Terms of this appointment');
+      expect(text).toContain(F121B);
+      expect(text).not.toContain('Judges Education Programme');
+      expect(text).not.toContain("The Society's terms");
+      expect(text).not.toContain('Appointments already agreed');
+    });
+  }
 
   it('regional: no terms in the data and none in the PDF', async () => {
     const { contract } = await acceptedContract({ showType: 'championship', showRuleset: 'wusv' });

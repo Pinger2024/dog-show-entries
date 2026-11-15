@@ -75,3 +75,47 @@ describe('judge offer terms — one owner', () => {
     expect((src.match(/offerTerms: terms/g) ?? []).length).toBe(3);
   });
 });
+
+describe('a judge who lives overseas — one rule, the judge\'s real flag everywhere', () => {
+  // Mandy, 15 Nov 2026: an overseas judge gets the two F(1).21.b paragraphs
+  // only. judgeOfferTerms owns that; its `judgeLivesOverseas` input is
+  // required, and nothing may pass a made-up value.
+  it('judgeOfferTerms is called only by the send paths\' one helper and the Send Offer dialog\'s preview', () => {
+    const callers = containing(/judgeOfferTerms\(\{/).filter((f) => f !== 'lib/judge-offer-terms.ts');
+    expect(callers).toEqual([
+      'app/(secretary)/secretary/shows/[id]/_components/judge-section.tsx',
+      'server/services/judge-offer-email.ts',
+    ]);
+  });
+
+  it('no caller hard-codes the flag', () => {
+    expect(containing(/judgeLivesOverseas:\s*(true|false)\b/)).toEqual([]);
+    expect(containing(/judgeLivesOverseas:\s*[^,}\n]*\?\?\s*(true|false)/)).toEqual([]);
+  });
+
+  it('the send helper passes the judge row\'s own flag, and all three send paths hand it the judge', () => {
+    const email = readFileSync(join(SRC, 'server/services/judge-offer-email.ts'), 'utf8');
+    expect(email).toContain('judgeLivesOverseas: judge.livesOverseas,');
+    const src = readFileSync(join(SRC, 'server/trpc/routers/secretary.ts'), 'utf8');
+    const calls = src.match(/judgeOfferDetails\(show, assignments, [^)]+\)/g) ?? [];
+    expect(calls).toEqual([
+      'judgeOfferDetails(show, assignments, judge)', // sendJudgeOffer
+      'judgeOfferDetails(show, assignments, contract.judge)', // resendJudgeOffer: the judge as they are now
+      'judgeOfferDetails(show, assignments, judge)', // sendBulkJudgeOffers
+    ]);
+    expect((src.match(/judgeOfferDetails\(/g) ?? []).length).toBe(3);
+  });
+
+  it('the overseas rule is decided in the owner alone', () => {
+    // Only the owner reads the input; every other file just passes it on.
+    expect(containing('input.judgeLivesOverseas')).toEqual(['lib/judge-offer-terms.ts']);
+  });
+
+  it('the box\'s words live in exactly one source file', () => {
+    expect(containing("gets the RKC's two paragraphs only")).toEqual(['lib/judge-offer-terms.ts']);
+    // The label as code (a string, a JSX attribute or JSX text), not a comment.
+    expect(containing(/['`]Lives overseas['`]|=\s*"Lives overseas"|>\s*Lives overseas\s*</)).toEqual([
+      'lib/judge-offer-terms.ts',
+    ]);
+  });
+});

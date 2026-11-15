@@ -31,7 +31,11 @@ const LEVEL_4 = 'Level 4 or above';
 /** Any of the Society's JEP term, whatever its level. */
 const JEP = 'Judges Education Programme';
 
-type ShowOpts = { showType?: 'open' | 'championship' | 'limited' | 'premier_open'; showRuleset?: 'rkc' | 'wusv' };
+type ShowOpts = {
+  showType?: 'open' | 'championship' | 'limited' | 'premier_open';
+  showRuleset?: 'rkc' | 'wusv';
+  livesOverseas?: boolean;
+};
 
 async function setup(opts: ShowOpts = {}) {
   const { user, org, breed } = await makeSecretaryWithOrgAndBreed();
@@ -41,9 +45,9 @@ async function setup(opts: ShowOpts = {}) {
     showType: opts.showType ?? 'open',
     showRuleset: opts.showRuleset ?? 'rkc',
   });
-  const judge = await makeJudge({ contactEmail: 'judge@test.local' });
+  const judge = await makeJudge({ contactEmail: 'judge@test.local', livesOverseas: opts.livesOverseas ?? false });
   await makeJudgeAssignment({ showId: show.id, judgeId: judge.id, breedId: breed.id, sex: 'dog' });
-  return { caller: createTestCaller(user), show, judge, breed };
+  return { caller: createTestCaller(user), show, judge, breed, org };
 }
 
 function lastEmail(): { to: unknown; subject: string; html: string } {
@@ -66,7 +70,7 @@ describe('sendJudgeOffer', () => {
     const contract = await caller.secretary.sendJudgeOffer({
       showId: show.id, judgeId: judge.id, judgeEmail: 'judge@test.local',
     });
-    const expected = judgeOfferTerms({ showType: 'open', showRuleset: 'rkc', breedNames: [breed.name] })!;
+    const expected = judgeOfferTerms({ showType: 'open', showRuleset: 'rkc', breedNames: [breed.name], judgeLivesOverseas: false })!;
     expect(await storedTerms(contract.id)).toEqual(expected);
 
     const email = lastEmail();
@@ -82,7 +86,7 @@ describe('sendJudgeOffer', () => {
     const contract = await caller.secretary.sendJudgeOffer({
       showId: show.id, judgeId: judge.id, judgeEmail: 'judge@test.local',
     });
-    const expected = judgeOfferTerms({ showType: 'championship', showRuleset: 'rkc', breedNames: [breed.name] })!;
+    const expected = judgeOfferTerms({ showType: 'championship', showRuleset: 'rkc', breedNames: [breed.name], judgeLivesOverseas: false })!;
     const stored = (await storedTerms(contract.id)) as { societyTerms: string[]; alreadyAgreedQuestion: string | null };
     expect(stored).toEqual(expected);
     expect(stored.societyTerms).toHaveLength(3);
@@ -148,7 +152,7 @@ describe('sendBulkJudgeOffers', () => {
     const res = await caller.secretary.sendBulkJudgeOffers({ showId: show.id, judgeIds: [judge.id] });
     expect(res.sent).toBe(1);
     const contract = await testDb.query.judgeContracts.findFirst({ where: eq(judgeContracts.judgeId, judge.id) });
-    const expected = judgeOfferTerms({ showType: 'open', showRuleset: 'rkc', breedNames: [breed.name] })!;
+    const expected = judgeOfferTerms({ showType: 'open', showRuleset: 'rkc', breedNames: [breed.name], judgeLivesOverseas: false })!;
     expect(contract!.offerTerms).toEqual(expected);
 
     const { html, subject } = lastEmail();
@@ -173,7 +177,7 @@ describe('sendBulkJudgeOffers', () => {
     await caller.secretary.sendBulkJudgeOffers({ showId: show.id, judgeIds: [judge.id] });
     const contract = await testDb.query.judgeContracts.findFirst({ where: eq(judgeContracts.judgeId, judge.id) });
     expect(contract!.offerTerms).toEqual(
-      judgeOfferTerms({ showType: 'championship', showRuleset: 'rkc', breedNames: [breed.name] }),
+      judgeOfferTerms({ showType: 'championship', showRuleset: 'rkc', breedNames: [breed.name], judgeLivesOverseas: false }),
     );
     expect(lastEmail().html).toContain(LEVEL_4);
   });
@@ -191,7 +195,7 @@ describe('resendJudgeOffer', () => {
 
     await caller.secretary.resendJudgeOffer({ contractId: contract.id });
 
-    const expected = judgeOfferTerms({ showType: 'open', showRuleset: 'rkc', breedNames: [breed.name] })!;
+    const expected = judgeOfferTerms({ showType: 'open', showRuleset: 'rkc', breedNames: [breed.name], judgeLivesOverseas: false })!;
     expect(await storedTerms(contract.id)).toEqual(expected);
     const { html, subject } = lastEmail();
     expect(subject).toBe(`Reminder: Judging Offer — ${show.name}`);
@@ -210,6 +214,92 @@ describe('resendJudgeOffer', () => {
     expect(await storedTerms(contract.id)).toBeNull();
     expect(lastEmail().html).not.toContain(F121B);
     expect(lastEmail().html).not.toContain(JEP);
+  });
+});
+
+describe('a judge who lives overseas: the F(1).21.b paragraphs only', () => {
+  type Stored = { societyTerms: string[]; alreadyAgreedQuestion: string | null; alreadyAgreedNotice: string | null };
+
+  for (const showType of ['open', 'championship'] as const) {
+    it(`sendJudgeOffer, ${showType} show: stores the paragraphs only and the email has no Society terms`, async () => {
+      const { caller, show, judge, breed } = await setup({ showType, livesOverseas: true });
+      const contract = await caller.secretary.sendJudgeOffer({
+        showId: show.id, judgeId: judge.id, judgeEmail: 'judge@test.local',
+      });
+      const stored = (await storedTerms(contract.id)) as Stored;
+      expect(stored).toEqual(
+        judgeOfferTerms({ showType, showRuleset: 'rkc', breedNames: [breed.name], judgeLivesOverseas: true }),
+      );
+      expect(stored.societyTerms).toEqual([]);
+      expect(stored.alreadyAgreedQuestion).toBeNull();
+      expect(stored.alreadyAgreedNotice).toBeNull();
+      const { html } = lastEmail();
+      expect(html).toContain(F121B);
+      expect(html).not.toContain(JEP);
+      expect(html).not.toContain('When you accept, you will be asked');
+    });
+  }
+
+  it('sendBulkJudgeOffers passes each judge\'s own flag', async () => {
+    const { caller, show, judge: overseas, breed } = await setup({ showType: 'championship', livesOverseas: true });
+    const uk = await makeJudge({ contactEmail: 'uk@test.local' });
+    await makeJudgeAssignment({ showId: show.id, judgeId: uk.id, breedId: breed.id, sex: 'bitch' });
+
+    const res = await caller.secretary.sendBulkJudgeOffers({ showId: show.id, judgeIds: [overseas.id, uk.id] });
+    expect(res.sent).toBe(2);
+    const overseasContract = await testDb.query.judgeContracts.findFirst({ where: eq(judgeContracts.judgeId, overseas.id) });
+    const ukContract = await testDb.query.judgeContracts.findFirst({ where: eq(judgeContracts.judgeId, uk.id) });
+    expect((overseasContract!.offerTerms as Stored).societyTerms).toEqual([]);
+    expect((overseasContract!.offerTerms as Stored).alreadyAgreedQuestion).toBeNull();
+    expect((ukContract!.offerTerms as Stored).societyTerms).toHaveLength(3);
+    expect((ukContract!.offerTerms as Stored).alreadyAgreedQuestion).not.toBeNull();
+  });
+
+  it('resendJudgeOffer passes the flag', async () => {
+    const { caller, show, judge } = await setup({ livesOverseas: true });
+    const contract = await caller.secretary.sendJudgeOffer({
+      showId: show.id, judgeId: judge.id, judgeEmail: 'judge@test.local',
+    });
+    await testDb.update(judgeContracts).set({ offerTerms: null }).where(eq(judgeContracts.id, contract.id));
+    resendMocks.send.mockClear();
+    await caller.secretary.resendJudgeOffer({ contractId: contract.id });
+    const stored = (await storedTerms(contract.id)) as Stored;
+    expect(stored.societyTerms).toEqual([]);
+    expect(stored.alreadyAgreedQuestion).toBeNull();
+    expect(lastEmail().html).not.toContain(JEP);
+  });
+
+  it('marking the judge overseas, then resending, re-stores the terms from the flag as it is now (and back again)', async () => {
+    const { caller, show, judge } = await setup({ showType: 'championship' });
+    const contract = await caller.secretary.sendJudgeOffer({
+      showId: show.id, judgeId: judge.id, judgeEmail: 'judge@test.local',
+    });
+    expect(((await storedTerms(contract.id)) as Stored).societyTerms).toHaveLength(3);
+
+    await caller.secretary.updateJudge({ judgeId: judge.id, livesOverseas: true });
+    resendMocks.send.mockClear();
+    await caller.secretary.resendJudgeOffer({ contractId: contract.id });
+    const afterOverseas = (await storedTerms(contract.id)) as Stored;
+    expect(afterOverseas.societyTerms).toEqual([]);
+    expect(afterOverseas.alreadyAgreedQuestion).toBeNull();
+    expect(lastEmail().html).not.toContain(JEP);
+
+    await caller.secretary.updateJudge({ judgeId: judge.id, livesOverseas: false });
+    resendMocks.send.mockClear();
+    await caller.secretary.resendJudgeOffer({ contractId: contract.id });
+    const afterUk = (await storedTerms(contract.id)) as Stored;
+    expect(afterUk.societyTerms).toHaveLength(3);
+    expect(afterUk.alreadyAgreedQuestion).not.toBeNull();
+    expect(lastEmail().html).toContain(LEVEL_4);
+  });
+
+  it('a regional still stores NULL for an overseas judge', async () => {
+    const { caller, show, judge } = await setup({ showType: 'championship', showRuleset: 'wusv', livesOverseas: true });
+    const contract = await caller.secretary.sendJudgeOffer({
+      showId: show.id, judgeId: judge.id, judgeEmail: 'judge@test.local',
+    });
+    expect(await storedTerms(contract.id)).toBeNull();
+    expect(lastEmail().html).not.toContain(F121B);
   });
 });
 

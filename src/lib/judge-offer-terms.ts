@@ -14,8 +14,9 @@
  *                                            or above at a championship show),
  *                                            and the "already agreed" question —
  *                                            unless the appointment names no
- *                                            breed (Junior Handling only):
- *                                            then the wording alone
+ *                                            breed (Junior Handling only), or
+ *                                            the judge lives overseas: then
+ *                                            the wording alone
  *
  * RKC Show Regulations 2026, F(1).21.b: "Societies are required to include the
  * following wording in judges' invitation letters" — the two paragraphs below,
@@ -25,8 +26,12 @@
  * same breed only; "a minimum of level 2", not applicable to overseas judges;
  * always on, no tick box. On 15 Nov 2026 she extended them to championship
  * shows at Level 4 ("for the champ show tho it should be level 4"; a judge
- * invited to give CCs for the first time "will be level 4"). Remi cannot check
- * a judge's JEP level, so term 1 is the judge's own declaration.
+ * invited to give CCs for the first time "will be level 4"), and decided that
+ * a judge marked "Lives overseas" (`judges.lives_overseas`, a fact about the
+ * judge) gets the two F(1).21.b paragraphs only on any show. Term 1 keeps its
+ * "does not apply to a judge who lives overseas" sentence as a safety net for
+ * a judge whose box was never ticked. Remi cannot check a judge's JEP level,
+ * so term 1 is the judge's own declaration.
  *
  * The terms are STORED on the contract when the offer is sent
  * (`judge_contracts.offer_terms`), so a contract only ever shows the terms its
@@ -57,6 +62,10 @@ export const ALREADY_AGREED_NONE = 'None declared';
 export const ALREADY_AGREED_YES_NO_DETAILS = 'Yes (no details given)';
 /** The prompt over the text box when the judge answers Yes. */
 export const ALREADY_AGREED_DETAILS_PROMPT = 'Please list each show and its date.';
+/** The secretary's box for a judge who lives overseas, and the line under it. */
+export const LIVES_OVERSEAS_LABEL = 'Lives overseas';
+export const LIVES_OVERSEAS_HINT =
+  "A judge who lives overseas gets the RKC's two paragraphs only, not the Society's terms.";
 
 const F121B_INVITATION_WORDING = [
   'In accepting this invitation you agree to be bound by Royal Kennel Club Rules and Regulations and the Royal Kennel Club Code of Best Practice for Judges. In doing so you also recognise that you are obliged to notify us in writing of any change in your personal circumstances or additional information which may affect your ability and standing to fulfil this judging appointment.',
@@ -69,7 +78,8 @@ export interface JudgeOfferTerms {
   /** The F(1).21.b paragraphs. */
   invitationParagraphs: string[];
   /** The Society's own terms as final sentences (empty unless an RKC open or
-   *  championship show whose appointment names a breed). */
+   *  championship show whose appointment names a breed, for a judge who does
+   *  not live overseas). */
   societyTerms: string[];
   /** The question the judge must answer when accepting; null = not asked. */
   alreadyAgreedQuestion: string | null;
@@ -104,6 +114,22 @@ export interface JudgeOfferTermsInput {
    *  buildJudgeBreedAndClassification, the same source as the offer's breed
    *  line. Empty when the appointment names no breed (no Society terms then). */
   breedNames: readonly string[];
+  /** `judges.lives_overseas` for this judge, read when the offer is sent.
+   *  Required with no default, so every caller passes the judge's real flag. */
+  judgeLivesOverseas: boolean;
+}
+
+/**
+ * Does an offer on this show carry standard terms at all? F(1).21.b binds only
+ * shows held under Regulation F(1): a regional, companion or primary show
+ * carries none. The secretary's screens show the "Lives overseas" box only
+ * where this is true, since nowhere else does the flag change anything.
+ */
+export function showCarriesJudgeOfferTerms(
+  showType: string | null | undefined,
+  showRuleset: string | null | undefined,
+): boolean {
+  return isRkcF1Show(showType, showRuleset);
 }
 
 /**
@@ -124,14 +150,15 @@ export function societyTermsJepLevel(
 export function judgeOfferTerms(input: JudgeOfferTermsInput): JudgeOfferTerms | null {
   // F(1).21.b binds only shows held under Regulation F(1); a regional,
   // companion or primary show carries no standard terms at all.
-  if (!isRkcF1Show(input.showType, input.showRuleset)) return null;
+  if (!showCarriesJudgeOfferTerms(input.showType, input.showRuleset)) return null;
 
   const invitationParagraphs = [...F121B_INVITATION_WORDING];
   // The Society's terms are about judging a breed: an appointment that names
   // no breed (e.g. Junior Handling only) gets the invitation wording alone.
+  // So does a judge who lives overseas, on any show.
   const breed = breedPhrase(input.breedNames);
   const jepLevel = societyTermsJepLevel(input.showType, input.showRuleset);
-  if (jepLevel == null || !breed) {
+  if (jepLevel == null || !breed || input.judgeLivesOverseas) {
     return {
       version: JUDGE_OFFER_TERMS_VERSION,
       invitationParagraphs,
