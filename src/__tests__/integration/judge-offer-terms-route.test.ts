@@ -220,6 +220,43 @@ describe('POST accept — the question is the gate', () => {
   });
 });
 
+describe('a missing answer always reaches the server, which says what is wrong', () => {
+  // Mandy, 15 Nov 2026, on the demo: "it wont let me hit accept". The No radio
+  // carried `required` but the radios are visually hidden, so the browser's own
+  // check blocked Accept with a tiny bubble (on some phones, nothing at all) and
+  // no POST was ever sent. `novalidate` lets the server's clear message show;
+  // the #already-agreed fragment lands the reloaded page on the question.
+  const acceptForm = (page: string) => page.match(/<form class="accept-form"[^>]*>/)?.[0] ?? '';
+
+  it('GET: the accept form has novalidate and lands back on the question', async () => {
+    const { token } = await offer();
+    const page = await (await GET(getReq(token), params(token))).text();
+    const form = acceptForm(page);
+    expect(form).not.toBe('');
+    expect(form).toMatch(/\snovalidate[\s>]/);
+    expect(form).toContain(`action="/api/judge-contract/${token}#already-agreed"`);
+    expect(page).toMatch(/<fieldset[^>]*\sid="already-agreed"/);
+  });
+
+  it('POST with no answer: 400, the red message, and the form still lands on the question', async () => {
+    const { token } = await offer();
+    const res = await POST(postReq(token, { action: 'accept' }), params(token));
+    expect(res.status).toBe(400);
+    const page = await res.text();
+    expect(page).toContain('<p class="error" id="already-agreed-error" role="alert">Please answer this question by choosing No or Yes.</p>');
+    const form = acceptForm(page);
+    expect(form).toMatch(/\snovalidate[\s>]/);
+    expect(form).toContain(`action="/api/judge-contract/${token}#already-agreed"`);
+    expect(page).toMatch(/<fieldset[^>]*\sid="already-agreed"/);
+  });
+
+  it('the page runs no script (it must work without JavaScript)', async () => {
+    const { token } = await offer();
+    const page = await (await GET(getReq(token), params(token))).text();
+    expect(page).not.toMatch(/<script/i);
+  });
+});
+
 describe('the secretary sees the answer before confirming', () => {
   it('getJudgeContracts and getChecklistJudgeSummary both carry it', async () => {
     const { token, show, user, contract } = await offer();

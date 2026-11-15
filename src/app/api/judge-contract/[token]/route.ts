@@ -173,14 +173,18 @@ function termsSection(terms: JudgeOfferTerms | null): SafeHtml | '' {
 
 /** The "already agreed" question, inside the accept form. Works with no
  *  script: the text box shows when Yes is chosen (CSS), and the server checks
- *  the answer whatever the browser did. */
+ *  the answer whatever the browser did. The form is `novalidate`: the radios
+ *  are visually hidden, so the browser's own "required" check blocked Accept
+ *  with no visible reason (Mandy, 15 Nov 2026: "it wont let me hit accept").
+ *  A missing answer now always reaches the server, which refuses it with a
+ *  clear message; the action's #already-agreed lands the page back on it. */
 function alreadyAgreedQuestion(
   question: string,
   state: { answer?: string; details?: string; error?: string },
 ): SafeHtml {
   const answer = state.answer === 'yes' || state.answer === 'no' ? state.answer : null;
   return html`
-            <fieldset class="question${state.error ? ' has-error' : ''}"${state.error ? html` aria-describedby="already-agreed-error"` : ''}>
+            <fieldset id="already-agreed" class="question${state.error ? ' has-error' : ''}"${state.error ? html` aria-describedby="already-agreed-error"` : ''}>
               <legend>${question}</legend>
               ${state.error ? html`<p class="error" id="already-agreed-error" role="alert">${state.error}</p>` : ''}
               <input class="choice-input" type="radio" id="already-agreed-no" name="alreadyAgreed" value="no"${answer === 'no' ? html` checked` : ''} required>
@@ -256,7 +260,7 @@ async function offerPage(
         ${termsSection(terms)}
 
         ${terms?.alreadyAgreedQuestion ? html`
-        <form class="accept-form" method="POST" action="/api/judge-contract/${token}">
+        <form class="accept-form" method="POST" action="/api/judge-contract/${token}#already-agreed" novalidate>
           <input type="hidden" name="action" value="accept">
           ${alreadyAgreedQuestion(terms.alreadyAgreedQuestion, state)}
           <button type="submit" class="btn btn-primary btn-block">Accept Appointment</button>
