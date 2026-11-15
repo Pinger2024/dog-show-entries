@@ -15,7 +15,12 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { trpc } from '@/lib/trpc';
-import { AlreadyAgreedAnswer, AlreadyAgreedConfirmNotice } from '@/components/judges/judge-offer-terms-view';
+import {
+  AlreadyAgreedAnswer,
+  AlreadyAgreedConfirmNotice,
+  LivesOverseasField,
+} from '@/components/judges/judge-offer-terms-view';
+import { showCarriesJudgeOfferTerms } from '@/lib/judge-offer-terms';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -59,6 +64,7 @@ export function JudgeOffersAction({ showId }: ActionPanelProps) {
   const [judgeName, setJudgeName] = useState('');
   const [judgeKc, setJudgeKc] = useState('');
   const [judgeEmail, setJudgeEmail] = useState('');
+  const [addLivesOverseas, setAddLivesOverseas] = useState(false);
   const [kcSelectedJudge, setKcSelectedJudge] = useState<{
     name: string;
     location: string | null;
@@ -66,6 +72,12 @@ export function JudgeOffersAction({ showId }: ActionPanelProps) {
   } | null>(null);
 
   const { data, isLoading } = trpc.secretary.getChecklistJudgeSummary.useQuery({ showId });
+  // "Lives overseas" only changes anything on a show that carries offer terms.
+  const { data: showData } = trpc.shows.getById.useQuery({ id: showId });
+  const showHasOfferTerms = showCarriesJudgeOfferTerms(
+    showData?.showType,
+    (showData as { showRuleset?: 'rkc' | 'wusv' } | undefined)?.showRuleset ?? null,
+  );
 
   // Mutations for judge pipeline
   const bulkOfferMutation = trpc.secretary.sendBulkJudgeOffers.useMutation({
@@ -150,6 +162,7 @@ export function JudgeOffersAction({ showId }: ActionPanelProps) {
     setJudgeName('');
     setJudgeKc('');
     setJudgeEmail('');
+    setAddLivesOverseas(false);
     setKcSelectedJudge(null);
     kcSearchMutation.reset();
     kcProfileMutation.reset();
@@ -161,6 +174,7 @@ export function JudgeOffersAction({ showId }: ActionPanelProps) {
       name: judgeName.trim(),
       kcNumber: judgeKc.trim() || undefined,
       contactEmail: judgeEmail.trim() || undefined,
+      livesOverseas: addLivesOverseas,
     });
   }
 
@@ -363,6 +377,14 @@ export function JudgeOffersAction({ showId }: ActionPanelProps) {
                   className="h-9 text-sm"
                 />
               </div>
+              {showHasOfferTerms && (
+                <LivesOverseasField
+                  id="checklist-add-lives-overseas"
+                  checked={addLivesOverseas}
+                  onCheckedChange={setAddLivesOverseas}
+                  className="bg-background"
+                />
+              )}
             </div>
           </div>
 

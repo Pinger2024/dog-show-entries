@@ -25,6 +25,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import { showCarriesJudgeOfferTerms } from '@/lib/judge-offer-terms';
+import { LivesOverseasField } from '@/components/judges/judge-offer-terms-view';
 
 // ── Types ───────────────────────────────────────────────
 
@@ -38,6 +40,10 @@ interface FoundJudge {
   contactPhone: string | null;
   kennelClubAffix: string | null;
   kcJudgeId?: string; // RKC UUID for profile lookup
+  /** The judge's stored flag when picked from Remi; undefined = not known
+   *  (RKC or manual) and not touched, so the server keeps whatever an existing
+   *  judge already has rather than clearing a stored "yes". */
+  livesOverseas?: boolean;
   source: 'local' | 'rkc' | 'manual';
   rkcApprovals?: { breed: string; group: string; level: number }[];
 }
@@ -124,6 +130,11 @@ export function AddJudgeWizard({
   // affordance (Amanda 2026-05-19). Local Remi search still runs.
   const isWusvShow =
     (showData as { showRuleset?: 'rkc' | 'wusv' } | undefined)?.showRuleset === 'wusv';
+  // "Lives overseas" only changes anything on a show that carries offer terms.
+  const showHasOfferTerms = showCarriesJudgeOfferTerms(
+    showData?.showType,
+    (showData as { showRuleset?: 'rkc' | 'wusv' } | undefined)?.showRuleset ?? null,
+  );
 
   // Auto-search RKC when local DB has no results and query is long enough (debounced)
   const lastAutoSearchRef = useRef('');
@@ -293,6 +304,7 @@ export function AddJudgeWizard({
       contactEmail: judge.contactEmail,
       contactPhone: judge.contactPhone,
       kennelClubAffix: judge.kennelClubAffix,
+      livesOverseas: judge.livesOverseas,
       source: 'local',
     });
   }
@@ -352,6 +364,7 @@ export function AddJudgeWizard({
       contactPhone: selectedJudge.contactPhone ?? undefined,
       kcJudgeId: selectedJudge.kcJudgeId,
       kennelClubAffix: selectedJudge.kennelClubAffix ?? undefined,
+      livesOverseas: selectedJudge.livesOverseas,
       assignments: selectedCombos.map((c) => ({
         breedId: c.breedId,
         sex: c.sex as 'dog' | 'bitch' | null,
@@ -790,6 +803,14 @@ export function AddJudgeWizard({
                   Shown in brackets after the judge name on the schedule
                 </p>
               </div>
+              {showHasOfferTerms && (
+                <LivesOverseasField
+                  id="wizard-lives-overseas"
+                  checked={selectedJudge.livesOverseas ?? false}
+                  onCheckedChange={(next) => setSelectedJudge({ ...selectedJudge, livesOverseas: next })}
+                  className="bg-background"
+                />
+              )}
               <div>
                 <p className="text-xs text-muted-foreground">
                   Judging ({selectedCount} assignment{selectedCount !== 1 ? 's' : ''})

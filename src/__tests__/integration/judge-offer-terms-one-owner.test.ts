@@ -118,4 +118,8 @@ describe('a judge who lives overseas — one rule, the judge\'s real flag everyw
       'lib/judge-offer-terms.ts',
     ]);
   });
+
+  it('the box is one component', () => {
+    expect(containing('export function LivesOverseasField')).toEqual(['components/judges/judge-offer-terms-view.tsx']);
+  });
 });
