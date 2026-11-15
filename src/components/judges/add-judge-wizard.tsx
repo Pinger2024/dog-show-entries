@@ -40,10 +40,14 @@ interface FoundJudge {
   contactPhone: string | null;
   kennelClubAffix: string | null;
   kcJudgeId?: string; // RKC UUID for profile lookup
-  /** The judge's stored flag when picked from Remi; undefined = not known
-   *  (RKC or manual) and not touched, so the server keeps whatever an existing
-   *  judge already has rather than clearing a stored "yes". */
+  /** What the "Lives overseas" box shows: the stored flag for a judge picked
+   *  from Remi; undefined (unticked) for an RKC or manual judge. */
   livesOverseas?: boolean;
+  /** True once the secretary changes the box. Only then is the flag sent:
+   *  untouched, the server keeps what the matched judge row already has (it
+   *  may resolve to a different row than the one picked), and a new judge
+   *  gets the default, living in the UK. */
+  livesOverseasChanged?: boolean;
   source: 'local' | 'rkc' | 'manual';
   rkcApprovals?: { breed: string; group: string; level: number }[];
 }
@@ -364,7 +368,7 @@ export function AddJudgeWizard({
       contactPhone: selectedJudge.contactPhone ?? undefined,
       kcJudgeId: selectedJudge.kcJudgeId,
       kennelClubAffix: selectedJudge.kennelClubAffix ?? undefined,
-      livesOverseas: selectedJudge.livesOverseas,
+      livesOverseas: selectedJudge.livesOverseasChanged ? selectedJudge.livesOverseas : undefined,
       assignments: selectedCombos.map((c) => ({
         breedId: c.breedId,
         sex: c.sex as 'dog' | 'bitch' | null,
@@ -807,7 +811,7 @@ export function AddJudgeWizard({
                 <LivesOverseasField
                   id="wizard-lives-overseas"
                   checked={selectedJudge.livesOverseas ?? false}
-                  onCheckedChange={(next) => setSelectedJudge({ ...selectedJudge, livesOverseas: next })}
+                  onCheckedChange={(next) => setSelectedJudge({ ...selectedJudge, livesOverseas: next, livesOverseasChanged: true })}
                   className="bg-background"
                 />
               )}

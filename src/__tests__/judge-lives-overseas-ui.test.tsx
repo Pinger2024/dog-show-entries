@@ -139,8 +139,12 @@ describe('the add-judge wizard', () => {
   it('a judge picked from Remi starts from their stored flag', () => {
     expect(src).toContain('livesOverseas: judge.livesOverseas,');
   });
-  it('sends the flag only as the secretary left it (undefined = untouched, so a stored "yes" is never cleared)', () => {
-    expect(src).toContain('livesOverseas: selectedJudge.livesOverseas,');
+  it('sends the flag only when the secretary changed the box (untouched = undefined, so the server keeps what the judge row has)', () => {
+    // Even a judge picked from Remi sends nothing until the box is changed:
+    // the server may resolve to a different (duplicate) row, whose stored
+    // value an untouched box must never overwrite.
+    expect(src).toContain('livesOverseas: selectedJudge.livesOverseasChanged ? selectedJudge.livesOverseas : undefined,');
+    expect(src).toMatch(/setSelectedJudge\(\{ \.\.\.selectedJudge, livesOverseas: next, livesOverseasChanged: true \}\)/);
     expect(src).not.toMatch(/livesOverseas: selectedJudge\.livesOverseas \?\?/);
   });
 });
