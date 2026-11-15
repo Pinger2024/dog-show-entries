@@ -1,6 +1,6 @@
 /**
- * The judge's accept page shows the stored terms and, on an RKC open show,
- * asks "Have you already agreed to judge {breed} anywhere before the date of
+ * The judge's accept page shows the stored terms and, on an RKC open or
+ * championship show, asks "Have you already agreed to judge {breed} anywhere before the date of
  * this show?". The server is the gate: an accept without an answer (or Yes
  * with an empty box) is refused and the contract stays offer_sent.
  */
@@ -29,7 +29,7 @@ import { GET, POST } from '@/app/api/judge-contract/[token]/route';
 
 const F121B = 'In accepting this invitation you agree to be bound by Royal Kennel Club Rules and Regulations';
 
-async function offer(opts: { showType?: 'open' | 'championship'; showRuleset?: 'rkc' | 'wusv' } = {}) {
+async function offer(opts: { showType?: 'open' | 'championship' | 'limited'; showRuleset?: 'rkc' | 'wusv' } = {}) {
   const { user, org, breed } = await makeSecretaryWithOrgAndBreed();
   const show = await makeShow({
     organisationId: org.id, breedId: breed.id,
@@ -90,10 +90,22 @@ describe('GET — the accept page', () => {
     expect(page).not.toContain('Level 2 or above');
   });
 
-  it('RKC championship: the invitation wording and no question', async () => {
-    const { token } = await offer({ showType: 'championship' });
+  it('RKC championship: the stored Level 4 terms, then the question', async () => {
+    const { token, breed } = await offer({ showType: 'championship' });
+    const page = await (await GET(getReq(token), params(token))).text();
+    const terms = judgeOfferTerms({ showType: 'championship', showRuleset: 'rkc', breedNames: [breed.name] })!;
+    expect(page).toContain(F121B);
+    for (const t of terms.societyTerms) expect(page).toContain(escapeHtml(t));
+    expect(page).toContain('Level 4 or above');
+    expect(page).toContain(escapeHtml(terms.alreadyAgreedQuestion!));
+    expect(page).toContain('name="alreadyAgreed"');
+  });
+
+  it('RKC limited show: the invitation wording and no question', async () => {
+    const { token } = await offer({ showType: 'limited' });
     const page = await (await GET(getReq(token), params(token))).text();
     expect(page).toContain(F121B);
+    expect(page).not.toContain('Judges Education Programme');
     expect(page).not.toContain('name="alreadyAgreed"');
   });
 
@@ -175,11 +187,27 @@ describe('POST accept — the question is the gate', () => {
     expect(secretaryEmail()!.html).not.toContain('Appointments already agreed');
   });
 
-  it('an RKC championship accepts with no question', async () => {
+  it('an RKC championship asks the question: no answer is refused, No accepts', async () => {
     const { token, contract } = await offer({ showType: 'championship' });
+    const refused = await POST(postReq(token, { action: 'accept' }), params(token));
+    expect(refused.status).toBe(400);
+    expect(await refused.text()).toContain('Please answer this question by choosing No or Yes.');
+    expect((await contractRow(contract.id)).stage).toBe('offer_sent');
+
+    const res = await POST(postReq(token, { action: 'accept', alreadyAgreed: 'no' }), params(token));
+    expect(res.status).toBe(200);
+    const row = await contractRow(contract.id);
+    expect(row.stage).toBe('offer_accepted');
+    expect(row.alreadyAgreedElsewhere).toBe(false);
+  });
+
+  it('an RKC limited show accepts with no question', async () => {
+    const { token, contract } = await offer({ showType: 'limited' });
     const res = await POST(postReq(token, { action: 'accept' }), params(token));
     expect(res.status).toBe(200);
-    expect((await contractRow(contract.id)).stage).toBe('offer_accepted');
+    const row = await contractRow(contract.id);
+    expect(row.stage).toBe('offer_accepted');
+    expect(row.alreadyAgreedElsewhere).toBeNull();
   });
 
   it('decline is unchanged: no answer needed', async () => {

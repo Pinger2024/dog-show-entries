@@ -49,6 +49,13 @@ export function isRkcOpenShow(showType: string | null | undefined, showRuleset?:
   return showType === 'open' || showType === 'premier_open';
 }
 
+/** Is this an RKC championship show? A regional never is, although regionals
+ *  are stored with showType 'championship' (see above). */
+export function isRkcChampionshipShow(showType: string | null | undefined, showRuleset?: string | null): boolean {
+  if (isRegionalShow(showRuleset)) return false;
+  return showType === 'championship';
+}
+
 /** Display key → label. The enum table plus the regional pseudo-type. */
 export const displayShowTypeLabels: Record<string, string> = {
   ...showTypeLabels,

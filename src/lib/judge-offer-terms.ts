@@ -7,10 +7,12 @@
  *   Regional (ruleset wusv), any type      → no terms at all (null)
  *   RKC companion or primary show (not     → no terms at all (null)
  *     held under Regulation F(1))
- *   RKC championship or limited show       → the F(1).21.b invitation wording
+ *   RKC limited show                       → the F(1).21.b invitation wording
  *   RKC open show (incl. premier open)     → the F(1).21.b wording, the
- *                                            Society's three terms, and the
- *                                            "already agreed" question —
+ *     or championship show                   Society's three terms (JEP Level 2
+ *                                            or above at an open show, Level 4
+ *                                            or above at a championship show),
+ *                                            and the "already agreed" question —
  *                                            unless the appointment names no
  *                                            breed (Junior Handling only):
  *                                            then the wording alone
@@ -21,8 +23,10 @@
  *
  * The Society's three terms were agreed with the domain expert on 14 Nov 2026:
  * same breed only; "a minimum of level 2", not applicable to overseas judges;
- * always on, no tick box. Remi cannot check a judge's JEP level, so term 1 is
- * the judge's own declaration.
+ * always on, no tick box. On 15 Nov 2026 she extended them to championship
+ * shows at Level 4 ("for the champ show tho it should be level 4"; a judge
+ * invited to give CCs for the first time "will be level 4"). Remi cannot check
+ * a judge's JEP level, so term 1 is the judge's own declaration.
  *
  * The terms are STORED on the contract when the offer is sent
  * (`judge_contracts.offer_terms`), so a contract only ever shows the terms its
@@ -32,7 +36,7 @@
  *
  * Pure (no db / node imports): the secretary's offer dialog imports it too.
  */
-import { isRkcF1Show, isRkcOpenShow } from './show-types';
+import { isRkcF1Show, isRkcOpenShow, isRkcChampionshipShow } from './show-types';
 
 /** Bump when the shape or the wording of the stored terms changes. */
 export const JUDGE_OFFER_TERMS_VERSION = 1;
@@ -64,7 +68,8 @@ export interface JudgeOfferTerms {
   version: number;
   /** The F(1).21.b paragraphs. */
   invitationParagraphs: string[];
-  /** The Society's own terms as final sentences (empty unless an RKC open show). */
+  /** The Society's own terms as final sentences (empty unless an RKC open or
+   *  championship show whose appointment names a breed). */
   societyTerms: string[];
   /** The question the judge must answer when accepting; null = not asked. */
   alreadyAgreedQuestion: string | null;
@@ -101,6 +106,20 @@ export interface JudgeOfferTermsInput {
   breedNames: readonly string[];
 }
 
+/**
+ * The JEP level the Society's first term asks for, by show type; null = the
+ * show carries no Society terms (a limited show; anything outside F(1)).
+ * Open (incl. premier open) → 2; championship → 4.
+ */
+export function societyTermsJepLevel(
+  showType: string | null | undefined,
+  showRuleset: string | null | undefined,
+): 2 | 4 | null {
+  if (isRkcOpenShow(showType, showRuleset)) return 2;
+  if (isRkcChampionshipShow(showType, showRuleset)) return 4;
+  return null;
+}
+
 /** What standard terms this judge's offer carries. Null = none (a regional). */
 export function judgeOfferTerms(input: JudgeOfferTermsInput): JudgeOfferTerms | null {
   // F(1).21.b binds only shows held under Regulation F(1); a regional,
@@ -111,7 +130,8 @@ export function judgeOfferTerms(input: JudgeOfferTermsInput): JudgeOfferTerms | 
   // The Society's terms are about judging a breed: an appointment that names
   // no breed (e.g. Junior Handling only) gets the invitation wording alone.
   const breed = breedPhrase(input.breedNames);
-  if (!isRkcOpenShow(input.showType, input.showRuleset) || !breed) {
+  const jepLevel = societyTermsJepLevel(input.showType, input.showRuleset);
+  if (jepLevel == null || !breed) {
     return {
       version: JUDGE_OFFER_TERMS_VERSION,
       invitationParagraphs,
@@ -125,7 +145,7 @@ export function judgeOfferTerms(input: JudgeOfferTermsInput): JudgeOfferTerms | 
     version: JUDGE_OFFER_TERMS_VERSION,
     invitationParagraphs,
     societyTerms: [
-      `The Judge confirms that they are at Level 2 or above of the Royal Kennel Club Judges Education Programme (JEP) for ${breed.one}. This does not apply to a judge who lives overseas.`,
+      `The Judge confirms that they are at Level ${jepLevel} or above of the Royal Kennel Club Judges Education Programme (JEP) for ${breed.one}. This does not apply to a judge who lives overseas.`,
       `From accepting this offer, the Judge will not accept any other appointment to judge ${breed.any} before the date of this show.`,
       `The Judge must tell the Society of every appointment to judge ${breed.any} that they have already agreed to. The Judge does this when accepting.`,
     ],

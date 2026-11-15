@@ -45,7 +45,19 @@ describe('judge offer terms — one owner', () => {
   });
 
   it('the JEP term lives in exactly one source file', () => {
-    expect(containing('Level 2 or above')).toEqual(['lib/judge-offer-terms.ts']);
+    // Matches the owner's template ("Level ${jepLevel} or above") and any
+    // hand-written copy with a digit ("Level 2 or above", "Level 4 or above").
+    expect(containing(/Level (\d|\$\{[^}]+\}) or above/)).toEqual(['lib/judge-offer-terms.ts']);
+    expect(containing('or above of the Royal Kennel Club Judges Education Programme')).toEqual([
+      'lib/judge-offer-terms.ts',
+    ]);
+  });
+
+  it('which JEP level a show asks for is decided in one place', () => {
+    // societyTermsJepLevel owns "open → 2, championship → 4". The level is a
+    // template value in the owner, so no file may write the term at a fixed level.
+    expect(containing(/Level [0-9] or above/)).toEqual([]);
+    expect(containing('export function societyTermsJepLevel')).toEqual(['lib/judge-offer-terms.ts']);
   });
 
   it('the "already agreed" question lives in exactly one source file', () => {

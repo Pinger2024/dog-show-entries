@@ -27,6 +27,9 @@ import { judgeOfferTerms } from '@/lib/judge-offer-terms';
 
 const F121B = 'In accepting this invitation you agree to be bound by Royal Kennel Club Rules and Regulations';
 const LEVEL_2 = 'Level 2 or above';
+const LEVEL_4 = 'Level 4 or above';
+/** Any of the Society's JEP term, whatever its level. */
+const JEP = 'Judges Education Programme';
 
 type ShowOpts = { showType?: 'open' | 'championship' | 'limited' | 'premier_open'; showRuleset?: 'rkc' | 'wusv' };
 
@@ -74,15 +77,42 @@ describe('sendJudgeOffer', () => {
     expect(email.html).toContain(`this breed (${breed.name})`);
   });
 
-  it('RKC championship: the invitation wording only', async () => {
-    const { caller, show, judge } = await setup({ showType: 'championship' });
+  it('RKC championship: stores the full terms at JEP Level 4 and the email carries them', async () => {
+    const { caller, show, judge, breed } = await setup({ showType: 'championship' });
     const contract = await caller.secretary.sendJudgeOffer({
       showId: show.id, judgeId: judge.id, judgeEmail: 'judge@test.local',
     });
-    const stored = (await storedTerms(contract.id)) as { societyTerms: string[] };
+    const expected = judgeOfferTerms({ showType: 'championship', showRuleset: 'rkc', breedNames: [breed.name] })!;
+    const stored = (await storedTerms(contract.id)) as { societyTerms: string[]; alreadyAgreedQuestion: string | null };
+    expect(stored).toEqual(expected);
+    expect(stored.societyTerms).toHaveLength(3);
+    expect(stored.societyTerms[0]).toContain(LEVEL_4);
+    expect(stored.alreadyAgreedQuestion).not.toBeNull();
+    const { html } = lastEmail();
+    expect(html).toContain(F121B);
+    for (const t of expected.societyTerms) expect(html).toContain(escapeHtml(t));
+    expect(html).toContain(escapeHtml(expected.alreadyAgreedNotice!));
+    expect(html).toContain(LEVEL_4);
+    expect(html).not.toContain(LEVEL_2);
+  });
+
+  it('RKC open show: the JEP term asks for Level 2', async () => {
+    const { caller, show, judge } = await setup({ showType: 'open' });
+    await caller.secretary.sendJudgeOffer({ showId: show.id, judgeId: judge.id, judgeEmail: 'judge@test.local' });
+    expect(lastEmail().html).toContain(LEVEL_2);
+    expect(lastEmail().html).not.toContain(LEVEL_4);
+  });
+
+  it('RKC limited show: the invitation wording only', async () => {
+    const { caller, show, judge } = await setup({ showType: 'limited' });
+    const contract = await caller.secretary.sendJudgeOffer({
+      showId: show.id, judgeId: judge.id, judgeEmail: 'judge@test.local',
+    });
+    const stored = (await storedTerms(contract.id)) as { societyTerms: string[]; alreadyAgreedQuestion: string | null };
     expect(stored.societyTerms).toEqual([]);
+    expect(stored.alreadyAgreedQuestion).toBeNull();
     expect(lastEmail().html).toContain(F121B);
-    expect(lastEmail().html).not.toContain(LEVEL_2);
+    expect(lastEmail().html).not.toContain(JEP);
   });
 
   it('regional: stores NULL and the email has no terms', async () => {
@@ -92,7 +122,7 @@ describe('sendJudgeOffer', () => {
     });
     expect(await storedTerms(contract.id)).toBeNull();
     expect(lastEmail().html).not.toContain(F121B);
-    expect(lastEmail().html).not.toContain(LEVEL_2);
+    expect(lastEmail().html).not.toContain(JEP);
   });
 
   it('the secretary\'s notes and expense notes arrive escaped', async () => {
@@ -135,7 +165,17 @@ describe('sendBulkJudgeOffers', () => {
     const contract = await testDb.query.judgeContracts.findFirst({ where: eq(judgeContracts.judgeId, judge.id) });
     expect(contract!.offerTerms).toBeNull();
     expect(lastEmail().html).not.toContain(F121B);
-    expect(lastEmail().html).not.toContain(LEVEL_2);
+    expect(lastEmail().html).not.toContain(JEP);
+  });
+
+  it('RKC championship: stores the Level 4 terms', async () => {
+    const { caller, show, judge, breed } = await setup({ showType: 'championship' });
+    await caller.secretary.sendBulkJudgeOffers({ showId: show.id, judgeIds: [judge.id] });
+    const contract = await testDb.query.judgeContracts.findFirst({ where: eq(judgeContracts.judgeId, judge.id) });
+    expect(contract!.offerTerms).toEqual(
+      judgeOfferTerms({ showType: 'championship', showRuleset: 'rkc', breedNames: [breed.name] }),
+    );
+    expect(lastEmail().html).toContain(LEVEL_4);
   });
 });
 
@@ -169,6 +209,7 @@ describe('resendJudgeOffer', () => {
     await caller.secretary.resendJudgeOffer({ contractId: contract.id });
     expect(await storedTerms(contract.id)).toBeNull();
     expect(lastEmail().html).not.toContain(F121B);
+    expect(lastEmail().html).not.toContain(JEP);
   });
 });
 
@@ -185,7 +226,7 @@ describe('an open-show appointment that names no breed (Junior Handling only)', 
     expect(stored.societyTerms).toEqual([]);
     expect(stored.alreadyAgreedQuestion).toBeNull();
     expect(lastEmail().html).toContain(F121B);
-    expect(lastEmail().html).not.toContain(LEVEL_2);
+    expect(lastEmail().html).not.toContain(JEP);
 
     const { POST } = await import('@/app/api/judge-contract/[token]/route');
     const fd = new FormData();

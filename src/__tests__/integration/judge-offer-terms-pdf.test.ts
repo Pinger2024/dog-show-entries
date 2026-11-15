@@ -54,7 +54,7 @@ function textOf(node: ReactNode): string {
 }
 
 async function acceptedContract(opts: {
-  showType?: 'open' | 'championship';
+  showType?: 'open' | 'championship' | 'limited';
   showRuleset?: 'rkc' | 'wusv';
   answer?: { alreadyAgreedElsewhere: boolean | null; alreadyAgreedDetails: string | null };
 } = {}) {
@@ -130,13 +130,29 @@ describe('contract PDF — standard terms', () => {
     expect(text).not.toContain('Level 2 or above');
   });
 
-  it('RKC championship: the invitation wording, no numbered terms, no answer row', async () => {
-    const { contract } = await acceptedContract({ showType: 'championship' });
+  it('RKC championship: the stored Level 4 terms and the answer row', async () => {
+    const { contract, breed } = await acceptedContract({
+      showType: 'championship',
+      answer: { alreadyAgreedElsewhere: false, alreadyAgreedDetails: null },
+    });
+    const { data, text } = await pdfFor(contract.id);
+    const expected = judgeOfferTerms({ showType: 'championship', showRuleset: 'rkc', breedNames: [breed.name] })!;
+    expect(data.standardTerms).toEqual(expected);
+    expect(data.alreadyAgreed).toBe('None declared');
+    expect(text).toContain(F121B);
+    for (const t of expected.societyTerms) expect(text).toContain(t);
+    expect(text).toContain('Level 4 or above');
+    expect(text).not.toContain('Level 2 or above');
+    expect(text).toContain('Appointments already agreed');
+  });
+
+  it('RKC limited show: the invitation wording, no numbered terms, no answer row', async () => {
+    const { contract } = await acceptedContract({ showType: 'limited' });
     const { data, text } = await pdfFor(contract.id);
     expect(data.standardTerms?.societyTerms).toEqual([]);
     expect(data.alreadyAgreed).toBeNull();
     expect(text).toContain(F121B);
-    expect(text).not.toContain('Level 2 or above');
+    expect(text).not.toContain('Judges Education Programme');
     expect(text).not.toContain('Appointments already agreed');
   });
 
@@ -148,6 +164,7 @@ describe('contract PDF — standard terms', () => {
     expect(JSON.stringify(data)).not.toContain('Royal Kennel Club Rules and Regulations');
     expect(text).not.toContain('Terms of this appointment');
     expect(text).not.toContain(F121B);
+    expect(text).not.toContain('Judges Education Programme');
   });
 
   it('an offer sent before the terms existed (NULL) prints no terms section', async () => {

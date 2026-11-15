@@ -7,6 +7,8 @@
  * RKC open show offer carries three terms of the society's own (agreed with
  * the domain expert, 14 Nov 2026): same breed only, JEP Level 2 or above (not
  * for overseas judges), and the judge declares appointments already agreed.
+ * On 15 Nov 2026 she extended the three terms to RKC championship shows at
+ * JEP Level 4 or above. A limited show keeps the F(1).21.b wording only.
  */
 import { describe, it, expect } from 'vitest';
 import {
@@ -16,10 +18,11 @@ import {
   alreadyAgreedAnswerText,
   alreadyAgreedSentence,
   breedPhrase,
+  societyTermsJepLevel,
   JUDGE_OFFER_TERMS_VERSION,
   ALREADY_AGREED_MAX_LENGTH,
 } from '@/lib/judge-offer-terms';
-import { isRkcOpenShow, isRegionalShow, isRkcF1Show } from '@/lib/show-types';
+import { isRkcOpenShow, isRegionalShow, isRkcF1Show, isRkcChampionshipShow } from '@/lib/show-types';
 
 const F121B_PARAGRAPH_1 =
   'In accepting this invitation you agree to be bound by Royal Kennel Club Rules and Regulations and the Royal Kennel Club Code of Best Practice for Judges. In doing so you also recognise that you are obliged to notify us in writing of any change in your personal circumstances or additional information which may affect your ability and standing to fulfil this judging appointment.';
@@ -42,6 +45,17 @@ describe('show-types: regional and RKC open', () => {
     expect(isRkcOpenShow('open', 'wusv')).toBe(false);
     for (const t of ['championship', 'limited', 'companion', 'primary']) {
       expect(isRkcOpenShow(t, 'rkc')).toBe(false);
+    }
+  });
+});
+
+describe('show-types: RKC championship', () => {
+  it('championship is an RKC championship show; a regional (stored as championship) never is', () => {
+    expect(isRkcChampionshipShow('championship', 'rkc')).toBe(true);
+    expect(isRkcChampionshipShow('championship', null)).toBe(true);
+    expect(isRkcChampionshipShow('championship', 'wusv')).toBe(false);
+    for (const t of ['open', 'premier_open', 'limited', 'companion', 'primary']) {
+      expect(isRkcChampionshipShow(t, 'rkc')).toBe(false);
     }
   });
 });
@@ -74,16 +88,49 @@ describe('judgeOfferTerms — which shows carry what', () => {
     expect(judgeOfferTerms({ showType: 'primary', showRuleset: 'rkc', breedNames: GSD })).toBeNull();
   });
 
-  it('an RKC championship or limited show carries the F(1).21.b wording only', () => {
-    for (const t of ['championship', 'limited']) {
-      const terms = judgeOfferTerms({ showType: t, showRuleset: 'rkc', breedNames: GSD });
-      expect(terms).not.toBeNull();
-      expect(terms!.invitationParagraphs).toEqual([F121B_PARAGRAPH_1, F121B_PARAGRAPH_2]);
-      expect(terms!.societyTerms).toEqual([]);
-      expect(terms!.alreadyAgreedQuestion).toBeNull();
-      expect(terms!.alreadyAgreedNotice).toBeNull();
-      expect(terms!.version).toBe(JUDGE_OFFER_TERMS_VERSION);
-    }
+  it('an RKC limited show carries the F(1).21.b wording only', () => {
+    const terms = judgeOfferTerms({ showType: 'limited', showRuleset: 'rkc', breedNames: GSD });
+    expect(terms).not.toBeNull();
+    expect(terms!.invitationParagraphs).toEqual([F121B_PARAGRAPH_1, F121B_PARAGRAPH_2]);
+    expect(terms!.societyTerms).toEqual([]);
+    expect(terms!.alreadyAgreedQuestion).toBeNull();
+    expect(terms!.alreadyAgreedNotice).toBeNull();
+    expect(terms!.version).toBe(JUDGE_OFFER_TERMS_VERSION);
+  });
+
+  it('an RKC championship show carries the wording, the three society terms at JEP Level 4, and the question', () => {
+    const terms = judgeOfferTerms({ showType: 'championship', showRuleset: 'rkc', breedNames: GSD })!;
+    expect(terms.invitationParagraphs).toEqual([F121B_PARAGRAPH_1, F121B_PARAGRAPH_2]);
+    expect(terms.societyTerms).toEqual([
+      'The Judge confirms that they are at Level 4 or above of the Royal Kennel Club Judges Education Programme (JEP) for this breed (German Shepherd Dog). This does not apply to a judge who lives overseas.',
+      'From accepting this offer, the Judge will not accept any other appointment to judge this breed (German Shepherd Dog) before the date of this show.',
+      'The Judge must tell the Society of every appointment to judge this breed (German Shepherd Dog) that they have already agreed to. The Judge does this when accepting.',
+    ]);
+    expect(terms.alreadyAgreedQuestion).toBe(
+      'Have you already agreed to judge this breed (German Shepherd Dog) anywhere before the date of this show?',
+    );
+    expect(terms.alreadyAgreedNotice).toMatch(/when you accept/i);
+    expect(terms.version).toBe(JUDGE_OFFER_TERMS_VERSION);
+  });
+
+  it('a championship appointment that names no breed (Junior Handling only) gets the invitation wording only', () => {
+    const terms = judgeOfferTerms({ showType: 'championship', showRuleset: 'rkc', breedNames: [] })!;
+    expect(terms.invitationParagraphs).toEqual([F121B_PARAGRAPH_1, F121B_PARAGRAPH_2]);
+    expect(terms.societyTerms).toEqual([]);
+    expect(terms.alreadyAgreedQuestion).toBeNull();
+  });
+
+  it('the JEP level by show type: open and premier open 2, championship 4, everything else none', () => {
+    expect(societyTermsJepLevel('open', 'rkc')).toBe(2);
+    expect(societyTermsJepLevel('premier_open', 'rkc')).toBe(2);
+    expect(societyTermsJepLevel('championship', 'rkc')).toBe(4);
+    expect(societyTermsJepLevel('championship', null)).toBe(4);
+    expect(societyTermsJepLevel('limited', 'rkc')).toBeNull();
+    expect(societyTermsJepLevel('companion', 'rkc')).toBeNull();
+    expect(societyTermsJepLevel('primary', 'rkc')).toBeNull();
+    // A regional is stored as championship; it is never an RKC show.
+    expect(societyTermsJepLevel('championship', 'wusv')).toBeNull();
+    expect(societyTermsJepLevel('open', 'wusv')).toBeNull();
   });
 
   it('an RKC open show carries the wording, the three society terms and the question', () => {
@@ -167,11 +214,17 @@ describe('readStoredJudgeOfferTerms — the copy on the contract', () => {
 
 describe('checkAlreadyAgreedAnswer — the server is the gate', () => {
   const open = judgeOfferTerms({ showType: 'open', showRuleset: 'rkc', breedNames: GSD });
+  const limited = judgeOfferTerms({ showType: 'limited', showRuleset: 'rkc', breedNames: GSD });
   const champ = judgeOfferTerms({ showType: 'championship', showRuleset: 'rkc', breedNames: GSD });
 
   it('not asked (no terms, or no question) → nothing to store', () => {
     expect(checkAlreadyAgreedAnswer(null, {})).toEqual({ ok: true, answer: null, details: null });
-    expect(checkAlreadyAgreedAnswer(champ, { answer: 'yes', details: 'x' })).toEqual({ ok: true, answer: null, details: null });
+    expect(checkAlreadyAgreedAnswer(limited, { answer: 'yes', details: 'x' })).toEqual({ ok: true, answer: null, details: null });
+  });
+
+  it('a championship show asks the question, so no answer is refused there too', () => {
+    expect(checkAlreadyAgreedAnswer(champ, {}).ok).toBe(false);
+    expect(checkAlreadyAgreedAnswer(champ, { answer: 'no' })).toEqual({ ok: true, answer: false, details: null });
   });
 
   it('no answer is refused', () => {
