@@ -5,8 +5,10 @@
  * migrateJudgeOfferTerms, called by runStartupMigrations.
  */
 import { describe, it, expect, afterEach } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { sql } from 'drizzle-orm';
-import { migrateJudgeOfferTerms } from '@/server/db/startup-migrations';
+import { migrateJudgeOfferTerms, migrateJudgeLivesOverseas } from '@/server/db/startup-migrations';
 import { testDb } from '../helpers/db';
 
 const COLUMNS = ['already_agreed_details', 'already_agreed_elsewhere', 'offer_terms'];
@@ -49,5 +51,48 @@ describe('migrateJudgeOfferTerms', () => {
     const after = await columns();
     expect(after).toEqual(before);
     expect(after.map((c) => c.column_name)).toEqual(COLUMNS);
+  });
+});
+
+/**
+ * judges.lives_overseas (15 Nov 2026): NOT NULL DEFAULT false, so every judge
+ * already in prod reads as living in the UK until a secretary ticks the box.
+ */
+describe('migrateJudgeLivesOverseas', () => {
+  async function column() {
+    const rows = await testDb.execute<{ data_type: string; is_nullable: string; column_default: string | null }>(sql`
+      SELECT data_type, is_nullable, column_default FROM information_schema.columns
+       WHERE table_name = 'judges' AND column_name = 'lives_overseas'`);
+    return [...rows];
+  }
+
+  afterEach(async () => {
+    await migrateJudgeLivesOverseas(testDb); // leave the test DB with the column
+  });
+
+  it('adds the column, NOT NULL DEFAULT false, and existing judges read false', async () => {
+    await testDb.execute(sql`ALTER TABLE judges DROP COLUMN IF EXISTS lives_overseas`);
+    await testDb.execute(sql`INSERT INTO judges (name) VALUES ('Judge before the column')`);
+    expect(await column()).toEqual([]);
+
+    await migrateJudgeLivesOverseas(testDb);
+
+    expect(await column()).toEqual([{ data_type: 'boolean', is_nullable: 'NO', column_default: 'false' }]);
+    const rows = await testDb.execute<{ lives_overseas: boolean }>(sql`
+      SELECT lives_overseas FROM judges WHERE name = 'Judge before the column'`);
+    expect([...rows]).toEqual([{ lives_overseas: false }]);
+  });
+
+  it('a second run is a no-op', async () => {
+    await migrateJudgeLivesOverseas(testDb);
+    const before = await column();
+    await expect(migrateJudgeLivesOverseas(testDb)).resolves.not.toThrow();
+    expect(await column()).toEqual(before);
+  });
+
+  it('runStartupMigrations calls it', () => {
+    const src = readFileSync(join(process.cwd(), 'src/server/db/startup-migrations.ts'), 'utf8');
+    const run = src.slice(src.indexOf('export async function runStartupMigrations'));
+    expect(run).toContain('await migrateJudgeLivesOverseas(db);');
   });
 });

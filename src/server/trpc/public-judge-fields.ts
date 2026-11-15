@@ -30,8 +30,10 @@ export const PUBLIC_JUDGE_FIELDS = [
   'updatedAt',
 ] as const;
 
-/** Judge columns only the club (active members) and admins may see. */
-export const PRIVATE_JUDGE_FIELDS = ['contactEmail', 'contactPhone', 'kcJudgeId'] as const;
+/** Judge columns only the club (active members) and admins may see.
+ *  `livesOverseas` (15 Nov 2026) is where the judge lives: it decides the
+ *  terms on the club's offer and no public page needs it. */
+export const PRIVATE_JUDGE_FIELDS = ['contactEmail', 'contactPhone', 'kcJudgeId', 'livesOverseas'] as const;
 
 /** Judge-assignment columns anyone may see. */
 export const PUBLIC_JUDGE_ASSIGNMENT_FIELDS = [

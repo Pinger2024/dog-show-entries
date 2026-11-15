@@ -80,6 +80,19 @@ export async function migrateJudgeOfferTerms(database: NonNullable<Database>): P
   `);
 }
 
+/**
+ * 2026-11-15: where a judge lives. A judge who lives overseas gets the RKC's
+ * F(1).21.b paragraphs only on an offer, never the Society's terms (Mandy, 15
+ * Nov 2026). On the judge, not the show: judges are shared rows. Every
+ * existing judge reads as living in the UK until a secretary ticks the box.
+ */
+export async function migrateJudgeLivesOverseas(database: NonNullable<Database>): Promise<void> {
+  await database.execute(sql`
+    ALTER TABLE judges
+      ADD COLUMN IF NOT EXISTS lives_overseas BOOLEAN NOT NULL DEFAULT false;
+  `);
+}
+
 export async function runStartupMigrations() {
   if (!db) {
     console.warn('[startup-migrations] db client unavailable, skipping');
@@ -384,6 +397,9 @@ export async function runStartupMigrations() {
 
   // -- 2026-11-14: judge-offer terms + the judge's answer (see migrateJudgeOfferTerms above) --
   await migrateJudgeOfferTerms(db);
+
+  // -- 2026-11-15: judges.lives_overseas (see migrateJudgeLivesOverseas above) --
+  await migrateJudgeLivesOverseas(db);
 
   // -- 2026-10-15: sundry kind (see migrateSundryKinds above) --
   const sundryFilled = await migrateSundryKinds(db);
