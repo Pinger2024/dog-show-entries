@@ -101,3 +101,15 @@ describe('one owner for the Disqualified shape', () => {
     expect(hits.map((h) => `${h.file}:${h.line}`)).toEqual([]);
   });
 });
+
+describe('public results page — the Disqualified rating fits its badge', () => {
+  // Badges are overflow-hidden; a fixed 4rem (sm:w-16) clipped "Disqualified"
+  // to "Disqualifi" on anything wider than a phone. A minimum width keeps the
+  // short ratings (V1, SG2) lined up and lets the long one grow.
+  it('the regional rating badge has a minimum width, not a fixed one', () => {
+    const page = fs.readFileSync(path.join(PROJECT_ROOT, 'src/app/(shows)/shows/[id]/results/page.tsx'), 'utf8');
+    const svBadge = page.slice(page.indexOf('svRatings?.get(result.entryClassId) ?'), page.indexOf('{svRatings.get(result.entryClassId)}'));
+    expect(svBadge).toContain('sm:min-w-16');
+    expect(svBadge).not.toMatch(/sm:w-16/);
+  });
+});
