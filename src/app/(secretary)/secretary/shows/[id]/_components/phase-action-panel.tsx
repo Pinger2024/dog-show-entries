@@ -1,6 +1,7 @@
 'use client';
 
 import { showHref } from '@/lib/show-status';
+import { resultsPublication, RESULTS_PUBLICATION_LABEL, RESULTS_LIVE_NOTE } from '@/lib/results-publication';
 import { canonicalUrl } from '@/lib/app-url';
 import Link from 'next/link';
 import { fireDogConfetti } from '@/lib/confetti';
@@ -706,7 +707,11 @@ function ShowDayPanel({ show, showId }: { show: Show; showId: string }) {
 // ── Phase 5: Post-Show ──────────────────────────────────────
 
 function PostShowPanel({ show, showId }: { show: Show; showId: string }) {
-  const resultsPublished = !!show.resultsPublishedAt;
+  // 'none' | 'live' | 'final' (lib/results-publication.ts). The task is done
+  // only once Publish Results is pressed; classes the stewards published live
+  // are already public, so say so (Mandy, 16 Nov 2026).
+  const publication = resultsPublication(show);
+  const resultsPublished = publication === 'final';
   const scheduleData = show.scheduleData as ScheduleData | null;
   const rkcSubmittedAt = scheduleData?.rkcSubmittedAt;
   const rkcSubmitted = !!rkcSubmittedAt;
@@ -769,8 +774,9 @@ function PostShowPanel({ show, showId }: { show: Show; showId: string }) {
             href={`/secretary/shows/${showId}/results`}
             icon={Trophy}
             label="Publish Results"
-            description="Review and publish results for exhibitors to see"
+            description={publication === 'live' ? RESULTS_LIVE_NOTE : 'Review and publish results for exhibitors to see'}
             accent="amber"
+            badge={publication === 'live' ? RESULTS_PUBLICATION_LABEL.live : undefined}
           />
         )}
         {resultsPublished && (

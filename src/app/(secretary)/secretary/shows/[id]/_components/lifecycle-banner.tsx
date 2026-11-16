@@ -18,6 +18,7 @@ import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { trpc } from '@/lib/trpc';
 import { effectiveShowStatus } from '@/lib/show-status';
+import { resultsPublication, RESULTS_PUBLICATION_LABEL, RESULTS_LIVE_NOTE } from '@/lib/results-publication';
 import { ConfirmCloseEntries } from './confirm-close-entries';
 import type { ScheduleData } from '@/server/db/schema/shows';
 import { Button } from '@/components/ui/button';
@@ -428,7 +429,9 @@ function ShowDayContent({ show }: { show: Show }) {
 // ── Phase 5: Post-Show ──────────────────────────────────────
 
 function PostShowContent({ show }: { show: Show }) {
-  const resultsPublished = !!show.resultsPublishedAt;
+  // 'none' | 'live' | 'final' — classes the stewards published live are on
+  // the public page before Publish Results is pressed (Mandy, 16 Nov 2026).
+  const publication = resultsPublication(show);
   const scheduleData = show.scheduleData as ScheduleData | null;
   const rkcSubmitted = !!scheduleData?.rkcSubmittedAt;
 
@@ -445,10 +448,13 @@ function PostShowContent({ show }: { show: Show }) {
         <h3 className={cn(SE_H, 'text-sm text-se-ink sm:text-base')}>
           Show complete
         </h3>
-        <Chip tone={resultsPublished ? 'fresh' : 'light'}>
-          {resultsPublished ? 'Results published' : 'Results not yet published'}
+        <Chip tone={publication === 'final' ? 'fresh' : 'light'}>
+          {RESULTS_PUBLICATION_LABEL[publication]}
         </Chip>
       </div>
+      {publication === 'live' && (
+        <p className="text-xs text-se-ink2">{RESULTS_LIVE_NOTE}</p>
+      )}
       <span className={cn(
         'block text-xs',
         rkcSubmitted && 'text-se-fresh-deep',

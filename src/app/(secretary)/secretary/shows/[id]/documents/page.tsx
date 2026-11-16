@@ -28,6 +28,7 @@ import {
 import { toast } from 'sonner';
 import { trpc } from '@/lib/trpc';
 import { svGradeGapsWarning } from '@/lib/sv-results';
+import { resultsFinalised } from '@/lib/results-publication';
 import { svMeasurementGapsNote, svMeasurementProgress } from '@/lib/sv-measurement';
 import { derivePhase } from '../_lib/phase-utils';
 import { Button } from '@/components/ui/button';
@@ -233,7 +234,10 @@ export default function DocumentsPage() {
     { enabled: stats?.showRuleset === 'wusv' },
   );
 
-  const resultsFinalised = Boolean(catalogueData?.show?.resultsPublishedAt);
+  // Publish Results pressed — classes a steward published live don't count:
+  // these documents fill in only once the results are finalised
+  // (lib/results-publication.ts).
+  const resultsAreFinal = catalogueData?.show ? resultsFinalised(catalogueData.show) : false;
   // SV / WUSV regional shows get the graded results report + spreadsheet the
   // regional group circulates after the show (Mandy 2026-06-27). RKC shows
   // use the Marked Catalogue for this instead — never show both.
@@ -581,7 +585,7 @@ export default function DocumentsPage() {
               icon={<CheckSquare className="size-4" />}
               label="Marked Catalogue"
               description="Full catalogue with results, placements, absentees, and awards annotated — required by the RKC within 14 days for championship shows"
-              note={!resultsFinalised ? 'Will be empty until results are published' : undefined}
+              note={!resultsAreFinal ? 'Will be empty until results are published' : undefined}
             >
               <CatalogueJobButton icon={<CheckSquare className="size-4" />} label="View" showId={showId} format="marked" />
             </DocRow>
@@ -634,7 +638,7 @@ export default function DocumentsPage() {
                   icon={<ScrollText className="size-4" />}
                   label="Judge's catalogue (with results)"
                   description="A keepsake copy of the catalogue with every dog's grade and placing filled in — for the judge to take home"
-                  note={!resultsFinalised ? 'Will be blank until results are published' : undefined}
+                  note={!resultsAreFinal ? 'Will be blank until results are published' : undefined}
                 >
                   <CatalogueJobButton icon={<ScrollText className="size-4" />} label="View" showId={showId} format="judge-copy" />
                 </DocRow>

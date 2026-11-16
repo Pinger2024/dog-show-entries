@@ -32,6 +32,7 @@ import {
 } from '@/lib/placements';
 import { svCoatDisplayName } from '@/lib/class-labels';
 import { computeSvClassRatings, isSvDisqualified } from '@/lib/sv-grading';
+import { RESULTS_PUBLICATION_LABEL, RESULTS_LIVE_NOTE } from '@/lib/results-publication';
 import { SE_H } from '@/components/show-experience/tokens';
 import { resolveTopAwards, buildPlacementIndex, eligibleCandidates, isPuppyOnShowDate, awardFilter } from '@/lib/top-awards';
 import { Badge } from '@/components/ui/badge';
@@ -732,6 +733,8 @@ export default function SecretaryResultsPage() {
     : null;
 
   const published = pubStatus?.published ?? false;
+  // 'none' | 'live' | 'final' — one owner (lib/results-publication.ts).
+  const publication = pubStatus?.publication ?? 'none';
   const publishedAt = pubStatus?.publishedAt;
   const canPublish = pubStatus ? ['in_progress', 'completed'].includes(pubStatus.showStatus) : false;
 
@@ -742,7 +745,7 @@ export default function SecretaryResultsPage() {
         <div className="flex items-start gap-3 rounded-lg border border-se-fresh-line bg-se-fresh-soft p-4">
           <Globe className="mt-0.5 size-5 shrink-0 text-se-fresh-deep" />
           <div className="flex-1">
-            <p className="font-medium text-se-fresh-deep">Results Published</p>
+            <p className="font-medium text-se-fresh-deep">{RESULTS_PUBLICATION_LABEL[publication]}</p>
             {publishedAt && (
               <p className="mt-0.5 text-xs text-se-fresh-deep">
                 Published {new Date(publishedAt).toLocaleString('en-GB', {
@@ -761,9 +764,11 @@ export default function SecretaryResultsPage() {
         <div className="flex items-start gap-3 rounded-lg border border-se-honey-line bg-se-honey-soft p-4">
           <Unlock className="mt-0.5 size-5 shrink-0 text-se-honey-deep" />
           <div>
-            <p className="font-medium text-se-honey-ink">Results Not Published</p>
+            <p className="font-medium text-se-honey-ink">{RESULTS_PUBLICATION_LABEL[publication]}</p>
             <p className="mt-0.5 text-xs text-se-honey-deep">
-              Results are only visible to stewards, secretaries, and admins.
+              {publication === 'live'
+                ? RESULTS_LIVE_NOTE
+                : 'Results are only visible to stewards, secretaries, and admins.'}
             </p>
           </div>
         </div>
