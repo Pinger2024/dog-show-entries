@@ -51,7 +51,7 @@ async function regionalClass() {
     return makeEntryClass({ entryId: entry.id, showClassId: showClass.id, absent: opts.absent });
   }
 
-  return { steward, show, showClass, dogInClass, caller: createTestCaller(steward) };
+  return { steward, show, showClass, dogInClass, caller: createTestCaller({ ...steward, name: steward.name ?? 'Steward' }) };
 }
 
 const stored = (entryClassId: string) =>

@@ -18,11 +18,20 @@ import {
   UserX,
   Plus,
   CircleSlash,
+  Ban,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { trpc } from '@/lib/trpc';
 import { SPECIAL_AWARDS, comparePlacing } from '@/lib/placements';
-import { allowedSvGradesForClass, isPlacedWithoutSvGrade } from '@/lib/sv-grading';
+import {
+  allowedSvGradesForClass,
+  bulkSvGradesForClass,
+  isPlacedWithoutSvGrade,
+  isSvDisqualified,
+  stewardStatusWrite,
+  type StewardStatusOutcome,
+} from '@/lib/sv-grading';
+import { groupStewardClassEntries } from '@/lib/steward-class-groups';
 import { SvMeasurementsCard } from '@/components/sv/sv-measurements-card';
 import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
@@ -231,11 +240,17 @@ export default function StewardClassResultsPage({
       )
     : [];
 
-  // Build the placement → dog map for the ladder.
-  const placedByValue = new Map<number, (typeof entries)[number]>();
-  for (const e of entries) {
-    if (e.result?.placement != null) placedByValue.set(e.result.placement, e);
-  }
+  // The placing ladder and the groups at the foot of the class — one rule
+  // (lib/steward-class-groups.ts). At a regional a Disqualified dog has its
+  // own group (Mandy, 16 Nov 2026) and counts as dealt with.
+  const {
+    placedByValue,
+    remaining,
+    withheld,
+    unplaced: explicitlyUnplaced,
+    disqualified,
+    absent,
+  } = groupStewardClassEntries(entries);
   const highestPlaced = placedByValue.size > 0
     ? Math.max(...Array.from(placedByValue.keys()))
     : 0;
@@ -244,22 +259,11 @@ export default function StewardClassResultsPage({
   const slots = Array.from({ length: totalSlots }, (_, i) => i + 1);
   const nextOpenSlot = slots.find((n) => !placedByValue.has(n)) ?? null;
 
-  // Categorise unplaced entries for the bottom sections.
-  const remaining = entries.filter(
-    (e) => !e.absent && e.result?.placement == null && !e.result?.placementStatus
-  );
-  const absent = entries.filter((e) => e.absent);
-  const withheld = entries.filter(
-    (e) => !e.absent && e.result?.placementStatus === 'withheld'
-  );
-  const explicitlyUnplaced = entries.filter(
-    (e) => !e.absent && e.result?.placementStatus === 'unplaced'
-  );
-
   const dogsForward = entries.filter((e) => !e.absent).length;
   const placedCount = placedByValue.size;
   const progressPct = dogsForward > 0 ? Math.round((placedCount / dogsForward) * 100) : 0;
-  // Everyone in the ring has been dealt with (placed / withheld / unplaced) but
+  // Everyone in the ring has been dealt with (placed / withheld / unplaced /
+  // disqualified) but
   // the class isn't live yet — make the Publish call-to-action loud so the last
   // step doesn't get missed.
   // Regionals: every dog the judge places gets a grade. A placing with no
@@ -299,23 +303,33 @@ export default function StewardClassResultsPage({
     removeResult.mutate({ entryClassId });
   }
 
+  // Withheld / Unplaced / Disqualified from a dog's Status menu. What each one
+  // records is the shared rule (lib/sv-grading.ts stewardStatusWrite):
+  // Disqualified is no placing + the grade Disqualified, and Withheld or
+  // Unplaced clear any grade — so they also undo a Disqualified.
   function setStatus(
     entryClassId: string,
-    status: 'withheld' | 'unplaced',
+    status: StewardStatusOutcome,
     currentSpecialAward: string | null
   ) {
     recordResult.mutate({
       entryClassId,
-      placement: null,
-      placementStatus: status,
+      ...stewardStatusWrite(status),
       specialAward: currentSpecialAward,
     });
   }
 
   // Set the SV grade on a single (already-recorded) dog, preserving its
   // placement/status/special award. Amanda 2026-05-28: grade sits beside the
-  // placement, set after the dog's been placed.
+  // placement, set after the dog's been placed. Disqualified is not a grade a
+  // placed dog can keep — "not 3rd disqualified" (Mandy, 16 Nov 2026) — so
+  // picking it here records the Disqualified outcome and the dog leaves the
+  // ladder for the Disqualified group (the server settles it the same way).
   function setGrade(entry: (typeof entries)[number], grade: SvGradeValue | null) {
+    if (isSvDisqualified({ svGrade: grade })) {
+      setStatus(entry.entryClassId, 'disqualified', entry.result?.specialAward ?? null);
+      return;
+    }
     recordResult.mutate({
       entryClassId: entry.entryClassId,
       placement: entry.result?.placement ?? null,
@@ -415,7 +429,7 @@ export default function StewardClassResultsPage({
             <ul className="mt-1 space-y-0.5 text-green-800">
               <li>· <strong>Tap any dog</strong> in the list to place it in the next open slot</li>
               <li>· <strong>Tap ×</strong> next to a placed dog to undo</li>
-              <li>· <strong>Tap "Status ▾"</strong> on a dog to mark Absent / Withheld / Unplaced</li>
+              <li>· <strong>Tap "Status ▾"</strong> on a dog to mark Absent / Withheld / Unplaced{isWusv ? ' / Disqualified' : ''}</li>
               <li>· <strong>Tap Award</strong> to note a special class award — the show&apos;s Top Awards (Best Dog, Best Bitch…) are chosen on the show page when judging finishes</li>
               <li>· <strong>When the class is finished, tap Publish</strong> so exhibitors can see the results</li>
             </ul>
@@ -431,19 +445,17 @@ export default function StewardClassResultsPage({
             {isWusv && placedCount > 0 && (
               <div className="flex flex-wrap items-center gap-2 border-b bg-muted/30 px-3 py-2">
                 <span className="text-xs font-medium text-muted-foreground">Grade all as</span>
-                {svGradeOptions
-                  .filter((g) => g.value !== 'disqualified')
-                  .map((g) => (
-                    <button
-                      key={g.value}
-                      type="button"
-                      onClick={() => setClassGrades.mutate({ showClassId: classId, svGrade: g.value })}
-                      disabled={setClassGrades.isPending}
-                      className="inline-flex h-8 items-center rounded-full border border-green-300 bg-green-50 px-3 text-xs font-semibold text-green-800 hover:bg-green-100 disabled:opacity-50"
-                    >
-                      {g.value.toUpperCase()}
-                    </button>
-                  ))}
+                {bulkSvGradesForClass(showClass.classDefinition?.name).map((g) => (
+                  <button
+                    key={g.value}
+                    type="button"
+                    onClick={() => setClassGrades.mutate({ showClassId: classId, svGrade: g.value })}
+                    disabled={setClassGrades.isPending}
+                    className="inline-flex h-8 items-center rounded-full border border-green-300 bg-green-50 px-3 text-xs font-semibold text-green-800 hover:bg-green-100 disabled:opacity-50"
+                  >
+                    {g.value.toUpperCase()}
+                  </button>
+                ))}
               </div>
             )}
             <div className="divide-y">
@@ -582,6 +594,7 @@ export default function StewardClassResultsPage({
                     onMarkAbsent={() => markAbsent.mutate({ entryClassId: entry.entryClassId, absent: true })}
                     onWithhold={() => setStatus(entry.entryClassId, 'withheld', entry.result?.specialAward ?? null)}
                     onUnplaced={() => setStatus(entry.entryClassId, 'unplaced', entry.result?.specialAward ?? null)}
+                    onDisqualify={isWusv ? () => setStatus(entry.entryClassId, 'disqualified', entry.result?.specialAward ?? null) : undefined}
                     onOpenSpecialAward={() => setSpecialAwardEntryId(entry.entryClassId)}
                   />
                 ))}
@@ -589,8 +602,8 @@ export default function StewardClassResultsPage({
             </>
           )}
 
-          {/* Withheld / Unplaced / Absent categories */}
-          {(withheld.length > 0 || explicitlyUnplaced.length > 0 || absent.length > 0) && (
+          {/* Withheld / Unplaced / Disqualified / Absent categories */}
+          {(withheld.length > 0 || explicitlyUnplaced.length > 0 || disqualified.length > 0 || absent.length > 0) && (
             <div className="mt-5 space-y-3">
               {withheld.length > 0 && (
                 <CategoryCard
@@ -605,6 +618,14 @@ export default function StewardClassResultsPage({
                   title="Unplaced"
                   tone="slate"
                   entries={explicitlyUnplaced}
+                  onClear={(id) => removeResult.mutate({ entryClassId: id })}
+                />
+              )}
+              {disqualified.length > 0 && (
+                <CategoryCard
+                  title="Disqualified"
+                  tone="red"
+                  entries={disqualified}
                   onClear={(id) => removeResult.mutate({ entryClassId: id })}
                 />
               )}
@@ -879,6 +900,7 @@ function DogCard({
   onMarkAbsent,
   onWithhold,
   onUnplaced,
+  onDisqualify,
   onOpenSpecialAward,
 }: {
   entry: DogCardEntry;
@@ -888,6 +910,8 @@ function DogCard({
   onMarkAbsent: () => void;
   onWithhold: () => void;
   onUnplaced: () => void;
+  /** Regionals only — the judge disqualified the dog (no placing). */
+  onDisqualify?: () => void;
   onOpenSpecialAward: () => void;
 }) {
   return (
@@ -942,7 +966,7 @@ function DogCard({
               type="button"
               onClick={(e) => e.stopPropagation()}
               className="inline-flex h-9 items-center gap-1 rounded-full border border-se-line2 bg-white px-2.5 text-xs font-semibold text-se-ink2 transition-colors hover:bg-se-paper2"
-              title="Mark as absent / withheld / unplaced"
+              title={onDisqualify ? 'Mark as absent / withheld / unplaced / disqualified' : 'Mark as absent / withheld / unplaced'}
             >
               Status
               <ChevronDown className="size-3.5" />
@@ -951,7 +975,7 @@ function DogCard({
           <PopoverContent className="w-52 p-1.5" align="end" onClick={(e) => e.stopPropagation()}>
             <button
               type="button"
-              className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm hover:bg-muted"
+              className="flex min-h-11 w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm hover:bg-muted"
               onClick={onMarkAbsent}
             >
               <UserX className="size-4 text-se-honey-deep" />
@@ -959,7 +983,7 @@ function DogCard({
             </button>
             <button
               type="button"
-              className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm hover:bg-muted"
+              className="flex min-h-11 w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm hover:bg-muted"
               onClick={onWithhold}
             >
               <CircleSlash className="size-4 text-se-honey-deep" />
@@ -967,12 +991,22 @@ function DogCard({
             </button>
             <button
               type="button"
-              className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm hover:bg-muted"
+              className="flex min-h-11 w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm hover:bg-muted"
               onClick={onUnplaced}
             >
               <CircleSlash className="size-4 text-muted-foreground" />
               Mark as unplaced
             </button>
+            {onDisqualify && (
+              <button
+                type="button"
+                className="flex min-h-11 w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm text-destructive hover:bg-destructive/10"
+                onClick={onDisqualify}
+              >
+                <Ban className="size-4" />
+                Disqualified
+              </button>
+            )}
           </PopoverContent>
         </Popover>
         </div>
@@ -991,7 +1025,7 @@ function CategoryCard({
   clearLabel = 'Clear',
 }: {
   title: string;
-  tone: 'amber' | 'slate' | 'muted';
+  tone: 'amber' | 'slate' | 'red' | 'muted';
   entries: {
     entryClassId: string;
     catalogueNumber: string | null;
@@ -1006,13 +1040,17 @@ function CategoryCard({
       ? 'border-se-honey-line bg-se-honey-soft/70'
       : tone === 'slate'
         ? 'border-se-line bg-se-paper2/70'
-        : 'border-muted-foreground/10 bg-muted/30';
+        : tone === 'red'
+          ? 'border-destructive/30 bg-destructive/5'
+          : 'border-muted-foreground/10 bg-muted/30';
   const titleClasses =
     tone === 'amber'
       ? 'text-se-honey-deep'
       : tone === 'slate'
         ? 'text-se-ink2'
-        : 'text-muted-foreground';
+        : tone === 'red'
+          ? 'text-destructive'
+          : 'text-muted-foreground';
   return (
     <div className={cn('overflow-hidden rounded-xl border', toneClasses)}>
       <div
@@ -1036,7 +1074,7 @@ function CategoryCard({
             <Button
               variant="ghost"
               size="sm"
-              className="h-8 text-xs"
+              className="min-h-11 shrink-0 text-xs"
               onClick={() => onClear(e.entryClassId)}
             >
               {clearLabel}

@@ -114,6 +114,19 @@ export function allowedSvGradesForClass(
 }
 
 /**
+ * The grades the steward's "Grade all as…" bar offers in a class: the class's
+ * own grades without Disqualified, which is never a bulk grade (it takes a
+ * dog's placing away — `steward.setClassGrades` refuses it too).
+ */
+export function bulkSvGradesForClass(
+  className: string | null | undefined,
+): { value: Exclude<SvGradeCode, 'disqualified'>; label: string }[] {
+  return allowedSvGradesForClass(className).filter(
+    (g): g is { value: Exclude<SvGradeCode, 'disqualified'>; label: string } => !isSvDisqualified({ svGrade: g.value }),
+  );
+}
+
+/**
  * The public-facing SV rating for a single result: grade + rank, e.g. "V1",
  * "SG2", "VP1". Falls back to the grade alone (no placement) or the placement
  * alone (no grade). Empty string when neither is set.
