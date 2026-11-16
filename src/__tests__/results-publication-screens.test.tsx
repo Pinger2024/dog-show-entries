@@ -129,6 +129,13 @@ describe('one owner for "are the results published"', () => {
     expect(hits.map((h) => `${h.file}:${h.line}  ${h.content}`)).toEqual([]);
   });
 
+  it('the secretary results page refreshes the state — publishing a class there, or a steward elsewhere', () => {
+    const page = fs.readFileSync(path.join(PROJECT_ROOT, 'src/app/(secretary)/secretary/shows/[id]/results/page.tsx'), 'utf8');
+    const button = page.slice(page.indexOf('function ClassPublishButton'), page.indexOf('const isPending = publishMut.isPending'));
+    expect(button.match(/getResultsPublicationStatus\.invalidate/g)?.length).toBe(2);
+    expect(page).toMatch(/getResultsPublicationStatus\.useQuery\(\s*\{ showId \},\s*\{ refetchInterval: 10_000 \}/);
+  });
+
   it('the secretary results page shows the owner\'s words for each state', () => {
     const page = fs.readFileSync(path.join(PROJECT_ROOT, 'src/app/(secretary)/secretary/shows/[id]/results/page.tsx'), 'utf8');
     expect(page).toContain('RESULTS_PUBLICATION_LABEL[publication]');

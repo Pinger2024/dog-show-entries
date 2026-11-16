@@ -205,9 +205,13 @@ function ClassPublishButton({
   results: { entryClassId: string; placement: number | null }[];
 }) {
   const utils = trpc.useUtils();
+  // Publishing a class puts it on the public page, which changes the show's
+  // publication state ('none' → 'live', lib/results-publication.ts).
   const publishMut = trpc.secretary.publishClassResults.useMutation({
     onSuccess: () => {
       utils.steward.getLiveResults.invalidate();
+      utils.secretary.getResultsPublicationStatus.invalidate({ showId });
+      utils.shows.getById.invalidate({ id: showId });
       toast.success('Class results published');
     },
     onError: (err) => toast.error(err.message),
@@ -215,6 +219,8 @@ function ClassPublishButton({
   const unpublishMut = trpc.secretary.unpublishClassResults.useMutation({
     onSuccess: () => {
       utils.steward.getLiveResults.invalidate();
+      utils.secretary.getResultsPublicationStatus.invalidate({ showId });
+      utils.shows.getById.invalidate({ id: showId });
       toast.success('Class results unpublished');
     },
     onError: (err) => toast.error(err.message),
@@ -624,8 +630,13 @@ export default function SecretaryResultsPage() {
       { refetchInterval: 10_000 }
     );
 
+  // Polls with the results above: stewards publish classes live from their
+  // own phones, and the banner must say so (Mandy, 16 Nov 2026).
   const { data: pubStatus } =
-    trpc.secretary.getResultsPublicationStatus.useQuery({ showId });
+    trpc.secretary.getResultsPublicationStatus.useQuery(
+      { showId },
+      { refetchInterval: 10_000 }
+    );
 
   const { data: showData } =
     trpc.shows.getById.useQuery({ id: showId });
