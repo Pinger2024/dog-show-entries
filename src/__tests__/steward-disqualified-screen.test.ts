@@ -113,3 +113,16 @@ describe('public results page — the Disqualified rating fits its badge', () =>
     expect(svBadge).not.toMatch(/sm:w-16/);
   });
 });
+
+describe('every results list reads a regional rating from the one owner', () => {
+  // The secretary's results page printed "1st" / "Unplaced" at a regional —
+  // the raw placing — while the public page read V1 / Disqualified.
+  it.each([
+    'src/app/(shows)/shows/[id]/results/page.tsx',
+    'src/app/(secretary)/secretary/shows/[id]/results/page.tsx',
+    'src/app/api/results-approval/[token]/route.ts',
+  ])('%s calls computeSvClassRatings', (file) => {
+    const source = fs.readFileSync(path.join(PROJECT_ROOT, file), 'utf8');
+    expect(source).toMatch(/computeSvClassRatings\(/);
+  });
+});

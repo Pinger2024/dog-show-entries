@@ -31,6 +31,7 @@ import {
   type AchievementType,
 } from '@/lib/placements';
 import { svCoatDisplayName } from '@/lib/class-labels';
+import { computeSvClassRatings, isSvDisqualified } from '@/lib/sv-grading';
 import { SE_H } from '@/components/show-experience/tokens';
 import { resolveTopAwards, buildPlacementIndex, eligibleCandidates, isPuppyOnShowDate, awardFilter } from '@/lib/top-awards';
 import { Badge } from '@/components/ui/badge';
@@ -679,6 +680,7 @@ export default function SecretaryResultsPage() {
   }
 
   const { show, breedGroups } = data;
+  const isWusv = show.showRuleset === 'wusv';
 
   // Gate: results only make sense from entries_closed onwards
   const tooEarly = ['draft', 'published', 'entries_open'].includes(show.status);
@@ -1010,7 +1012,12 @@ export default function SecretaryResultsPage() {
               )}
 
               <div className="space-y-3">
-                {group.classes.map((cls) => (
+                {group.classes.map((cls) => {
+                  // Regionals read V1 / SG2 / Disqualified — the one owner the
+                  // public results page reads too, so the secretary checks
+                  // exactly what the public sees (Mandy, 16 Nov 2026).
+                  const svRatings = isWusv ? computeSvClassRatings(cls.results) : null;
+                  return (
                   <div
                     key={cls.classId}
                     className="rounded-lg border bg-white p-3"
@@ -1051,7 +1058,21 @@ export default function SecretaryResultsPage() {
                       <div className="space-y-1">
                         {cls.results.map((result) => (
                           <div key={result.entryClassId} className="flex flex-wrap items-center gap-1.5 sm:gap-3 text-sm">
-                              {result.placement ? (
+                              {svRatings?.get(result.entryClassId) ? (
+                                <Badge
+                                  variant="outline"
+                                  className={cn(
+                                    'text-xs font-semibold whitespace-nowrap',
+                                    isSvDisqualified(result)
+                                      ? 'border-destructive/30 bg-destructive/5 text-destructive'
+                                      : result.placement
+                                        ? (placementColors[result.placement] ?? '')
+                                        : '',
+                                  )}
+                                >
+                                  {svRatings.get(result.entryClassId)}
+                                </Badge>
+                              ) : result.placement ? (
                                 <Badge
                                   variant="outline"
                                   className={`text-xs font-semibold whitespace-nowrap ${placementColors[result.placement] ?? ''}`}
@@ -1102,7 +1123,8 @@ export default function SecretaryResultsPage() {
                     )}
                     <ClassAbsentees absentees={cls.absentees} className="mt-1" />
                   </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
           ))}
