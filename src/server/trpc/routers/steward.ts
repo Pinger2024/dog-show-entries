@@ -34,6 +34,7 @@ import { classResultsPublishState } from '@/lib/class-results-publish-state';
 import { recordTopAward, removeTopAwardHolder } from '@/server/services/achievements';
 import { recordSvMeasurement } from '@/server/services/sv-measurement';
 import { formatSvMeasurement, svMeasurementBlock } from '@/lib/sv-measurement';
+import { settleResultWrite, takesRankedSvGrade } from '@/lib/sv-grading';
 
 /** Resolve a show slug or UUID to a UUID */
 async function resolveShowId(db: Database, idOrSlug: string): Promise<string> {
@@ -527,6 +528,7 @@ export const stewardRouter = createTRPCRouter({
         with: {
           showClass: true,
           entry: { columns: { status: true, deletedAt: true } },
+          result: { columns: { placementStatus: true, svGrade: true } },
         },
       });
 
@@ -536,6 +538,14 @@ export const stewardRouter = createTRPCRouter({
           message: 'Entry class not found',
         });
       }
+
+      // Placing, status and grade as they will be stored — the one rule
+      // (lib/sv-grading.ts settleResultWrite): a Disqualified grade takes the
+      // placing away, and a placing or Withheld clears a stored Disqualified,
+      // so a placed dog is never Disqualified (Mandy, 16 Nov 2026: "not 3rd
+      // disqualified"). Settled first, so the slot-clash check below sees the
+      // placing that will actually be written.
+      const settled = settleResultWrite(input, ec.result);
 
       if (!isLiveEntry(ec.entry)) {
         throw new TRPCError({
@@ -571,7 +581,7 @@ export const stewardRouter = createTRPCRouter({
       // write e.g. placement=1 — and the ladder renders one dog per slot, so the
       // loser silently vanishes. Reject a numeric placement that another entry in
       // THIS class already holds, in plain English the steward can act on.
-      if (input.placement != null) {
+      if (settled.placement != null) {
         const clash = await ctx.db
           .select({ catalogueNumber: entries.catalogueNumber })
           .from(results)
@@ -581,7 +591,7 @@ export const stewardRouter = createTRPCRouter({
             and(
               eq(entryClasses.showClassId, ec.showClassId),
               ne(entryClasses.id, input.entryClassId),
-              eq(results.placement, input.placement),
+              eq(results.placement, settled.placement),
             ),
           )
           .limit(1);
@@ -589,7 +599,7 @@ export const stewardRouter = createTRPCRouter({
           const cat = clash[0]!.catalogueNumber;
           throw new TRPCError({
             code: 'BAD_REQUEST',
-            message: `${getPlacementLabel(input.placement)} is already taken by #${cat ?? '—'} — clear it first.`,
+            message: `${getPlacementLabel(settled.placement)} is already taken by #${cat ?? '—'} — clear it first.`,
           });
         }
       }
@@ -601,20 +611,18 @@ export const stewardRouter = createTRPCRouter({
       // special-award dialog doesn't send the grade), and writing every
       // unsent field as blank silently erased a judge's critique and the
       // winner photo whenever a grade was changed (found 25 Sept 2026).
-      // A numeric placing always clears withheld/unplaced — the two are
-      // mutually exclusive.
-      const placementStatus =
-        input.placement != null ? null : input.placementStatus;
+      // Placing, status and grade come from `settled` above (a numeric placing
+      // always clears withheld/unplaced — the two are mutually exclusive).
       const changes = {
-        placement: input.placement,
-        ...(placementStatus !== undefined ? { placementStatus } : {}),
+        placement: settled.placement,
+        ...(settled.placementStatus !== undefined ? { placementStatus: settled.placementStatus } : {}),
         ...(input.specialAward !== undefined ? { specialAward: input.specialAward } : {}),
         ...(input.critiqueText !== undefined ? { critiqueText: input.critiqueText } : {}),
         ...(input.winnerPhotoUrl !== undefined ? { winnerPhotoUrl: input.winnerPhotoUrl } : {}),
         ...(input.winnerPhotoStorageKey !== undefined
           ? { winnerPhotoStorageKey: input.winnerPhotoStorageKey }
           : {}),
-        ...(input.svGrade !== undefined ? { svGrade: input.svGrade } : {}),
+        ...(settled.svGrade !== undefined ? { svGrade: settled.svGrade } : {}),
         recordedBy: ctx.session.user.id,
         recordedAt: new Date(),
       };
@@ -774,17 +782,19 @@ export const stewardRouter = createTRPCRouter({
       return { removed: true };
     }),
 
-  // ── Bulk-set the SV grade for every recorded dog in a class ──────
+  // ── Bulk-set the SV grade for every placed dog in a class ──────
   // SV stewards often grade most of a class the same (e.g. all SG) then
-  // tweak the odd one (Amanda 2026-05-28). Sets svGrade on every result
-  // already recorded in the class; placements are left untouched.
+  // tweak the odd one (Amanda 2026-05-28). Grades only the dogs that take a
+  // ranked grade (lib/sv-grading.ts takesRankedSvGrade: placed, not
+  // Disqualified) and are present — never a withheld, unplaced, absent or
+  // Disqualified dog. It used to grade every recorded result, so the
+  // Unplaced dog Mandy's steward had disqualified got a V too (16 Nov 2026).
+  // Disqualified is not a bulk grade. Placements are left untouched.
   setClassGrades: stewardProcedure
     .input(
       z.object({
         showClassId: z.string().uuid(),
-        svGrade: z
-          .enum(['v', 'sg', 'g', 'a', 'm', 'u', 'vp', 'p', 'wv', 'disqualified'])
-          .nullable(),
+        svGrade: z.enum(['v', 'sg', 'g', 'a', 'm', 'u', 'vp', 'p', 'wv']).nullable(),
       }),
     )
     .mutation(async ({ ctx, input }) => {
@@ -798,9 +808,12 @@ export const stewardRouter = createTRPCRouter({
 
       const ecRows = await ctx.db.query.entryClasses.findMany({
         where: eq(entryClasses.showClassId, input.showClassId),
-        columns: { id: true },
+        columns: { id: true, absent: true },
+        with: { result: { columns: { placement: true, svGrade: true } } },
       });
-      const ecIds = ecRows.map((r) => r.id);
+      const ecIds = ecRows
+        .filter((ec) => !ec.absent && ec.result != null && takesRankedSvGrade(ec.result))
+        .map((ec) => ec.id);
       if (ecIds.length === 0) return { updated: 0 };
 
       const updated = await ctx.db
