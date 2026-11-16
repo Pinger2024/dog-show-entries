@@ -97,7 +97,19 @@ describe('computeSvClassRatings (within-grade numbering, Amanda 2026-05-28)', ()
       { entryClassId: 'np', svGrade: null, placement: 1 },
     ]);
     expect(m.get('dq')).toBe('Disqualified');
-    expect(m.get('np')).toBe('1');
+    expect(m.get('np')).toBe('1st');
+  });
+
+  // A regional's Junior Handling class has no SV grade. Its winner read a bare
+  // "1" on the public results; the judge's approval page and the secretary's
+  // results page, which read the same owner since 16 Nov 2026, said "1st".
+  it('a placed dog with no grade (Junior Handling at a regional) reads its placing in words', () => {
+    const m = computeSvClassRatings([
+      { entryClassId: 'jh1', svGrade: null, placement: 1 },
+      { entryClassId: 'jh2', svGrade: null, placement: 2 },
+      { entryClassId: 'jh4', svGrade: null, placement: 4 },
+    ]);
+    expect([m.get('jh1'), m.get('jh2'), m.get('jh4')]).toEqual(['1st', '2nd', 'Reserve']);
   });
 });
 

@@ -200,6 +200,17 @@ describe('GET /api/results-approval/[token] — what the judge is asked to appro
     expect(rows.map(([name]) => name)).not.toContain('Stale');
   });
 
+  it('a regional class with no grades (Junior Handling) still reads 1st, not a bare "1"', async () => {
+    const rows = await approvalPageFor('wusv', [
+      { name: 'Handler Winner', placement: 1 },
+      { name: 'Handler Second', placement: 2 },
+    ]);
+    expect(rows).toEqual([
+      ['Handler Winner', '1st'],
+      ['Handler Second', '2nd'],
+    ]);
+  });
+
   it('an RKC show still shows placings, with Withheld and Unplaced in plain words', async () => {
     const rows = await approvalPageFor('rkc', [
       { name: 'Unplaced Dog', placementStatus: 'unplaced' },

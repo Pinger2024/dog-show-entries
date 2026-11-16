@@ -6,7 +6,7 @@
  * Source: GSDL-BRG / WUSV reference + Sieger Editorial design brief.
  */
 
-import { comparePlacing } from './placements';
+import { comparePlacing, getPlacementLabel } from './placements';
 
 export interface SvGrade {
   code: string;
@@ -172,7 +172,10 @@ export function formatSvGradeBare(svGrade: string | null | undefined): string {
  * The steward records each dog's grade plus its overall placing (best first,
  * as on any show); this groups by grade and numbers 1..n within each grade in
  * placing order. Returns a Map keyed by entryClassId. Disqualified shows in
- * full; an ungraded-but-placed dog falls back to its plain placement.
+ * full; an ungraded-but-placed dog falls back to its placing in words ("1st",
+ * "Reserve") — a regional's Junior Handling class has no grades, and its
+ * winner used to read a bare "1" here while the judge's approval page said
+ * "1st" (16 Nov 2026, when that page and the secretary's began reading this).
  *
  * A dog with no placing (withheld, unplaced) gets NO entry, even if it carries
  * a grade: it has no rank, and a bare "V" for it would only ever be the
@@ -198,7 +201,7 @@ export function computeSvClassRatings(
     if (isSvDisqualified(r)) {
       map.set(r.entryClassId, 'Disqualified');
     } else if (isPlacedWithoutSvGrade(r)) {
-      map.set(r.entryClassId, String(r.placement));
+      map.set(r.entryClassId, getPlacementLabel(r.placement!));
     }
   }
 
