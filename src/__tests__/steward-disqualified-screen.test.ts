@@ -63,13 +63,13 @@ describe('steward class page — the Status menu and the Disqualified group', ()
     'utf8',
   );
 
-  it('offers "Disqualified" in the Status menu at regionals only, recorded through the shared helper', () => {
+  it('offers "Mark as disqualified" in the Status menu at regionals only, recorded through the shared helper', () => {
     // The DogCard gets the handler only on a regional.
     expect(page).toMatch(/onDisqualify=\{isWusv \?/);
     expect(page).toMatch(/\{onDisqualify && \(/);
     expect(page).toContain("setStatus(entry.entryClassId, 'disqualified'");
     expect(page).toContain('...stewardStatusWrite(status)');
-    expect(page).toMatch(/>\s*Disqualified\s*</);
+    expect(page).toMatch(/>\s*Mark as disqualified\s*</);
   });
 
   it('Withheld and Unplaced go through the same helper, so they clear a Disqualified grade', () => {

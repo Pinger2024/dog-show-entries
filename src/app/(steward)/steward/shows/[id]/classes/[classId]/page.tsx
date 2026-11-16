@@ -1004,7 +1004,7 @@ function DogCard({
                 onClick={onDisqualify}
               >
                 <Ban className="size-4" />
-                Disqualified
+                Mark as disqualified
               </button>
             )}
           </PopoverContent>
