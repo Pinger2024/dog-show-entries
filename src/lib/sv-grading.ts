@@ -6,7 +6,7 @@
  * Source: GSDL-BRG / WUSV reference + Sieger Editorial design brief.
  */
 
-import { comparePlacing } from './placements';
+import { comparePlacing, getPlacementLabel } from './placements';
 
 export interface SvGrade {
   code: string;
@@ -114,6 +114,19 @@ export function allowedSvGradesForClass(
 }
 
 /**
+ * The grades the steward's "Grade all as…" bar offers in a class: the class's
+ * own grades without Disqualified, which is never a bulk grade (it takes a
+ * dog's placing away — `steward.setClassGrades` refuses it too).
+ */
+export function bulkSvGradesForClass(
+  className: string | null | undefined,
+): { value: Exclude<SvGradeCode, 'disqualified'>; label: string }[] {
+  return allowedSvGradesForClass(className).filter(
+    (g): g is { value: Exclude<SvGradeCode, 'disqualified'>; label: string } => !isSvDisqualified({ svGrade: g.value }),
+  );
+}
+
+/**
  * The public-facing SV rating for a single result: grade + rank, e.g. "V1",
  * "SG2", "VP1". Falls back to the grade alone (no placement) or the placement
  * alone (no grade). Empty string when neither is set.
@@ -159,7 +172,15 @@ export function formatSvGradeBare(svGrade: string | null | undefined): string {
  * The steward records each dog's grade plus its overall placing (best first,
  * as on any show); this groups by grade and numbers 1..n within each grade in
  * placing order. Returns a Map keyed by entryClassId. Disqualified shows in
- * full; an ungraded-but-placed dog falls back to its plain placement.
+ * full; an ungraded-but-placed dog falls back to its placing in words ("1st",
+ * "Reserve") — a regional's Junior Handling class has no grades, and its
+ * winner used to read a bare "1" here while the judge's approval page said
+ * "1st" (16 Nov 2026, when that page and the secretary's began reading this).
+ *
+ * A dog with no placing (withheld, unplaced) gets NO entry, even if it carries
+ * a grade: it has no rank, and a bare "V" for it would only ever be the
+ * steward's "Grade all as V" landing on an unplaced dog (Mandy, 16 Nov 2026 —
+ * a disqualified dog marked Unplaced, then bulk-graded, would have read "V3").
  */
 export function computeSvClassRatings(
   results: ReadonlyArray<{
@@ -174,13 +195,13 @@ export function computeSvClassRatings(
     map.set(item.entryClassId, formatSvRating(grade, rank));
   }
 
-  // Disqualified + ungraded fallbacks.
+  // Disqualified + ungraded-but-placed fallbacks.
   for (const r of results) {
     if (map.has(r.entryClassId)) continue;
-    if (r.svGrade === 'disqualified') {
+    if (isSvDisqualified(r)) {
       map.set(r.entryClassId, 'Disqualified');
     } else if (isPlacedWithoutSvGrade(r)) {
-      map.set(r.entryClassId, String(r.placement));
+      map.set(r.entryClassId, getPlacementLabel(r.placement!));
     }
   }
 
@@ -201,9 +222,11 @@ export interface SvGradedPlacing {
  * SV ranks each grade separately and restarts the count per grade, so a class
  * graded SG, SG, G placed 1..3 reads SG1, SG2, G1.
  *
- * Returns the graded dogs only (ungraded and Disqualified are left for the
- * caller to place), best grade first in {@link SV_GRADE_ORDER}, each grade in
- * the steward's placing order, each with its 1-based rank. The public results
+ * Returns the graded, PLACED dogs only ({@link takesRankedSvGrade}) — ungraded,
+ * Disqualified and unplaced dogs are left for the caller — best grade first in
+ * {@link SV_GRADE_ORDER}, each grade in the steward's placing order, each with
+ * its 1-based rank. A graded dog with no placing used to be ranked last in its
+ * grade ("V3" for a dog the judge never placed — Mandy, 16 Nov 2026). The public results
  * page ({@link computeSvClassRatings}) and the SV graded results PDF and
  * spreadsheet (`computeClassMembers` in sv-results.ts) both rank with this —
  * they used to carry two copies of the same loop (register §4, 2026-09-11).
@@ -213,7 +236,7 @@ export function rankWithinGrades<T extends SvGradedPlacing>(
 ): { item: T; grade: string; rank: number }[] {
   const byGrade = new Map<string, T[]>();
   for (const item of items) {
-    if (!item.svGrade || item.svGrade === 'disqualified') continue;
+    if (!item.svGrade || !takesRankedSvGrade(item)) continue;
     const list = byGrade.get(item.svGrade) ?? [];
     list.push(item);
     byGrade.set(item.svGrade, list);
@@ -245,4 +268,91 @@ export function rankWithinGrades<T extends SvGradedPlacing>(
  */
 export function isPlacedWithoutSvGrade(r: SvGradedPlacing): boolean {
   return r.placement != null && !r.svGrade;
+}
+
+/**
+ * THE test for "this dog was disqualified". A Disqualified dog is stored as
+ * `svGrade: 'disqualified'` with no placing and `placementStatus: 'unplaced'`
+ * ({@link stewardStatusWrite}); every reader asks this rather than comparing
+ * the string itself.
+ */
+export function isSvDisqualified(r: { svGrade?: string | null } | null | undefined): boolean {
+  return r?.svGrade === 'disqualified';
+}
+
+/**
+ * THE rule for which dogs carry a ranked SV grade (V1, SG2…): a dog with a
+ * numeric placing that is not Disqualified. {@link rankWithinGrades} ranks only
+ * these, the steward's grade box sits only beside them, and "Grade all as…"
+ * (`steward.setClassGrades`) grades only these — never a withheld, unplaced or
+ * Disqualified dog (Mandy, 16 Nov 2026: the bulk V landed on a DQ'd dog).
+ */
+export function takesRankedSvGrade(r: SvGradedPlacing): boolean {
+  return r.placement != null && !isSvDisqualified(r);
+}
+
+/** The non-placing outcomes the steward picks from a dog's Status menu. */
+export type StewardStatusOutcome = 'withheld' | 'unplaced' | 'disqualified';
+
+export interface StewardStatusResultWrite {
+  placement: null;
+  placementStatus: 'withheld' | 'unplaced';
+  svGrade: 'disqualified' | null;
+}
+
+/**
+ * What `steward.recordResult` is sent for each Status-menu outcome — the one
+ * place the Disqualified shape is written down (Mandy, 16 Nov 2026: "shows as
+ * disqualified and no placing ie not 3rd disqualified"):
+ *  - Disqualified: no placing, `unplaced`, grade `disqualified` — the grade is
+ *    what the results owner ({@link computeSvClassRatings}) already prints;
+ *  - Unplaced / Withheld: no placing and NO grade, so choosing either on a
+ *    Disqualified dog clears the DQ (and an unplaced dog never keeps a grade
+ *    it could be ranked by).
+ * Offered at regionals only; on an RKC show the grade is always null anyway.
+ */
+export function stewardStatusWrite(outcome: StewardStatusOutcome): StewardStatusResultWrite {
+  if (outcome === 'disqualified') {
+    return { placement: null, placementStatus: 'unplaced', svGrade: 'disqualified' };
+  }
+  return { placement: null, placementStatus: outcome, svGrade: null };
+}
+
+/**
+ * How `steward.recordResult` settles placing, status and grade on a write,
+ * given what is already stored — so a placed dog is never Disqualified, from
+ * any screen or a direct API call. Fields absent from the result mean "leave
+ * as stored" (the steward screen saves partial results).
+ *  - A grade of Disqualified always wins: no placing, `unplaced`. The ladder's
+ *    grade box offers Disqualified beside a placed dog, and "3rd, Disqualified"
+ *    is exactly what must never be recorded.
+ *  - A numeric placing always clears withheld/unplaced (the two are mutually
+ *    exclusive), and clears a stored Disqualified.
+ *  - Withheld clears a stored Disqualified.
+ *  - A save that keeps the dog unplaced and sends no grade (the special award
+ *    dialog re-sending what is there) leaves a stored Disqualified alone.
+ */
+export function settleResultWrite(
+  input: {
+    placement: number | null;
+    placementStatus?: 'withheld' | 'unplaced' | null;
+    svGrade?: SvGradeCode | null;
+  },
+  existing: { placementStatus: string | null; svGrade: string | null } | null | undefined,
+): {
+  placement: number | null;
+  placementStatus?: 'withheld' | 'unplaced' | null;
+  svGrade?: SvGradeCode | null;
+} {
+  if (input.svGrade === 'disqualified') return stewardStatusWrite('disqualified');
+
+  const placementStatus = input.placement != null ? null : input.placementStatus;
+  const out: ReturnType<typeof settleResultWrite> = { placement: input.placement };
+  if (placementStatus !== undefined) out.placementStatus = placementStatus;
+  if (input.svGrade !== undefined) out.svGrade = input.svGrade;
+
+  const finalStatus = placementStatus !== undefined ? placementStatus : (existing?.placementStatus ?? null);
+  const staysDisqualified = input.placement == null && finalStatus === 'unplaced';
+  if (input.svGrade === undefined && isSvDisqualified(existing) && !staysDisqualified) out.svGrade = null;
+  return out;
 }

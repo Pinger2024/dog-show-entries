@@ -115,6 +115,8 @@ import {
 } from '@/server/services/report-queries';
 import { validateRkcSchedule } from '@/lib/rkc-schedule-compliance';
 import { championshipClassesComplete } from '@/lib/championship-class-requirements';
+import { resultsFinalised, resultsPublication } from '@/lib/results-publication';
+import { showIdsWithPublishedResults } from '@/server/services/results-shows';
 
 /**
  * True if this judge has assignments with any organisation outside the
@@ -4346,7 +4348,9 @@ export const secretaryRouter = createTRPCRouter({
       // (default-checklist.ts) but it was never populated here, so it could never
       // auto-tick. (The sibling 'judge_approvals_sent' key is still unwired — see
       // SECRETARY_DASHBOARD_AUDIT.md; it needs the approval-state query.)
-      detected.results_published = !!show.resultsPublishedAt;
+      // "Publish results" is done once it has been pressed — classes a steward
+      // published live don't tick it (lib/results-publication.ts).
+      detected.results_published = resultsFinalised(show);
       // Sundry items — surfaced in the setup checklist because Amanda
       // kept missing the step on SV regional shows (2026-05-24). Counts
       // both enabled and disabled rows, so the secretary can explicitly
@@ -4674,7 +4678,8 @@ export const secretaryRouter = createTRPCRouter({
 
       return {
         phase,
-        resultsPublished: !!show.resultsPublishedAt,
+        // The Results nav badge waits for Publish Results (lib/results-publication.ts).
+        resultsPublished: resultsFinalised(show),
       };
     }),
 
@@ -6972,8 +6977,16 @@ export const secretaryRouter = createTRPCRouter({
       const declined = judgeStatuses.filter((j) => j.status === 'declined').length;
       const notSent = judgeStatuses.filter((j) => !j.status).length;
 
+      // 'none' | 'live' | 'final' — one owner (lib/results-publication.ts).
+      // `published` stays "Publish Results has been pressed": the Unpublish
+      // button and the lock depend on it, and classes a steward published live
+      // must never loosen that (Mandy, 16 Nov 2026).
+      const hasPublishedResults = (await showIdsWithPublishedResults(ctx.db, [input.showId])).has(input.showId);
+      const publication = resultsPublication({ resultsPublishedAt: show.resultsPublishedAt, hasPublishedResults });
+
       return {
-        published: !!show.resultsPublishedAt,
+        published: publication === 'final',
+        publication,
         publishedAt: show.resultsPublishedAt,
         locked: !!show.resultsLockedAt,
         showStatus: show.status,

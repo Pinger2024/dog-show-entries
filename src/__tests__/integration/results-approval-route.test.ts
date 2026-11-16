@@ -120,3 +120,104 @@ describe('POST /api/results-approval/[token] approve', () => {
     expect(res.status).toBe(404);
   });
 });
+
+// Mandy, 16 Nov 2026: a regional judge approved results without seeing the
+// V1 / SG2 / Disqualified the public would see — the page printed the raw
+// placing. It now reads the SV rating from the one owner, in the public
+// results page's order, and names Withheld / Unplaced in plain words.
+describe('GET /api/results-approval/[token] — what the judge is asked to approve', () => {
+  async function approvalPageFor(showRuleset: 'rkc' | 'wusv', rows: Array<{
+    placement?: number | null;
+    placementStatus?: string | null;
+    svGrade?: 'v' | 'sg' | 'disqualified' | null;
+    absent?: boolean;
+    name: string;
+  }>) {
+    const { org, breed } = await makeSecretaryWithOrgAndBreed();
+    const show = await makeShow({ organisationId: org.id, breedId: breed.id, status: 'in_progress', showRuleset });
+    const judge = await makeJudge({ contactEmail: 'j@test.local' });
+    await makeJudgeAssignment({ showId: show.id, judgeId: judge.id, breedId: breed.id });
+    const steward = await makeUser({ role: 'steward' });
+    await makeStewardAssignment({ userId: steward.id, showId: show.id });
+    const showClass = await makeShowClass({ showId: show.id, breedId: breed.id });
+    const exhibitor = await makeUser({ role: 'exhibitor' });
+    for (const r of rows) {
+      const dog = await makeDog({ ownerId: exhibitor.id, breedId: breed.id, registeredName: r.name });
+      const entry = await makeEntry({ showId: show.id, dogId: dog.id, exhibitorId: exhibitor.id, status: 'confirmed' });
+      const ec = await makeEntryClass({ entryId: entry.id, showClassId: showClass.id, absent: r.absent });
+      await makeResult({
+        entryClassId: ec.id,
+        placement: r.placement ?? null,
+        placementStatus: r.placementStatus ?? null,
+        svGrade: r.svGrade ?? null,
+        recordedBy: steward.id,
+      });
+    }
+    await createTestCaller({ ...steward, name: steward.name ?? 'Steward' }).steward.submitForJudgeApproval({
+      showId: show.id, judgeId: judge.id,
+    });
+    const assignment = await testDb.query.judgeAssignments.findFirst({
+      where: and(eq(judgeAssignments.showId, show.id), eq(judgeAssignments.judgeId, judge.id)),
+    });
+    const res = await resultsApprovalGET(
+      new NextRequest(`http://localhost/api/results-approval/${assignment!.approvalToken}`),
+      params(assignment!.approvalToken!),
+    );
+    expect(res.status).toBe(200);
+    const page = await res.text();
+    // dog name → what its Result cell says, in page order.
+    return [...page.matchAll(/<td>([^<]*)<\/td>\s*<td><span class="placement-badge[^"]*">([^<]*)<\/span><\/td>/g)].map(
+      (m) => [m[1], m[2]],
+    );
+  }
+
+  it('a regional shows the SV rating — V1, V2, Disqualified — never a placing or a V3', async () => {
+    const rows = await approvalPageFor('wusv', [
+      { name: 'Growler', placementStatus: 'unplaced', svGrade: 'disqualified' },
+      { name: 'Second', placement: 2, svGrade: 'v' },
+      { name: 'Bulk Graded', placementStatus: 'unplaced', svGrade: 'v' },
+      { name: 'First', placement: 1, svGrade: 'v' },
+      { name: 'Held Back', placementStatus: 'withheld' },
+    ]);
+    const cells = Object.fromEntries(rows);
+    expect(cells['First']).toBe('V1');
+    expect(cells['Second']).toBe('V2');
+    expect(cells['Growler']).toBe('Disqualified');
+    expect(cells['Bulk Graded']).toBe('Unplaced');
+    expect(cells['Held Back']).toBe('Withheld');
+    expect(rows.map(([, label]) => label)).not.toContain('V3');
+    expect(rows.map(([, label]) => label)).not.toContain('1st');
+    // The public results page's order: placings first, then the rest.
+    expect(rows.slice(0, 2).map(([name]) => name)).toEqual(['First', 'Second']);
+  });
+
+  it('a regional ranks only the dogs the public page shows — an absent dog with a stale placing takes no V', async () => {
+    const rows = await approvalPageFor('wusv', [
+      { name: 'Stale', placement: 1, svGrade: 'v', absent: true },
+      { name: 'Winner', placement: 2, svGrade: 'v' },
+    ]);
+    expect(Object.fromEntries(rows)['Winner']).toBe('V1');
+    expect(rows.map(([name]) => name)).not.toContain('Stale');
+  });
+
+  it('a regional class with no grades (Junior Handling) still reads 1st, not a bare "1"', async () => {
+    const rows = await approvalPageFor('wusv', [
+      { name: 'Handler Winner', placement: 1 },
+      { name: 'Handler Second', placement: 2 },
+    ]);
+    expect(rows).toEqual([
+      ['Handler Winner', '1st'],
+      ['Handler Second', '2nd'],
+    ]);
+  });
+
+  it('an RKC show still shows placings, with Withheld and Unplaced in plain words', async () => {
+    const rows = await approvalPageFor('rkc', [
+      { name: 'Unplaced Dog', placementStatus: 'unplaced' },
+      { name: 'Winner', placement: 1 },
+      { name: 'Held Back', placementStatus: 'withheld' },
+    ]);
+    expect(rows[0]).toEqual(['Winner', '1st']);
+    expect(Object.fromEntries(rows)).toEqual({ Winner: '1st', 'Unplaced Dog': 'Unplaced', 'Held Back': 'Withheld' });
+  });
+});

@@ -31,6 +31,8 @@ import {
   type AchievementType,
 } from '@/lib/placements';
 import { svCoatDisplayName } from '@/lib/class-labels';
+import { computeSvClassRatings, isSvDisqualified } from '@/lib/sv-grading';
+import { RESULTS_PUBLICATION_LABEL, RESULTS_LIVE_NOTE } from '@/lib/results-publication';
 import { SE_H } from '@/components/show-experience/tokens';
 import { resolveTopAwards, buildPlacementIndex, eligibleCandidates, isPuppyOnShowDate, awardFilter } from '@/lib/top-awards';
 import { Badge } from '@/components/ui/badge';
@@ -203,9 +205,13 @@ function ClassPublishButton({
   results: { entryClassId: string; placement: number | null }[];
 }) {
   const utils = trpc.useUtils();
+  // Publishing a class puts it on the public page, which changes the show's
+  // publication state ('none' → 'live', lib/results-publication.ts).
   const publishMut = trpc.secretary.publishClassResults.useMutation({
     onSuccess: () => {
       utils.steward.getLiveResults.invalidate();
+      utils.secretary.getResultsPublicationStatus.invalidate({ showId });
+      utils.shows.getById.invalidate({ id: showId });
       toast.success('Class results published');
     },
     onError: (err) => toast.error(err.message),
@@ -213,6 +219,8 @@ function ClassPublishButton({
   const unpublishMut = trpc.secretary.unpublishClassResults.useMutation({
     onSuccess: () => {
       utils.steward.getLiveResults.invalidate();
+      utils.secretary.getResultsPublicationStatus.invalidate({ showId });
+      utils.shows.getById.invalidate({ id: showId });
       toast.success('Class results unpublished');
     },
     onError: (err) => toast.error(err.message),
@@ -622,8 +630,13 @@ export default function SecretaryResultsPage() {
       { refetchInterval: 10_000 }
     );
 
+  // Polls with the results above: stewards publish classes live from their
+  // own phones, and the banner must say so (Mandy, 16 Nov 2026).
   const { data: pubStatus } =
-    trpc.secretary.getResultsPublicationStatus.useQuery({ showId });
+    trpc.secretary.getResultsPublicationStatus.useQuery(
+      { showId },
+      { refetchInterval: 10_000 }
+    );
 
   const { data: showData } =
     trpc.shows.getById.useQuery({ id: showId });
@@ -679,6 +692,7 @@ export default function SecretaryResultsPage() {
   }
 
   const { show, breedGroups } = data;
+  const isWusv = show.showRuleset === 'wusv';
 
   // Gate: results only make sense from entries_closed onwards
   const tooEarly = ['draft', 'published', 'entries_open'].includes(show.status);
@@ -730,6 +744,8 @@ export default function SecretaryResultsPage() {
     : null;
 
   const published = pubStatus?.published ?? false;
+  // 'none' | 'live' | 'final' — one owner (lib/results-publication.ts).
+  const publication = pubStatus?.publication ?? 'none';
   const publishedAt = pubStatus?.publishedAt;
   const canPublish = pubStatus ? ['in_progress', 'completed'].includes(pubStatus.showStatus) : false;
 
@@ -740,7 +756,7 @@ export default function SecretaryResultsPage() {
         <div className="flex items-start gap-3 rounded-lg border border-se-fresh-line bg-se-fresh-soft p-4">
           <Globe className="mt-0.5 size-5 shrink-0 text-se-fresh-deep" />
           <div className="flex-1">
-            <p className="font-medium text-se-fresh-deep">Results Published</p>
+            <p className="font-medium text-se-fresh-deep">{RESULTS_PUBLICATION_LABEL[publication]}</p>
             {publishedAt && (
               <p className="mt-0.5 text-xs text-se-fresh-deep">
                 Published {new Date(publishedAt).toLocaleString('en-GB', {
@@ -759,9 +775,11 @@ export default function SecretaryResultsPage() {
         <div className="flex items-start gap-3 rounded-lg border border-se-honey-line bg-se-honey-soft p-4">
           <Unlock className="mt-0.5 size-5 shrink-0 text-se-honey-deep" />
           <div>
-            <p className="font-medium text-se-honey-ink">Results Not Published</p>
+            <p className="font-medium text-se-honey-ink">{RESULTS_PUBLICATION_LABEL[publication]}</p>
             <p className="mt-0.5 text-xs text-se-honey-deep">
-              Results are only visible to stewards, secretaries, and admins.
+              {publication === 'live'
+                ? RESULTS_LIVE_NOTE
+                : 'Results are only visible to stewards, secretaries, and admins.'}
             </p>
           </div>
         </div>
@@ -1010,7 +1028,12 @@ export default function SecretaryResultsPage() {
               )}
 
               <div className="space-y-3">
-                {group.classes.map((cls) => (
+                {group.classes.map((cls) => {
+                  // Regionals read V1 / SG2 / Disqualified — the one owner the
+                  // public results page reads too, so the secretary checks
+                  // exactly what the public sees (Mandy, 16 Nov 2026).
+                  const svRatings = isWusv ? computeSvClassRatings(cls.results) : null;
+                  return (
                   <div
                     key={cls.classId}
                     className="rounded-lg border bg-white p-3"
@@ -1051,7 +1074,21 @@ export default function SecretaryResultsPage() {
                       <div className="space-y-1">
                         {cls.results.map((result) => (
                           <div key={result.entryClassId} className="flex flex-wrap items-center gap-1.5 sm:gap-3 text-sm">
-                              {result.placement ? (
+                              {svRatings?.get(result.entryClassId) ? (
+                                <Badge
+                                  variant="outline"
+                                  className={cn(
+                                    'text-xs font-semibold whitespace-nowrap',
+                                    isSvDisqualified(result)
+                                      ? 'border-destructive/30 bg-destructive/5 text-destructive'
+                                      : result.placement
+                                        ? (placementColors[result.placement] ?? '')
+                                        : '',
+                                  )}
+                                >
+                                  {svRatings.get(result.entryClassId)}
+                                </Badge>
+                              ) : result.placement ? (
                                 <Badge
                                   variant="outline"
                                   className={`text-xs font-semibold whitespace-nowrap ${placementColors[result.placement] ?? ''}`}
@@ -1102,7 +1139,8 @@ export default function SecretaryResultsPage() {
                     )}
                     <ClassAbsentees absentees={cls.absentees} className="mt-1" />
                   </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
           ))}

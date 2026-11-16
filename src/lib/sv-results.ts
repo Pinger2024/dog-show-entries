@@ -40,7 +40,7 @@ import {
   sexLetter,
   compareShowClassRunningOrder,
 } from './class-labels';
-import { rankWithinGrades, isPlacedWithoutSvGrade, formatSvGradeBare } from './sv-grading';
+import { rankWithinGrades, isPlacedWithoutSvGrade, formatSvGradeBare, isSvDisqualified } from './sv-grading';
 import { comparePlacing } from './placements';
 import { formatRegNumber } from '@/components/catalogue/catalogue-utils';
 import { REGIONAL_BEST_AWARDS } from './best-awards';
@@ -322,10 +322,13 @@ export interface SvComputedRow {
 }
 
 /**
- * Rank every dog in one show-class. Present dogs are grouped by grade (best
- * first) and numbered 1..n within each grade, in the steward's placing order
- * (`rankWithinGrades`); Disqualified and ungraded dogs follow; absentees come
- * last, numbered 90, 91… in ring-number order.
+ * Rank every dog in one show-class. Present, placed dogs are grouped by grade
+ * (best first) and numbered 1..n within each grade, in the steward's placing
+ * order (`rankWithinGrades`); Disqualified, ungraded and unplaced dogs follow;
+ * absentees come last, numbered 90, 91… in ring-number order. A dog with no
+ * placing carries no rank and no grade here even if one was stored — the
+ * steward's "Grade all as V" once landed on an unplaced dog and would have
+ * sent it to the League as V3 (Mandy, 16 Nov 2026).
  */
 export function computeClassMembers(
   showClass: SvShowClassInput,
@@ -355,11 +358,10 @@ export function computeClassMembers(
     .filter((m) => !rankedMembers.has(m))
     .sort((a, b) => comparePlacing(a.result?.placement, b.result?.placement));
 
-  // Disqualified + ungraded-but-present dogs (rare) after the graded block,
-  // in placing order.
+  // Disqualified, ungraded-but-placed and unplaced dogs after the graded
+  // block, in placing order.
   for (const m of ungraded) {
-    const grade = m.result?.svGrade ?? null;
-    if (grade === 'disqualified') {
+    if (isSvDisqualified(m.result)) {
       out.push({
         entry: m.entry,
         showClass,

@@ -18,6 +18,7 @@ import {
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
 import type { ActionPanelProps } from '../checklist-action-registry';
+import { RESULTS_PUBLICATION_LABEL, RESULTS_LIVE_NOTE } from '@/lib/results-publication';
 
 export function ResultsPublishAction({ showId }: ActionPanelProps) {
   const [sendNotifications, setSendNotifications] = useState(true);
@@ -53,7 +54,8 @@ export function ResultsPublishAction({ showId }: ActionPanelProps) {
 
   if (!data) return null;
 
-  const { published, publishedAt, approvals, showStatus } = data;
+  // 'none' | 'live' | 'final' — one owner (lib/results-publication.ts).
+  const { published, publication, publishedAt, approvals, showStatus } = data;
   const canPublish = ['in_progress', 'completed'].includes(showStatus);
 
   return (
@@ -63,7 +65,7 @@ export function ResultsPublishAction({ showId }: ActionPanelProps) {
         <div className="flex items-center gap-2 rounded-lg bg-se-fresh-soft p-3 text-sm text-se-fresh-deep">
           <Globe className="size-4 shrink-0" />
           <div>
-            <p className="font-medium">Results are published</p>
+            <p className="font-medium">{RESULTS_PUBLICATION_LABEL.final}</p>
             {publishedAt && (
               <p className="text-xs text-se-fresh-deep">
                 Published {new Date(publishedAt).toLocaleString('en-GB', {
@@ -79,9 +81,12 @@ export function ResultsPublishAction({ showId }: ActionPanelProps) {
           <Lock className="ml-auto size-4 text-se-fresh-deep" />
         </div>
       ) : (
-        <div className="flex items-center gap-2 rounded-lg bg-se-honey-soft p-3 text-sm text-se-honey-deep">
-          <Unlock className="size-4 shrink-0" />
-          <p className="font-medium">Results not yet published</p>
+        <div className="flex items-start gap-2 rounded-lg bg-se-honey-soft p-3 text-sm text-se-honey-deep">
+          <Unlock className="mt-0.5 size-4 shrink-0" />
+          <div>
+            <p className="font-medium">{RESULTS_PUBLICATION_LABEL[publication]}</p>
+            {publication === 'live' && <p className="mt-0.5 text-xs">{RESULTS_LIVE_NOTE}</p>}
+          </div>
         </div>
       )}
 

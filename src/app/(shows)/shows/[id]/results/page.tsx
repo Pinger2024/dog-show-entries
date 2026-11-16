@@ -545,7 +545,7 @@ export default function LiveResultsPage({
                                 {isWusv && svRatings?.get(result.entryClassId) ? (
                                   <Badge
                                     variant="outline"
-                                    className={`w-auto sm:w-16 justify-center text-xs font-semibold whitespace-nowrap ${result.placement ? placementColors[result.placement] ?? '' : ''}`}
+                                    className={`w-auto sm:min-w-16 justify-center text-xs font-semibold whitespace-nowrap ${result.placement ? placementColors[result.placement] ?? '' : ''}`}
                                   >
                                     {svRatings.get(result.entryClassId)}
                                   </Badge>
