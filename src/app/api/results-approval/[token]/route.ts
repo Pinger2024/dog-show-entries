@@ -12,7 +12,8 @@ import {
   achievements,
   breeds,
 } from '@/server/db/schema';
-import { getPlacementLabel, achievementLabels, comparePlacing } from '@/lib/placements';
+import { getPlacementLabel, achievementLabels, comparePlacing, classOutcomeLabel } from '@/lib/placements';
+import { computeSvClassRatings } from '@/lib/sv-grading';
 import { buildClassLabelMap, svCoatDisplayName, svDisplayAge } from '@/lib/class-labels';
 import { resend, FROM, emailHeader } from '@/server/services/email';
 import { BRAND } from '@/lib/brand';
@@ -228,6 +229,9 @@ export async function GET(
   // per coat, so the raw numbers alone are indistinguishable — Mandy, NE
   // Regional 5 Sept 2026).
   const classLabelMap = buildClassLabelMap(filteredClasses, show.showRuleset);
+  // A regional's results read as SV ratings (V1, SG2, Disqualified) — the
+  // judge must approve what the public will see (Mandy, 16 Nov 2026).
+  const isWusv = show.showRuleset === 'wusv';
 
   // Build breed-grouped results HTML
   const breedGroupMap = new Map<string, {
@@ -249,12 +253,32 @@ export async function GET(
     // Per-class attendance (Mandy 2026-08-12) — this class's own flag.
     const dogsForward = confirmed.filter((ec) => !ec.absent).length;
 
-    const resultRows = sc.entryClasses
-      .filter((ec) => ec.result && isLiveEntry(ec.entry))
-      .sort((a, b) => comparePlacing(a.result!.placement, b.result!.placement))
+    // The same results the public results page shows for this class
+    // (steward.getLiveResults: a live entry, present in this class), in its
+    // order — so an absent dog's stale placing can neither appear here nor
+    // shift a regional's within-grade numbers away from the public page's.
+    const shown = sc.entryClasses
+      .filter((ec) => ec.result && isLiveEntry(ec.entry) && !ec.absent)
+      .sort((a, b) => comparePlacing(a.result!.placement, b.result!.placement));
+    const svRatings = isWusv
+      ? computeSvClassRatings(
+          shown.map((ec) => ({ entryClassId: ec.id, svGrade: ec.result!.svGrade, placement: ec.result!.placement })),
+        )
+      : null;
+
+    const resultRows = shown
       .map((ec) => {
         const r = ec.result!;
-        const pLabel = r.placement ? getPlacementLabel(r.placement) : '—';
+        // Regionals: the SV rating from the one owner. RKC: the placing.
+        // Neither → Withheld / Unplaced in plain words (classOutcomeLabel).
+        const rating = svRatings ? svRatings.get(ec.id) : r.placement ? getPlacementLabel(r.placement) : undefined;
+        const pLabel =
+          rating ||
+          (r.placementStatus === 'withheld'
+            ? classOutcomeLabel('withheld', null)
+            : r.placementStatus === 'unplaced'
+              ? classOutcomeLabel('unplaced', null)
+              : '—');
         const pClass = r.placement === 1 ? 'p1' : r.placement === 2 ? 'p2' : r.placement === 3 ? 'p3' : '';
         return html`<tr>
           <td>${ec.entry.catalogueNumber ?? '—'}</td>
@@ -275,7 +299,7 @@ export async function GET(
     breedGroupMap.get(breedName)!.classesHtml.push(html`
       <div class="class-header">${classNum}${svDisplayAge(sc.classDefinition.name)}${sexLabel}${coatLabel} <span style="color: ${BRAND.ink2}; font-weight: normal; font-size: 12px;">(${dogsForward} presented / ${confirmed.length} entered)</span></div>
       ${resultRows.length > 0
-        ? html`<table class="class-table"><thead><tr><th>Cat #</th><th>Dog</th><th>Place</th><th>Award</th></tr></thead><tbody>${resultRows}</tbody></table>`
+        ? html`<table class="class-table"><thead><tr><th>Cat #</th><th>Dog</th><th>${isWusv ? 'Grade' : 'Place'}</th><th>Award</th></tr></thead><tbody>${resultRows}</tbody></table>`
         : html`<p style="padding: 4px 10px; font-size: 13px; color: ${BRAND.ink2};">No results recorded</p>`}
     `);
 
