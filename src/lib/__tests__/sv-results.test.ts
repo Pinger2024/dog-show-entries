@@ -294,6 +294,24 @@ describe('computeClassMembers', () => {
       ['', '3', '37'],
     ]);
   });
+
+  // Mandy, 16 Nov 2026: an unplaced dog that "Grade all as V" also graded
+  // would have gone to the League as V3. No placing, no rank, no grade.
+  it('gives an unplaced graded dog no rank and no grade; a Disqualified dog reads Disqualified', () => {
+    const sc = svClass('wd', 'Working', 'dog', 'stock');
+    const members = [
+      { entry: entry({ showClassId: 'wd', name: 'One', grade: 'v', placement: 1, ring: '10' }), result: { svGrade: 'v', placement: 1, placementStatus: null }, absent: false },
+      { entry: entry({ showClassId: 'wd', name: 'Two', grade: 'v', placement: 2, ring: '11' }), result: { svGrade: 'v', placement: 2, placementStatus: null }, absent: false },
+      { entry: entry({ showClassId: 'wd', name: 'Unplaced', grade: 'v', ring: '12' }), result: { svGrade: 'v', placement: null, placementStatus: 'unplaced' }, absent: false },
+      { entry: entry({ showClassId: 'wd', name: 'Growler', grade: 'disqualified', ring: '13' }), result: { svGrade: 'disqualified', placement: null, placementStatus: 'unplaced' }, absent: false },
+    ];
+    expect(computeClassMembers(sc, members).map((r) => [r.gradeDisplay, r.placementDisplay, r.placementNumber, r.entry.dog?.registeredName])).toEqual([
+      ['V', '1', 1, 'One'],
+      ['V', '2', 2, 'Two'],
+      ['', '', null, 'Unplaced'],
+      ['Disqualified', '', null, 'Growler'],
+    ]);
+  });
 });
 
 describe('buildSvResultsReport', () => {
