@@ -25,6 +25,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import { showCarriesJudgeOfferTerms } from '@/lib/judge-offer-terms';
+import { LivesOverseasField } from '@/components/judges/judge-offer-terms-view';
 
 // ── Types ───────────────────────────────────────────────
 
@@ -38,6 +40,14 @@ interface FoundJudge {
   contactPhone: string | null;
   kennelClubAffix: string | null;
   kcJudgeId?: string; // RKC UUID for profile lookup
+  /** What the "Lives overseas" box shows: the stored flag for a judge picked
+   *  from Remi; undefined (unticked) for an RKC or manual judge. */
+  livesOverseas?: boolean;
+  /** True once the secretary changes the box. Only then is the flag sent:
+   *  untouched, the server keeps what the matched judge row already has (it
+   *  may resolve to a different row than the one picked), and a new judge
+   *  gets the default, living in the UK. */
+  livesOverseasChanged?: boolean;
   source: 'local' | 'rkc' | 'manual';
   rkcApprovals?: { breed: string; group: string; level: number }[];
 }
@@ -124,6 +134,11 @@ export function AddJudgeWizard({
   // affordance (Amanda 2026-05-19). Local Remi search still runs.
   const isWusvShow =
     (showData as { showRuleset?: 'rkc' | 'wusv' } | undefined)?.showRuleset === 'wusv';
+  // "Lives overseas" only changes anything on a show that carries offer terms.
+  const showHasOfferTerms = showCarriesJudgeOfferTerms(
+    showData?.showType,
+    (showData as { showRuleset?: 'rkc' | 'wusv' } | undefined)?.showRuleset ?? null,
+  );
 
   // Auto-search RKC when local DB has no results and query is long enough (debounced)
   const lastAutoSearchRef = useRef('');
@@ -293,6 +308,7 @@ export function AddJudgeWizard({
       contactEmail: judge.contactEmail,
       contactPhone: judge.contactPhone,
       kennelClubAffix: judge.kennelClubAffix,
+      livesOverseas: judge.livesOverseas,
       source: 'local',
     });
   }
@@ -352,6 +368,7 @@ export function AddJudgeWizard({
       contactPhone: selectedJudge.contactPhone ?? undefined,
       kcJudgeId: selectedJudge.kcJudgeId,
       kennelClubAffix: selectedJudge.kennelClubAffix ?? undefined,
+      livesOverseas: selectedJudge.livesOverseasChanged ? selectedJudge.livesOverseas : undefined,
       assignments: selectedCombos.map((c) => ({
         breedId: c.breedId,
         sex: c.sex as 'dog' | 'bitch' | null,
@@ -790,6 +807,14 @@ export function AddJudgeWizard({
                   Shown in brackets after the judge name on the schedule
                 </p>
               </div>
+              {showHasOfferTerms && (
+                <LivesOverseasField
+                  id="wizard-lives-overseas"
+                  checked={selectedJudge.livesOverseas ?? false}
+                  onCheckedChange={(next) => setSelectedJudge({ ...selectedJudge, livesOverseas: next, livesOverseasChanged: true })}
+                  className="bg-background"
+                />
+              )}
               <div>
                 <p className="text-xs text-muted-foreground">
                   Judging ({selectedCount} assignment{selectedCount !== 1 ? 's' : ''})

@@ -12,6 +12,16 @@ import { BRAND } from '@/lib/brand';
 import { displayShowTypeLabel } from '@/lib/show-types';
 import { FEEDBACK_REPLY_TO } from '@/lib/email-addresses';
 import { isContractOfferExpired } from '@/lib/judge-contract-offer';
+import { buildJudgeBreedAndClassification, showBreedNamesForJudging } from '@/lib/judge-breed-classification';
+import {
+  readStoredJudgeOfferTerms,
+  checkAlreadyAgreedAnswer,
+  alreadyAgreedSentence,
+  ALREADY_AGREED_DETAILS_PROMPT,
+  ALREADY_AGREED_MAX_LENGTH,
+  SOCIETY_TERMS_HEADING,
+  type JudgeOfferTerms,
+} from '@/lib/judge-offer-terms';
 
 // Built with `html` (src/lib/html-escape.ts): show, club and judge names and
 // the secretary's notes are user-typed, so every interpolation is escaped.
@@ -50,9 +60,9 @@ function renderPage(title: string, body: SafeHtml): string {
       color: ${BRAND.cream};
     }
     .banner h2 { font-size: 22px; font-weight: 700; }
-    .banner .sub { color: rgba(243, 236, 220, 0.78); font-size: 14px; margin-top: 8px; }
+    .banner .sub { color: rgba(243, 236, 220, 0.85); font-size: 16px; margin-top: 8px; }
     .body { padding: 24px; }
-    .body p { font-size: 15px; line-height: 1.6; color: ${BRAND.ink}; margin-bottom: 16px; }
+    .body p { font-size: 16px; line-height: 1.6; color: ${BRAND.ink}; margin-bottom: 16px; }
     .detail-table { width: 100%; border-collapse: collapse; margin: 20px 0; }
     .detail-table td { padding: 10px 12px; border-bottom: 1px solid ${BRAND.line}; }
     .detail-table .label { font-weight: 600; color: ${BRAND.ink}; width: 120px; }
@@ -75,6 +85,43 @@ function renderPage(title: string, body: SafeHtml): string {
     .success-icon { font-size: 48px; margin-bottom: 12px; }
     .footer { text-align: center; padding: 24px; font-size: 12px; color: ${BRAND.ink2}; }
     form { display: inline; }
+    /* The standard terms and the "already agreed" question: judges are often
+       older and on a phone, so 16px+ text, big tap targets, nothing wider
+       than the screen. */
+    .terms { border: 1px solid ${BRAND.line}; border-radius: 10px; padding: 16px; margin: 20px 0; }
+    .body .terms p, .terms li { font-size: 16px; line-height: 1.6; color: ${BRAND.ink}; overflow-wrap: anywhere; }
+    .body .terms p:last-child { margin-bottom: 0; }
+    .terms h3 { font-size: 17px; font-weight: 700; margin: 16px 0 8px; }
+    .terms ol { padding-left: 24px; }
+    .terms li { margin-bottom: 10px; }
+    form.accept-form { display: block; }
+    .question { border: 2px solid ${BRAND.line}; border-radius: 12px; padding: 16px; margin: 0 0 20px; min-width: 0; }
+    .question.has-error { border-color: #dc2626; }
+    /* float keeps the long question inside the box instead of sitting on its border */
+    .question legend { float: left; width: 100%; font-size: 17px; font-weight: 700; line-height: 1.5; padding: 0; }
+    .question .error, .question .choice { clear: both; }
+    .question .error { color: #b91c1c; font-size: 16px; font-weight: 600; margin: 8px 0 4px; }
+    .choice-input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+    .choice {
+      display: block; margin-top: 12px; padding: 14px 16px; min-height: 52px;
+      border: 2px solid ${BRAND.line}; border-radius: 12px; font-size: 18px; font-weight: 600; cursor: pointer;
+    }
+    .choice::before {
+      content: ''; display: inline-block; width: 20px; height: 20px; margin-right: 12px; vertical-align: -3px;
+      border: 2px solid ${BRAND.ink2}; border-radius: 50%; box-sizing: border-box;
+    }
+    .choice-input:checked + .choice { border-color: ${BRAND.green}; background: ${BRAND.paper}; }
+    .choice-input:checked + .choice::before { border: 6px solid ${BRAND.green}; }
+    .choice-input:focus-visible + .choice { outline: 3px solid ${BRAND.green}; outline-offset: 2px; }
+    .details { display: none; margin-top: 16px; }
+    #already-agreed-yes:checked ~ .details { display: block; }
+    .details label { display: block; font-size: 16px; font-weight: 600; margin-bottom: 8px; }
+    .details textarea {
+      width: 100%; padding: 12px; border: 2px solid ${BRAND.line}; border-radius: 10px;
+      font-size: 16px; font-family: inherit; line-height: 1.5; resize: vertical;
+    }
+    .btn-block { display: block; width: 100%; min-height: 52px; font-size: 18px; }
+    .decline-link { display: inline-block; margin-top: 16px; padding: 12px 16px; font-size: 16px; color: ${BRAND.ink2}; }
   </style>
 </head>
 <body>
@@ -91,6 +138,149 @@ function renderPage(title: string, body: SafeHtml): string {
 </html>`.toString();
 }
 
+type OfferContract = NonNullable<Awaited<ReturnType<typeof loadContract>>>;
+
+function loadContract(token: string) {
+  return db.query.judgeContracts.findFirst({
+    where: eq(judgeContracts.offerToken, token),
+    with: {
+      show: {
+        with: {
+          venue: true,
+          organisation: { columns: publicOrgColumns },
+          // For the Breed / Classification rows (one owner, as in the email).
+          breed: true,
+          showClasses: { with: { breed: true } },
+        },
+      },
+      judge: true,
+    },
+  });
+}
+
+/** The standard terms exactly as stored on the contract when the offer was
+ *  sent — the same order as the offer email. Nothing for a NULL-terms contract. */
+function termsSection(terms: JudgeOfferTerms | null): SafeHtml | '' {
+  if (!terms) return '';
+  return html`
+        <div class="terms">
+          ${terms.invitationParagraphs.map((p) => html`<p>${p}</p>`)}
+          ${terms.societyTerms.length > 0 ? html`
+          <h3>${SOCIETY_TERMS_HEADING}</h3>
+          <ol>${terms.societyTerms.map((t) => html`<li>${t}</li>`)}</ol>` : ''}
+        </div>`;
+}
+
+/** The "already agreed" question, inside the accept form. Works with no
+ *  script: the text box shows when Yes is chosen (CSS), and the server checks
+ *  the answer whatever the browser did. The form is `novalidate`: the radios
+ *  are visually hidden, so the browser's own "required" check blocked Accept
+ *  with no visible reason (Mandy, 15 Nov 2026: "it wont let me hit accept").
+ *  A missing answer now always reaches the server, which refuses it with a
+ *  clear message; the action's #already-agreed lands the page back on it. */
+function alreadyAgreedQuestion(
+  question: string,
+  state: { answer?: string; details?: string; error?: string },
+): SafeHtml {
+  const answer = state.answer === 'yes' || state.answer === 'no' ? state.answer : null;
+  return html`
+            <fieldset id="already-agreed" class="question${state.error ? ' has-error' : ''}"${state.error ? html` aria-describedby="already-agreed-error"` : ''}>
+              <legend>${question}</legend>
+              ${state.error ? html`<p class="error" id="already-agreed-error" role="alert">${state.error}</p>` : ''}
+              <input class="choice-input" type="radio" id="already-agreed-no" name="alreadyAgreed" value="no"${answer === 'no' ? html` checked` : ''} required>
+              <label class="choice" for="already-agreed-no">No</label>
+              <input class="choice-input" type="radio" id="already-agreed-yes" name="alreadyAgreed" value="yes"${answer === 'yes' ? html` checked` : ''}>
+              <label class="choice" for="already-agreed-yes">Yes</label>
+              <div class="details">
+                <label for="already-agreed-details">${ALREADY_AGREED_DETAILS_PROMPT}</label>
+                <textarea id="already-agreed-details" name="alreadyAgreedDetails" rows="4" maxlength="${ALREADY_AGREED_MAX_LENGTH}">${state.details ?? ''}</textarea>
+              </div>
+            </fieldset>`;
+}
+
+/** The full offer page: details, the secretary's notes, the stored terms, and
+ *  the accept form (carrying the question when the stored terms ask it).
+ *  Shown by GET, and by POST again when an accept is refused. */
+async function offerPage(
+  contract: OfferContract,
+  token: string,
+  state: { answer?: string; details?: string; error?: string } = {},
+): Promise<string> {
+  // The Breed and Classification rows come from the same owner as the offer
+  // email (src/lib/judge-breed-classification.ts). This page used to build its
+  // own breed list, which printed "All breeds" for a single-breed show's judge.
+  const assignments = await db.query.judgeAssignments.findMany({
+    where: and(
+      eq(judgeAssignments.showId, contract.showId),
+      eq(judgeAssignments.judgeId, contract.judgeId)
+    ),
+    with: { breed: true },
+  });
+
+  const show = contract.show;
+  const { breedLine, classificationLine } = buildJudgeBreedAndClassification(
+    assignments,
+    showBreedNamesForJudging(show),
+    show.name,
+  );
+  const orgName = show.organisation?.name ?? 'the Show Society';
+  const terms = readStoredJudgeOfferTerms(contract.offerTerms);
+
+  const showDate = new Date(show.startDate).toLocaleDateString('en-GB', {
+    weekday: 'long',
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+  });
+
+  const venue = show.venue
+    ? `${show.venue.name}${show.venue.postcode ? `, ${show.venue.postcode}` : ''}`
+    : 'Venue TBC';
+
+  return renderPage('Judging Offer', html`
+      <div class="banner">
+        <h2>Judging Appointment Offer</h2>
+        <div class="sub">from ${orgName}</div>
+      </div>
+      <div class="body">
+        <p>Dear ${contract.judgeName},</p>
+        <p>${orgName} would like to invite you to judge at the following show:</p>
+
+        <table class="detail-table">
+          <tr><td class="label">Show</td><td>${show.name}</td></tr>
+          <tr><td class="label">Date</td><td>${showDate}</td></tr>
+          <tr><td class="label">Venue</td><td>${venue}</td></tr>
+          <tr><td class="label">Breed</td><td>${breedLine}</td></tr>
+          <tr><td class="label">Classification</td><td>${classificationLine}</td></tr>
+          ${show.showType ? html`<tr><td class="label">Show Type</td><td>${displayShowTypeLabel(show.showType, show.showRuleset)}</td></tr>` : ''}
+        </table>
+
+        ${contract.notes ? html`<p style="padding: 12px; background: ${BRAND.paper}; border-radius: 8px; font-size: 16px; color: ${BRAND.ink2};">${contract.notes}</p>` : ''}
+
+        ${termsSection(terms)}
+
+        ${terms?.alreadyAgreedQuestion ? html`
+        <form class="accept-form" method="POST" action="/api/judge-contract/${token}#already-agreed" novalidate>
+          <input type="hidden" name="action" value="accept">
+          ${alreadyAgreedQuestion(terms.alreadyAgreedQuestion, state)}
+          <button type="submit" class="btn btn-primary btn-block">Accept Appointment</button>
+        </form>
+        <div style="text-align: center;">
+          <a href="/api/judge-contract/${token}?action=decline" class="decline-link">Decline</a>
+        </div>` : html`
+        <p>Please click the button below to accept or decline this appointment.</p>
+
+        <div class="buttons">
+          <form method="POST" action="/api/judge-contract/${token}">
+            <input type="hidden" name="action" value="accept">
+            <button type="submit" class="btn btn-primary">Accept Appointment</button>
+          </form>
+          <a href="/api/judge-contract/${token}?action=decline" class="btn btn-outline">Decline</a>
+        </div>`}
+      </div>
+    `);
+}
+
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ token: string }> }
@@ -98,13 +288,7 @@ export async function GET(
   const { token } = await params;
   const action = request.nextUrl.searchParams.get('action');
 
-  const contract = await db.query.judgeContracts.findFirst({
-    where: eq(judgeContracts.offerToken, token),
-    with: {
-      show: { with: { venue: true, organisation: { columns: publicOrgColumns } } },
-      judge: true,
-    },
-  });
+  const contract = await loadContract(token);
 
   if (!contract) {
     return new NextResponse(
@@ -160,18 +344,6 @@ export async function GET(
     );
   }
 
-  // Get breed assignments for display
-  const assignments = await db.query.judgeAssignments.findMany({
-    where: and(
-      eq(judgeAssignments.showId, contract.showId),
-      eq(judgeAssignments.judgeId, contract.judgeId)
-    ),
-    with: { breed: true, ring: true },
-  });
-
-  const breedNames = assignments.filter((a) => a.breed).map((a) => a.breed!.name);
-  const breedsText = breedNames.length > 0 ? breedNames.join(', ') : 'All breeds';
-
   const show = contract.show;
   const orgName = show.organisation?.name ?? 'the Show Society';
 
@@ -181,10 +353,6 @@ export async function GET(
     month: 'long',
     year: 'numeric',
   });
-
-  const venue = show.venue
-    ? `${show.venue.name}${show.venue.postcode ? `, ${show.venue.postcode}` : ''}`
-    : 'Venue TBC';
 
   // Show acceptance page or decline confirmation based on action
   if (action === 'decline') {
@@ -199,7 +367,7 @@ export async function GET(
           <p>If you have a reason you'd like to share, please enter it below (optional):</p>
           <form method="POST" action="/api/judge-contract/${token}">
             <input type="hidden" name="action" value="decline">
-            <textarea name="reason" rows="3" placeholder="Reason for declining (optional)" style="width: 100%; padding: 10px; border: 1px solid ${BRAND.line}; border-radius: 8px; font-size: 14px; font-family: inherit; resize: vertical; margin-bottom: 16px;"></textarea>
+            <textarea name="reason" rows="3" placeholder="Reason for declining (optional)" style="width: 100%; padding: 10px; border: 1px solid ${BRAND.line}; border-radius: 8px; font-size: 16px; font-family: inherit; resize: vertical; margin-bottom: 16px;"></textarea>
             <div class="buttons">
               <button type="submit" class="btn btn-danger">Yes, Decline</button>
               <a href="/api/judge-contract/${token}" class="btn btn-outline">Go Back</a>
@@ -212,39 +380,9 @@ export async function GET(
   }
 
   // Default: show the full offer page
-  return new NextResponse(
-    renderPage('Judging Offer', html`
-      <div class="banner">
-        <h2>Judging Appointment Offer</h2>
-        <div class="sub">from ${orgName}</div>
-      </div>
-      <div class="body">
-        <p>Dear ${contract.judgeName},</p>
-        <p>${orgName} would like to invite you to judge at the following show:</p>
-
-        <table class="detail-table">
-          <tr><td class="label">Show</td><td>${show.name}</td></tr>
-          <tr><td class="label">Date</td><td>${showDate}</td></tr>
-          <tr><td class="label">Venue</td><td>${venue}</td></tr>
-          <tr><td class="label">Breeds</td><td>${breedsText}</td></tr>
-          ${show.showType ? html`<tr><td class="label">Show Type</td><td>${displayShowTypeLabel(show.showType, show.showRuleset)}</td></tr>` : ''}
-        </table>
-
-        ${contract.notes ? html`<p style="padding: 12px; background: ${BRAND.paper}; border-radius: 8px; font-size: 14px; color: ${BRAND.ink2};">${contract.notes}</p>` : ''}
-
-        <p>Please click the button below to accept or decline this appointment.</p>
-
-        <div class="buttons">
-          <form method="POST" action="/api/judge-contract/${token}">
-            <input type="hidden" name="action" value="accept">
-            <button type="submit" class="btn btn-primary">Accept Appointment</button>
-          </form>
-          <a href="/api/judge-contract/${token}?action=decline" class="btn btn-outline">Decline</a>
-        </div>
-      </div>
-    `),
-    { headers: { 'Content-Type': 'text/html' } }
-  );
+  return new NextResponse(await offerPage(contract, token), {
+    headers: { 'Content-Type': 'text/html' },
+  });
 }
 
 export async function POST(
@@ -256,13 +394,7 @@ export async function POST(
   const formData = await request.formData();
   const action = formData.get('action') as string;
 
-  const contract = await db.query.judgeContracts.findFirst({
-    where: eq(judgeContracts.offerToken, token),
-    with: {
-      show: { with: { venue: true, organisation: { columns: publicOrgColumns } } },
-      judge: true,
-    },
-  });
+  const contract = await loadContract(token);
 
   if (!contract) {
     return new NextResponse(
@@ -298,11 +430,35 @@ export async function POST(
   const orgName = show.organisation?.name ?? 'the Show Society';
 
   if (action === 'accept') {
-    // Update contract to accepted
+    // The stored terms decide whether the judge must answer the "already
+    // agreed" question (src/lib/judge-offer-terms.ts). No answer, or Yes with
+    // an empty box: show the page again with the reason; nothing changes.
+    const answerForm = {
+      answer: (formData.get('alreadyAgreed') as string | null) ?? undefined,
+      details: (formData.get('alreadyAgreedDetails') as string | null) ?? undefined,
+    };
+    const check = checkAlreadyAgreedAnswer(readStoredJudgeOfferTerms(contract.offerTerms), answerForm);
+    if (!check.ok) {
+      return new NextResponse(
+        await offerPage(contract, token, { ...answerForm, error: check.message }),
+        { status: 400, headers: { 'Content-Type': 'text/html' } }
+      );
+    }
+
+    // Update contract to accepted, with the judge's answer in the same write
     await db
       .update(judgeContracts)
-      .set({ stage: 'offer_accepted', acceptedAt: new Date() })
+      .set({
+        stage: 'offer_accepted',
+        acceptedAt: new Date(),
+        alreadyAgreedElsewhere: check.answer,
+        alreadyAgreedDetails: check.details,
+      })
       .where(eq(judgeContracts.id, contract.id));
+    const agreedLine = alreadyAgreedSentence({
+      alreadyAgreedElsewhere: check.answer,
+      alreadyAgreedDetails: check.details,
+    });
 
     // Fire-and-forget: render + R2 upload would make the judge wait 2–3s on
     // Accept, and the stage transition is already persisted. If archiving
@@ -363,6 +519,7 @@ export async function POST(
         <p style="font-size: 15px; color: ${BRAND.ink}; line-height: 1.6;">
           <strong>${contract.judgeName}</strong> has accepted the invitation to judge at <strong>${show.name}</strong>.
         </p>
+        ${agreedLine ? html`<p style="font-size: 15px; color: ${BRAND.ink}; line-height: 1.6; padding: 12px; background: ${BRAND.paper}; border-radius: 8px; white-space: pre-line;">${agreedLine}</p>` : ''}
         <p style="font-size: 15px; color: ${BRAND.ink}; line-height: 1.6;">
           The next step is to send the formal confirmation letter. You can do this from the Judges tab in the show management page.
         </p>
@@ -391,7 +548,7 @@ export async function POST(
         <div class="body">
           <p>Thank you for accepting the invitation to judge at <strong>${show.name}</strong>.</p>
           <p>${orgName} has been notified and will send your formal confirmation letter shortly.</p>
-          <p style="color: ${BRAND.ink2}; font-size: 14px;">You can safely close this page.</p>
+          <p style="color: ${BRAND.ink2}; font-size: 16px;">You can safely close this page.</p>
         </div>
       `),
       { headers: { 'Content-Type': 'text/html' } }
@@ -481,7 +638,7 @@ export async function POST(
         <div class="body">
           <p>You have declined the invitation to judge at <strong>${show.name}</strong>.</p>
           <p>${orgName} has been notified.</p>
-          <p style="color: ${BRAND.ink2}; font-size: 14px;">You can safely close this page.</p>
+          <p style="color: ${BRAND.ink2}; font-size: 16px;">You can safely close this page.</p>
         </div>
       `),
       { headers: { 'Content-Type': 'text/html' } }

@@ -115,7 +115,6 @@ import {
 } from '@/server/services/report-queries';
 import { validateRkcSchedule } from '@/lib/rkc-schedule-compliance';
 import { championshipClassesComplete } from '@/lib/championship-class-requirements';
-import { displayShowTypeLabel } from '@/lib/show-types';
 
 /**
  * True if this judge has assignments with any organisation outside the
@@ -186,6 +185,7 @@ function buildJudgeBreedText(
 }
 
 import { buildJudgeBreedAndClassification } from '@/lib/judge-breed-classification';
+import { judgeOfferDetails, judgeOfferShowWith, renderJudgeOfferEmail } from '@/server/services/judge-offer-email';
 
 /**
  * Derive a sundry row's status from the entries in the same order
@@ -2897,6 +2897,8 @@ export const secretaryRouter = createTRPCRouter({
         kcNumber: z.string().optional(),
         contactEmail: z.string().email().optional(),
         kennelClubAffix: z.string().max(100).optional(),
+        /** Omitted = the column default (lives in the UK). */
+        livesOverseas: z.boolean().optional(),
       })
     )
     .mutation(async ({ ctx, input }) => {
@@ -2907,6 +2909,7 @@ export const secretaryRouter = createTRPCRouter({
           kcNumber: input.kcNumber ?? null,
           contactEmail: input.contactEmail ?? null,
           kennelClubAffix: input.kennelClubAffix ?? null,
+          livesOverseas: input.livesOverseas,
         })
         .returning();
 
@@ -3085,6 +3088,8 @@ export const secretaryRouter = createTRPCRouter({
       bio: z.string().max(2000).optional(),
       photoUrl: z.union([z.string().url().max(500), z.literal('')]).optional(),
       kennelClubAffix: z.string().max(100).optional(),
+      // The Send Offer dialog saves this on its own the moment it is ticked.
+      livesOverseas: z.boolean().optional(),
     }))
     .mutation(async ({ ctx, input }) => {
       const { judgeId, ...updates } = input;
@@ -3111,6 +3116,7 @@ export const secretaryRouter = createTRPCRouter({
       if (updates.bio !== undefined) setValues.bio = updates.bio || null;
       if (updates.photoUrl !== undefined) setValues.photoUrl = updates.photoUrl || null;
       if (updates.kennelClubAffix !== undefined) setValues.kennelClubAffix = updates.kennelClubAffix || null;
+      if (updates.livesOverseas !== undefined) setValues.livesOverseas = updates.livesOverseas;
       if (Object.keys(setValues).length === 0) throw new TRPCError({ code: 'BAD_REQUEST', message: 'No fields to update' });
 
       const [updated] = await ctx.db.update(judges).set(setValues).where(eq(judges.id, judgeId)).returning();
@@ -3165,6 +3171,10 @@ export const secretaryRouter = createTRPCRouter({
       contactPhone: z.string().max(50).optional(),
       kcJudgeId: z.string().max(100).optional(),
       kennelClubAffix: z.string().max(100).optional(),
+      // Sent only when the secretary set it (or the wizard read it off the
+      // judge's own row). Omitted = a new judge lives in the UK; an existing
+      // judge keeps what is stored, so an untouched box never clears a "yes".
+      livesOverseas: z.boolean().optional(),
       // Assignment details — array of breed+sex combos
       assignments: z.array(z.object({
         breedId: z.string().uuid().nullable(),
@@ -3207,6 +3217,7 @@ export const secretaryRouter = createTRPCRouter({
           contactPhone: input.contactPhone || null,
           kcJudgeId: input.kcJudgeId || null,
           kennelClubAffix: input.kennelClubAffix || null,
+          livesOverseas: input.livesOverseas,
         }).returning();
         judge = created!;
       } else {
@@ -3225,6 +3236,7 @@ export const secretaryRouter = createTRPCRouter({
             contactPhone: input.contactPhone ?? judge.contactPhone,
             kcJudgeId: input.kcJudgeId ?? judge.kcJudgeId,
             kennelClubAffix: input.kennelClubAffix ?? judge.kennelClubAffix,
+            livesOverseas: input.livesOverseas ?? judge.livesOverseas,
           }).where(eq(judges.id, judge.id));
         }
       }
@@ -4744,10 +4756,10 @@ export const secretaryRouter = createTRPCRouter({
           .where(eq(judges.id, input.judgeId));
       }
 
-      // Fetch show with venue, org, breed, and classes
+      // Fetch show with venue, club name, breed, and classes
       const show = await ctx.db.query.shows.findFirst({
         where: eq(shows.id, input.showId),
-        with: { venue: true, organisation: true, breed: true, showClasses: { with: { breed: true } } },
+        with: judgeOfferShowWith,
       });
       if (!show) {
         throw new TRPCError({ code: 'NOT_FOUND', message: 'Show not found' });
@@ -4762,21 +4774,16 @@ export const secretaryRouter = createTRPCRouter({
         with: { breed: true, ring: true },
       });
 
-      // Derive breed + classification labels per Amanda's 2026-05-15 spec.
-      const showBreedNames = show.breed
-        ? [show.breed.name]
-        : [...new Set(show.showClasses.filter((sc) => sc.breed).map((sc) => sc.breed!.name))];
-      const { breedLine, classificationLine } = buildJudgeBreedAndClassification(
-        assignments,
-        showBreedNames,
-        show.name,
-      );
+      // Breed + classification lines and the standard terms — one owner each
+      // (src/server/services/judge-offer-email.ts, src/lib/judge-offer-terms.ts).
+      // The judge's own "lives overseas" flag decides the Society's terms.
+      const { breedLine, classificationLine, terms } = judgeOfferDetails(show, assignments, judge);
 
       // Token expires in 30 days
       const tokenExpiresAt = new Date();
       tokenExpiresAt.setDate(tokenExpiresAt.getDate() + 30);
 
-      // Create contract record
+      // Create contract record, storing the terms exactly as sent
       const [contract] = await ctx.db
         .insert(judgeContracts)
         .values({
@@ -4792,6 +4799,7 @@ export const secretaryRouter = createTRPCRouter({
           travelCost: input.travelCost ?? null,
           otherExpenses: input.otherExpenses ?? null,
           expenseNotes: input.expenseNotes ?? null,
+          offerTerms: terms,
         })
         .returning();
 
@@ -4799,143 +4807,14 @@ export const secretaryRouter = createTRPCRouter({
         throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Failed to create contract' });
       }
 
-      // Build and send email
-      const baseUrl = getBaseUrl();
-      const acceptUrl = `${baseUrl}/api/judge-contract/${contract.offerToken}`;
-
-      const showDate = new Date(show.startDate).toLocaleDateString('en-GB', {
-        weekday: 'long',
-        day: 'numeric',
-        month: 'long',
-        year: 'numeric',
+      const { subject, html } = renderJudgeOfferEmail({
+        kind: 'offer',
+        show,
+        contract,
+        breedLine,
+        classificationLine,
+        acceptUrl: `${getBaseUrl()}/api/judge-contract/${contract.offerToken}`,
       });
-
-      const venue = show.venue
-        ? `${show.venue.name}${show.venue.postcode ? `, ${show.venue.postcode}` : ''}`
-        : 'Venue TBC';
-
-      const orgName = show.organisation?.name ?? 'the Show Society';
-
-      const html = `
-<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-</head>
-<body style="margin: 0; padding: 0; background-color: ${BRAND.paper}; font-family: 'Hanken Grotesk', -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
-  <div style="max-width: 600px; margin: 0 auto; padding: 24px 16px;">
-
-    <!-- Header -->
-    <div style="text-align: center; padding: 24px 0;">
-      <h1 style="margin: 0; font-family: 'Hanken Grotesk', -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 26px; font-weight: 800; color: ${BRAND.green}; letter-spacing: -0.015em;">Remi<span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:${BRAND.fresh};margin-left:3px;"></span></h1>
-    </div>
-
-    <!-- Main card -->
-    <div style="background: #ffffff; border: 1px solid ${BRAND.line}; border-radius: 14px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
-
-      <!-- Banner -->
-      <div style="background: ${BRAND.deep}; padding: 24px 24px 20px; text-align: center;">
-        <h2 style="margin: 0; color: ${BRAND.cream}; font-size: 22px; font-weight: 700;">Judging Appointment Offer</h2>
-        <p style="margin: 8px 0 0; color: rgba(243, 236, 220, 0.78); font-size: 14px;">
-          from ${orgName}
-        </p>
-      </div>
-
-      <!-- Letter body -->
-      <div style="padding: 24px;">
-        <p style="font-size: 15px; color: ${BRAND.ink}; line-height: 1.6;">
-          Dear ${judge.name},
-        </p>
-        <p style="font-size: 15px; color: ${BRAND.ink}; line-height: 1.6;">
-          On behalf of ${orgName}, I have much pleasure in inviting you to judge at our forthcoming show. The details are as follows:
-        </p>
-
-        <!-- Show details table -->
-        <table style="width: 100%; margin: 20px 0; border-collapse: collapse;">
-          <tr>
-            <td style="padding: 10px 12px; border-bottom: 1px solid ${BRAND.line}; font-weight: 600; color: ${BRAND.ink}; width: 120px;">Show</td>
-            <td style="padding: 10px 12px; border-bottom: 1px solid ${BRAND.line}; color: ${BRAND.ink};">${show.name}</td>
-          </tr>
-          <tr>
-            <td style="padding: 10px 12px; border-bottom: 1px solid ${BRAND.line}; font-weight: 600; color: ${BRAND.ink};">Date</td>
-            <td style="padding: 10px 12px; border-bottom: 1px solid ${BRAND.line}; color: ${BRAND.ink};">${showDate}</td>
-          </tr>
-          <tr>
-            <td style="padding: 10px 12px; border-bottom: 1px solid ${BRAND.line}; font-weight: 600; color: ${BRAND.ink};">Venue</td>
-            <td style="padding: 10px 12px; border-bottom: 1px solid ${BRAND.line}; color: ${BRAND.ink};">${venue}</td>
-          </tr>
-          <tr>
-            <td style="padding: 10px 12px; border-bottom: 1px solid ${BRAND.line}; font-weight: 600; color: ${BRAND.ink};">Breed</td>
-            <td style="padding: 10px 12px; border-bottom: 1px solid ${BRAND.line}; color: ${BRAND.ink};">${breedLine}</td>
-          </tr>
-          <tr>
-            <td style="padding: 10px 12px; border-bottom: 1px solid ${BRAND.line}; font-weight: 600; color: ${BRAND.ink};">Classification</td>
-            <td style="padding: 10px 12px; border-bottom: 1px solid ${BRAND.line}; color: ${BRAND.ink};">${classificationLine}</td>
-          </tr>
-          ${(() => {
-            // SV/WUSV regional shows still carry show_type='championship' on
-            // the legacy column, so render "Regional" when the ruleset is
-            // wusv (Amanda 2026-05-22).
-            const showTypeText = show.showType
-              ? displayShowTypeLabel(show.showType, (show as { showRuleset?: 'rkc' | 'wusv' }).showRuleset)
-              : null;
-            return showTypeText ? `<tr>
-            <td style="padding: 10px 12px; border-bottom: 1px solid ${BRAND.line}; font-weight: 600; color: ${BRAND.ink};">Show Type</td>
-            <td style="padding: 10px 12px; border-bottom: 1px solid ${BRAND.line}; color: ${BRAND.ink};">${showTypeText}</td>
-          </tr>` : '';
-          })()}
-          ${(() => {
-            const parts: string[] = [];
-            if (input.hotelCost && input.hotelCost > 0) parts.push(`Hotel: £${(input.hotelCost / 100).toFixed(2)}`);
-            if (input.travelCost && input.travelCost > 0) parts.push(`Travel: £${(input.travelCost / 100).toFixed(2)}`);
-            if (input.otherExpenses && input.otherExpenses > 0) parts.push(`Other: £${(input.otherExpenses / 100).toFixed(2)}`);
-            if (parts.length === 0) return '';
-            const expText = parts.join(', ') + (input.expenseNotes ? ` (${input.expenseNotes})` : '');
-            return `<tr>
-              <td style="padding: 10px 12px; border-bottom: 1px solid ${BRAND.line}; font-weight: 600; color: ${BRAND.ink};">Expenses</td>
-              <td style="padding: 10px 12px; border-bottom: 1px solid ${BRAND.line}; color: ${BRAND.ink};">${expText}</td>
-            </tr>`;
-          })()}
-        </table>
-
-        ${input.notes ? `<p style="font-size: 14px; color: ${BRAND.ink2}; line-height: 1.6; padding: 12px; background: ${BRAND.paper}; border-radius: 8px;">${input.notes}</p>` : ''}
-
-        <p style="font-size: 15px; color: ${BRAND.ink}; line-height: 1.6;">
-          If you are willing to accept this appointment, please confirm by clicking the button below. This constitutes the formal written offer as required under Royal Kennel Club regulations.
-        </p>
-
-        <!-- Buttons -->
-        <div style="text-align: center; margin: 28px 0;">
-          <a href="${acceptUrl}?action=accept"
-             style="display: inline-block; background: ${BRAND.green}; color: ${BRAND.cream}; padding: 14px 32px; border-radius: 13px; font-size: 16px; font-weight: 700; text-decoration: none; margin-bottom: 12px;">
-            Accept Appointment
-          </a>
-          <br>
-          <a href="${acceptUrl}?action=decline"
-             style="display: inline-block; color: ${BRAND.ink2}; padding: 8px 16px; font-size: 13px; text-decoration: underline; margin-top: 8px;">
-            Decline
-          </a>
-        </div>
-
-        <p style="font-size: 13px; color: ${BRAND.ink2}; line-height: 1.5; text-align: center;">
-          This link will expire on ${tokenExpiresAt.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}.
-        </p>
-      </div>
-    </div>
-
-    <!-- Footer -->
-    <div style="text-align: center; padding: 24px 16px; font-size: 12px; color: ${BRAND.ink2};">
-      <p style="margin: 0;">
-        This offer was sent by <strong>Remi</strong> on behalf of ${orgName}.
-      </p>
-      <p style="margin: 8px 0 0;">
-        If you have any questions, please reply to this email.
-      </p>
-    </div>
-  </div>
-</body>
-</html>`;
 
       const resend = new Resend(process.env.RESEND_API_KEY);
       const emailFrom = process.env.EMAIL_FROM ?? 'Remi <noreply@remishowmanager.co.uk>';
@@ -4945,7 +4824,7 @@ export const secretaryRouter = createTRPCRouter({
           from: emailFrom,
           to: input.judgeEmail,
           replyTo: FEEDBACK_REPLY_TO,
-          subject: `Judging Offer — ${show.name}`,
+          subject,
           html,
         });
         // Resend reports API-level rejections (suppressed address, bad
@@ -4968,7 +4847,7 @@ export const secretaryRouter = createTRPCRouter({
       const contract = await ctx.db.query.judgeContracts.findFirst({
         where: eq(judgeContracts.id, input.contractId),
         with: {
-          show: { with: { venue: true, organisation: true, breed: true, showClasses: { with: { breed: true } } } },
+          show: { with: judgeOfferShowWith },
           judge: true,
         },
       });
@@ -4986,15 +4865,6 @@ export const secretaryRouter = createTRPCRouter({
         });
       }
 
-      // Refresh token expiry
-      const tokenExpiresAt = new Date();
-      tokenExpiresAt.setDate(tokenExpiresAt.getDate() + 30);
-
-      await ctx.db
-        .update(judgeContracts)
-        .set({ tokenExpiresAt, offerSentAt: new Date() })
-        .where(eq(judgeContracts.id, input.contractId));
-
       // Get breed assignments
       const assignments = await ctx.db.query.judgeAssignments.findMany({
         where: and(
@@ -5004,76 +4874,29 @@ export const secretaryRouter = createTRPCRouter({
         with: { breed: true },
       });
 
-      const showBreedNames = contract.show.breed
-        ? [contract.show.breed.name]
-        : [...new Set(contract.show.showClasses.filter((sc) => sc.breed).map((sc) => sc.breed!.name))];
-      const { breedLine, classificationLine } = buildJudgeBreedAndClassification(
-        assignments,
-        showBreedNames,
-        contract.show.name,
-      );
-
-      const baseUrl = getBaseUrl();
-      const acceptUrl = `${baseUrl}/api/judge-contract/${contract.offerToken}`;
       const show = contract.show;
-      const orgName = show.organisation?.name ?? 'the Show Society';
+      // The judge as they are now: marking a judge overseas after the first
+      // offer, then resending, re-stores the terms from the current flag.
+      const { breedLine, classificationLine, terms } = judgeOfferDetails(show, assignments, contract.judge);
 
-      const showDate = new Date(show.startDate).toLocaleDateString('en-GB', {
-        weekday: 'long',
-        day: 'numeric',
-        month: 'long',
-        year: 'numeric',
+      // Refresh token expiry, and re-store the terms this reminder sends
+      const tokenExpiresAt = new Date();
+      tokenExpiresAt.setDate(tokenExpiresAt.getDate() + 30);
+
+      const [updated] = await ctx.db
+        .update(judgeContracts)
+        .set({ tokenExpiresAt, offerSentAt: new Date(), offerTerms: terms })
+        .where(eq(judgeContracts.id, input.contractId))
+        .returning();
+
+      const { subject, html } = renderJudgeOfferEmail({
+        kind: 'reminder',
+        show,
+        contract: updated!,
+        breedLine,
+        classificationLine,
+        acceptUrl: `${getBaseUrl()}/api/judge-contract/${contract.offerToken}`,
       });
-
-      const venue = show.venue
-        ? `${show.venue.name}${show.venue.postcode ? `, ${show.venue.postcode}` : ''}`
-        : 'Venue TBC';
-
-      const html = `
-<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-</head>
-<body style="margin: 0; padding: 0; background-color: ${BRAND.paper}; font-family: 'Hanken Grotesk', -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
-  <div style="max-width: 600px; margin: 0 auto; padding: 24px 16px;">
-    <div style="text-align: center; padding: 24px 0;">
-      <h1 style="margin: 0; font-family: 'Hanken Grotesk', -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 26px; font-weight: 800; color: ${BRAND.green}; letter-spacing: -0.015em;">Remi<span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:${BRAND.fresh};margin-left:3px;"></span></h1>
-    </div>
-    <div style="background: #ffffff; border: 1px solid ${BRAND.line}; border-radius: 14px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
-      <div style="background: ${BRAND.deep}; padding: 24px 24px 20px; text-align: center;">
-        <h2 style="margin: 0; color: ${BRAND.cream}; font-size: 22px; font-weight: 700;">Judging Appointment Offer</h2>
-        <p style="margin: 8px 0 0; color: rgba(243, 236, 220, 0.78); font-size: 14px;">Reminder from ${orgName}</p>
-      </div>
-      <div style="padding: 24px;">
-        <p style="font-size: 15px; color: ${BRAND.ink}; line-height: 1.6;">Dear ${contract.judgeName},</p>
-        <p style="font-size: 15px; color: ${BRAND.ink}; line-height: 1.6;">
-          This is a reminder regarding our invitation for you to judge at our show. We would be delighted if you could confirm your acceptance at your earliest convenience.
-        </p>
-        <table style="width: 100%; margin: 20px 0; border-collapse: collapse;">
-          <tr><td style="padding: 10px 12px; border-bottom: 1px solid ${BRAND.line}; font-weight: 600; color: ${BRAND.ink}; width: 120px;">Show</td><td style="padding: 10px 12px; border-bottom: 1px solid ${BRAND.line}; color: ${BRAND.ink};">${show.name}</td></tr>
-          <tr><td style="padding: 10px 12px; border-bottom: 1px solid ${BRAND.line}; font-weight: 600; color: ${BRAND.ink};">Date</td><td style="padding: 10px 12px; border-bottom: 1px solid ${BRAND.line}; color: ${BRAND.ink};">${showDate}</td></tr>
-          <tr><td style="padding: 10px 12px; border-bottom: 1px solid ${BRAND.line}; font-weight: 600; color: ${BRAND.ink};">Venue</td><td style="padding: 10px 12px; border-bottom: 1px solid ${BRAND.line}; color: ${BRAND.ink};">${venue}</td></tr>
-          <tr><td style="padding: 10px 12px; border-bottom: 1px solid ${BRAND.line}; font-weight: 600; color: ${BRAND.ink};">Breed</td><td style="padding: 10px 12px; border-bottom: 1px solid ${BRAND.line}; color: ${BRAND.ink};">${breedLine}</td></tr>
-          <tr><td style="padding: 10px 12px; border-bottom: 1px solid ${BRAND.line}; font-weight: 600; color: ${BRAND.ink};">Classification</td><td style="padding: 10px 12px; border-bottom: 1px solid ${BRAND.line}; color: ${BRAND.ink};">${classificationLine}</td></tr>
-        </table>
-        <div style="text-align: center; margin: 28px 0;">
-          <a href="${acceptUrl}?action=accept" style="display: inline-block; background: ${BRAND.green}; color: ${BRAND.cream}; padding: 14px 32px; border-radius: 13px; font-size: 16px; font-weight: 700; text-decoration: none; margin-bottom: 12px;">Accept Appointment</a>
-          <br>
-          <a href="${acceptUrl}?action=decline" style="display: inline-block; color: ${BRAND.ink2}; padding: 8px 16px; font-size: 13px; text-decoration: underline; margin-top: 8px;">Decline</a>
-        </div>
-        <p style="font-size: 13px; color: ${BRAND.ink2}; line-height: 1.5; text-align: center;">
-          This link will expire on ${tokenExpiresAt.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}.
-        </p>
-      </div>
-    </div>
-    <div style="text-align: center; padding: 24px 16px; font-size: 12px; color: ${BRAND.ink2};">
-      <p style="margin: 0;">This offer was sent by <strong>Remi</strong> on behalf of ${orgName}.</p>
-    </div>
-  </div>
-</body>
-</html>`;
 
       const resend = new Resend(process.env.RESEND_API_KEY);
       const emailFrom = process.env.EMAIL_FROM ?? 'Remi <noreply@remishowmanager.co.uk>';
@@ -5083,7 +4906,7 @@ export const secretaryRouter = createTRPCRouter({
           from: emailFrom,
           to: contract.judgeEmail,
           replyTo: FEEDBACK_REPLY_TO,
-          subject: `Reminder: Judging Offer — ${show.name}`,
+          subject,
           html,
         });
         // Resend SDK v6 returns { data, error } instead of throwing on HTTP errors,
@@ -5356,6 +5179,10 @@ export const secretaryRouter = createTRPCRouter({
           travelCost: contract?.travelCost ?? null,
           otherExpenses: contract?.otherExpenses ?? null,
           expenseNotes: contract?.expenseNotes ?? null,
+          // The judge's answer at acceptance about appointments already
+          // agreed — the secretary reads it before confirming.
+          alreadyAgreedElsewhere: contract?.alreadyAgreedElsewhere ?? null,
+          alreadyAgreedDetails: contract?.alreadyAgreedDetails ?? null,
           judgeEmail: contract?.judgeEmail ?? j.contactEmail,
         };
       });
@@ -5525,21 +5352,13 @@ export const secretaryRouter = createTRPCRouter({
 
       const show = await ctx.db.query.shows.findFirst({
         where: eq(shows.id, input.showId),
-        with: { venue: true, organisation: true },
+        with: judgeOfferShowWith,
       });
       if (!show) throw new TRPCError({ code: 'NOT_FOUND' });
 
       const resend = new Resend(process.env.RESEND_API_KEY);
       const emailFrom = process.env.EMAIL_FROM ?? 'Remi <noreply@remishowmanager.co.uk>';
       const baseUrl = getBaseUrl();
-      const orgName = show.organisation?.name ?? 'the Show Society';
-
-      const showDate = new Date(show.startDate).toLocaleDateString('en-GB', {
-        weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',
-      });
-      const venue = show.venue
-        ? `${show.venue.name}${show.venue.postcode ? `, ${show.venue.postcode}` : ''}`
-        : 'Venue TBC';
 
       // Pre-fetch all data to avoid N+1 queries in the loop
       const allJudges = await ctx.db.query.judges.findMany({
@@ -5595,7 +5414,7 @@ export const secretaryRouter = createTRPCRouter({
         }
 
         const assignments = assignmentsByJudge.get(judgeId) ?? [];
-        const breedsText = assignments.filter((a) => a.breed).map((a) => a.breed!.name).join(', ') || 'All breeds';
+        const { breedLine, classificationLine, terms } = judgeOfferDetails(show, assignments, judge);
 
         const tokenExpiresAt = new Date();
         tokenExpiresAt.setDate(tokenExpiresAt.getDate() + 30);
@@ -5609,42 +5428,24 @@ export const secretaryRouter = createTRPCRouter({
             stage: 'offer_sent',
             offerSentAt: new Date(),
             tokenExpiresAt,
+            offerTerms: terms,
           }).returning();
 
-          const acceptUrl = `${baseUrl}/api/judge-contract/${contract!.offerToken}`;
+          const { subject, html } = renderJudgeOfferEmail({
+            kind: 'offer',
+            show,
+            contract: contract!,
+            breedLine,
+            classificationLine,
+            acceptUrl: `${baseUrl}/api/judge-contract/${contract!.offerToken}`,
+          });
 
           const offerResult = await resend.emails.send({
             from: emailFrom,
             to: judge.contactEmail,
             replyTo: FEEDBACK_REPLY_TO,
-            subject: `Judging Offer — ${show.name}`,
-            html: `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
-<body style="margin:0;padding:0;background-color:${BRAND.paper};font-family:'Hanken Grotesk',-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
-<div style="max-width:600px;margin:0 auto;padding:24px 16px;">
-  <div style="text-align:center;padding:24px 0;"><h1 style="margin:0;font-family:'Hanken Grotesk',-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;font-size:26px;font-weight:800;color:${BRAND.green};letter-spacing:-0.015em;">Remi<span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:${BRAND.fresh};margin-left:3px;"></span></h1></div>
-  <div style="background:#fff;border:1px solid ${BRAND.line};border-radius:14px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
-    <div style="background:${BRAND.deep};padding:24px;text-align:center;">
-      <h2 style="margin:0;color:${BRAND.cream};font-size:22px;font-weight:700;">Judging Appointment Offer</h2>
-      <p style="margin:8px 0 0;color:rgba(243,236,220,0.78);font-size:14px;">from ${orgName}</p>
-    </div>
-    <div style="padding:24px;">
-      <p style="font-size:15px;color:${BRAND.ink};line-height:1.6;">Dear ${judge.name},</p>
-      <p style="font-size:15px;color:${BRAND.ink};line-height:1.6;">On behalf of ${orgName}, I have much pleasure in inviting you to judge at our forthcoming show.</p>
-      <table style="width:100%;margin:20px 0;border-collapse:collapse;">
-        <tr><td style="padding:10px 12px;border-bottom:1px solid ${BRAND.line};font-weight:600;color:${BRAND.ink};width:120px;">Show</td><td style="padding:10px 12px;border-bottom:1px solid ${BRAND.line};">${show.name}</td></tr>
-        <tr><td style="padding:10px 12px;border-bottom:1px solid ${BRAND.line};font-weight:600;color:${BRAND.ink};">Date</td><td style="padding:10px 12px;border-bottom:1px solid ${BRAND.line};">${showDate}</td></tr>
-        <tr><td style="padding:10px 12px;border-bottom:1px solid ${BRAND.line};font-weight:600;color:${BRAND.ink};">Venue</td><td style="padding:10px 12px;border-bottom:1px solid ${BRAND.line};">${venue}</td></tr>
-        <tr><td style="padding:10px 12px;border-bottom:1px solid ${BRAND.line};font-weight:600;color:${BRAND.ink};">Breeds</td><td style="padding:10px 12px;border-bottom:1px solid ${BRAND.line};">${breedsText}</td></tr>
-      </table>
-      <p style="font-size:15px;color:${BRAND.ink};line-height:1.6;">Please confirm by clicking below.</p>
-      <div style="text-align:center;margin:28px 0;">
-        <a href="${acceptUrl}?action=accept" style="display:inline-block;background:${BRAND.green};color:${BRAND.cream};padding:14px 32px;border-radius:13px;font-size:16px;font-weight:700;text-decoration:none;">Accept Appointment</a>
-        <br><a href="${acceptUrl}?action=decline" style="display:inline-block;color:${BRAND.ink2};padding:8px 16px;font-size:13px;text-decoration:underline;margin-top:8px;">Decline</a>
-      </div>
-      <p style="font-size:13px;color:${BRAND.ink2};text-align:center;">This link expires on ${tokenExpiresAt.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}.</p>
-    </div>
-  </div>
-</div></body></html>`,
+            subject,
+            html,
           });
           if (offerResult.error) throw new Error(offerResult.error.message ?? 'Resend rejected the email');
           sent++;

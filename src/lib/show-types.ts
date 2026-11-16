@@ -23,7 +23,37 @@ export function displayShowType(
   showType: string,
   showRuleset?: string | null,
 ): string {
-  return showRuleset === 'wusv' ? 'regional' : showType;
+  return isRegionalShow(showRuleset) ? 'regional' : showType;
+}
+
+/** Is this a regional (GSDL British Regional Group, WUSV rules) rather than an
+ *  RKC show? Keyed off the ruleset, never the stored type: a regional is stored
+ *  as `championship`. */
+export function isRegionalShow(showRuleset?: string | null): boolean {
+  return showRuleset === 'wusv';
+}
+
+/** Is this show held under RKC Show Regulation F(1)? F(1) covers championship,
+ *  open (premier open included) and limited shows; matches are F(2) and
+ *  companion dog shows F(3), so companion and primary are not. A regional is
+ *  never an RKC show. */
+export function isRkcF1Show(showType: string | null | undefined, showRuleset?: string | null): boolean {
+  if (isRegionalShow(showRuleset)) return false;
+  return showType === 'championship' || showType === 'open' || showType === 'premier_open' || showType === 'limited';
+}
+
+/** Is this an RKC open show? A premier open show is an open show too (it is
+ *  scheduled from the same class templates). A regional never is. */
+export function isRkcOpenShow(showType: string | null | undefined, showRuleset?: string | null): boolean {
+  if (isRegionalShow(showRuleset)) return false;
+  return showType === 'open' || showType === 'premier_open';
+}
+
+/** Is this an RKC championship show? A regional never is, although regionals
+ *  are stored with showType 'championship' (see above). */
+export function isRkcChampionshipShow(showType: string | null | undefined, showRuleset?: string | null): boolean {
+  if (isRegionalShow(showRuleset)) return false;
+  return showType === 'championship';
 }
 
 /** Display key → label. The enum table plus the regional pseudo-type. */

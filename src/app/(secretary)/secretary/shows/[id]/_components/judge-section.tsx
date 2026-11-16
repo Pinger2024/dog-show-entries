@@ -21,7 +21,7 @@ import {
 import { toast } from 'sonner';
 import { trpc } from '@/lib/trpc';
 import { cn } from '@/lib/utils';
-import { buildJudgeBreedAndClassification } from '@/lib/judge-breed-classification';
+import { buildJudgeBreedAndClassification, showBreedNamesForJudging } from '@/lib/judge-breed-classification';
 import { formatCurrency, poundsToPence, penceToPoundsString } from '@/lib/date-utils';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -78,6 +78,12 @@ import { JudgeCoverageDashboard } from '@/components/judges/judge-coverage-dashb
 import { AddJudgeWizard } from '@/components/judges/add-judge-wizard';
 import { GroupJudgesPanel } from '@/components/judges/group-judges-panel';
 import { displayShowTypeLabel } from '@/lib/show-types';
+import { judgeOfferTerms, showCarriesJudgeOfferTerms, LIVES_OVERSEAS_LABEL } from '@/lib/judge-offer-terms';
+import {
+  JudgeOfferTermsPreview,
+  AlreadyAgreedAnswer,
+  LivesOverseasField,
+} from '@/components/judges/judge-offer-terms-view';
 
 function formatContractTimeline(contract: {
   offerSentAt: Date | string | null;
@@ -114,6 +120,12 @@ export function JudgesSection({ showId }: { showId: string }) {
   const [offerTravel, setOfferTravel] = useState('');
   const [offerOther, setOfferOther] = useState('');
   const [offerExpenseNotes, setOfferExpenseNotes] = useState('');
+  // The judge's "lives overseas" flag as shown in the offer dialog. Saved to
+  // the judge the moment it changes; the send path reads the saved flag.
+  const [offerLivesOverseas, setOfferLivesOverseas] = useState(false);
+  // The standard-terms block in the offer dialog starts open on a wide
+  // screen and closed on a phone, where it would push the form out of sight.
+  const [offerTermsOpen, setOfferTermsOpen] = useState(false);
   // RKC judge search state
   const [kcSearchSurname, setKcSearchSurname] = useState('');
   const [kcSearchBreed, setKcSearchBreed] = useState('');
@@ -140,6 +152,12 @@ export function JudgesSection({ showId }: { showId: string }) {
   // wording (contract process, "subject to approval", affix, duplicate-check).
   const isWusv =
     (showData as { showRuleset?: 'rkc' | 'wusv' } | undefined)?.showRuleset === 'wusv';
+  // Only a show held under RKC Regulation F(1) carries offer terms, so only
+  // there does "Lives overseas" change anything (src/lib/judge-offer-terms.ts).
+  const showHasOfferTerms = showCarriesJudgeOfferTerms(
+    showData?.showType,
+    (showData as { showRuleset?: 'rkc' | 'wusv' } | undefined)?.showRuleset ?? null,
+  );
 
   // For single-breed shows, derive the breed from the show's classes
   const singleBreedId = useMemo(() => {
@@ -313,6 +331,7 @@ export function JudgesSection({ showId }: { showId: string }) {
     contactEmail: '',
     contactPhone: '',
     kennelClubAffix: '',
+    livesOverseas: false,
   });
   const updateJudgeMutation = trpc.secretary.updateJudge.useMutation({
     onSuccess: () => {
@@ -322,6 +341,19 @@ export function JudgesSection({ showId }: { showId: string }) {
       utils.secretary.searchJudges.invalidate();
     },
     onError: (err) => toast.error(err.message ?? 'Failed to update judge'),
+  });
+
+  // The Send Offer dialog's "Lives overseas" box saves straight to the judge
+  // through the same procedure (and the same "engaged by another club" lock)
+  // as Edit judge details — its own mutation, so it neither closes that
+  // dialog nor says "Judge details updated".
+  const livesOverseasMutation = trpc.secretary.updateJudge.useMutation({
+    onSuccess: (judge) => {
+      toast.success(judge.livesOverseas ? `Saved: ${judge.name} lives overseas` : `Saved: ${judge.name} does not live overseas`);
+      utils.secretary.getShowJudges.invalidate({ showId });
+      utils.secretary.searchJudges.invalidate();
+    },
+    onError: (err) => toast.error(err.message ?? 'Could not save. Please try again.'),
   });
 
   const setRkcApprovalMutation = trpc.secretary.setJudgeRkcApproval.useMutation({
@@ -336,12 +368,13 @@ export function JudgesSection({ showId }: { showId: string }) {
     onError: (err) => toast.error(err.message ?? (isWusv ? 'Failed to update approval flag' : 'Failed to update RKC approval flag')),
   });
 
-  function openEditJudge(judge: { judgeId: string; name: string; contactEmail: string | null; contactPhone: string | null; kennelClubAffix?: string | null }) {
+  function openEditJudge(judge: { judgeId: string; name: string; contactEmail: string | null; contactPhone: string | null; kennelClubAffix?: string | null; livesOverseas: boolean }) {
     setEditJudgeForm({
       name: judge.name,
       contactEmail: judge.contactEmail ?? '',
       contactPhone: judge.contactPhone ?? '',
       kennelClubAffix: judge.kennelClubAffix ?? '',
+      livesOverseas: judge.livesOverseas,
     });
     setEditJudgeId(judge.judgeId);
   }
@@ -367,6 +400,7 @@ export function JudgesSection({ showId }: { showId: string }) {
       contactEmail: string | null;
       contactPhone: string | null;
       kennelClubAffix: string | null;
+      livesOverseas: boolean;
       rings: string[];
       assignmentIds: string[];
       subjectToRkcApproval: boolean;
@@ -393,6 +427,7 @@ export function JudgesSection({ showId }: { showId: string }) {
           contactEmail: a.judge.contactEmail,
           contactPhone: a.judge.contactPhone,
           kennelClubAffix: a.judge.kennelClubAffix,
+          livesOverseas: a.judge.livesOverseas,
           rings: a.ring ? [`Ring ${a.ring.number}`] : [],
           assignmentIds: [a.id],
           subjectToRkcApproval: (a as { subjectToRkcApproval?: boolean }).subjectToRkcApproval === true,
@@ -402,14 +437,9 @@ export function JudgesSection({ showId }: { showId: string }) {
     return Array.from(seen.values());
   }, [assignments]);
 
-  // The show's breed list for buildJudgeBreedAndClassification — mirrors the
-  // server derivation in secretary.ts (sendJudgeOffer etc): a single-breed
-  // show's breed comes straight off the shows row; a general show's breed
-  // list comes from the distinct breeds on its showClasses.
-  const showBreedNames = useMemo(() => {
-    if (showData?.breed?.name) return [showData.breed.name];
-    return [...new Set((showData?.showClasses ?? []).filter((sc) => sc.breed).map((sc) => sc.breed!.name))];
-  }, [showData]);
+  // The show's breed list for buildJudgeBreedAndClassification — the same
+  // function the offer send paths use (it used to be mirrored here).
+  const showBreedNames = useMemo(() => showBreedNamesForJudging(showData ?? {}), [showData]);
 
   // Build the breed + classification labels Amanda wants shown on the
   // assignments card and inside the offer email preview (2026-05-15).
@@ -421,18 +451,21 @@ export function JudgesSection({ showId }: { showId: string }) {
   function deriveJudgeLabels(j: typeof uniqueJudges[number]): {
     breedLine: string;
     classificationLines: string[];
+    breedNames: string[];
   } {
     const judgeAssignments = (assignments ?? []).filter((a) => a.judgeId === j.judgeId && !a.judgeRole);
-    const { breedLine, classifications } = buildJudgeBreedAndClassification(
+    const { breedLine, classifications, breedNames } = buildJudgeBreedAndClassification(
       judgeAssignments,
       showBreedNames,
       showData?.name,
     );
-    return { breedLine, classificationLines: classifications };
+    return { breedLine, classificationLines: classifications, breedNames };
   }
 
-  function openOfferDialog(judgeId: string, email: string) {
-    setOfferJudgeId(judgeId);
+  function openOfferDialog(judge: { judgeId: string; livesOverseas: boolean }, email: string) {
+    setOfferTermsOpen(typeof window !== 'undefined' && window.matchMedia('(min-width: 640px)').matches);
+    setOfferJudgeId(judge.judgeId);
+    setOfferLivesOverseas(judge.livesOverseas);
     setOfferEmail(email);
     setOfferNotes('');
     setOfferHotel('');
@@ -500,12 +533,17 @@ export function JudgesSection({ showId }: { showId: string }) {
 
                 return (
                   <div key={j.judgeId} className="rounded-lg border p-4">
-                    <div className="flex items-start justify-between gap-3">
+                    {/* Stacks on a phone: details full width, actions in their own
+                        row below. Side by side from sm up. */}
+                    <div data-judge-card-row className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2 flex-wrap">
                           <span className="font-semibold">{j.name}</span>
                           {j.kcNumber && (
                             <span className="text-sm text-muted-foreground">({j.kcNumber})</span>
+                          )}
+                          {showHasOfferTerms && j.livesOverseas && (
+                            <Badge variant="outline">{LIVES_OVERSEAS_LABEL}</Badge>
                           )}
                           {stageConf ? (
                             <Badge variant={stageConf.variant}>{stageConf.label}</Badge>
@@ -548,6 +586,9 @@ export function JudgesSection({ showId }: { showId: string }) {
                             {formatContractTimeline(contract)}
                           </p>
                         )}
+                        {contract && (stage === 'offer_accepted' || stage === 'confirmed') && (
+                          <AlreadyAgreedAnswer contract={contract} className="mt-2" />
+                        )}
                         {contract?.contractPdfKey && (
                           <a
                             href={`/api/judge-contract-pdf/${contract.id}`}
@@ -581,12 +622,12 @@ export function JudgesSection({ showId }: { showId: string }) {
                           </span>
                         </label>
                       </div>
-                      <div className="flex items-center gap-1.5 shrink-0">
+                      <div data-judge-card-actions className="flex flex-wrap items-center gap-1.5 max-sm:[&>button]:min-h-11 sm:shrink-0">
                         {!contract && (
                           <Button
                             size="sm"
                             variant="outline"
-                            onClick={() => openOfferDialog(j.judgeId, j.contactEmail ?? '')}
+                            onClick={() => openOfferDialog(j, j.contactEmail ?? '')}
                           >
                             <Send className="size-3.5" />
                             Send Offer
@@ -631,7 +672,7 @@ export function JudgesSection({ showId }: { showId: string }) {
                           <Button
                             size="sm"
                             variant="outline"
-                            onClick={() => openOfferDialog(j.judgeId, j.contactEmail ?? contract?.judgeEmail ?? '')}
+                            onClick={() => openOfferDialog(j, j.contactEmail ?? contract?.judgeEmail ?? '')}
                           >
                             <Send className="size-3.5" />
                             New Offer
@@ -787,7 +828,7 @@ export function JudgesSection({ showId }: { showId: string }) {
           {/* Email preview */}
           {(() => {
             const judge = uniqueJudges.find((j) => j.judgeId === offerJudgeId);
-            const labels = judge ? deriveJudgeLabels(judge) : { breedLine: '—', classificationLines: [] };
+            const labels = judge ? deriveJudgeLabels(judge) : { breedLine: '—', classificationLines: [], breedNames: [] };
             const breedLine = labels.breedLine;
             const classificationText = labels.classificationLines.length > 0
               ? labels.classificationLines.join(' / ')
@@ -851,6 +892,41 @@ export function JudgesSection({ showId }: { showId: string }) {
                   <span className="rounded-md bg-[#2f6b43] px-4 py-1.5 text-xs font-medium text-[#f3ecdc]">Accept Appointment</span>
                   <span className="text-xs text-muted-foreground underline">Decline</span>
                 </div>
+              </div>
+            );
+          })()}
+
+          {/* The standard terms this offer will carry — from the same owner
+              the send path stores them with (src/lib/judge-offer-terms.ts).
+              The "Lives overseas" box sits right above them: ticking it saves
+              to the judge and the terms below change at once. Not shown where
+              the show carries no terms (a regional, companion or primary). */}
+          {(() => {
+            const judge = uniqueJudges.find((j) => j.judgeId === offerJudgeId);
+            if (!judge || !showData?.showType) return null;
+            const terms = judgeOfferTerms({
+              showType: showData.showType,
+              showRuleset: (showData as { showRuleset?: 'rkc' | 'wusv' }).showRuleset ?? null,
+              breedNames: deriveJudgeLabels(judge).breedNames,
+              judgeLivesOverseas: offerLivesOverseas,
+            });
+            if (!terms) return null;
+            return (
+              <div className="space-y-3">
+                <LivesOverseasField
+                  id={`offer-lives-overseas-${judge.judgeId}`}
+                  checked={offerLivesOverseas}
+                  disabled={livesOverseasMutation.isPending}
+                  onCheckedChange={(next) => {
+                    const previous = offerLivesOverseas;
+                    setOfferLivesOverseas(next);
+                    livesOverseasMutation.mutate(
+                      { judgeId: judge.judgeId, livesOverseas: next },
+                      { onError: () => setOfferLivesOverseas(previous) },
+                    );
+                  }}
+                />
+                <JudgeOfferTermsPreview key={offerJudgeId} terms={terms} defaultOpen={offerTermsOpen} />
               </div>
             );
           })()}
@@ -942,7 +1018,7 @@ export function JudgesSection({ showId }: { showId: string }) {
                   expenseNotes: offerExpenseNotes.trim() || undefined,
                 })
               }
-              disabled={!offerEmail.trim() || sendOfferMutation.isPending}
+              disabled={!offerEmail.trim() || sendOfferMutation.isPending || livesOverseasMutation.isPending}
             >
               {sendOfferMutation.isPending ? (
                 <Loader2 className="size-4 animate-spin" />
@@ -964,7 +1040,8 @@ export function JudgesSection({ showId }: { showId: string }) {
           <DialogHeader>
             <DialogTitle>Edit judge details</DialogTitle>
             <DialogDescription>
-              Update the judge&apos;s name, contact details, or affix. Changes
+              Update the judge&apos;s name, contact details or affix
+              {showHasOfferTerms ? ', or whether they live overseas' : ''}. Changes
               apply to every show this judge is on.
             </DialogDescription>
           </DialogHeader>
@@ -1009,6 +1086,13 @@ export function JudgesSection({ showId }: { showId: string }) {
                 className="mt-1 h-11"
               />
             </div>
+            {showHasOfferTerms && (
+              <LivesOverseasField
+                id="edit-judge-lives-overseas"
+                checked={editJudgeForm.livesOverseas}
+                onCheckedChange={(next) => setEditJudgeForm((f) => ({ ...f, livesOverseas: next }))}
+              />
+            )}
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setEditJudgeId(null)}>
@@ -1023,6 +1107,7 @@ export function JudgesSection({ showId }: { showId: string }) {
                   contactEmail: editJudgeForm.contactEmail.trim(),
                   contactPhone: editJudgeForm.contactPhone.trim(),
                   kennelClubAffix: editJudgeForm.kennelClubAffix.trim(),
+                  livesOverseas: editJudgeForm.livesOverseas,
                 });
               }}
               disabled={updateJudgeMutation.isPending || !editJudgeForm.name.trim()}

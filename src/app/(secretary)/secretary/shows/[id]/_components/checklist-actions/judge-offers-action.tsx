@@ -15,6 +15,12 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { trpc } from '@/lib/trpc';
+import {
+  AlreadyAgreedAnswer,
+  AlreadyAgreedConfirmNotice,
+  LivesOverseasField,
+} from '@/components/judges/judge-offer-terms-view';
+import { showCarriesJudgeOfferTerms } from '@/lib/judge-offer-terms';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -58,6 +64,7 @@ export function JudgeOffersAction({ showId }: ActionPanelProps) {
   const [judgeName, setJudgeName] = useState('');
   const [judgeKc, setJudgeKc] = useState('');
   const [judgeEmail, setJudgeEmail] = useState('');
+  const [addLivesOverseas, setAddLivesOverseas] = useState(false);
   const [kcSelectedJudge, setKcSelectedJudge] = useState<{
     name: string;
     location: string | null;
@@ -65,6 +72,12 @@ export function JudgeOffersAction({ showId }: ActionPanelProps) {
   } | null>(null);
 
   const { data, isLoading } = trpc.secretary.getChecklistJudgeSummary.useQuery({ showId });
+  // "Lives overseas" only changes anything on a show that carries offer terms.
+  const { data: showData } = trpc.shows.getById.useQuery({ id: showId });
+  const showHasOfferTerms = showCarriesJudgeOfferTerms(
+    showData?.showType,
+    (showData as { showRuleset?: 'rkc' | 'wusv' } | undefined)?.showRuleset ?? null,
+  );
 
   // Mutations for judge pipeline
   const bulkOfferMutation = trpc.secretary.sendBulkJudgeOffers.useMutation({
@@ -149,6 +162,7 @@ export function JudgeOffersAction({ showId }: ActionPanelProps) {
     setJudgeName('');
     setJudgeKc('');
     setJudgeEmail('');
+    setAddLivesOverseas(false);
     setKcSelectedJudge(null);
     kcSearchMutation.reset();
     kcProfileMutation.reset();
@@ -160,6 +174,7 @@ export function JudgeOffersAction({ showId }: ActionPanelProps) {
       name: judgeName.trim(),
       kcNumber: judgeKc.trim() || undefined,
       contactEmail: judgeEmail.trim() || undefined,
+      livesOverseas: addLivesOverseas,
     });
   }
 
@@ -362,6 +377,14 @@ export function JudgeOffersAction({ showId }: ActionPanelProps) {
                   className="h-9 text-sm"
                 />
               </div>
+              {showHasOfferTerms && (
+                <LivesOverseasField
+                  id="checklist-add-lives-overseas"
+                  checked={addLivesOverseas}
+                  onCheckedChange={setAddLivesOverseas}
+                  className="bg-background"
+                />
+              )}
             </div>
           </div>
 
@@ -437,6 +460,9 @@ export function JudgeOffersAction({ showId }: ActionPanelProps) {
               </Button>
             )}
             {summary.accepted > 0 && (
+              <AlreadyAgreedConfirmNotice judges={data?.judges ?? []} className="basis-full" />
+            )}
+            {summary.accepted > 0 && (
               <Button
                 size="sm"
                 variant="secondary"
@@ -487,7 +513,7 @@ export function JudgeOffersAction({ showId }: ActionPanelProps) {
                 <div
                   key={j.judgeId}
                   className={cn(
-                    'flex items-center gap-3 rounded-md border px-3 py-2.5',
+                    'flex flex-wrap items-center gap-3 rounded-md border px-3 py-2.5',
                     stage === 'declined' && 'opacity-50'
                   )}
                 >
@@ -556,6 +582,11 @@ export function JudgeOffersAction({ showId }: ActionPanelProps) {
                       <Check className="size-4 text-se-fresh-deep" />
                     )}
                   </div>
+                  {/* Full width under the row: in the name column it could be
+                      squeezed narrow on a phone. */}
+                  {(stage === 'offer_accepted' || stage === 'confirmed') && (
+                    <AlreadyAgreedAnswer contract={j} className="basis-full text-xs" />
+                  )}
                 </div>
               );
             })}

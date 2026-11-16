@@ -68,8 +68,11 @@ describe('GET /api/judge-contract/[token]', () => {
 describe('POST /api/judge-contract/[token] accept', () => {
   it('moves the contract to offer_accepted and stamps acceptedAt', async () => {
     const { contract } = await freshContractToken();
+    // The default show is an RKC open show, whose offer asks the judge about
+    // appointments already agreed (judge-offer-terms-route.test.ts covers the
+    // refusal when it is left unanswered).
     const res = await judgeContractPOST(
-      postReq(contract.offerToken!, { action: 'accept' }),
+      postReq(contract.offerToken!, { action: 'accept', alreadyAgreed: 'no' }),
       params(contract.offerToken!),
     );
     expect(res.status).toBe(200);

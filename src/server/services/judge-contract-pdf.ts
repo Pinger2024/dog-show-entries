@@ -9,7 +9,8 @@
  * still-pending contracts are skipped.
  */
 import { and, eq } from 'drizzle-orm';
-import { renderToBuffer } from '@react-pdf/renderer';
+import { createElement, type ReactElement } from 'react';
+import { renderToBuffer, type DocumentProps } from '@react-pdf/renderer';
 import { db } from '@/server/db';
 import { judgeContracts, judgeAssignments } from '@/server/db/schema';
 import { uploadToR2 } from './storage';
@@ -18,6 +19,7 @@ import {
   type JudgeContractPdfData,
 } from '@/components/judge-contract/judge-contract-pdf';
 import { buildJudgeBreedAndClassification } from '@/lib/judge-breed-classification';
+import { readStoredJudgeOfferTerms, alreadyAgreedAnswerText } from '@/lib/judge-offer-terms';
 
 export type GenerateResult =
   | { status: 'generated' }
@@ -107,6 +109,10 @@ export async function generateJudgeContractPdf(
       notes: contract.expenseNotes,
     },
     terms: contract.notes,
+    // The standard terms exactly as stored when the offer was sent — never
+    // recomputed here, so the PDF shows only what this judge was sent.
+    standardTerms: readStoredJudgeOfferTerms(contract.offerTerms),
+    alreadyAgreed: alreadyAgreedAnswerText(contract),
     dates: {
       offerSentAt: contract.offerSentAt,
       acceptedAt: contract.acceptedAt ?? new Date(),
@@ -114,7 +120,9 @@ export async function generateJudgeContractPdf(
     generatedAt: new Date(),
   };
 
-  const pdfBuffer = await renderToBuffer(JudgeContractPdf({ data: pdfData }));
+  const pdfBuffer = await renderToBuffer(
+    createElement(JudgeContractPdf, { data: pdfData }) as unknown as ReactElement<DocumentProps>,
+  );
 
   const key = `judge-contracts/${contract.showId}/${contractId}.pdf`;
   await uploadToR2(key, pdfBuffer, 'application/pdf');

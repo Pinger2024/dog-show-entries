@@ -1,6 +1,8 @@
 import {
+  boolean,
   index,
   integer,
+  jsonb,
   pgEnum,
   pgTable,
   text,
@@ -10,6 +12,7 @@ import {
 import { relations } from 'drizzle-orm';
 import { shows } from './shows';
 import { judges } from './judges';
+import type { JudgeOfferTerms } from '@/lib/judge-offer-terms';
 
 export const contractStageEnum = pgEnum('contract_stage', [
   'offer_sent',
@@ -47,6 +50,14 @@ export const judgeContracts = pgTable(
     // RKC-audit purposes even if the DB row is later edited.
     contractPdfKey: text('contract_pdf_key'),
     contractPdfGeneratedAt: timestamp('contract_pdf_generated_at', { withTimezone: true }),
+    // The standard terms exactly as sent with the offer (src/lib/judge-offer-terms.ts
+    // owns them). NULL = an offer sent before the terms existed, or a regional:
+    // every surface then renders as it always did.
+    offerTerms: jsonb('offer_terms').$type<JudgeOfferTerms>(),
+    // The judge's answer at acceptance to the "already agreed" question
+    // (worded by src/lib/judge-offer-terms.ts). NULL = never asked.
+    alreadyAgreedElsewhere: boolean('already_agreed_elsewhere'),
+    alreadyAgreedDetails: text('already_agreed_details'),
     createdAt: timestamp('created_at', { withTimezone: true })
       .defaultNow()
       .notNull(),

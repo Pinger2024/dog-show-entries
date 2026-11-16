@@ -1,4 +1,4 @@
-import { integer, pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core';
+import { boolean, integer, pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core';
 import { relations } from 'drizzle-orm';
 import { judgeAssignments } from './judge-assignments';
 import { judgeContracts } from './judge-contracts';
@@ -15,6 +15,10 @@ export const judges = pgTable('judges', {
   photoUrl: text('photo_url'), // Judge portrait photo URL for catalogue
   kennelClubAffix: text('kennel_club_affix'), // e.g., "Sadira" — displayed on schedule after judge name
   kcJudgeId: text('kc_judge_id'), // RKC internal UUID — cached to avoid repeated Firecrawl scrapes
+  // A fact about the judge (judges are shared rows), not about one show. A
+  // judge who lives overseas gets the RKC's F(1).21.b paragraphs only on an
+  // offer, never the Society's terms (src/lib/judge-offer-terms.ts).
+  livesOverseas: boolean('lives_overseas').notNull().default(false),
   createdAt: timestamp('created_at', { withTimezone: true })
     .defaultNow()
     .notNull(),
