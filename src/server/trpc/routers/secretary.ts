@@ -116,6 +116,7 @@ import {
 import { validateRkcSchedule } from '@/lib/rkc-schedule-compliance';
 import { championshipClassesComplete } from '@/lib/championship-class-requirements';
 import { resultsFinalised, resultsPublication } from '@/lib/results-publication';
+import { pickScheduleSources, previousScheduleDefaults } from '@/lib/schedule-defaults';
 import { showIdsWithPublishedResults } from '@/server/services/results-shows';
 
 /**
@@ -6106,7 +6107,7 @@ export const secretaryRouter = createTRPCRouter({
     .query(async ({ ctx, input }) => {
       const currentShow = await ctx.db.query.shows.findFirst({
         where: eq(shows.id, input.showId),
-        columns: { id: true, organisationId: true },
+        columns: { id: true, organisationId: true, showType: true, showRuleset: true },
       });
       if (!currentShow) return null;
 
@@ -6125,14 +6126,20 @@ export const secretaryRouter = createTRPCRouter({
         throw new TRPCError({ code: 'FORBIDDEN', message: 'You do not have access to this show' });
       }
 
-      // Find the most recent OTHER show from the same org that has schedule data
-      const previous = await ctx.db.query.shows.findFirst({
+      // The club's other shows with a schedule, newest first. Everything starts
+      // from the latest; the awards wording and the list of awards from the
+      // last show of the same type (lib/schedule-defaults.ts owns the rule).
+      const others = await ctx.db.query.shows.findMany({
         where: and(
           eq(shows.organisationId, currentShow.organisationId),
           sql`${shows.id} != ${input.showId}`,
           sql`${shows.scheduleData} is not null`,
         ),
         columns: {
+          id: true,
+          name: true,
+          showType: true,
+          showRuleset: true,
           scheduleData: true,
           showOpenTime: true,
           startTime: true,
@@ -6141,13 +6148,19 @@ export const secretaryRouter = createTRPCRouter({
         orderBy: [desc(shows.createdAt)],
       });
 
-      if (!previous?.scheduleData) return null;
+      const sources = pickScheduleSources(currentShow, others);
+      const previous = sources?.latest;
+      if (!sources || !previous?.scheduleData) return null;
 
       return {
-        scheduleData: previous.scheduleData,
+        scheduleData: previousScheduleDefaults(previous.scheduleData, sources.sameType?.scheduleData ?? null),
         showOpenTime: previous.showOpenTime,
         startTime: previous.startTime,
         onCallVet: previous.onCallVet,
+        latestShowName: previous.name,
+        // the show the awards came from, when it is not the latest one
+        awardsFromShowName:
+          sources.sameType && sources.sameType.id !== previous.id ? sources.sameType.name : null,
       };
     }),
 

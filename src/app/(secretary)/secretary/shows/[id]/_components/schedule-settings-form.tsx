@@ -62,6 +62,7 @@ import {
 } from '@/lib/rkc-statements';
 import { SHOW_TIMES } from '@/lib/show-times';
 import { buildBestAwards } from '@/lib/best-awards';
+import { scheduleDefaultsNote } from '@/lib/schedule-defaults';
 import { AwardsPicker } from '@/components/awards/awards-picker';
 import { InlineHelp, type SectionHelpContent } from './section-help';
 import { SE_H } from '@/components/show-experience/tokens';
@@ -725,7 +726,14 @@ export function ScheduleSettingsForm({ showId, onSaved }: ScheduleSettingsFormPr
         <div className="flex items-start gap-2 rounded-lg border border-se-honey-line bg-se-honey-soft px-3 py-2.5 text-sm">
           <Info className="mt-0.5 size-4 shrink-0 text-se-honey-deep" />
           <p className="text-se-honey-deep">
-            Pre-filled from your last show. Review each section and save when ready.
+            {previousData && showData
+              ? scheduleDefaultsNote({
+                  latestShowName: previousData.latestShowName,
+                  awardsFromShowName: previousData.awardsFromShowName,
+                  showType: showData.showType,
+                  showRuleset: showData.showRuleset,
+                })
+              : 'Pre-filled from your last show. Review each section and save when ready.'}
           </p>
         </div>
       )}
