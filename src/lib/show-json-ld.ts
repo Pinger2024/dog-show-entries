@@ -1,8 +1,11 @@
+import { displayShowTypeTitle } from '@/lib/show-types';
+
 interface ShowForJsonLd {
   id: string;
   name: string;
   description?: string | null;
   showType: string;
+  showRuleset?: string | null;
   status: string;
   startDate: string;
   endDate: string;
@@ -36,15 +39,6 @@ interface SponsorForJsonLd {
     logoUrl?: string | null;
   };
 }
-
-const SHOW_TYPE_LABELS: Record<string, string> = {
-  companion: 'Companion Show',
-  primary: 'Primary Show',
-  limited: 'Limited Show',
-  open: 'Open Show',
-  premier_open: 'Premier Open Show',
-  championship: 'Championship Show',
-};
 
 const STATUS_MAP: Record<string, string> = {
   draft: 'https://schema.org/EventScheduled',
@@ -170,7 +164,7 @@ export function buildShowJsonLd(
   // Additional metadata
   jsonLd.isAccessibleForFree = false;
   if (show.showType) {
-    jsonLd.additionalType = SHOW_TYPE_LABELS[show.showType] ?? show.showType;
+    jsonLd.additionalType = displayShowTypeTitle(show.showType, show.showRuleset);
   }
 
   return jsonLd;

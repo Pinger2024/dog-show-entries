@@ -93,7 +93,7 @@ export function JudgeAcceptanceAction({ showId, entityId, entityName }: ActionPa
       )}
 
       {stage === 'declined' && contract.expenseNotes && (
-        <p className="text-xs text-muted-foreground bg-red-50 p-2 rounded-md border border-red-100">
+        <p className="text-xs text-muted-foreground bg-destructive/5 p-2 rounded-md border border-destructive/20">
           {contract.expenseNotes}
         </p>
       )}

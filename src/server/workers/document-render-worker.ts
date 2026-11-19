@@ -1,0 +1,298 @@
+/**
+ * Background worker for document_render_jobs — runs as a SEPARATE OS
+ * process from the web app (see scripts/run-render-worker.ts) so a heavy
+ * PDF render that exhausts memory kills the worker, never the process
+ * serving exhibitors (2026-08-15 outage: a catalogue render OOM-killed the
+ * single prod web instance mid-entries).
+ *
+ * Claims one queued job at a time via `FOR UPDATE SKIP LOCKED` so multiple
+ * worker instances (or a future scale-out) never double-render the same job.
+ *
+ * Two run modes, same loop (2026-08-27): `runWorkerLoop`'s default is
+ * forever-poll — start, then claim/sleep/claim/sleep until something aborts
+ * it — which is what the DEMO uses under launchd (a long-lived process is
+ * exactly what a laptop launchd service expects to manage). Prod instead
+ * runs `{ exitWhenIdle: true }` on a Render Cron Job that fires every 5
+ * minutes: claim and render whatever is queued, then exit the moment the
+ * queue is empty. Render bills cron compute per second actually running,
+ * not per second the process exists — a 24/7 Background Worker idling
+ * between catalogue requests cost ~$25/month; five-minute cron ticks that
+ * mostly find nothing queued and exit in under a second cost pennies. See
+ * scripts/_provision-render-cron.ts.
+ */
+import { createHash } from 'node:crypto';
+import { eq, sql } from 'drizzle-orm';
+import { PDFDocument } from 'pdf-lib';
+import type { Database } from '@/server/db';
+import * as schema from '@/server/db/schema';
+import { uploadToR2, getPublicUrl } from '@/server/services/storage';
+import {
+  renderCatalogueFromSnapshot,
+  type CatalogueSnapshot,
+  type CatalogueFormat,
+} from '@/server/services/catalogue-snapshot';
+import { isCatalogueFormat } from '@/server/services/catalogue-jobs';
+import { runCataloguePreflight, type PreflightReport, type PreflightFormat } from '@/lib/catalogue-preflight';
+
+const STALE_RUNNING_MINUTES = 15;
+const DEFAULT_POLL_INTERVAL_MS = 2000;
+
+/** Raw row shape from the hand-written SQL below — snake_case, as Postgres
+ *  returns it, NOT the drizzle-mapped camelCase shape. Claiming via raw SQL
+ *  (rather than a drizzle update().returning()) is what makes the
+ *  `FOR UPDATE SKIP LOCKED` subquery possible. */
+export interface RawDocumentRenderJobRow {
+  id: string;
+  show_id: string;
+  document_type: string;
+  format: string;
+  status: string;
+  attempts: number;
+  max_attempts: number;
+  error: string | null;
+  requested_by_user_id: string | null;
+  snapshot: CatalogueSnapshot;
+  snapshot_hash: string;
+  file_sha256: string | null;
+  storage_key: string | null;
+  page_count: number | null;
+  file_bytes: number | null;
+  preflight: unknown;
+  created_at: string;
+  started_at: string | null;
+  finished_at: string | null;
+}
+
+function extractRows<T>(result: unknown): T[] {
+  if (Array.isArray(result)) return result as T[];
+  return ((result as { rows?: T[] })?.rows ?? []) as T[];
+}
+
+/** Reset jobs stuck in 'running' from a worker that crashed or was killed
+ *  mid-render — call once at worker start. Returns how many were reset. */
+export async function resetStaleRunningJobs(db: Database): Promise<number> {
+  const result = await db.execute(sql`
+    UPDATE document_render_jobs
+    SET status = 'queued'
+    WHERE status = 'running'
+      AND started_at < now() - make_interval(mins => ${STALE_RUNNING_MINUTES})
+    RETURNING id
+  `);
+  return extractRows<{ id: string }>(result).length;
+}
+
+/** Atomically claim the oldest eligible queued job, marking it 'running' and
+ *  incrementing its attempt count. Returns null when there's nothing to do. */
+export async function claimNextJob(db: Database): Promise<RawDocumentRenderJobRow | null> {
+  const result = await db.execute(sql`
+    UPDATE document_render_jobs
+    SET status = 'running', attempts = attempts + 1, started_at = now()
+    WHERE id = (
+      SELECT id FROM document_render_jobs
+      WHERE status = 'queued' AND attempts < max_attempts
+      ORDER BY created_at
+      LIMIT 1
+      FOR UPDATE SKIP LOCKED
+    )
+    RETURNING *
+  `);
+  const rows = extractRows<RawDocumentRenderJobRow>(result);
+  return rows[0] ?? null;
+}
+
+/** Run the format-aware print preflight against a just-rendered artefact.
+ *  `job.format` — validated with `isCatalogueFormat` (the same guard
+ *  `documentJobs.request` uses) rather than trusted as `PreflightFormat` —
+ *  is what makes this format-aware: every PDF used to be judged as a
+ *  saddle-stitched customer catalogue that must name every entry
+ *  regardless of what it actually was, which is what produced false-red
+ *  `page-count-booklet`/`catalogue-number-completeness` failures on real,
+ *  correctly-printed steward (`judging`) books.
+ *
+ *  A preflight crash must never fail a finished render — this policy is
+ *  unchanged from before: catch ANY throw, log it, and return null so
+ *  `processJob` still records the job as done with no preflight report. */
+async function runPreflight(
+  job: RawDocumentRenderJobRow,
+  buffer: Buffer,
+  snapshot: CatalogueSnapshot,
+): Promise<PreflightReport | null> {
+  try {
+    if (!isCatalogueFormat(job.format)) {
+      console.error(`[document-render-worker] preflight skipped for job ${job.id}: unrecognised format "${job.format}"`);
+      return null;
+    }
+    const format = job.format as PreflightFormat;
+    const report = await runCataloguePreflight(buffer, snapshot.meta, { format });
+    const status = report.passed ? 'PASS' : 'FAIL';
+    const detail = report.passed
+      ? 'all checks passed'
+      : report.checks
+          .filter((c) => c.level === 'fail' && !c.passed)
+          .map((c) => c.id)
+          .join(', ');
+    console.log(
+      `[document-render-worker] job ${job.id} preflight ${status} ${format} (${report.contract.binding}/${report.contract.completeness}): ${detail}`,
+    );
+    return report;
+  } catch (err) {
+    console.error(`[document-render-worker] preflight failed for job ${job.id}:`, err);
+    return null;
+  }
+}
+
+/** Render one claimed job, upload the result, and record the outcome.
+ *  Exported (rather than folded into the poll loop) so tests can exercise
+ *  the exact render→upload→finalise path without spawning a process. */
+export async function processJob(db: Database, job: RawDocumentRenderJobRow): Promise<void> {
+  try {
+    if (job.document_type !== 'catalogue') {
+      throw new Error(`Unsupported document type: ${job.document_type}`);
+    }
+
+    const format = job.format as CatalogueFormat;
+    const buffer = await renderCatalogueFromSnapshot(job.snapshot, format);
+
+    const storageKey = `document-jobs/${job.show_id}/${job.id}.pdf`;
+    await uploadToR2(storageKey, buffer, 'application/pdf');
+
+    const fileSha256 = createHash('sha256').update(buffer).digest('hex');
+    // pdf-lib rather than poppler for the page count — poppler may not be
+    // present wherever this worker eventually runs in prod.
+    const pdfDoc = await PDFDocument.load(buffer);
+    const pageCount = pdfDoc.getPageCount();
+
+    const preflight = await runPreflight(job, buffer, job.snapshot);
+
+    await db
+      .update(schema.documentRenderJobs)
+      .set({
+        status: 'done',
+        error: null,
+        fileSha256,
+        storageKey,
+        pageCount,
+        fileBytes: buffer.byteLength,
+        preflight: preflight ?? null,
+        finishedAt: new Date(),
+      })
+      .where(eq(schema.documentRenderJobs.id, job.id));
+
+    // Backfill any print-order item waiting on this job (print-orders.ts
+    // enqueues catalogue proofs instead of rendering them synchronously).
+    const publicUrl = getPublicUrl(storageKey);
+    await db
+      .update(schema.printOrderItems)
+      .set({ pdfStorageKey: storageKey, pdfPublicUrl: publicUrl, pdfGeneratedAt: new Date() })
+      .where(eq(schema.printOrderItems.renderJobId, job.id));
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error(`[document-render-worker] job ${job.id} failed (attempt ${job.attempts}/${job.max_attempts}):`, message);
+    const exhausted = job.attempts >= job.max_attempts;
+    await db
+      .update(schema.documentRenderJobs)
+      .set({ status: exhausted ? 'failed' : 'queued', error: message })
+      .where(eq(schema.documentRenderJobs.id, job.id));
+  }
+}
+
+function sleep(ms: number, signal?: AbortSignal): Promise<void> {
+  return new Promise((resolve) => {
+    const timer = setTimeout(resolve, ms);
+    signal?.addEventListener(
+      'abort',
+      () => {
+        clearTimeout(timer);
+        resolve();
+      },
+      { once: true },
+    );
+  });
+}
+
+const DEFAULT_JOBS_TABLE_POLL_INTERVAL_MS = 5000;
+
+/** Waits for `document_render_jobs` to exist before the worker touches it.
+ *
+ *  This worker is deployed as its own Render Background Worker, separate
+ *  from the web service — and only the WEB process runs startup migrations
+ *  (src/instrumentation.ts, on boot, production only), which is what
+ *  CREATEs this table. On a first deploy there's no guarantee the web
+ *  instance wins that race: if this worker starts first and calls straight
+ *  into `resetStaleRunningJobs`, Postgres throws `relation
+ *  "document_render_jobs" does not exist`, `main()` (run-render-worker.ts)
+ *  catches it and `process.exit(1)`s, and the worker crash-loops until the
+ *  web process happens to catch up — noisy and slow to recover from.
+ *  Polling `to_regclass` (a plain read, no lock, safe to hammer) sidesteps
+ *  the race entirely: the worker just waits.
+ */
+export async function waitForJobsTable(
+  db: Database,
+  opts: { pollIntervalMs?: number; signal?: AbortSignal } = {},
+): Promise<void> {
+  const pollIntervalMs = opts.pollIntervalMs ?? DEFAULT_JOBS_TABLE_POLL_INTERVAL_MS;
+  let waited = false;
+
+  while (!opts.signal?.aborted) {
+    const result = await db.execute(sql`SELECT to_regclass('public.document_render_jobs') AS tbl`);
+    const [row] = extractRows<{ tbl: string | null }>(result);
+    if (row?.tbl) {
+      if (waited) {
+        console.log('[document-render-worker] document_render_jobs table present');
+      }
+      return;
+    }
+    if (!waited) {
+      console.log(
+        '[document-render-worker] waiting for document_render_jobs table (web startup migrations create it)…',
+      );
+      waited = true;
+    }
+    await sleep(pollIntervalMs, opts.signal);
+  }
+}
+
+/** Poll-claim-render loop.
+ *
+ *  Default (`exitWhenIdle` unset/false): runs until `signal` aborts —
+ *  claim, sleep if nothing's queued, repeat. This is the demo's mode under
+ *  launchd, which expects to manage a long-lived process.
+ *
+ *  `exitWhenIdle: true`: claims and processes jobs back-to-back with no
+ *  sleep between them, and returns the moment `claimNextJob` finds nothing
+ *  left — never sleeps, never waits for `signal`. This is prod's mode under
+ *  a Render Cron Job that reinvokes the whole process every 5 minutes, so
+ *  "idle" here means "hand control back to the process exit", not "poll
+ *  slower". */
+export async function runWorkerLoop(
+  db: Database,
+  opts: { pollIntervalMs?: number; signal?: AbortSignal; exitWhenIdle?: boolean } = {},
+): Promise<void> {
+  const pollIntervalMs = opts.pollIntervalMs ?? DEFAULT_POLL_INTERVAL_MS;
+
+  console.log('[document-render-worker] starting');
+  await waitForJobsTable(db, { signal: opts.signal });
+  if (opts.signal?.aborted) return;
+  const resetCount = await resetStaleRunningJobs(db);
+  if (resetCount > 0) {
+    console.log(`[document-render-worker] reset ${resetCount} stale running job(s) back to queued`);
+  }
+
+  while (!opts.signal?.aborted) {
+    const job = await claimNextJob(db);
+    if (!job) {
+      if (opts.exitWhenIdle) {
+        console.log('[document-render-worker] queue drained — exiting');
+        return;
+      }
+      await sleep(pollIntervalMs, opts.signal);
+      continue;
+    }
+    console.log(
+      `[document-render-worker] claimed job ${job.id} (${job.document_type}/${job.format}, attempt ${job.attempts}/${job.max_attempts})`,
+    );
+    await processJob(db, job);
+  }
+
+  console.log('[document-render-worker] stopped');
+}

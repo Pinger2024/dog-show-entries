@@ -84,10 +84,10 @@ describe('secretary sundry items', () => {
     const show = await makeShow({ organisationId: org.id });
     const caller = createTestCaller(user);
     const a = await caller.secretary.createSundryItem({
-      showId: show.id, name: 'Programme', priceInPence: 500,
+      showId: show.id, name: 'Programme', kind: 'other', priceInPence: 500,
     });
     const b = await caller.secretary.createSundryItem({
-      showId: show.id, name: 'Disc', priceInPence: 1000,
+      showId: show.id, name: 'Disc', kind: 'other', priceInPence: 1000,
     });
     expect(a?.sortOrder).toBe(0);
     expect(b?.sortOrder).toBe(1);
@@ -98,7 +98,7 @@ describe('secretary sundry items', () => {
     const show = await makeShow({ organisationId: org.id });
     const caller = createTestCaller(user);
     const item = await caller.secretary.createSundryItem({
-      showId: show.id, name: 'Programme', priceInPence: 500,
+      showId: show.id, name: 'Programme', kind: 'other', priceInPence: 500,
     });
     const updated = await caller.secretary.updateSundryItem({
       id: item!.id, showId: show.id, priceInPence: 700, enabled: false,
@@ -113,7 +113,7 @@ describe('secretary sundry items', () => {
     const otherShow = await makeShow({ organisationId: otherOrg.id });
     await expect(
       createTestCaller(user).secretary.createSundryItem({
-        showId: otherShow.id, name: 'Sneak', priceInPence: 100,
+        showId: otherShow.id, name: 'Sneak', kind: 'other', priceInPence: 100,
       }),
     ).rejects.toThrow(/access/i);
   });
@@ -124,7 +124,7 @@ describe('secretary sundry items', () => {
     const otherShow = await makeShow({ organisationId: org.id });
     const caller = createTestCaller(user);
     const item = await caller.secretary.createSundryItem({
-      showId: show.id, name: 'Item', priceInPence: 100,
+      showId: show.id, name: 'Item', kind: 'other', priceInPence: 100,
     });
     await expect(
       caller.secretary.updateSundryItem({ id: item!.id, showId: otherShow.id, priceInPence: 200 }),

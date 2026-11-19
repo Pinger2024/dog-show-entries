@@ -8,6 +8,7 @@ import {
   uuid,
 } from 'drizzle-orm/pg-core';
 import { relations } from 'drizzle-orm';
+import { svGradeEnum } from './enums';
 import { entryClasses } from './entry-classes';
 import { users } from './users';
 
@@ -19,6 +20,7 @@ export const results = pgTable(
       .notNull()
       .references(() => entryClasses.id, { onDelete: 'cascade' }),
     placement: integer('placement'),
+    svGrade: svGradeEnum('sv_grade'),
     /**
      * For entries that aren't placed numerically. Mutually exclusive
      * with `placement` — when this is set, `placement` should be null.

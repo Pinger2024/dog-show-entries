@@ -1,5 +1,9 @@
 import { Document, Page, Text, View, StyleSheet, Font } from '@react-pdf/renderer';
 import path from 'path';
+import { formatLondonShortDate } from '@/lib/date-utils';
+import { sexLetter } from '@/lib/class-labels';
+import '@/lib/pdf-hyphenation';
+import { displayShowTypeTitle } from '@/lib/show-types';
 
 const fontsDir = path.join(process.cwd(), 'public', 'fonts');
 Font.register({
@@ -10,11 +14,12 @@ Font.register({
     { src: path.join(fontsDir, 'times-new-roman-italic.ttf'), fontStyle: 'italic' },
   ],
 });
-Font.registerHyphenationCallback((word) => [word]);
 
 export interface RingBoardShowInfo {
   name: string;
   showType: string;
+  /** 'wusv' prints a regional as "Regional" (displayShowTypeLabel owns the rule). */
+  showRuleset?: string | null;
   date: string;
   organisation: string | null;
   venue: string | null;
@@ -26,7 +31,7 @@ export interface RingBoardRing {
   breeds: {
     breedName: string | null;
     classes: {
-      classNumber: number | null;
+      classLabel: string;
       className: string;
       sex: string | null;
       entryCount: number;
@@ -34,15 +39,6 @@ export interface RingBoardRing {
     totalEntries: number;
   }[];
 }
-
-const SHOW_TYPE_LABELS: Record<string, string> = {
-  companion: 'Companion Show',
-  primary: 'Primary Show',
-  limited: 'Limited Show',
-  open: 'Open Show',
-  premier_open: 'Premier Open Show',
-  championship: 'Championship Show',
-};
 
 const s = StyleSheet.create({
   page: {
@@ -187,12 +183,9 @@ export function RingBoard({
   show: RingBoardShowInfo;
   rings: RingBoardRing[];
 }) {
-  const showDate = new Date(show.date).toLocaleDateString('en-GB', {
-    day: 'numeric',
-    month: 'long',
-    year: 'numeric',
-  });
-  const showTypeLabel = SHOW_TYPE_LABELS[show.showType] ?? show.showType;
+  // Always Europe/London, never the process's own timezone (Michael 2026-09-03).
+  const showDate = formatLondonShortDate(show.date);
+  const showTypeLabel = displayShowTypeTitle(show.showType, show.showRuleset);
 
   return (
     <Document title={`Ring Board — ${show.name}`} author="Remi Show Manager">
@@ -208,7 +201,11 @@ export function RingBoard({
           {show.venue && <Text style={s.venue}>{show.venue}</Text>}
         </View>
 
-        <Text style={s.pageTitle}>Ring Plan</Text>
+        {/* minPresenceAhead: keep the "Ring Plan" title with its first ring
+            card — don't strand it alone at the foot of a page. */}
+        <View minPresenceAhead={150}>
+          <Text style={s.pageTitle}>Ring Plan</Text>
+        </View>
 
         {rings.map((ring) => (
           <View key={ring.ringNumber} style={s.ringCard} wrap={false}>
@@ -225,11 +222,11 @@ export function RingBoard({
                     <Text style={s.breedName}>{breed.breedName}</Text>
                   )}
                   {breed.classes.map((cls, ci) => {
-                    const sexLabel = cls.sex === 'dog' ? 'D' : cls.sex === 'bitch' ? 'B' : '';
+                    const sexLabel = sexLetter(cls.sex);
                     return (
                       <View key={ci} style={s.classRow}>
                         <Text style={s.classNumber}>
-                          {cls.classNumber ? `${cls.classNumber}.` : ''}
+                          {cls.classLabel ? `${cls.classLabel}.` : ''}
                         </Text>
                         <Text style={s.className}>{cls.className}</Text>
                         {sexLabel ? <Text style={s.classSex}>{sexLabel}</Text> : <View style={{ width: 50 }} />}

@@ -20,6 +20,8 @@ import {
 } from '@/components/ui/card';
 import { ClubApplicationForm } from '@/components/club-application-form';
 import { trpc } from '@/lib/trpc/client';
+import { cn } from '@/lib/utils';
+import { SE_H } from '@/components/show-experience/tokens';
 
 export default function ApplyPage() {
   const { data: session, status: sessionStatus } = useSession();
@@ -62,7 +64,7 @@ export default function ApplyPage() {
     return (
       <div className="mx-auto max-w-lg space-y-8 pb-16 md:pb-0">
         <div>
-          <h1 className="font-serif text-2xl font-bold tracking-tight sm:text-3xl">
+          <h1 className={cn(SE_H, 'text-2xl sm:text-3xl')}>
             Club Registered
           </h1>
           <p className="mt-1.5 text-muted-foreground">
@@ -70,17 +72,17 @@ export default function ApplyPage() {
           </p>
         </div>
 
-        <Card className="border-emerald-200 bg-emerald-50/50">
+        <Card className="border-se-fresh-line bg-se-fresh-soft/50">
           <CardHeader className="pb-3">
             <div className="flex items-center gap-3">
-              <div className="flex size-10 items-center justify-center rounded-full bg-emerald-100">
-                <CheckCircle2 className="size-5 text-emerald-700" />
+              <div className="flex size-10 items-center justify-center rounded-full bg-se-fresh-soft">
+                <CheckCircle2 className="size-5 text-se-fresh-deep" />
               </div>
               <div>
                 <CardTitle className="text-base font-semibold">
                   {application.organisationName}
                 </CardTitle>
-                <CardDescription className="text-emerald-700">
+                <CardDescription className="text-se-fresh-deep">
                   Your club is registered and ready to go
                 </CardDescription>
               </div>
@@ -105,7 +107,7 @@ export default function ApplyPage() {
   return (
     <div className="mx-auto max-w-lg space-y-8 pb-16 md:pb-0">
       <div>
-        <h1 className="font-serif text-2xl font-bold tracking-tight sm:text-3xl">
+        <h1 className={cn(SE_H, 'text-2xl sm:text-3xl')}>
           Register Your Club
         </h1>
         <p className="mt-1.5 text-muted-foreground">

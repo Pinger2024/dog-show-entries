@@ -1,0 +1,24 @@
+# Dockerfile.worker build context. Render builds from a git checkout of
+# `main` for this service — separate branches (e.g. ops/db-backup, which
+# has its own Dockerfile.backup and no .dockerignore of its own) are
+# entirely separate checkouts and unaffected by this file.
+#
+# Do NOT exclude public/, src/, scripts/, tsconfig.json, next.config.*, or
+# drizzle.config.* — the worker renders PDFs by reading fonts/templates off
+# disk under public/ (see Dockerfile.worker) and runs TypeScript straight
+# out of src/ and scripts/ via tsx, no build step.
+
+.git
+node_modules
+.next
+research/
+drizzle/
+coverage
+*.log
+.env*
+
+# Editor / OS junk
+.DS_Store
+.vscode
+.idea
+*.swp

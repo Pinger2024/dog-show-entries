@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { fireDogConfetti } from '@/lib/confetti';
 import {
   AlertTriangle,
@@ -15,7 +16,29 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { trpc } from '@/lib/trpc';
-import { penceToPoundsString, poundsToPence } from '@/lib/date-utils';
+import {
+  penceToPoundsString,
+  poundsToPence,
+  toLondonDateTimeInput,
+  closeInputForPickedDate,
+  closeInputDate,
+  closeInputTime,
+} from '@/lib/date-utils';
+import {
+  MIN_DAYS_BEFORE_SHOW_START,
+  checkCloseInput,
+  latestPermissibleCloseDateInputValue,
+} from '@/lib/entry-close-rules';
+import { EntryCloseHint, CloseDateRuleHint } from '@/components/shows/entry-close-hint';
+import { VenuePicker } from '@/components/show/venue-picker';
+import {
+  WIZARD_STEPS,
+  WIZARD_STEP_PARAM,
+  isWizardStepId,
+  wizardStepBlocked,
+  type WizardStepId,
+} from '@/lib/show-setup-steps';
+import { SECRETARY_DETAIL_FIELDS, missingSecretaryDetails } from '@/lib/show-setup-requirements';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -35,9 +58,11 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { PostcodeLookup, formatAddress } from '@/components/postcode-lookup';
 import type { RouterOutputs } from '@/server/trpc/router';
 import { ClassManager, BulkClassCreator } from './class-manager';
+import { DiscountsSection } from './discounts-section';
+import { RegionalFeesEditor, type RegionalFeePayload } from './regional-fees-editor';
+import { SectionHeading, InlineHelp } from './section-help';
 import { JudgesSection } from './judge-section';
 import { ScheduleSettingsForm } from './schedule-settings-form';
 import { SundryItemManager } from './sundry-item-manager';
@@ -46,15 +71,11 @@ type Show = NonNullable<RouterOutputs['shows']['getById']>;
 
 // ── Step definitions ──────────────────────────────────────
 
-const STEPS = [
-  { id: 'classes', label: 'Classes & Breeds', shortLabel: 'Classes' },
-  { id: 'judge', label: 'Judge', shortLabel: 'Judge' },
-  { id: 'details', label: 'Fees & Setup', shortLabel: 'Setup' },
-  { id: 'schedule', label: 'Schedule', shortLabel: 'Schedule' },
-  { id: 'open', label: 'Open Entries', shortLabel: 'Open' },
-] as const;
+// ONE owner — src/lib/show-setup-steps.ts: the entries-open blockers name
+// these same steps, which is how the wizard knows what is complete.
+const STEPS = WIZARD_STEPS;
 
-type StepId = (typeof STEPS)[number]['id'];
+type StepId = WizardStepId;
 
 interface SetupWizardProps {
   showId: string;
@@ -64,49 +85,65 @@ interface SetupWizardProps {
 export function SetupWizard({ showId, show }: SetupWizardProps) {
   // ── All hooks first (Rules of Hooks!) ──────────────
 
-  const { data: autoDetect } = trpc.secretary.getChecklistAutoDetect.useQuery(
+  // The same blockers the lifecycle banner shows. A step is complete when no
+  // REQUIRED blocker points at it — ONE owner (src/lib/show-setup-steps.ts),
+  // so the tick here and the red line in the banner can never disagree
+  // (Mandy, 28 Oct 2026: a ticked "Fees & Setup" beside "Venue not confirmed",
+  // because this used to hand-type its own three-item rule).
+  const { data: blockers } = trpc.secretary.getPhaseBlockers.useQuery(
     { showId },
     { staleTime: 15_000 },
   );
+  const searchParams = useSearchParams();
+  const requestedStep = searchParams.get(WIZARD_STEP_PARAM);
 
   const [activeStep, setActiveStep] = useState<StepId>('classes');
   const [initialized, setInitialized] = useState(false);
 
-  // Derive step completion from server data
   const stepComplete = useCallback(
     (stepId: StepId): boolean => {
-      if (!autoDetect) return false;
+      if (!blockers) return false;
       switch (stepId) {
-        case 'classes':
-          return autoDetect.classes_created === true;
-        case 'judge':
-          return autoDetect.judges_assigned === true && autoDetect.judge_offers_sent === true;
-        case 'details':
-          return (
-            autoDetect.entry_fees_set === true &&
-            autoDetect.entry_close_date_set === true &&
-            autoDetect.secretary_details_set === true
-          );
         case 'schedule':
-          return show.scheduleData != null;
+          // Saved at least once, and nothing required left on it.
+          return show.scheduleData != null && !wizardStepBlocked('schedule', blockers.openEntriesBlockers);
         case 'open':
           return false; // This step is "done" when entries are opened
         default:
-          return false;
+          return !wizardStepBlocked(stepId, blockers.openEntriesBlockers);
       }
     },
-    [autoDetect, show.scheduleData],
+    [blockers, show.scheduleData],
   );
 
-  // Auto-open first incomplete step on mount
+  // On mount, open the first incomplete step — unless a blocker's link
+  // asked for one (?step=…), which the effect below follows.
   useEffect(() => {
-    if (initialized || !autoDetect) return;
-    const firstIncomplete = STEPS.find((s) => !stepComplete(s.id));
-    if (firstIncomplete) {
-      setActiveStep(firstIncomplete.id);
+    if (initialized || !blockers) return;
+    if (!isWizardStepId(requestedStep)) {
+      const firstIncomplete = STEPS.find((s) => !stepComplete(s.id));
+      if (firstIncomplete) setActiveStep(firstIncomplete.id);
     }
     setInitialized(true);
-  }, [autoDetect, initialized, stepComplete]);
+  }, [blockers, initialized, requestedStep, stepComplete]);
+
+  // Follow a blocker's link whenever it changes, not only on mount: the
+  // lifecycle banner sits ABOVE this wizard on the same page, so clicking
+  // "Venue not confirmed" there is a soft navigation that changes the query
+  // string without remounting anything. Then land on the anchor the link
+  // named (#sundry-items) or the top of the step, once it has rendered.
+  useEffect(() => {
+    if (!isWizardStepId(requestedStep)) return;
+    setActiveStep(requestedStep);
+    const hash = window.location.hash.slice(1);
+    const timer = window.setTimeout(() => {
+      const target =
+        (hash ? document.getElementById(hash) : null) ??
+        document.getElementById(`wizard-step-${requestedStep}`);
+      target?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 150);
+    return () => window.clearTimeout(timer);
+  }, [requestedStep]);
 
   // ── Render ─────────────────────────────────────────
 
@@ -141,6 +178,21 @@ export function SetupWizard({ showId, show }: SetupWizardProps) {
           <p className="mt-0.5 text-xs text-muted-foreground">
             Complete these {STEPS.length} steps to open entries. You can do them in any order.
           </p>
+          <div className="mt-2">
+            <InlineHelp
+              label="New to this? Read the quick guide"
+              content={{
+                what: 'These steps cover everything we need before exhibitors can enter your show. Each one saves on its own and you can come back to any step at any time. When all five are done, you can open entries to the public.',
+                todo: [
+                  'Work through the steps in order if you like, or click any step to jump to it.',
+                  'Each step has its own Help button (the small question mark next to each section) if you get stuck.',
+                  'Nothing goes live until you press the green Open Entries button at the end.',
+                ],
+                benefit: 'Running a show used to mean a folder full of paper forms, a spreadsheet of entries, several trips to the printer, late nights with the calculator, and a cardboard box of cash on the day. With us, all of that is one online form, one button to open entries, and one click to print whatever you need. Your evenings are yours again.',
+                tip: 'You can leave this page and come back later. Your progress is saved automatically.',
+              }}
+            />
+          </div>
         </div>
       )}
 
@@ -184,7 +236,7 @@ export function SetupWizard({ showId, show }: SetupWizardProps) {
                     className={cn(
                       'flex size-8 items-center justify-center rounded-full text-xs font-semibold transition-colors',
                       isComplete
-                        ? 'bg-emerald-500 text-white'
+                        ? 'bg-se-fresh text-white'
                         : isCurrent
                           ? 'ring-2 ring-primary bg-background text-primary'
                           : 'bg-muted text-muted-foreground',
@@ -216,7 +268,7 @@ export function SetupWizard({ showId, show }: SetupWizardProps) {
                     className={cn(
                       'mx-2 h-0.5 flex-1',
                       stepComplete(STEPS[i].id)
-                        ? 'bg-emerald-500'
+                        ? 'bg-se-fresh'
                         : 'bg-muted',
                     )}
                   />
@@ -233,7 +285,7 @@ export function SetupWizard({ showId, show }: SetupWizardProps) {
         const isCurrent = step.id === activeStep;
 
         return (
-          <Card key={step.id} className="overflow-hidden">
+          <Card key={step.id} id={`wizard-step-${step.id}`} className="overflow-hidden">
             {/* Step header — always visible */}
             <button
               type="button"
@@ -250,7 +302,7 @@ export function SetupWizard({ showId, show }: SetupWizardProps) {
                 className={cn(
                   'flex size-7 shrink-0 items-center justify-center rounded-full text-xs font-semibold',
                   isComplete
-                    ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400'
+                    ? 'bg-se-fresh-soft text-se-fresh-deep'
                     : isCurrent
                       ? 'bg-primary/10 text-primary'
                       : 'bg-muted text-muted-foreground',
@@ -279,7 +331,7 @@ export function SetupWizard({ showId, show }: SetupWizardProps) {
               {isComplete && (
                 <Badge
                   variant="secondary"
-                  className="bg-emerald-50 text-emerald-700 text-xs dark:bg-emerald-900/20 dark:text-emerald-400"
+                  className="bg-se-fresh-soft text-se-fresh-deep text-xs"
                 >
                   Complete
                 </Badge>
@@ -301,19 +353,23 @@ export function SetupWizard({ showId, show }: SetupWizardProps) {
                   <StepClasses showId={showId} show={show} />
                 )}
                 {step.id === 'judge' && (
-                  <StepJudge showId={showId} />
+                  <StepJudge showId={showId} show={show} />
                 )}
                 {step.id === 'details' && (
-                  <StepDetails showId={showId} show={show} />
+                  <StepDetails showId={showId} show={show} onSaved={goNext} />
                 )}
                 {step.id === 'schedule' && (
-                  <StepSchedule showId={showId} onSaved={goNext} />
+                  <StepSchedule showId={showId} show={show} onSaved={goNext} />
                 )}
                 {step.id === 'open' && (
                   <StepOpenEntries showId={showId} />
                 )}
 
-                {/* Navigation */}
+                {/* Navigation — hide standalone Next on steps that have
+                    their own Save button (Details, Schedule). Otherwise
+                    clicking Next would advance without persisting the
+                    half-typed values on the page, which surfaced 2026-05-20
+                    as the "multi-dog package not saving" bug. */}
                 <div className="mt-6 flex items-center justify-between border-t pt-4">
                   {i > 0 ? (
                     <Button
@@ -327,7 +383,7 @@ export function SetupWizard({ showId, show }: SetupWizardProps) {
                   ) : (
                     <div />
                   )}
-                  {i < STEPS.length - 1 && (
+                  {i < STEPS.length - 1 && step.id !== 'details' && step.id !== 'schedule' && (
                     <Button
                       size="sm"
                       className="min-h-[2.75rem] text-sm"
@@ -351,27 +407,109 @@ export function SetupWizard({ showId, show }: SetupWizardProps) {
 
 function StepClasses({ showId, show }: { showId: string; show: Show }) {
   const hasClasses = (show.showClasses?.length ?? 0) > 0;
+  const isWusv = show.showRuleset === 'wusv';
+
+  const help = (
+    <div className="mb-3">
+      <InlineHelp
+        label="What are classes?"
+        content={{
+          what: 'A class is a group of dogs competing against each other, like Puppy, Junior, or Open. Most shows offer several classes so dogs compete with others of a similar age or experience. Each class needs to be set up before exhibitors can enter their dogs.',
+          todo: [
+            'Pick the classes you want to offer (you can use a standard set as a starting point).',
+            'Add or remove classes if your show is different from the usual.',
+            isWusv
+              ? 'Regional shows use the standard SV age classes (Minor Puppy through to Working), split by sex and coat. We set these up for you.'
+              : 'For Champ shows, the Royal Kennel Club has rules about which classes must be offered. We try to flag anything missing.',
+          ],
+          benefit: isWusv
+            ? 'No more typing your class list into a Word document and re-typing it next year. We remember your set up, and the same classes flow straight through to the schedule, the catalogue, and the judges book without you lifting a finger.'
+            : 'No more typing your class list into a Word document and re-typing it next year. We remember your set up, flag any RKC rules that you might miss, and the same classes flow straight through to the schedule, the catalogue, and the judges book without you lifting a finger.',
+          tip: 'You can change classes at any time before entries open. Once a dog has entered a class, that class is locked in so its entry stays valid.',
+        }}
+      />
+    </div>
+  );
 
   if (!hasClasses) {
-    return <BulkClassCreator showId={showId} />;
+    return (
+      <>
+        {help}
+        <BulkClassCreator showId={showId} />
+      </>
+    );
   }
 
   return (
-    <ClassManager
-      showId={showId}
-      showType={show.showType}
-      classes={show.showClasses ?? []}
-    />
+    <>
+      {help}
+      <ClassManager
+        showId={showId}
+        showType={show.showType}
+        showScope={show.showScope}
+        showRuleset={show.showRuleset}
+        classes={show.showClasses ?? []}
+      />
+    </>
   );
 }
 
 // ── Step 2: Judge ─────────────────────────────────────────
 
-function StepJudge({ showId }: { showId: string }) {
-  return <JudgesSection showId={showId} />;
+function StepJudge({ showId, show }: { showId: string; show: Show }) {
+  const isWusv = show.showRuleset === 'wusv';
+  return (
+    <>
+      <div className="mb-3">
+        <InlineHelp
+          label="How do judges work?"
+          content={{
+            what: isWusv
+              ? 'Every regional show needs a judge. Add your judge (or judges) here, and we email each one to ask if they accept the invitation. They confirm online and that locks them in.'
+              : 'Every breed at your show needs a judge. We keep a directory of judges with their Royal Kennel Club details, and we email each one to ask if they accept the invitation. They confirm online and that locks them in.',
+            todo: [
+              isWusv
+                ? 'Add the judge by name and email.'
+                : 'Search for the judge by name. If they are in our directory we will fill in their RKC number for you.',
+              'Choose which breeds and sex each judge is doing (for multi-breed shows).',
+              'When you save, we send the judge an email with the invitation. They click Accept or Decline.',
+              'You can see who has accepted at the top of this section. Chase any that have not replied a week or two before the show.',
+            ],
+            benefit: 'No more posting invitation letters, sending follow-up texts, or wondering whether a judge has confirmed. We send the invitation the moment you save, the judge clicks one button to accept, and you see the green tick instantly. Their name flows straight into the schedule and catalogue.',
+            tip: 'If a judge cannot do the show in the end, you can swap them out at any time and we will send a new invitation to the replacement.',
+          }}
+        />
+      </div>
+      <JudgesSection showId={showId} />
+    </>
+  );
 }
 
 // ── Secretary Details (read-only with edit toggle) ────────
+
+const secretaryFieldLabel = (key: (typeof SECRETARY_DETAIL_FIELDS)[number]['key']) =>
+  SECRETARY_DETAIL_FIELDS.find((f) => f.key === key)?.label ?? key;
+
+/**
+ * "Still needed: Phone, Postal address" — the same list, from the same
+ * owner, that the lifecycle banner's blocker prints. Mandy filled in a
+ * secretary's name and email and could not see why the banner still said
+ * "incomplete" (28 Oct 2026): the form never said what it needed.
+ */
+function SecretaryDetailsHint({ missing }: { missing: string[] }) {
+  if (missing.length === 0) {
+    return (
+      <p className="text-xs text-se-fresh-deep">
+        All four details are in — the schedule and entry form can print them.
+      </p>
+    );
+  }
+  return (
+    <p className="text-xs text-destructive">
+      Still needed before entries can open: {missing.join(', ')}.
+    </p>
+  );
+}
 
 function SecretaryDetails({
   secretaryName,
@@ -380,6 +518,7 @@ function SecretaryDetails({
   secretaryAddress,
   secretaryUserId,
   onChange,
+  onSave,
 }: {
   secretaryName: string;
   secretaryEmail: string;
@@ -387,6 +526,8 @@ function SecretaryDetails({
   secretaryAddress: string;
   secretaryUserId: string | null;
   onChange: (fields: { name?: string; email?: string; phone?: string; address?: string }) => void;
+  /** Persist the four fields to the show — "Save Changes" must mean saved. */
+  onSave?: (fields: { name: string; email: string; phone: string; address: string }) => void;
 }) {
   const [editing, setEditing] = useState(false);
   const [editName, setEditName] = useState(secretaryName);
@@ -415,6 +556,9 @@ function SecretaryDetails({
       phone: editPhone,
       address: editAddress,
     });
+    // Save to the show now, not only when the step's own Save is pressed —
+    // Mandy pressed this button and the banner stayed red (28 Oct 2026).
+    onSave?.({ name: editName, email: editEmail, phone: editPhone, address: editAddress });
 
     // Also update the underlying user record so future shows get the correct data
     if (secretaryUserId) {
@@ -450,7 +594,19 @@ function SecretaryDetails({
     return (
       <div className="space-y-3">
         <div className="flex items-center justify-between">
-          <h4 className="text-sm font-semibold">Secretary Details</h4>
+          <SectionHeading
+            title="Secretary Details"
+            help={{
+              what: 'Your contact details as the show secretary. These appear in the printed schedule and on the show page so exhibitors know who to ask if they have a question.',
+              todo: [
+                'Add your name, email, phone number and postal address — all four are needed before entries can open.',
+                'The schedule and the entry form print them, so exhibitors know who to contact and where to post an entry.',
+                'These details are saved against your account so future shows can pre-fill them.',
+              ],
+              benefit: 'Type these once and they pre-fill every show you ever run with us. They also flow through to the schedule, the catalogue, the entry confirmation emails to exhibitors, and any letters we need to send on your behalf. No copy and paste, no remembering to update three documents when your phone number changes.',
+              tip: 'If your club has a shared show email like secretary@yourclub.co.uk, use that instead of your personal one. It is easier to hand over if someone else takes over the role.',
+            }}
+          />
           {hasDetails && (
             <Button variant="ghost" size="sm" className="h-8 text-xs" onClick={() => setEditing(false)}>
               Cancel
@@ -459,26 +615,30 @@ function SecretaryDetails({
         </div>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <div className="space-y-1.5">
-            <Label htmlFor="wiz-sec-name" className="text-xs">Name</Label>
+            <Label htmlFor="wiz-sec-name" className="text-xs">{secretaryFieldLabel('secretaryName')} <span className="text-destructive">*</span></Label>
             <Input id="wiz-sec-name" placeholder="Secretary name" className="min-h-[2.75rem]" value={val.name} onChange={(e) => set.name(e.target.value)} />
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="wiz-sec-email" className="text-xs">Email</Label>
+            <Label htmlFor="wiz-sec-email" className="text-xs">{secretaryFieldLabel('secretaryEmail')} <span className="text-destructive">*</span></Label>
             <Input id="wiz-sec-email" type="email" placeholder="secretary@example.com" className="min-h-[2.75rem]" value={val.email} onChange={(e) => set.email(e.target.value)} />
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="wiz-sec-phone" className="text-xs">Phone</Label>
+            <Label htmlFor="wiz-sec-phone" className="text-xs">{secretaryFieldLabel('secretaryPhone')} <span className="text-destructive">*</span></Label>
             <Input id="wiz-sec-phone" type="tel" placeholder="Phone number" className="min-h-[2.75rem]" value={val.phone} onChange={(e) => set.phone(e.target.value)} />
           </div>
         </div>
         <div className="space-y-1.5">
-          <Label htmlFor="wiz-sec-address" className="text-xs">Address</Label>
-          <PostcodeLookup
-            compact
-            onSelect={(result) => set.address(`${formatAddress(result)}, ${result.postcode}`)}
-          />
-          <Input id="wiz-sec-address" placeholder="Full address" className="min-h-[2.75rem]" value={val.address} onChange={(e) => set.address(e.target.value)} />
+          <Label htmlFor="wiz-sec-address" className="text-xs">{secretaryFieldLabel('secretaryAddress')} <span className="text-destructive">*</span></Label>
+          <Input id="wiz-sec-address" placeholder="House/flat, street, town, postcode" className="min-h-[2.75rem]" value={val.address} onChange={(e) => set.address(e.target.value)} />
         </div>
+        <SecretaryDetailsHint
+          missing={missingSecretaryDetails({
+            secretaryName: val.name,
+            secretaryEmail: val.email,
+            secretaryPhone: val.phone,
+            secretaryAddress: val.address,
+          })}
+        />
         {editing && (
           <Button size="sm" className="min-h-[2.75rem]" onClick={saveEdits}>
             Save Changes
@@ -521,13 +681,24 @@ function SecretaryDetails({
           </p>
         )}
       </div>
+      <SecretaryDetailsHint
+        missing={missingSecretaryDetails({ secretaryName, secretaryEmail, secretaryPhone, secretaryAddress })}
+      />
     </div>
   );
 }
 
 // ── Step 3: Show Details ──────────────────────────────────
 
-function StepDetails({ showId, show }: { showId: string; show: Show }) {
+function StepDetails({
+  showId,
+  show,
+  onSaved,
+}: {
+  showId: string;
+  show: Show;
+  onSaved?: () => void;
+}) {
   const [firstEntryFee, setFirstEntryFee] = useState(
     show.firstEntryFee != null ? penceToPoundsString(show.firstEntryFee) : '',
   );
@@ -542,15 +713,17 @@ function StepDetails({ showId, show }: { showId: string; show: Show }) {
   const [juniorHandlerFee, setJuniorHandlerFee] = useState(
     show.juniorHandlerFee != null ? penceToPoundsString(show.juniorHandlerFee) : '',
   );
+  const [multiDog, setMultiDog] = useState({
+    threshold: show.multiDogThreshold != null ? String(show.multiDogThreshold) : '',
+    packagePence: show.multiDogPackagePence != null ? penceToPoundsString(show.multiDogPackagePence) : '',
+  });
+  // Close date/time boxes hold UK wall-clock 'YYYY-MM-DDTHH:mm' — never the
+  // UTC clock (2026-09-22: that moved every BST close an hour earlier per Save).
   const [entryCloseDate, setEntryCloseDate] = useState(
-    show.entryCloseDate
-      ? new Date(show.entryCloseDate).toISOString().slice(0, 16)
-      : '',
+    show.entryCloseDate ? toLondonDateTimeInput(show.entryCloseDate) : '',
   );
   const [postalCloseDate, setPostalCloseDate] = useState(
-    show.postalCloseDate
-      ? new Date(show.postalCloseDate).toISOString().slice(0, 16)
-      : '',
+    show.postalCloseDate ? toLondonDateTimeInput(show.postalCloseDate) : '',
   );
   const [secretaryName, setSecretaryName] = useState(show.secretaryName ?? '');
   const [secretaryEmail, setSecretaryEmail] = useState(
@@ -563,6 +736,10 @@ function StepDetails({ showId, show }: { showId: string; show: Show }) {
     show.secretaryAddress ?? '',
   );
   const [kcLicenceNo, setKcLicenceNo] = useState(show.kcLicenceNo ?? '');
+  const isWusv = show.showRuleset === 'wusv';
+  // Embedded RegionalFeesEditor reports its config here so this step's single
+  // Save persists fees alongside the close dates (no two-save-button trap).
+  const [regionalPayload, setRegionalPayload] = useState<RegionalFeePayload | null>(null);
 
   const utils = trpc.useUtils();
   const updateMutation = trpc.shows.update.useMutation({
@@ -571,34 +748,71 @@ function StepDetails({ showId, show }: { showId: string; show: Show }) {
       utils.secretary.getChecklistAutoDetect.invalidate({ showId });
       utils.secretary.getPhaseBlockers.invalidate({ showId });
       toast.success('Show details saved');
+      // Advance to the next step on successful save — the wizard's standalone
+      // Next button is hidden on this step (2026-05-20 fix for the multi-dog
+      // package not saving when users clicked Next instead of Save Details).
+      onSaved?.();
     },
     onError: (err) => toast.error(err.message ?? 'Failed to save details'),
   });
 
+  // The venue and the secretary details save on their own, without moving
+  // to the next step: choosing a venue is a choice, not "I'm done here".
+  const saveVenueMutation = trpc.shows.update.useMutation({
+    onSuccess: () => {
+      utils.shows.getById.invalidate({ id: showId });
+      utils.secretary.getChecklistAutoDetect.invalidate({ showId });
+      utils.secretary.getPhaseBlockers.invalidate({ showId });
+      toast.success('Venue saved');
+    },
+    onError: (err) => toast.error(err.message ?? 'Failed to save the venue'),
+  });
+  const saveSecretaryMutation = trpc.shows.update.useMutation({
+    onSuccess: () => {
+      utils.shows.getById.invalidate({ id: showId });
+      utils.secretary.getChecklistAutoDetect.invalidate({ showId });
+      utils.secretary.getPhaseBlockers.invalidate({ showId });
+      toast.success('Secretary details saved');
+    },
+    onError: (err) => toast.error(err.message ?? 'Failed to save the secretary details'),
+  });
+
   function handleSave() {
-    if (entryCloseDate && show.startDate && new Date(entryCloseDate) >= new Date(show.startDate)) {
-      toast.error('Entry close date must be before the show start date');
+    // Mandy's hard rule (2026-08-04): entries — and postal entries — must
+    // close at least two weeks before the show. Same helper + message the
+    // server uses, so this can never drift from what the server accepts.
+    // checkCloseInput also hands back the exact instant to send, so the
+    // value checked is the value saved.
+    const entryClose = checkCloseInput(entryCloseDate, show.startDate, 'entry close date');
+    if (!entryClose.ok) {
+      toast.error(entryClose.message);
       return;
     }
-    if (postalCloseDate && show.startDate && new Date(postalCloseDate) >= new Date(show.startDate)) {
-      toast.error('Postal close date must be before the show start date');
+    const postalClose = checkCloseInput(postalCloseDate, show.startDate, 'postal close date');
+    if (!postalClose.ok) {
+      toast.error(postalClose.message);
       return;
     }
 
     updateMutation.mutate({
       id: showId,
-      firstEntryFee: firstEntryFee ? poundsToPence(Number(firstEntryFee)) : null,
-      subsequentEntryFee: subsequentEntryFee
+      // Regional (SV/WUSV) shows price via regionalFeeConfig (reported up by the
+      // embedded RegionalFeesEditor); their RKC fee fields stay untouched.
+      firstEntryFee: isWusv ? undefined : firstEntryFee ? poundsToPence(Number(firstEntryFee)) : null,
+      subsequentEntryFee: isWusv
+        ? undefined
+        : subsequentEntryFee
         ? poundsToPence(Number(subsequentEntryFee))
         : null,
-      nfcEntryFee: nfcEntryFee ? poundsToPence(Number(nfcEntryFee)) : null,
-      juniorHandlerFee: juniorHandlerFee ? poundsToPence(Number(juniorHandlerFee)) : null,
-      entryCloseDate: entryCloseDate
-        ? new Date(entryCloseDate).toISOString()
-        : null,
-      postalCloseDate: postalCloseDate
-        ? new Date(postalCloseDate).toISOString()
-        : null,
+      nfcEntryFee: isWusv ? undefined : nfcEntryFee ? poundsToPence(Number(nfcEntryFee)) : null,
+      juniorHandlerFee: isWusv
+        ? regionalPayload?.juniorHandlerFeePence ?? undefined
+        : juniorHandlerFee ? poundsToPence(Number(juniorHandlerFee)) : null,
+      regionalFeeConfig: isWusv ? regionalPayload?.config ?? undefined : undefined,
+      multiDogThreshold: isWusv ? undefined : multiDog.threshold ? Number(multiDog.threshold) : null,
+      multiDogPackagePence: isWusv ? undefined : multiDog.packagePence ? poundsToPence(Number(multiDog.packagePence)) : null,
+      entryCloseDate: entryClose.instant,
+      postalCloseDate: postalClose.instant,
       secretaryName: secretaryName || null,
       secretaryEmail: secretaryEmail || null,
       secretaryPhone: secretaryPhone || null,
@@ -609,9 +823,55 @@ function StepDetails({ showId, show }: { showId: string; show: Show }) {
 
   return (
     <div className="space-y-6">
+      {/* Venue — until 28 Oct 2026 no screen could set a show's venue after
+          creation (Mandy, GSD Club of Scotland): the banner said "Venue not
+          confirmed" and sent her here, and here had nothing. */}
+      <div className="space-y-3">
+        <SectionHeading
+          title="Venue"
+          help={{
+            what: 'Where the show is held. It is printed on the schedule and shown to exhibitors on the show page, with a map once the postcode is known.',
+            todo: [
+              'Choose one of your club\'s venues, or add a new one with its name, address and postcode.',
+              'Your choice is saved straight away.',
+            ],
+            tip: 'Add the postcode and we put the venue on the map for exhibitors travelling to you.',
+          }}
+        />
+        <VenuePicker
+          organisationId={show.organisationId}
+          value={show.venueId}
+          onChange={(venueId) => saveVenueMutation.mutate({ id: showId, venueId })}
+          disabled={saveVenueMutation.isPending}
+          idPrefix="wiz-venue"
+        />
+      </div>
+
       {/* Entry Fees */}
       <div className="space-y-3">
-        <h4 className="text-sm font-semibold">Entry Fees</h4>
+        <SectionHeading
+          title="Entry Fees"
+          help={{
+            what: 'The prices people pay to enter their dog. There are usually two main rates: one for the first class a dog enters, and a cheaper one for any extra classes the same dog enters.',
+            todo: [
+              'First entry fee: what people pay for one dog in one class.',
+              'Subsequent entry fee: what they pay if the same dog enters another class at the same show.',
+              'NFC: Not For Competition. For people who want to bring their dog along but not compete. Some shows charge less, some leave it the same.',
+              'Junior Handler: for the young handler classes. Usually free or just a small amount.',
+            ],
+            benefit: 'We work out the right total for every order automatically, including first-class and extra-class fees, and we collect the money for you at the same time the exhibitor enters. No more cash on the day, no more chasing late payments, no more sums on a notepad.',
+            tip: 'You can leave any of these blank if you do not offer that type of entry. Just set what applies to your show.',
+          }}
+        />
+        {isWusv ? (
+          <RegionalFeesEditor
+            showId={showId}
+            config={show.regionalFeeConfig}
+            juniorHandlerFeePence={show.juniorHandlerFee}
+            onChange={setRegionalPayload}
+          />
+        ) : (
+          <>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <div className="space-y-1.5">
             <Label htmlFor="wiz-first-fee" className="text-xs">
@@ -694,36 +954,113 @@ function StepDetails({ showId, show }: { showId: string; show: Show }) {
             </div>
           </div>
         </div>
+
+        <DiscountsSection
+          showId={showId}
+          multiDog={multiDog}
+          onMultiDogChange={setMultiDog}
+        />
+          </>
+        )}
       </div>
 
       {/* Close Dates */}
       <div className="space-y-3">
-        <h4 className="text-sm font-semibold">Close Dates</h4>
+        <SectionHeading
+          title="Close Dates"
+          help={{
+            what: 'The deadlines for entries. After the online close date, exhibitors cannot enter through Remi any more. The postal close date is for people who post their entry form to you by hand, if you accept those.',
+            todo: [
+              'Pick the date and time online entries should close. This is usually a couple of weeks before the show.',
+              'If you accept postal entries, set the postal close date too. It can be the same as the online date, or different.',
+              `Both dates must be at least ${MIN_DAYS_BEFORE_SHOW_START} calendar days before the show day — see the exact latest date below.`,
+            ],
+            benefit: 'We close entries automatically at the exact date and time you set. No more checking the inbox at midnight, no more deciding whether a late entry that arrived in the post a day late should be accepted. The deadline is fair, firm, and out of your hands.',
+            tip: 'You can extend a close date later if you need more entries. Just come back and change it.',
+          }}
+        />
+        {show.startDate && <EntryCloseHint startDate={show.startDate} />}
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <div className="space-y-1.5">
             <Label htmlFor="wiz-close-date" className="text-xs">
               Entry close date
             </Label>
-            <Input
-              id="wiz-close-date"
-              type="datetime-local"
-              className="min-h-[2.75rem]"
-              value={entryCloseDate}
-              onChange={(e) => setEntryCloseDate(e.target.value)}
-            />
+            {/* Separate date + time inputs (Mandy 2026-07-23): closes default
+                to 11:59pm on the chosen date. A combined datetime-local can't
+                deliver that — iOS's wheel starts from an arbitrary time, so
+                the "default" was whatever the wheel happened to say. */}
+            <div className="flex gap-2">
+              <Input
+                id="wiz-close-date"
+                type="date"
+                className="min-h-[2.75rem] flex-1"
+                value={closeInputDate(entryCloseDate)}
+                max={show.startDate ? latestPermissibleCloseDateInputValue(show.startDate) : undefined}
+                onChange={(e) => {
+                  // A picked date closes at 23:59 UK time (founder rule).
+                  const newClose = e.target.value ? closeInputForPickedDate(e.target.value) : '';
+                  // Mandy's hard rule (2026-08-04): same floor guard as Save
+                  // (handleSave above), but on change — immediate feedback
+                  // rather than a surprise on the eventual save.
+                  const check = checkCloseInput(newClose, show.startDate, 'entry close date');
+                  if (!check.ok) {
+                    // Still being typed (e.g. a 5-digit year): wait quietly.
+                    if (check.reason === 'too-late') toast.error(check.message);
+                    return;
+                  }
+                  setEntryCloseDate(newClose);
+                }}
+              />
+              <Input
+                aria-label="Closing time"
+                type="time"
+                className="min-h-[2.75rem] w-28"
+                value={closeInputTime(entryCloseDate)}
+                disabled={!entryCloseDate}
+                onChange={(e) =>
+                  entryCloseDate &&
+                  setEntryCloseDate(closeInputForPickedDate(closeInputDate(entryCloseDate), e.target.value))
+                }
+              />
+            </div>
+            <CloseDateRuleHint field="entry close date" startDate={show.startDate} showRuleset={show.showRuleset} />
           </div>
           {show.acceptsPostalEntries && (
             <div className="space-y-1.5">
               <Label htmlFor="wiz-postal-close" className="text-xs">
                 Postal close date
               </Label>
-              <Input
-                id="wiz-postal-close"
-                type="datetime-local"
-                className="min-h-[2.75rem]"
-                value={postalCloseDate}
-                onChange={(e) => setPostalCloseDate(e.target.value)}
-              />
+              <div className="flex gap-2">
+                <Input
+                  id="wiz-postal-close"
+                  type="date"
+                  className="min-h-[2.75rem] flex-1"
+                  value={closeInputDate(postalCloseDate)}
+                  max={show.startDate ? latestPermissibleCloseDateInputValue(show.startDate) : undefined}
+                  onChange={(e) => {
+                    const newClose = e.target.value ? closeInputForPickedDate(e.target.value) : '';
+                    // Same guard as the entry close date above.
+                    const check = checkCloseInput(newClose, show.startDate, 'postal close date');
+                    if (!check.ok) {
+                      if (check.reason === 'too-late') toast.error(check.message);
+                      return;
+                    }
+                    setPostalCloseDate(newClose);
+                  }}
+                />
+                <Input
+                  aria-label="Postal closing time"
+                  type="time"
+                  className="min-h-[2.75rem] w-28"
+                  value={closeInputTime(postalCloseDate)}
+                  disabled={!postalCloseDate}
+                  onChange={(e) =>
+                    postalCloseDate &&
+                    setPostalCloseDate(closeInputForPickedDate(closeInputDate(postalCloseDate), e.target.value))
+                  }
+                />
+              </div>
+              <CloseDateRuleHint field="postal close date" startDate={show.startDate} showRuleset={show.showRuleset} />
             </div>
           )}
         </div>
@@ -736,6 +1073,15 @@ function StepDetails({ showId, show }: { showId: string; show: Show }) {
         secretaryPhone={secretaryPhone}
         secretaryAddress={secretaryAddress}
         secretaryUserId={show.secretaryUserId}
+        onSave={(f) =>
+          saveSecretaryMutation.mutate({
+            id: showId,
+            secretaryName: f.name || null,
+            secretaryEmail: f.email || null,
+            secretaryPhone: f.phone || null,
+            secretaryAddress: f.address || null,
+          })
+        }
         onChange={(fields) => {
           if (fields.name !== undefined) setSecretaryName(fields.name);
           if (fields.email !== undefined) setSecretaryEmail(fields.email);
@@ -744,21 +1090,35 @@ function StepDetails({ showId, show }: { showId: string; show: Show }) {
         }}
       />
 
-      {/* RKC Licence */}
-      <div className="space-y-1.5">
-        <Label htmlFor="wiz-licence" className="text-xs">
-          RKC Licence Number
-        </Label>
-        <Input
-          id="wiz-licence"
-          placeholder="Licence number"
-          className="min-h-[2.75rem] max-w-xs"
-          value={kcLicenceNo}
-          onChange={(e) => setKcLicenceNo(e.target.value)}
-        />
-      </div>
+      {/* RKC Licence — not applicable to SV/WUSV regional shows, which run
+          under GSDL British Regional Group / WUSV rules, not an RKC licence. */}
+      {!isWusv && (
+        <div className="space-y-1.5">
+          <SectionHeading
+            title="RKC Licence Number"
+            help={{
+              what: 'The Royal Kennel Club gives each licensed show a unique number. It must be printed on the schedule and catalogue. The RKC sends it to you when they approve your show licence.',
+              todo: [
+                'Find the licence number on the approval email or letter the RKC sent you.',
+                'Type it in here. We will put it on the schedule and catalogue automatically.',
+              ],
+              tip: 'If you have not had the licence number back yet, you can come back and add it later. It does not stop you opening entries.',
+            }}
+            level="h5"
+          />
+          <Input
+            id="wiz-licence"
+            placeholder="Licence number"
+            className="min-h-[2.75rem] max-w-xs"
+            value={kcLicenceNo}
+            onChange={(e) => setKcLicenceNo(e.target.value)}
+          />
+        </div>
+      )}
 
-      {/* Save */}
+      {/* Save + advance — single button does both so half-typed values
+          (like the multi-dog package fields) can't get left behind by a
+          Next click that doesn't save. */}
       <Button
         className="w-full min-h-[2.75rem] sm:w-auto"
         onClick={handleSave}
@@ -770,16 +1130,30 @@ function StepDetails({ showId, show }: { showId: string; show: Show }) {
             Saving...
           </>
         ) : (
-          'Save Details'
+          <>
+            Save &amp; Continue
+            <ChevronRight className="ml-1 size-3.5" />
+          </>
         )}
       </Button>
 
-      {/* Sundry Items */}
-      <div className="space-y-3">
-        <h4 className="text-sm font-semibold">Sundry Items</h4>
-        <p className="text-xs text-muted-foreground">
-          Configure add-on items exhibitors can purchase at checkout, such as catalogues, memberships, and donations.
-        </p>
+      {/* Sundry Items — id is the anchor the no_sundry_items blocker links to */}
+      <div id="sundry-items" className="space-y-3">
+        <SectionHeading
+          title="Sundry Items"
+          subtitle="Optional extras exhibitors can add to their order at checkout."
+          help={{
+            what: 'Anything you would like to sell alongside the entry fees, like printed catalogues, club memberships, raffle tickets, or a donation to a charity. Exhibitors see these as add-ons when they check out.',
+            todo: [
+              'Click Add to create a new item.',
+              'Give it a clear name and a price.',
+              'Tick whether it is a yes/no item (like a printed catalogue) or whether people can buy more than one (like raffle tickets).',
+              'You can edit or remove items any time before the order is paid.',
+            ],
+            benefit: 'No more bags of cash for catalogue sales on the day, no more counting raffle ticket stubs, no more chasing club memberships through the post. Exhibitors tick what they want, pay online, and you arrive on the day with a clean list of who has bought what.',
+            tip: 'This is a great place to add a donation to a charity close to your club. Exhibitors are often happy to add £5 to their order if it goes to a good cause.',
+          }}
+        />
         <SundryItemManager showId={showId} />
       </div>
     </div>
@@ -790,12 +1164,36 @@ function StepDetails({ showId, show }: { showId: string; show: Show }) {
 
 function StepSchedule({
   showId,
+  show,
   onSaved,
 }: {
   showId: string;
+  show: Show;
   onSaved: () => void;
 }) {
-  return <ScheduleSettingsForm showId={showId} onSaved={onSaved} />;
+  const isWusv = show.showRuleset === 'wusv';
+  return (
+    <>
+      <div className="mb-3">
+        <InlineHelp
+          label="What is the schedule for?"
+          content={{
+            what: isWusv
+              ? 'The schedule is the printed (or shared digitally) document that tells exhibitors everything about your show. It includes the date, the venue, the classes, the judges, the fees, and all the rules. We add the standard statements for you automatically.'
+              : 'The schedule is the printed (or shared digitally) document that tells exhibitors everything about your show. It includes the date, the venue, the classes, the judges, the fees, and all the rules. The Royal Kennel Club requires certain statements to be on it, and we add those for you automatically.',
+            todo: [
+              'Fill in each section by clicking it open and typing the details.',
+              'Click Preview PDF at the top to see how it looks before you share it.',
+              'When you are happy, share the link or the PDF with exhibitors.',
+            ],
+            benefit: 'Schedules used to mean a Word document, an emailed quote from the printer, a marked up PDF proof going back and forth, postage costs, and a week or two of wait. With us, you fill in the form once and the schedule appears as a polished PDF in seconds. Every time you change something, the PDF updates. No printer, no postage, no proofs, no waiting. Share the link on social media and exhibitors read it on their phone.',
+            tip: 'You do not have to finish this in one go. The form saves as you type, so you can come back any time and pick up where you left off.',
+          }}
+        />
+      </div>
+      <ScheduleSettingsForm showId={showId} onSaved={onSaved} />
+    </>
+  );
 }
 
 // ── Step 5: Open Entries ──────────────────────────────────
@@ -831,6 +1229,19 @@ function StepOpenEntries({ showId }: { showId: string }) {
 
   return (
     <div className="space-y-4">
+      <InlineHelp
+        label="What happens when I open entries?"
+        content={{
+          what: 'Opening entries makes your show live. From that moment, exhibitors can find it on Remi and enter their dogs. Their money is taken at the time of entry, and we hold it until after the show, when it is paid out to your club.',
+          todo: [
+            'Make sure every item on the checklist below has a green tick.',
+            'Click the green Open Entries button at the bottom.',
+            'You will see a confirmation and the show will appear publicly.',
+          ],
+          benefit: 'The moment you click open, exhibitors can find the show in our directory and on every search engine. They enter on their phone in two minutes, pay there and then, and you get an email confirming each entry. No envelopes, no cheques to bank, no spreadsheet to maintain. Watch your entries grow in real time on the dashboard.',
+          tip: 'You can edit most things about the show after entries open, but be careful changing fees or classes once people have started entering. Tell exhibitors first if you do.',
+        }}
+      />
       <p className="text-sm text-muted-foreground">
         Review the checklist below. All required items must be completed before
         you can open entries.
@@ -846,9 +1257,9 @@ function StepOpenEntries({ showId }: { showId: string }) {
       ) : (
         <div className="space-y-1.5">
           {allBlockers.length === 0 && (
-            <div className="flex items-center gap-2.5 rounded-md bg-emerald-50 px-3 py-3 dark:bg-emerald-900/20">
-              <Check className="size-5 text-emerald-600" />
-              <span className="text-sm font-medium text-emerald-700 dark:text-emerald-400">
+            <div className="flex items-center gap-2.5 rounded-md bg-se-fresh-soft px-3 py-3">
+              <Check className="size-5 text-se-fresh-deep" />
+              <span className="text-sm font-medium text-se-fresh-deep">
                 All requirements met — ready to open entries!
               </span>
             </div>
@@ -864,13 +1275,13 @@ function StepOpenEntries({ showId }: { showId: string }) {
                   'flex size-5 shrink-0 items-center justify-center rounded-full',
                   blocker.severity === 'required'
                     ? 'bg-destructive/10'
-                    : 'bg-amber-100 dark:bg-amber-900/30',
+                    : 'bg-se-honey-soft',
                 )}
               >
                 {blocker.severity === 'required' ? (
                   <X className="size-3 text-destructive" />
                 ) : (
-                  <AlertTriangle className="size-3 text-amber-600" />
+                  <AlertTriangle className="size-3 text-se-honey-deep" />
                 )}
               </div>
 

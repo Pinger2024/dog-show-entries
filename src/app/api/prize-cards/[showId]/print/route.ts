@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { html } from '@/lib/html-escape';
 
 /**
  * Returns an HTML wrapper page that embeds the prize-card PDF and
@@ -14,6 +15,9 @@ import { NextRequest, NextResponse } from 'next/server';
  * does its own auth + data fetch, so anyone hitting this wrapper without a
  * valid session just gets an empty iframe. Nothing sensitive leaks from the
  * wrapper itself (it doesn't contain the show name, entries, or any PII).
+ * (An admin-only session check was briefly shipped here on 2026-07-30 based
+ * on a stale branch's UI; it locked secretaries out of the mobile print flow
+ * and was reverted the same day.)
  */
 export async function GET(
   request: NextRequest,
@@ -31,9 +35,13 @@ export async function GET(
     if (value !== null) forwarded.set(key, value);
   }
   forwarded.set('preview', '1');
-  const pdfHref = `/api/prize-cards/${showId}?${forwarded.toString()}`;
+  // showId comes straight from the URL (Next decodes it), so it is
+  // path-encoded here and the whole page is built with the escaping `html`
+  // tag — a crafted link must not be able to inject markup (bug hunt
+  // 2026-09-22: reflected XSS against a logged-in secretary).
+  const pdfHref = `/api/prize-cards/${encodeURIComponent(showId)}?${forwarded.toString()}`;
 
-  const html = `<!DOCTYPE html>
+  const page = html`<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="utf-8">
@@ -120,9 +128,9 @@ export async function GET(
     })();
   </script>
 </body>
-</html>`;
+</html>`.toString();
 
-  return new NextResponse(html, {
+  return new NextResponse(page, {
     status: 200,
     headers: {
       'Content-Type': 'text/html; charset=utf-8',
