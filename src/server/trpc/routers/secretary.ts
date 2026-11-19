@@ -43,6 +43,7 @@ import {
 } from '@/lib/show-setup-requirements';
 import { wizardStepPath, wizardStepLabel, type WizardStepKey } from '@/lib/show-setup-steps';
 import { SV_CLASS_AUTO_CREATE_COMBOS, isUnnumberedClassDef } from '@/lib/class-labels';
+import { newShowClassBreed } from '@/lib/show-class-breed';
 import {
   shows,
   entries,
@@ -1885,11 +1886,11 @@ export const secretaryRouter = createTRPCRouter({
       const [targetShow, classDefinition] = await Promise.all([
         ctx.db.query.shows.findFirst({
           where: eq(shows.id, input.showId),
-          columns: { showScope: true, showRuleset: true, scheduleData: true },
+          columns: { showScope: true, showRuleset: true, scheduleData: true, breedId: true },
         }),
         ctx.db.query.classDefinitions.findFirst({
           where: eq(classDefinitions.id, input.classDefinitionId),
-          columns: { name: true },
+          columns: { name: true, type: true },
         }),
       ]);
       if (!targetShow || !classDefinition) throw new TRPCError({ code: 'NOT_FOUND' });
@@ -1916,17 +1917,26 @@ export const secretaryRouter = createTRPCRouter({
         .from(showClasses)
         .where(eq(showClasses.showId, input.showId));
 
+      // Which breed the class is saved with — one owner (lib/show-class-breed.ts):
+      // "Any breed" + Combined on a single-breed show takes the show's breed, or
+      // its judge would read as Junior Handling (Mandy 8355, 19 Nov 2026).
+      const breed = newShowClassBreed(targetShow, {
+        sex: input.sex ?? null,
+        classDefinitionType: classDefinition.type,
+        breedId: input.breedId,
+      });
+
       const [created] = await ctx.db
         .insert(showClasses)
         .values({
           showId: input.showId,
           classDefinitionId: input.classDefinitionId,
-          breedId: input.breedId ?? null,
+          breedId: breed.breedId,
           classGroup: input.classGroup ?? null,
           sex: input.sex ?? null,
           entryFee: input.entryFee,
           sortOrder: (Number(maxSort?.max) ?? -1) + 1,
-          isBreedSpecific: !!input.breedId,
+          isBreedSpecific: breed.isBreedSpecific,
         })
         .returning();
       return created!;
@@ -1959,7 +1969,7 @@ export const secretaryRouter = createTRPCRouter({
 
       const targetShow = await ctx.db.query.shows.findFirst({
         where: eq(shows.id, input.showId),
-        columns: { showScope: true, showRuleset: true },
+        columns: { showScope: true, showRuleset: true, breedId: true },
       });
       if (!targetShow) throw new TRPCError({ code: 'NOT_FOUND' });
       if (
@@ -2016,22 +2026,26 @@ export const secretaryRouter = createTRPCRouter({
         isBreedSpecific: boolean;
       }> = [];
 
+      // Which breed each class is saved with — one owner (lib/show-class-breed.ts).
+      const classDefTypeMap = new Map(classDefRows.map((cd) => [cd.id, cd.type]));
+      const breedFor = (classDefId: string, sex: 'dog' | 'bitch' | null, breedId: string | null) =>
+        newShowClassBreed(targetShow, { sex, classDefinitionType: classDefTypeMap.get(classDefId), breedId });
+
       if (input.breedIds.length === 0) {
-        // Handling classes — no breeds, no sex split
+        // No breeds ticked, no sex split. Junior Handling stays breed-less; on a
+        // single-breed show any other class takes the show's breed, or its judge
+        // would read as Junior Handling (Mandy 8355, 19 Nov 2026).
         for (const classDefId of sortedClassDefIds) {
           values.push({
             showId: input.showId,
-            breedId: null,
             classDefinitionId: classDefId,
             sex: null,
             entryFee: input.entryFee,
             sortOrder: sortOrder++,
-            isBreedSpecific: false,
+            ...breedFor(classDefId, null, null),
           });
         }
       } else {
-        // Build a type map from the already-fetched classDefRows
-        const classDefTypeMap = new Map(classDefRows.map((cd) => [cd.id, cd.type]));
 
         // Track JH class definitions already added (they should only appear once
         // across all breeds, not once per breed)
@@ -2050,23 +2064,21 @@ export const secretaryRouter = createTRPCRouter({
                     addedJhClassDefIds.add(classDefId);
                     values.push({
                       showId: input.showId,
-                      breedId: null,
                       classDefinitionId: classDefId,
                       sex: null,
                       entryFee: input.entryFee,
                       sortOrder: sortOrder++,
-                      isBreedSpecific: false,
+                      ...breedFor(classDefId, null, null),
                     });
                   }
                 } else {
                   values.push({
                     showId: input.showId,
-                    breedId,
                     classDefinitionId: classDefId,
                     sex,
                     entryFee: input.entryFee,
                     sortOrder: sortOrder++,
-                    isBreedSpecific: true,
+                    ...breedFor(classDefId, sex, breedId),
                   });
                 }
               }
@@ -2080,23 +2092,21 @@ export const secretaryRouter = createTRPCRouter({
                   addedJhClassDefIds.add(classDefId);
                   values.push({
                     showId: input.showId,
-                    breedId: null,
                     classDefinitionId: classDefId,
                     sex: null,
                     entryFee: input.entryFee,
                     sortOrder: sortOrder++,
-                    isBreedSpecific: false,
+                    ...breedFor(classDefId, null, null),
                   });
                 }
               } else {
                 values.push({
                   showId: input.showId,
-                  breedId,
                   classDefinitionId: classDefId,
                   sex: null,
                   entryFee: input.entryFee,
                   sortOrder: sortOrder++,
-                  isBreedSpecific: true,
+                  ...breedFor(classDefId, null, breedId),
                 });
               }
             }
