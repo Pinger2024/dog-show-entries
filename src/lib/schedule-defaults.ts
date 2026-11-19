@@ -67,20 +67,19 @@ export function previousScheduleDefaults(latest: ScheduleData, sameType: Schedul
 }
 
 /**
- * The note above a schedule that was pre-filled from earlier shows. Names the
- * show it came from, and the show the awards came from when that is a
- * different one, so the secretary knows why the awards differ from her last
- * show's.
+ * The note above a schedule that was pre-filled from earlier shows. Plain
+ * words, no show names: Mandy found the first version (two full show names)
+ * confusing and chose this wording (Telegram 8344–8346, 19 Nov 2026).
  */
 export function scheduleDefaultsNote(input: {
-  latestShowName: string;
-  awardsFromShowName: string | null;
+  /** the Awards section came from a different show than everything else */
+  awardsFromAnotherShow: boolean;
   showType: string;
   showRuleset: string;
 }): string {
-  const from = `Pre-filled from your last show, ${input.latestShowName.trim()}.`;
-  const awards = input.awardsFromShowName
-    ? ` The awards wording and the list of awards come from your last ${displayShowTypeTitle(input.showType, input.showRuleset)}, ${input.awardsFromShowName.trim()}.`
-    : '';
-  return `${from}${awards} Review each section and save when ready.`;
+  if (!input.awardsFromAnotherShow) {
+    return "We've copied this from your last show to save you typing. Please check each section.";
+  }
+  const lastOfType = displayShowTypeTitle(input.showType, input.showRuleset).toLowerCase();
+  return `We've copied this from your earlier shows to save you typing. The Awards section is from your last ${lastOfType}. Everything else is from your most recent show. Please check each section.`;
 }

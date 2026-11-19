@@ -722,18 +722,15 @@ export function ScheduleSettingsForm({ showId, onSaved }: ScheduleSettingsFormPr
       />
 
       {/* Smart defaults notice */}
-      {appliedDefaults && (
+      {appliedDefaults && showData && (
         <div className="flex items-start gap-2 rounded-lg border border-se-honey-line bg-se-honey-soft px-3 py-2.5 text-sm">
           <Info className="mt-0.5 size-4 shrink-0 text-se-honey-deep" />
           <p className="text-se-honey-deep">
-            {previousData && showData
-              ? scheduleDefaultsNote({
-                  latestShowName: previousData.latestShowName,
-                  awardsFromShowName: previousData.awardsFromShowName,
-                  showType: showData.showType,
-                  showRuleset: showData.showRuleset,
-                })
-              : 'Pre-filled from your last show. Review each section and save when ready.'}
+            {scheduleDefaultsNote({
+              awardsFromAnotherShow: previousData?.awardsFromAnotherShow ?? false,
+              showType: showData.showType,
+              showRuleset: showData.showRuleset,
+            })}
           </p>
         </div>
       )}

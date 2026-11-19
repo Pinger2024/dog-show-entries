@@ -78,9 +78,8 @@ describe('a new show starts from the club\'s last show of the same type for its 
 
     expect(sd.awardsDescription).toBe(CHAMP_WORDING);
     expect(sd.bestAwards).toEqual(CHAMP_AWARDS);
-    // so the note above the form can say where each part came from
-    expect(prev!.latestShowName).toBe('Open Show 2027');
-    expect(prev!.awardsFromShowName).toBe('Championship Show 2026');
+    // so the note above the form can say the Awards came from another show
+    expect(prev!.awardsFromAnotherShow).toBe(true);
   });
 
   it('everything else, prize money included, still comes from the latest show', async () => {
@@ -106,7 +105,7 @@ describe('a new show starts from the club\'s last show of the same type for its 
     expect(sd.awardsDescription).toBe(OPEN_WORDING);
     expect(sd.bestAwards).toEqual(OPEN_AWARDS);
     // the latest show IS the same-type show: nothing extra to say
-    expect(prev!.awardsFromShowName).toBeNull();
+    expect(prev!.awardsFromAnotherShow).toBe(false);
   });
 
   it('a club\'s first show of a type starts from its latest show, as before', async () => {

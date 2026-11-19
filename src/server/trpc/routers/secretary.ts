@@ -6137,7 +6137,6 @@ export const secretaryRouter = createTRPCRouter({
         ),
         columns: {
           id: true,
-          name: true,
           showType: true,
           showRuleset: true,
           scheduleData: true,
@@ -6157,10 +6156,8 @@ export const secretaryRouter = createTRPCRouter({
         showOpenTime: previous.showOpenTime,
         startTime: previous.startTime,
         onCallVet: previous.onCallVet,
-        latestShowName: previous.name,
-        // the show the awards came from, when it is not the latest one
-        awardsFromShowName:
-          sources.sameType && sources.sameType.id !== previous.id ? sources.sameType.name : null,
+        // the Awards section came from an earlier show of the same type
+        awardsFromAnotherShow: !!sources.sameType && sources.sameType.id !== previous.id,
       };
     }),
 

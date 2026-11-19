@@ -74,22 +74,23 @@ describe('previousScheduleDefaults', () => {
 });
 
 describe('scheduleDefaultsNote', () => {
-  it('names the show everything came from', () => {
-    expect(
-      scheduleDefaultsNote({ latestShowName: 'South Western GSD Open Show ', awardsFromShowName: null, showType: 'open', showRuleset: 'rkc' }),
-    ).toBe('Pre-filled from your last show, South Western GSD Open Show. Review each section and save when ready.');
+  // Mandy chose this wording (Telegram 8344–8346): the first version named
+  // two long show names and confused her.
+  it('one source: copied from the last show', () => {
+    expect(scheduleDefaultsNote({ awardsFromAnotherShow: false, showType: 'open', showRuleset: 'rkc' })).toBe(
+      "We've copied this from your last show to save you typing. Please check each section.",
+    );
   });
 
-  it('says where the awards came from when that is a different show', () => {
-    expect(
-      scheduleDefaultsNote({
-        latestShowName: 'South Western GSD Open Show',
-        awardsFromShowName: 'South Western GSD 55th Anniversary Championship Show',
-        showType: 'championship',
-        showRuleset: 'rkc',
-      }),
-    ).toBe(
-      'Pre-filled from your last show, South Western GSD Open Show. The awards wording and the list of awards come from your last Championship Show, South Western GSD 55th Anniversary Championship Show. Review each section and save when ready.',
+  it('the Awards from another show: says which kind of show, in plain words', () => {
+    expect(scheduleDefaultsNote({ awardsFromAnotherShow: true, showType: 'championship', showRuleset: 'rkc' })).toBe(
+      "We've copied this from your earlier shows to save you typing. The Awards section is from your last championship show. Everything else is from your most recent show. Please check each section.",
+    );
+  });
+
+  it('names a regional as a regional, not a championship show', () => {
+    expect(scheduleDefaultsNote({ awardsFromAnotherShow: true, showType: 'championship', showRuleset: 'wusv' })).toContain(
+      'from your last regional show.',
     );
   });
 });
