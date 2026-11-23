@@ -37,6 +37,7 @@ import { PUBLIC_SHOW_STATUSES } from '@/lib/public-show-statuses';
 import { scheduleCatalogueRefresh } from '@/server/services/catalogue-jobs';
 import { listResultsShows, showIdsWithPublishedResults } from '@/server/services/results-shows';
 import { SV_CLASS_AUTO_CREATE_COMBOS, isUnnumberedClassDef } from '@/lib/class-labels';
+import { newShowClassBreed } from '@/lib/show-class-breed';
 import type { Database } from '@/server/db';
 
 /** Validation for the regional (SV/WUSV) tiered fee config jsonb — mirrors the
@@ -616,7 +617,12 @@ export const showsRouter = createTRPCRouter({
         const classDefTypeMap = new Map(classDefs.map((cd) => [cd.id, cd.type]));
 
         const isSeparateSex = showData.classSexArrangement === 'separate_sex';
-        const values: { showId: string; classDefinitionId: string; entryFee: number; sortOrder: number; sex?: 'dog' | 'bitch'; classNumber: number | null }[] = [];
+        const values: { showId: string; classDefinitionId: string; entryFee: number; sortOrder: number; sex?: 'dog' | 'bitch'; classNumber: number | null; breedId: string | null; isBreedSpecific: boolean }[] = [];
+        // Which breed each class is saved with — one owner (lib/show-class-breed.ts).
+        // A mixed class here would otherwise be breed-less, the Junior Handling
+        // shape (Mandy 8355, 19 Nov 2026).
+        const breedFor = (classDefId: string, sex: 'dog' | 'bitch' | null) =>
+          newShowClassBreed(show!, { sex, classDefinitionType: classDefTypeMap.get(classDefId) });
         let sortOrder = 0;
         // Junior Handler and Special Award Classes sit OUTSIDE the RKC-numbered
         // breed-class sequence (they render as JHA/JHB or A/B/C), so they keep
@@ -649,6 +655,7 @@ export const showsRouter = createTRPCRouter({
                     entryFee: feeForDef(classDefId),
                     sortOrder: sortOrder++,
                     classNumber: null,
+                    ...breedFor(classDefId, null),
                   });
                 }
               } else {
@@ -659,6 +666,7 @@ export const showsRouter = createTRPCRouter({
                   sortOrder: sortOrder++,
                   sex,
                   classNumber: isUnnumberedDef(classDefId) ? null : ++classNumber,
+                  ...breedFor(classDefId, sex),
                 });
               }
             }
@@ -671,6 +679,7 @@ export const showsRouter = createTRPCRouter({
               entryFee: feeForDef(classDefId),
               sortOrder: sortOrder++,
               classNumber: isUnnumberedDef(classDefId) ? null : ++classNumber,
+              ...breedFor(classDefId, null),
             });
           }
         }
