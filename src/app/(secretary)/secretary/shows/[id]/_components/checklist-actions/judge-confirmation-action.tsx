@@ -6,6 +6,7 @@ import { trpc } from '@/lib/trpc';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { penceToPoundsString } from '@/lib/date-utils';
+import { AlreadyAgreedAnswer } from '@/components/judges/judge-offer-terms-view';
 import type { ActionPanelProps } from '../checklist-action-registry';
 
 export function JudgeConfirmationAction({ showId, entityId, entityName }: ActionPanelProps) {
@@ -60,6 +61,8 @@ export function JudgeConfirmationAction({ showId, entityId, entityName }: Action
         </div>
       )}
 
+      <AlreadyAgreedAnswer contract={contract} />
+
       {contract.stage === 'offer_accepted' && (
         <Button
           size="sm"
@@ -72,7 +75,7 @@ export function JudgeConfirmationAction({ showId, entityId, entityName }: Action
       )}
 
       {contract.stage === 'confirmed' && (
-        <p className="text-xs text-green-600 flex items-center gap-1">
+        <p className="text-xs text-se-fresh-deep flex items-center gap-1">
           <Check className="size-3" />
           Confirmation sent {contract.confirmedAt ? new Date(contract.confirmedAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : ''}
         </p>

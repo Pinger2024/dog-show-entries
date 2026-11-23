@@ -12,7 +12,6 @@ import {
   ArrowRight,
   Check,
   Loader2,
-  Plus,
   CalendarIcon,
   User,
   Lock,
@@ -30,9 +29,23 @@ import {
   X,
 } from 'lucide-react';
 import Link from 'next/link';
-import { format, addDays } from 'date-fns';
+import { format, addDays, subDays } from 'date-fns';
 import { trpc } from '@/lib/trpc';
-import { poundsToPence, formatCurrency, parseLocalDate } from '@/lib/date-utils';
+import {
+  poundsToPence,
+  formatCurrency,
+  parseLocalDate,
+  fromLondonDateTimeInput,
+  closeInputForPickedDate,
+  formatLondonDate,
+  formatCloseTimeUK,
+} from '@/lib/date-utils';
+import {
+  checkCloseInput,
+  latestPermissibleCloseDate,
+} from '@/lib/entry-close-rules';
+import { EntryCloseHint, CloseDateRuleHint } from '@/components/shows/entry-close-hint';
+import { VenuePicker } from '@/components/show/venue-picker';
 import { CLASS_TEMPLATES, getRelevantTemplates } from '@/lib/class-templates';
 import { AllBreedClassSetup, type AllBreedClassData } from '@/components/shows/all-breed-class-setup';
 import { Button } from '@/components/ui/button';
@@ -65,7 +78,7 @@ import {
 } from '@/components/ui/dialog';
 import { Calendar } from '@/components/ui/calendar';
 import { cn } from '@/lib/utils';
-import { PostcodeLookup, formatAddress } from '@/components/postcode-lookup';
+import { SE_H } from '@/components/show-experience/tokens';
 import {
   Form,
   FormControl,
@@ -102,7 +115,7 @@ const classSexArrangements = [
 
 import { SHOW_TIMES } from '@/lib/show-times';
 
-const createShowSchema = z.object({
+export const createShowSchema = z.object({
   // Step 1 - Basic Info
   name: z.string().min(1, 'Show name is required').max(255),
   showType: z.enum([
@@ -114,6 +127,7 @@ const createShowSchema = z.object({
     'championship',
   ], { required_error: 'Please select a show type' }),
   showScope: z.enum(['single_breed', 'general'], { required_error: 'Please select a show scope' }),
+  showRuleset: z.enum(['rkc', 'wusv']).default('rkc'),
   breedId: z.string().uuid().optional(),
   classSexArrangement: z.enum(['separate_sex', 'combined_sex']).optional(),
   secretaryUserId: z.string().uuid().optional(),
@@ -131,12 +145,10 @@ const createShowSchema = z.object({
   postalCloseDate: z.string().optional(),
   description: z.string().optional(),
 
-  // Step 2 - Venue
-  venueId: z.string().uuid().optional(),
-  newVenueName: z.string().optional(),
-  newVenueAddress: z.string().optional(),
-  newVenuePostcode: z.string().optional(),
-  newVenueIndoorOutdoor: z.string().optional(),
+  // Step 2 - Venue. Required: a show must not be able to bypass choosing
+  // its venue (Mandy, 28 Oct 2026). Adding a new venue happens inside the
+  // VenuePicker, which hands back the id.
+  venueId: z.string().uuid('Please choose the venue or add a new one'),
 
   // Step 3 - Entry Fees (in pounds, converted to pence on submit)
   firstEntryFee: z.coerce.number().min(0, 'Fee must be 0 or more').default(0),
@@ -170,17 +182,48 @@ const createShowSchema = z.object({
     return true;
   },
   { message: 'End date must be on or after the start date', path: ['endDate'] }
-).refine(
-  (data) => {
-    if (data.entryCloseDate && data.startDate) {
-      return new Date(data.startDate) >= new Date(data.entryCloseDate);
-    }
-    return true;
-  },
-  { message: 'Entry close date must be before the show start date', path: ['entryCloseDate'] }
-);
+).superRefine((data, ctx) => {
+  // Mandy's hard rule (2026-08-04): entries — and postal entries — must
+  // close at least 13 calendar days before the show ("two weeks give or
+  // take a day"). Same helper + message the server uses, via superRefine
+  // (not .refine) because the message needs the show's own date — the
+  // client can never drift from what the server accepts. checkCloseInput
+  // never throws: a date that isn't complete yet (e.g. a 5-digit year) is a
+  // validation message on the field, not a crash.
+  if (data.entryCloseDate) {
+    const check = checkCloseInput(closeInputForPickedDate(data.entryCloseDate), data.startDate, 'entry close date');
+    if (!check.ok) ctx.addIssue({ code: 'custom', message: check.message, path: ['entryCloseDate'] });
+  }
+  if (data.postalCloseDate) {
+    const check = checkCloseInput(closeInputForPickedDate(data.postalCloseDate), data.startDate, 'postal close date');
+    if (!check.ok) ctx.addIssue({ code: 'custom', message: check.message, path: ['postalCloseDate'] });
+  }
+});
 
 type CreateShowValues = z.infer<typeof createShowSchema>;
+
+/**
+ * The new show's open / close instants exactly as shows.create takes them
+ * (and as the Review step shows them). The pickers hold bare dates:
+ * - entries OPEN at 00:00 UK time on the picked date;
+ * - entries — and postal entries — CLOSE at 23:59 UK time on the picked date
+ *   (founder rule, commit 44ffeaad; owner `closeInputForPickedDate`). Until
+ *   2026-09-22 this stored 00:00, closing entries at the start of the last
+ *   day the schedule advertised.
+ * UK time whatever zone the browser is in. Throws on a date that isn't
+ * real — call it before anything is written.
+ */
+export function newShowDatesPayload(values: Pick<CreateShowValues, 'entriesOpenDate' | 'entryCloseDate' | 'postalCloseDate'>) {
+  return {
+    entriesOpenDate: values.entriesOpenDate ? fromLondonDateTimeInput(values.entriesOpenDate) : undefined,
+    entryCloseDate: values.entryCloseDate
+      ? fromLondonDateTimeInput(closeInputForPickedDate(values.entryCloseDate))
+      : undefined,
+    postalCloseDate: values.postalCloseDate
+      ? fromLondonDateTimeInput(closeInputForPickedDate(values.postalCloseDate))
+      : undefined,
+  };
+}
 
 const STEPS = [
   'Basic Info',
@@ -201,13 +244,13 @@ export default function NewShowPage() {
   const { data: session } = useSession();
   const [step, setStep] = useState(0);
   const [openSections, setOpenSections] = useState<string[]>(['classification', 'schedule', 'secretary']);
-  const [createVenue, setCreateVenue] = useState(false);
   const [selectedTemplates, setSelectedTemplates] = useState<string[]>([]);
   const [allBreedData, setAllBreedData] = useState<AllBreedClassData>({
     selectedBreedIds: [],
     selectedTemplateId: null,
     classDefinitionIds: [],
     breedClassOverrides: {},
+    ccBreedIds: [],
   });
 
   const form = useForm<CreateShowValues>({
@@ -216,6 +259,7 @@ export default function NewShowPage() {
       name: '',
       showType: '' as never,
       showScope: '' as never,
+      showRuleset: 'rkc',
       classSexArrangement: undefined,
       secretaryUserId: undefined,
       secretaryEmail: '',
@@ -231,10 +275,6 @@ export default function NewShowPage() {
       postalCloseDate: '',
       description: '',
       venueId: undefined,
-      newVenueName: '',
-      newVenueAddress: '',
-      newVenuePostcode: '',
-      newVenueIndoorOutdoor: '',
       firstEntryFee: '' as unknown as number,
       subsequentEntryFee: '' as unknown as number,
       nfcEntryFee: '' as unknown as number,
@@ -248,7 +288,6 @@ export default function NewShowPage() {
   const { data: allBreeds } = trpc.breeds.list.useQuery();
 
   const utils = trpc.useUtils();
-  const createVenueMutation = trpc.secretary.createVenue.useMutation();
   const createShowMutation = trpc.shows.create.useMutation();
   const inviteMutation = trpc.invitations.send.useMutation();
   const [inviteOpen, setInviteOpen] = useState(false);
@@ -270,6 +309,13 @@ export default function NewShowPage() {
 
   // Auto-select the organisation if there's only one
   const currentOrgId = form.watch('organisationId');
+
+  // Venues belong to a club: changing the club drops a venue chosen for
+  // the previous one, so step 2 cannot carry another club's venue through.
+  useEffect(() => {
+    form.setValue('venueId', undefined as unknown as string);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentOrgId]);
   useEffect(() => {
     if (organisations.length === 1 && !form.getValues('organisationId')) {
       form.setValue('organisationId', organisations[0].id, { shouldDirty: true });
@@ -290,16 +336,46 @@ export default function NewShowPage() {
     }
   }, [currentOrgId, organisations, form]);
 
+  // Lock show ruleset to the org's ruleset (WUSV orgs only ever run WUSV
+  // shows). For WUSV orgs we also auto-set the implicit values for fields
+  // that don't apply to SV regional shows so the secretary doesn't have to
+  // tick them: scope is always single_breed and breed is German Shepherd
+  // Dog. Show type defaults to 'championship' for SV regional shows (Amanda
+  // 2026-05-19 — SV shows are always a championship-style regional event).
+  useEffect(() => {
+    if (!currentOrgId) return;
+    const org = organisations.find((o) => o.id === currentOrgId);
+    if (!org?.showRuleset) return;
+    form.setValue('showRuleset', org.showRuleset as 'rkc' | 'wusv', { shouldDirty: false });
+    if (org.showRuleset === 'wusv') {
+      if (!form.getValues('showType')) {
+        form.setValue('showType', 'championship', { shouldDirty: false });
+      }
+      if (!form.getValues('showScope')) {
+        form.setValue('showScope', 'single_breed', { shouldDirty: false });
+      }
+      const gsd = (allBreeds ?? []).find(
+        (b) => b.name === 'German Shepherd Dog',
+      );
+      if (gsd && !form.getValues('breedId')) {
+        form.setValue('breedId', gsd.id, { shouldDirty: false });
+      }
+      // SV regionals are always separate Dog + Bitch (Amanda 2026-05-24).
+      form.setValue('classSexArrangement', 'separate_sex', { shouldDirty: false });
+    }
+  }, [currentOrgId, organisations, form, allBreeds]);
+
+  // Whether the currently-selected org is an SV/WUSV club. Drives a few
+  // UI sections that should be hidden for SV shows (Show Type/Scope/Breed
+  // — values are implicit; show ruleset picker — locked to wusv).
+  const isWusvOrg =
+    organisations.find((o) => o.id === currentOrgId)?.showRuleset === 'wusv';
+
   // Fetch venues for this org
   const { data: venues } = trpc.secretary.listVenues.useQuery(
     { organisationId: currentOrgId },
     { enabled: !!currentOrgId }
   );
-
-  // Default to "New Venue" if no existing venues for this org
-  useEffect(() => {
-    if (venues && venues.length === 0) setCreateVenue(true);
-  }, [venues]);
 
   // Fetch org members for the secretary picker
   const { data: orgMembersData } = trpc.secretary.orgMembers.useQuery(
@@ -349,29 +425,19 @@ export default function NewShowPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessionUserId, orgMembers]);
 
-  const isSubmitting =
-    createVenueMutation.isPending || createShowMutation.isPending;
+  const isSubmitting = createShowMutation.isPending;
 
   async function onSubmit(values: CreateShowValues, asDraft: boolean) {
     try {
-      let venueId = values.venueId;
-
-      // Create venue if needed
-      if (createVenue && values.newVenueName) {
-        const venue = await createVenueMutation.mutateAsync({
-          name: values.newVenueName,
-          address: values.newVenueAddress || undefined,
-          postcode: values.newVenuePostcode || undefined,
-          indoorOutdoor: values.newVenueIndoorOutdoor || undefined,
-          organisationId: values.organisationId,
-        });
-        venueId = venue.id;
-      }
+      // Dates first: a date that isn't real fails here, before the venue or
+      // show is written.
+      const dates = newShowDatesPayload(values);
 
       const show = await createShowMutation.mutateAsync({
         name: values.name,
         showType: values.showType,
         showScope: values.showScope,
+        showRuleset: values.showRuleset ?? 'rkc',
         breedId: values.breedId || undefined,
         classSexArrangement: values.classSexArrangement || undefined,
         secretaryUserId: values.secretaryUserId || undefined,
@@ -381,18 +447,12 @@ export default function NewShowPage() {
         secretaryAddress: values.secretaryAddress || undefined,
         showOpenTime: values.showOpenTime || undefined,
         organisationId: values.organisationId,
-        venueId: venueId || undefined,
+        venueId: values.venueId,
         startDate: values.startDate,
         endDate: values.endDate,
-        entriesOpenDate: values.entriesOpenDate
-          ? parseLocalDate(values.entriesOpenDate).toISOString()
-          : undefined,
-        entryCloseDate: values.entryCloseDate
-          ? parseLocalDate(values.entryCloseDate).toISOString()
-          : undefined,
-        postalCloseDate: values.postalCloseDate
-          ? parseLocalDate(values.postalCloseDate).toISOString()
-          : undefined,
+        // A picked date means 00:00 UK time on that date, whatever zone the
+        // browser is in (parseLocalDate used the browser's own midnight).
+        ...dates,
         description: values.description || undefined,
         // Single-breed: pass class definition IDs directly
         classDefinitionIds: (values.showScope !== 'general' && values.selectedClassIds.length > 0)
@@ -419,6 +479,7 @@ export default function NewShowPage() {
               breedIds: allBreedData.selectedBreedIds,
               classDefinitionIds: allBreedData.classDefinitionIds,
               splitBySex: !!values.classSexArrangement && values.classSexArrangement === 'separate_sex',
+              ccBreedIds: values.showType === 'championship' ? allBreedData.ccBreedIds : [],
             }
           : undefined,
       });
@@ -442,10 +503,24 @@ export default function NewShowPage() {
   const watchedName = form.watch('name');
   const watchedShowType = form.watch('showType');
   const watchedShowScope = form.watch('showScope');
+  const watchedShowRuleset = form.watch('showRuleset');
   const watchedStartDate = form.watch('startDate');
   const watchedEndDate = form.watch('endDate');
+  const watchedVenueId = form.watch('venueId');
   const watchedAcceptsPostal = form.watch('acceptsPostalEntries');
   const watchedEntriesOpen = form.watch('entriesOpenDate');
+
+  // Mandy's 13-day floor (2026-08-04) — computed once per render rather than
+  // separately at each of the three JSX sites below that need it.
+  const latestCloseDate = watchedStartDate ? latestPermissibleCloseDate(watchedStartDate) : undefined;
+
+  // SV/WUSV regionals always run separate Dog + Bitch — force the form
+  // value if the secretary flips the ruleset after starting the wizard.
+  useEffect(() => {
+    if (watchedShowRuleset === 'wusv') {
+      form.setValue('classSexArrangement', 'separate_sex', { shouldDirty: false });
+    }
+  }, [watchedShowRuleset, form]);
 
   // Auto-compute endDate from startDate + showDays
   const [showDays, setShowDays] = useState(1);
@@ -483,7 +558,8 @@ export default function NewShowPage() {
           watchedEndDate
         );
       case 1:
-        return true; // Venue is optional
+        // A show must not be able to bypass choosing its venue (Mandy, 28 Oct 2026).
+        return !!watchedVenueId;
       case 2:
         return true; // Fees can be 0
       case 3:
@@ -554,7 +630,7 @@ export default function NewShowPage() {
     return (
       <div className="space-y-6 pb-16 md:pb-0">
         <div>
-          <h1 className="font-serif text-2xl font-bold tracking-tight sm:text-3xl">Create New Show</h1>
+          <h1 className={cn(SE_H, 'font-serif text-2xl sm:text-3xl')}>Create New Show</h1>
           <p className="mt-1 text-sm text-muted-foreground">
             You need to set up your club before creating a show.
           </p>
@@ -581,7 +657,7 @@ export default function NewShowPage() {
     <div className="space-y-6 pb-16 md:pb-0">
       {/* Header */}
       <div>
-        <h1 className="font-serif text-2xl font-bold tracking-tight sm:text-3xl">Create New Show</h1>
+        <h1 className={cn(SE_H, 'font-serif text-2xl sm:text-3xl')}>Create New Show</h1>
         <p className="mt-1 text-sm text-muted-foreground">
           Step {step + 1} of {STEPS.length} — <span className="font-medium text-foreground">{STEPS[step]}</span>
         </p>
@@ -689,55 +765,109 @@ export default function NewShowPage() {
                   />
                 )}
 
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <FormField
-                    control={form.control}
-                    name="showType"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Show Type <span className="text-destructive">*</span></FormLabel>
-                        <Select onValueChange={field.onChange} value={field.value ?? ''}>
-                          <FormControl>
-                            <SelectTrigger className="w-full">
-                              <SelectValue placeholder="Select show type" />
-                            </SelectTrigger>
-                          </FormControl>
-                          <SelectContent>
-                            {showTypes.map((t) => (
-                              <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  <FormField
-                    control={form.control}
-                    name="showScope"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Show Scope <span className="text-destructive">*</span></FormLabel>
-                        <Select onValueChange={field.onChange} value={field.value ?? ''}>
-                          <FormControl>
-                            <SelectTrigger className="w-full">
-                              <SelectValue placeholder="Select show scope" />
-                            </SelectTrigger>
-                          </FormControl>
-                          <SelectContent>
-                            {showScopes.map((s) => (
-                              <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                </div>
+                {/* SV/WUSV clubs always run single-breed GSD championship-style
+                    shows, so the Show Type / Show Scope dropdowns are
+                    hidden — values are set server-side from the org's
+                    ruleset (Amanda 2026-05-19). */}
+                {!isWusvOrg && (
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <FormField
+                      control={form.control}
+                      name="showType"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Show Type <span className="text-destructive">*</span></FormLabel>
+                          <Select onValueChange={field.onChange} value={field.value ?? ''}>
+                            <FormControl>
+                              <SelectTrigger className="w-full">
+                                <SelectValue placeholder="Select show type" />
+                              </SelectTrigger>
+                            </FormControl>
+                            <SelectContent>
+                              {showTypes.map((t) => (
+                                <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={form.control}
+                      name="showScope"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Show Scope <span className="text-destructive">*</span></FormLabel>
+                          <Select onValueChange={field.onChange} value={field.value ?? ''}>
+                            <FormControl>
+                              <SelectTrigger className="w-full">
+                                <SelectValue placeholder="Select show scope" />
+                              </SelectTrigger>
+                            </FormControl>
+                            <SelectContent>
+                              {showScopes.map((s) => (
+                                <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+                )}
 
-                {/* Breed selector for single-breed shows */}
-                {watchedShowScope === 'single_breed' && (
+                {/* Show Ruleset — RKC or WUSV/SV. Hidden for WUSV orgs
+                    because there's no meaningful choice. */}
+                {!isWusvOrg && (
+                <FormField
+                  control={form.control}
+                  name="showRuleset"
+                  render={({ field }) => {
+                    const orgRuleset = organisations.find((o) => o.id === currentOrgId)?.showRuleset;
+                    const locked = !!orgRuleset;
+                    return (
+                      <FormItem>
+                        <FormLabel>Show Rules</FormLabel>
+                        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                          {[
+                            { value: 'rkc', label: 'Royal Kennel Club (RKC)', desc: 'Standard UK dog show — placement ribbons, CCs, RCCs.' },
+                            { value: 'wusv', label: 'WUSV / SV Regional', desc: 'German Shepherd breed show under SV rules — graded V/SG/G, class split by coat type.' },
+                          ].map((opt) => (
+                            <button
+                              key={opt.value}
+                              type="button"
+                              disabled={locked && opt.value !== field.value}
+                              onClick={() => !locked && field.onChange(opt.value)}
+                              className={`flex flex-col gap-1 rounded-lg border p-4 text-left transition-colors ${
+                                field.value === opt.value
+                                  ? 'border-primary bg-primary/5 ring-1 ring-primary'
+                                  : locked
+                                    ? 'opacity-40 cursor-not-allowed'
+                                    : 'hover:bg-accent'
+                              }`}
+                            >
+                              <span className="text-sm font-semibold">{opt.label}</span>
+                              <span className="text-xs text-muted-foreground">{opt.desc}</span>
+                            </button>
+                          ))}
+                        </div>
+                        {locked && (
+                          <p className="text-xs text-muted-foreground">
+                            Your club is registered as a {orgRuleset === 'wusv' ? 'WUSV/SV' : 'RKC'} club — shows are automatically set to match.
+                          </p>
+                        )}
+                        <FormMessage />
+                      </FormItem>
+                    );
+                  }}
+                />
+                )}
+
+                {/* Breed selector for single-breed shows. Hidden for SV
+                    orgs — breed is always German Shepherd Dog. */}
+                {watchedShowScope === 'single_breed' && !isWusvOrg && (
                   <FormField
                     control={form.control}
                     name="breedId"
@@ -769,28 +899,34 @@ export default function NewShowPage() {
                     </AccordionTrigger>
                     <AccordionContent className="space-y-6 pb-2">
 
-                <FormField
-                  control={form.control}
-                  name="classSexArrangement"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Class Structure</FormLabel>
-                      <Select onValueChange={field.onChange} value={field.value ?? ''}>
-                        <FormControl>
-                          <SelectTrigger className="w-full">
-                            <SelectValue placeholder="Select class structure" />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          {classSexArrangements.map((a) => (
-                            <SelectItem key={a.value} value={a.value}>{a.label}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
+                {/* SV regionals are always separate Dog + Bitch — hide
+                    the picker entirely (Amanda 2026-05-24). The form
+                    value gets forced to 'separate_sex' below when the
+                    SV ruleset is selected. */}
+                {watchedShowRuleset !== 'wusv' && (
+                  <FormField
+                    control={form.control}
+                    name="classSexArrangement"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Class Structure</FormLabel>
+                        <Select onValueChange={field.onChange} value={field.value ?? ''}>
+                          <FormControl>
+                            <SelectTrigger className="w-full">
+                              <SelectValue placeholder="Select class structure" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            {classSexArrangements.map((a) => (
+                              <SelectItem key={a.value} value={a.value}>{a.label}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                )}
 
                     </AccordionContent>
                   </AccordionItem>
@@ -840,33 +976,42 @@ export default function NewShowPage() {
                   />
                 </div>
 
-                {/* Entry dates */}
-                <div className="grid gap-4 sm:grid-cols-2">
+                {/* Entry dates — sm:grid-cols-3 matches the row above so
+                    Entries Open aligns with Show Date and Entries Close
+                    aligns with Show Opens At (col 2 deliberately empty). */}
+                <div className="grid gap-4 sm:grid-cols-3">
                   <DatePickerField control={form.control} name="entriesOpenDate" label="Entries Open" placeholder="Optional" />
+                  <div className="hidden sm:block" />
                   <div>
-                    <DatePickerField control={form.control} name="entryCloseDate" label="Entries Close" placeholder="Optional" disableBefore={watchedEntriesOpen ? parseLocalDate(watchedEntriesOpen) : undefined} disableAfter={watchedStartDate ? parseLocalDate(watchedStartDate) : undefined} />
+                    {/* disableAfter is the latest date the 13-day floor allows —
+                        Mandy's rule (2026-08-04) — not the show date itself, so
+                        the calendar picker physically can't offer a non-compliant
+                        date (learn the rule while picking, not on save-reject). */}
+                    <DatePickerField control={form.control} name="entryCloseDate" label="Entries Close" placeholder="Optional" disableBefore={watchedEntriesOpen ? parseLocalDate(watchedEntriesOpen) : undefined} disableAfter={latestCloseDate} />
                     {watchedStartDate && (
-                      <div className="mt-1.5 flex flex-wrap gap-1">
-                        {[
-                          { label: '1 week before', days: 7 },
-                          { label: '2 weeks before', days: 14 },
-                          { label: '1 month before', days: 30 },
-                        ].map((opt) => {
-                          const closeDate = new Date(parseLocalDate(watchedStartDate));
-                          closeDate.setDate(closeDate.getDate() - opt.days);
-                          const dateStr = closeDate.toISOString().split('T')[0]!;
-                          return (
-                            <button
-                              key={opt.days}
-                              type="button"
-                              onClick={() => form.setValue('entryCloseDate', dateStr, { shouldValidate: true, shouldDirty: true })}
-                              className="min-h-[2.75rem] rounded-full border px-3 py-2 text-xs text-muted-foreground transition-colors hover:border-primary hover:text-primary active:bg-primary/10 active:border-primary active:text-primary"
-                            >
-                              {opt.label}
-                            </button>
-                          );
-                        })}
-                      </div>
+                      <>
+                        <EntryCloseHint startDate={watchedStartDate} className="mt-1.5" />
+                        <CloseDateRuleHint field="entry close date" startDate={watchedStartDate} showRuleset={form.watch('showRuleset')} className="mt-1.5" />
+                        <div className="mt-1.5 flex flex-wrap gap-1">
+                          {[
+                            { label: 'Latest allowed', date: latestCloseDate! },
+                            { label: '3 weeks before', date: subDays(parseLocalDate(watchedStartDate), 21) },
+                            { label: '1 month before', date: subDays(parseLocalDate(watchedStartDate), 30) },
+                          ].map((opt) => {
+                            const dateStr = format(opt.date, 'yyyy-MM-dd');
+                            return (
+                              <button
+                                key={opt.label}
+                                type="button"
+                                onClick={() => form.setValue('entryCloseDate', dateStr, { shouldValidate: true, shouldDirty: true })}
+                                className="min-h-[2.75rem] rounded-full border px-3 py-2 text-xs text-muted-foreground transition-colors hover:border-primary hover:text-primary active:bg-primary/10 active:border-primary active:text-primary"
+                              >
+                                {opt.label}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </>
                     )}
                   </div>
                 </div>
@@ -889,7 +1034,15 @@ export default function NewShowPage() {
                 />
 
                 {watchedAcceptsPostal && (
-                  <DatePickerField control={form.control} name="postalCloseDate" label="Postal Close Date" placeholder="Pick a date" disableBefore={watchedEntriesOpen ? parseLocalDate(watchedEntriesOpen) : undefined} disableAfter={watchedStartDate ? parseLocalDate(watchedStartDate) : undefined} />
+                  <div>
+                    <DatePickerField control={form.control} name="postalCloseDate" label="Postal Close Date" placeholder="Pick a date" disableBefore={watchedEntriesOpen ? parseLocalDate(watchedEntriesOpen) : undefined} disableAfter={latestCloseDate} />
+                    {watchedStartDate && (
+                      <>
+                        <EntryCloseHint startDate={watchedStartDate} className="mt-1.5" />
+                        <CloseDateRuleHint field="postal close date" startDate={watchedStartDate} showRuleset={form.watch('showRuleset')} className="mt-1.5" />
+                      </>
+                    )}
+                  </div>
                 )}
 
                     </AccordionContent>
@@ -970,9 +1123,9 @@ export default function NewShowPage() {
                     )}
                   />
                   {pendingInviteEmail && !form.watch('secretaryUserId') && (
-                    <div className="rounded-md border border-amber-200 bg-amber-50 p-3 dark:border-amber-800 dark:bg-amber-950/30">
+                    <div className="rounded-md border border-se-honey-line bg-se-honey-soft p-3">
                       <div className="flex items-center gap-2">
-                        <Mail className="size-4 text-amber-600" />
+                        <Mail className="size-4 text-se-honey-deep" />
                         <div className="min-w-0 flex-1">
                           <p className="text-sm font-medium">Invite sent to <span className="font-semibold">{pendingInviteEmail}</span></p>
                           <p className="text-xs text-muted-foreground">They&apos;ll be set as secretary once they sign up</p>
@@ -1115,145 +1268,17 @@ export default function NewShowPage() {
                   Venue
                 </CardTitle>
                 <CardDescription>
-                  Where will the show take place? Select an existing venue or add a new one.
+                  Where will the show take place? Choose one of your club&apos;s venues or add a new one.
+                  Every show needs a venue — it is printed on the schedule.
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
-                <div className="flex gap-2">
-                  <Button
-                    type="button"
-                    variant={!createVenue ? 'default' : 'outline'}
-                    size="sm"
-                    onClick={() => setCreateVenue(false)}
-                  >
-                    Existing Venue
-                  </Button>
-                  <Button
-                    type="button"
-                    variant={createVenue ? 'default' : 'outline'}
-                    size="sm"
-                    onClick={() => {
-                      setCreateVenue(true);
-                      form.setValue('venueId', undefined);
-                    }}
-                  >
-                    <Plus className="size-3.5" />
-                    New Venue
-                  </Button>
-                </div>
-
-                {!createVenue ? (
-                  <FormField
-                    control={form.control}
-                    name="venueId"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Venue</FormLabel>
-                        <Select
-                          onValueChange={field.onChange}
-                          defaultValue={field.value}
-                        >
-                          <FormControl>
-                            <SelectTrigger className="w-full">
-                              <SelectValue placeholder="Select a venue (optional)" />
-                            </SelectTrigger>
-                          </FormControl>
-                          <SelectContent>
-                            {(venues ?? []).map((v) => (
-                              <SelectItem key={v.id} value={v.id}>
-                                {v.name}
-                                {v.postcode ? ` (${v.postcode})` : ''}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                ) : (
-                  <div className="space-y-4 rounded-lg border p-4">
-                    <FormField
-                      control={form.control}
-                      name="newVenueName"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Venue Name</FormLabel>
-                          <FormControl>
-                            <Input
-                              placeholder="e.g. National Exhibition Centre"
-                              {...field}
-                            />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                    <PostcodeLookup
-                      compact
-                      onSelect={(result) => {
-                        form.setValue('newVenueAddress', formatAddress(result));
-                        form.setValue('newVenuePostcode', result.postcode);
-                      }}
-                    />
-                    <FormField
-                      control={form.control}
-                      name="newVenueAddress"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Address</FormLabel>
-                          <FormControl>
-                            <Input
-                              placeholder="Full address"
-                              {...field}
-                            />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                    <div className="grid gap-4 sm:grid-cols-2">
-                      <FormField
-                        control={form.control}
-                        name="newVenuePostcode"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Postcode</FormLabel>
-                            <FormControl>
-                              <Input placeholder="e.g. B40 1NT" {...field} />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-                      <FormField
-                        control={form.control}
-                        name="newVenueIndoorOutdoor"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Indoor/Outdoor</FormLabel>
-                            <Select
-                              onValueChange={field.onChange}
-                              defaultValue={field.value}
-                            >
-                              <FormControl>
-                                <SelectTrigger className="w-full">
-                                  <SelectValue placeholder="Select" />
-                                </SelectTrigger>
-                              </FormControl>
-                              <SelectContent>
-                                <SelectItem value="indoor">Indoor</SelectItem>
-                                <SelectItem value="outdoor">Outdoor</SelectItem>
-                                <SelectItem value="both">Both</SelectItem>
-                              </SelectContent>
-                            </Select>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-                    </div>
-                  </div>
-                )}
+                <VenuePicker
+                  organisationId={currentOrgId}
+                  value={watchedVenueId}
+                  onChange={(id) => form.setValue('venueId', id, { shouldValidate: true, shouldDirty: true })}
+                  idPrefix="new-show-venue"
+                />
               </CardContent>
             </Card>
           )}
@@ -1279,7 +1304,9 @@ export default function NewShowPage() {
                     name="firstEntryFee"
                     render={({ field }) => (
                       <FormItem className="rounded-lg border bg-muted/20 p-4">
-                        <FormLabel className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">First Entry</FormLabel>
+                        <FormLabel className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
+                          {watchedShowRuleset === 'wusv' ? 'Entry Fee (per class)' : 'First Entry'}
+                        </FormLabel>
                         <FormControl>
                           <div className="relative">
                             <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm font-semibold text-muted-foreground">£</span>
@@ -1295,89 +1322,95 @@ export default function NewShowPage() {
                             />
                           </div>
                         </FormControl>
-                        <p className="text-xs text-muted-foreground">The fee for the first dog entered</p>
+                        <p className="text-xs text-muted-foreground">
+                          {watchedShowRuleset === 'wusv' ? 'Applies to all SV age classes' : 'The fee for the first dog entered'}
+                        </p>
                         <FormMessage />
                       </FormItem>
                     )}
                   />
+                  {watchedShowRuleset !== 'wusv' && (
+                    <FormField
+                      control={form.control}
+                      name="subsequentEntryFee"
+                      render={({ field }) => (
+                        <FormItem className="rounded-lg border bg-muted/20 p-4">
+                          <FormLabel className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Subsequent</FormLabel>
+                          <FormControl>
+                            <div className="relative">
+                              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm font-semibold text-muted-foreground">£</span>
+                              <Input
+                                type="number"
+                                min={0}
+                                step={0.01}
+                                placeholder="0.00"
+                                className="pl-7 text-lg font-semibold h-12"
+                                {...field}
+                                value={field.value === 0 || field.value ? field.value : ''}
+                                onChange={(e) => field.onChange(e.target.value === '' ? '' : Number(e.target.value))}
+                              />
+                            </div>
+                          </FormControl>
+                          <p className="text-xs text-muted-foreground">Each additional entry after the first</p>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  )}
+                  {watchedShowRuleset !== 'wusv' && (
+                    <FormField
+                      control={form.control}
+                      name="nfcEntryFee"
+                      render={({ field }) => (
+                        <FormItem className="rounded-lg border bg-muted/20 p-4">
+                          <FormLabel className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Not for Competition</FormLabel>
+                          <FormControl>
+                            <div className="relative">
+                              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm font-semibold text-muted-foreground">£</span>
+                              <Input
+                                type="number"
+                                min={0}
+                                step={0.01}
+                                placeholder="0.00"
+                                className="pl-7 text-lg font-semibold h-12"
+                                {...field}
+                                value={field.value === 0 || field.value ? field.value : ''}
+                                onChange={(e) => field.onChange(e.target.value === '' ? '' : Number(e.target.value))}
+                              />
+                            </div>
+                          </FormControl>
+                          <p className="text-xs text-muted-foreground">NFC entries (exhibition only)</p>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  )}
                   <FormField
-                    control={form.control}
-                    name="subsequentEntryFee"
-                    render={({ field }) => (
-                      <FormItem className="rounded-lg border bg-muted/20 p-4">
-                        <FormLabel className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Subsequent</FormLabel>
-                        <FormControl>
-                          <div className="relative">
-                            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm font-semibold text-muted-foreground">£</span>
-                            <Input
-                              type="number"
-                              min={0}
-                              step={0.01}
-                              placeholder="0.00"
-                              className="pl-7 text-lg font-semibold h-12"
-                              {...field}
-                              value={field.value === 0 || field.value ? field.value : ''}
-                              onChange={(e) => field.onChange(e.target.value === '' ? '' : Number(e.target.value))}
-                            />
-                          </div>
-                        </FormControl>
-                        <p className="text-xs text-muted-foreground">Each additional entry after the first</p>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  <FormField
-                    control={form.control}
-                    name="nfcEntryFee"
-                    render={({ field }) => (
-                      <FormItem className="rounded-lg border bg-muted/20 p-4">
-                        <FormLabel className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Not for Competition</FormLabel>
-                        <FormControl>
-                          <div className="relative">
-                            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm font-semibold text-muted-foreground">£</span>
-                            <Input
-                              type="number"
-                              min={0}
-                              step={0.01}
-                              placeholder="0.00"
-                              className="pl-7 text-lg font-semibold h-12"
-                              {...field}
-                              value={field.value === 0 || field.value ? field.value : ''}
-                              onChange={(e) => field.onChange(e.target.value === '' ? '' : Number(e.target.value))}
-                            />
-                          </div>
-                        </FormControl>
-                        <p className="text-xs text-muted-foreground">NFC entries (exhibition only)</p>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  <FormField
-                    control={form.control}
-                    name="juniorHandlerFee"
-                    render={({ field }) => (
-                      <FormItem className="rounded-lg border bg-muted/20 p-4">
-                        <FormLabel className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Junior Handling</FormLabel>
-                        <FormControl>
-                          <div className="relative">
-                            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm font-semibold text-muted-foreground">£</span>
-                            <Input
-                              type="number"
-                              min={0}
-                              step={0.01}
-                              placeholder="0.00"
-                              className="pl-7 text-lg font-semibold h-12"
-                              {...field}
-                              value={field.value === 0 || field.value ? field.value : ''}
-                              onChange={(e) => field.onChange(e.target.value === '' ? '' : Number(e.target.value))}
-                            />
-                          </div>
-                        </FormControl>
-                        <p className="text-xs text-muted-foreground">Fee for junior handling classes</p>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
+                      control={form.control}
+                      name="juniorHandlerFee"
+                      render={({ field }) => (
+                        <FormItem className="rounded-lg border bg-muted/20 p-4">
+                          <FormLabel className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Junior Handling</FormLabel>
+                          <FormControl>
+                            <div className="relative">
+                              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm font-semibold text-muted-foreground">£</span>
+                              <Input
+                                type="number"
+                                min={0}
+                                step={0.01}
+                                placeholder="0.00"
+                                className="pl-7 text-lg font-semibold h-12"
+                                {...field}
+                                value={field.value === 0 || field.value ? field.value : ''}
+                                onChange={(e) => field.onChange(e.target.value === '' ? '' : Number(e.target.value))}
+                              />
+                            </div>
+                          </FormControl>
+                          <p className="text-xs text-muted-foreground">Fee for junior handling classes</p>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
                 </div>
               </CardContent>
             </Card>
@@ -1403,12 +1436,41 @@ export default function NewShowPage() {
                   value={allBreedData}
                   onChange={handleAllBreedDataChange}
                   classDefinitions={classDefinitions ?? []}
+                  showType={watchedShowType}
                 />
               </CardContent>
             </Card>
           )}
 
-          {step === 3 && watchedShowScope !== 'general' && (
+          {step === 3 && watchedShowScope !== 'general' && isWusvOrg && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2.5 font-serif text-lg">
+                  <div className="flex size-8 items-center justify-center rounded-lg bg-primary/10">
+                    <LayoutGrid className="size-4 text-primary" />
+                  </div>
+                  SV Classification
+                </CardTitle>
+                <CardDescription>
+                  Your SV/WUSV show will be set up with the full SV class structure when you create it.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <div className="rounded-lg border bg-primary/5 p-4 space-y-2">
+                  <p className="text-sm font-medium">What gets set up automatically</p>
+                  <ul className="text-sm text-muted-foreground list-disc pl-5 space-y-1">
+                    <li>All SV age classes (Baby Puppy → Working) split by sex × coat type (Long Coat / Short Coat)</li>
+                    <li>Same entry fee on every SV age class</li>
+                  </ul>
+                  <p className="text-xs text-muted-foreground pt-1">
+                    You can fine-tune which age classes to include, change the fee, or add Junior Handling on the <strong>SV Classes</strong> page after the show is created.
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {step === 3 && watchedShowScope !== 'general' && !isWusvOrg && (
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2.5 font-serif text-lg">
@@ -1429,7 +1491,7 @@ export default function NewShowPage() {
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-                  {getRelevantTemplates(watchedShowType, watchedShowScope).map((t) => {
+                  {getRelevantTemplates(watchedShowType, watchedShowScope, watchedShowRuleset).map((t) => {
                     const isActive = selectedTemplates.includes(t.id);
                     return (
                       <button
@@ -1510,7 +1572,7 @@ export default function NewShowPage() {
           )}
 
           {/* Step 5: Review */}
-          {step === 4 && <ReviewStep form={form} organisations={organisations} venues={venues ?? []} classDefinitions={classDefinitions ?? []} createVenue={createVenue} classSexArrangements={classSexArrangements} allBreedData={allBreedData} onEditStep={setStep} />}
+          {step === 4 && <ReviewStep form={form} organisations={organisations} venues={venues ?? []} classDefinitions={classDefinitions ?? []} classSexArrangements={classSexArrangements} allBreedData={allBreedData} onEditStep={setStep} />}
 
           {/* Navigation */}
           <div className="mt-8 flex items-center justify-between gap-2 border-t pt-6">
@@ -1713,7 +1775,6 @@ function ReviewStep({
   organisations,
   venues,
   classDefinitions,
-  createVenue,
   classSexArrangements,
   allBreedData,
   onEditStep,
@@ -1722,12 +1783,19 @@ function ReviewStep({
   organisations: { id: string; name: string }[];
   venues: { id: string; name: string; postcode: string | null }[];
   classDefinitions: { id: string; name: string }[];
-  createVenue: boolean;
   classSexArrangements: readonly { value: string; label: string }[];
   allBreedData: AllBreedClassData;
   onEditStep: (step: number) => void;
 }) {
   const values = form.getValues();
+  // Exactly what Create will send, shown in UK time — so the close reads
+  // "16 Aug 2026 · 23:59", the moment entries really shut.
+  let reviewDates: ReturnType<typeof newShowDatesPayload> | null = null;
+  try {
+    reviewDates = newShowDatesPayload(values);
+  } catch {
+    // A date isn't complete yet; Create will say so. Nothing to preview.
+  }
   const org = organisations.find((o) => o.id === values.organisationId);
   const venue = venues.find((v) => v.id === values.venueId);
   const selectedClasses = classDefinitions.filter((cd) =>
@@ -1810,18 +1878,13 @@ function ReviewStep({
               <Pencil className="size-3" /> Edit
             </Button>
           </div>
-          {createVenue && values.newVenueName ? (
-            <div>
-              <p className="text-sm font-medium">{values.newVenueName} <Badge variant="outline" className="text-xs">New</Badge></p>
-              {values.newVenuePostcode && <p className="text-xs text-muted-foreground mt-0.5">{values.newVenuePostcode}</p>}
-            </div>
-          ) : venue ? (
+          {venue ? (
             <p className="text-sm font-medium">
               {venue.name}
               {venue.postcode && <span className="text-muted-foreground"> — {venue.postcode}</span>}
             </p>
           ) : (
-            <p className="text-sm text-muted-foreground italic">No venue selected — you can add one later</p>
+            <p className="text-sm text-destructive">No venue chosen yet — every show needs one before it can be created</p>
           )}
         </div>
 
@@ -1856,22 +1919,26 @@ function ReviewStep({
         </div>
 
         {/* Entry Dates */}
-        {(values.entriesOpenDate || values.entryCloseDate) && (
+        {(reviewDates?.entriesOpenDate || reviewDates?.entryCloseDate) && (
           <div className="rounded-lg border bg-muted/20 p-4">
             <h3 className="text-xs font-semibold uppercase tracking-widest text-muted-foreground mb-3">
               Important Dates
             </h3>
             <div className="grid grid-cols-2 gap-3 text-sm">
-              {values.entriesOpenDate && (
+              {reviewDates?.entriesOpenDate && (
                 <div>
                   <p className="text-xs text-muted-foreground">Entries Open</p>
-                  <p className="font-medium">{new Date(values.entriesOpenDate).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}</p>
+                  <p className="font-medium">{formatLondonDate(reviewDates.entriesOpenDate, { day: 'numeric', month: 'short', year: 'numeric' })}</p>
                 </div>
               )}
-              {values.entryCloseDate && (
+              {reviewDates?.entryCloseDate && (
                 <div>
                   <p className="text-xs text-muted-foreground">Entries Close</p>
-                  <p className="font-medium">{new Date(values.entryCloseDate).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}</p>
+                  <p className="font-medium">
+                    {formatLondonDate(reviewDates.entryCloseDate, { day: 'numeric', month: 'short', year: 'numeric' })}
+                    {' · '}
+                    {formatCloseTimeUK(new Date(reviewDates.entryCloseDate))}
+                  </p>
                 </div>
               )}
             </div>

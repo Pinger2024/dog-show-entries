@@ -15,6 +15,8 @@ import { POST as timelinePhotoPOST } from '@/app/api/upload/timeline-photo/route
 import { POST as feedbackAttachmentPOST } from '@/app/api/upload/feedback-attachment/route';
 import { POST as checklistDocPOST } from '@/app/api/upload/checklist-document/route';
 import { makeUser, makeDog } from '../helpers/factories';
+import { testDb } from '../helpers/db';
+import { dogOwners } from '@/server/db/schema';
 
 beforeEach(() => {
   vi.mocked(auth).mockReset();
@@ -85,6 +87,29 @@ describe('POST /api/upload/timeline-photo', () => {
     const user = await makeUser({ role: 'exhibitor' });
     const dog = await makeDog({ ownerId: user.id });
     authedAs(user);
+    const file = new File([new Uint8Array(100)], 'pic.jpg', { type: 'image/jpeg' });
+    const res = await timelinePhotoPOST(
+      postForm('http://localhost', { file, dogId: dog.id }) as never,
+    );
+    expect(res.status).toBe(200);
+  });
+
+  // Rafaye Kanto incident, 2026-08-12: a linked co-owner (dog_owners.user_id)
+  // must get the same upload rights as the account holder.
+  it('200 for a linked co-owner (dog_owners.user_id, not dogs.owner_id)', async () => {
+    const owner = await makeUser({ role: 'exhibitor' });
+    const coOwner = await makeUser({ role: 'exhibitor' });
+    const dog = await makeDog({ ownerId: owner.id });
+    await testDb.insert(dogOwners).values({
+      dogId: dog.id,
+      userId: coOwner.id,
+      ownerName: 'Co Owner',
+      ownerAddress: '2 Low St',
+      ownerEmail: 'co-owner@test.local',
+      isPrimary: false,
+      sortOrder: 1,
+    });
+    authedAs(coOwner);
     const file = new File([new Uint8Array(100)], 'pic.jpg', { type: 'image/jpeg' });
     const res = await timelinePhotoPOST(
       postForm('http://localhost', { file, dogId: dog.id }) as never,

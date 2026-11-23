@@ -1,7 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import { eq, inArray } from 'drizzle-orm';
-import { entries, entryClasses, payments } from '@/server/db/schema';
+import { entries, entryClasses, payments, venues } from '@/server/db/schema';
 import { testDb } from '../helpers/db';
+import { londonDateOffset, todayInLondon } from '@/lib/date-utils';
 import { createTestCaller } from '../helpers/context';
 import {
   makeUser,
@@ -18,17 +19,50 @@ import {
 const publicCaller = () => createTestCaller(null);
 
 describe('shows.list (public, with filters)', () => {
-  it('returns only published / entries_open shows by default', async () => {
+  it('lists every upcoming show by default — entries closed stays until the day (Mandy, 7 Oct 2026)', async () => {
     const org = await makeOrg();
-    await makeShow({ organisationId: org.id, status: 'draft', name: 'Hidden Draft' });
-    const open = await makeShow({ organisationId: org.id, status: 'entries_open', name: 'Open Show' });
-    await makeShow({ organisationId: org.id, status: 'completed', name: 'Old Show' });
+    const future = londonDateOffset(30);
+    const today = todayInLondon();
+    const past = londonDateOffset(-10);
+
+    const published = await makeShow({ organisationId: org.id, status: 'published', startDate: future, endDate: future });
+    const open = await makeShow({ organisationId: org.id, status: 'entries_open', startDate: future, endDate: future });
+    // The North Eastern case: entries closed, show still to come.
+    const closed = await makeShow({ organisationId: org.id, status: 'entries_closed', startDate: londonDateOffset(4), endDate: londonDateOffset(4) });
+    const live = await makeShow({ organisationId: org.id, status: 'in_progress', startDate: today, endDate: today });
+
+    const draft = await makeShow({ organisationId: org.id, status: 'draft', startDate: future, endDate: future });
+    const cancelled = await makeShow({ organisationId: org.id, status: 'cancelled', startDate: future, endDate: future });
+    const completed = await makeShow({ organisationId: org.id, status: 'completed', startDate: past, endDate: past });
+    // Status never moved on, but the show has been and gone.
+    const stale = await makeShow({ organisationId: org.id, status: 'entries_closed', startDate: past, endDate: past });
 
     const result = await publicCaller().shows.list({});
-    const names = result.items.map((s) => s.name);
-    expect(names).toContain(open.name);
-    expect(names).not.toContain('Hidden Draft');
-    expect(names).not.toContain('Old Show');
+    const ids = new Set(result.items.map((s) => s.id));
+    expect(ids).toEqual(new Set([published.id, open.id, closed.id, live.id]));
+    for (const hidden of [draft, cancelled, completed, stale]) expect(ids.has(hidden.id)).toBe(false);
+  });
+
+  it('a multi-day show stays listed on its second day', async () => {
+    const org = await makeOrg();
+    const twoDay = await makeShow({
+      organisationId: org.id,
+      status: 'in_progress',
+      startDate: londonDateOffset(-1),
+      endDate: londonDateOffset(0),
+    });
+    const result = await publicCaller().shows.list({});
+    expect(result.items.map((s) => s.id)).toContain(twoDay.id);
+  });
+
+  it('sorts in the page\'s section order — a closed show this weekend is not pushed behind shows months away', async () => {
+    const org = await makeOrg();
+    const farPublished = await makeShow({ organisationId: org.id, status: 'published', startDate: londonDateOffset(60), endDate: londonDateOffset(60) });
+    const closed = await makeShow({ organisationId: org.id, status: 'entries_closed', startDate: londonDateOffset(4), endDate: londonDateOffset(4) });
+    const open = await makeShow({ organisationId: org.id, status: 'entries_open', startDate: londonDateOffset(40), endDate: londonDateOffset(40) });
+
+    const result = await publicCaller().shows.list({});
+    expect(result.items.map((s) => s.id)).toEqual([open.id, closed.id, farPublished.id]);
   });
 
   it('filters by status when provided', async () => {
@@ -125,6 +159,21 @@ async function entryReadyToEdit() {
 }
 
 describe('entries.update (class edit + fee diff)', () => {
+  // Bug hunt 2026-09-22: an entry left at checkout's payment step stays
+  // 'pending' (unpaid). Edit Classes let the exhibitor add a class, pay ONLY
+  // the difference, and the webhook's single-entry branch then confirmed and
+  // numbered the whole entry — dog in the catalogue for a few pounds.
+  it('refuses to change classes on an unpaid (pending) entry', async () => {
+    const { exhibitor, entry, c1, c2 } = await entryReadyToEdit();
+    await testDb.update(entries).set({ status: 'pending' }).where(eq(entries.id, entry.id));
+    await expect(
+      createTestCaller(exhibitor).entries.update({ id: entry.id, classIds: [c1.id, c2.id] }),
+    ).rejects.toThrow(/paid/i);
+    const adj = await testDb.query.payments.findFirst({ where: eq(payments.entryId, entry.id) });
+    expect(adj).toBeUndefined();
+  });
+
+
   it('adds a class — fee goes up, returns clientSecret for additional payment', async () => {
     const { exhibitor, entry, c1, c2 } = await entryReadyToEdit();
     const caller = createTestCaller(exhibitor);
@@ -141,18 +190,22 @@ describe('entries.update (class edit + fee diff)', () => {
     expect(res.requiresPayment).toBe(true);
     expect(res.clientSecret).toBeTruthy();
 
-    // entry_classes should now reflect the new set
+    // The class change is DEFERRED until the adjustment payment succeeds (the
+    // Stripe webhook applies it), so the entry still has only its original
+    // class — an abandoned top-up must not grant a free upgrade.
     const ecRows = await testDb.query.entryClasses.findMany({
       where: eq(entryClasses.entryId, entry.id),
     });
-    expect(ecRows.map((r) => r.showClassId).sort()).toEqual([c1.id, c2.id].sort());
+    expect(ecRows.map((r) => r.showClassId)).toEqual([c1.id]);
 
-    // Adjustment payment row inserted
+    // Adjustment payment row inserted. payment.amount is the GROSS charge
+    // (diff subtotal + £1 + 1% platform fee) so it reconciles with Stripe.
+    // 400 diff + (100 + round(400 * 0.01)) = 504.
     const adjPayment = await testDb.query.payments.findFirst({
       where: eq(payments.entryId, entry.id),
     });
     expect(adjPayment?.type).toBe('adjustment');
-    expect(adjPayment?.amount).toBe(400);
+    expect(adjPayment?.amount).toBe(504);
   });
 
   it('removes a class — fee goes down, refund issued via Stripe (mocked)', async () => {
@@ -183,7 +236,17 @@ describe('entries.update (class edit + fee diff)', () => {
       where: eq(payments.type, 'refund'),
     });
     expect(refundRow?.amount).toBe(400);
-    expect(refundRow?.status).toBe('succeeded');
+    // executeStripeRefund records the refund row as 'refunded' (not 'succeeded')
+    // and — crucially — increments the original payment's refundAmount, which
+    // the old ad-hoc path failed to do (the bug that enabled silent over-refund).
+    expect(refundRow?.status).toBe('refunded');
+    const allPayments = await testDb.query.payments.findMany({
+      where: eq(payments.entryId, entry.id),
+    });
+    const original = allPayments.find(
+      (p) => p.stripePaymentId === 'pi_test_original' && p.type !== 'refund',
+    );
+    expect(original?.refundAmount).toBe(400);
   });
 
   it('rejects update on a show that is no longer accepting entries', async () => {
@@ -215,3 +278,22 @@ describe('entries.update (class edit + fee diff)', () => {
 });
 
 void inArray;
+
+describe('shows.nearby (public)', () => {
+  it('includes a show whose entries have closed but has not happened yet (Mandy, 7 Oct 2026)', async () => {
+    const org = await makeOrg();
+    const [venue] = await testDb
+      .insert(venues)
+      .values({ name: 'Nearby Hall', lat: '53.4808000', lng: '-2.2426000' })
+      .returning();
+    const closed = await makeShow({
+      organisationId: org.id,
+      venueId: venue!.id,
+      status: 'entries_closed',
+      startDate: londonDateOffset(4),
+      endDate: londonDateOffset(4),
+    });
+    const result = await publicCaller().shows.nearby({ lat: 53.48, lng: -2.24, radiusMiles: 20 });
+    expect(result.map((s) => s.id)).toContain(closed.id);
+  });
+});

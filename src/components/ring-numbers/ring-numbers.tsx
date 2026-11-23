@@ -1,5 +1,6 @@
 import { Document, Page, Text, View, StyleSheet, Font } from '@react-pdf/renderer';
 import path from 'path';
+import '@/lib/pdf-hyphenation';
 
 // Register Inter for a clean, modern look
 const fontsDir = path.join(process.cwd(), 'public', 'fonts');
@@ -10,7 +11,6 @@ Font.register({
     { src: path.join(fontsDir, 'inter-semibold.ttf'), fontWeight: 'bold' },
   ],
 });
-Font.registerHyphenationCallback((word) => [word]);
 
 export interface RingNumberShowInfo {
   name: string;

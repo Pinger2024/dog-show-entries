@@ -8,16 +8,18 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import {
-  Card,
   CardContent,
   CardFooter,
   CardHeader,
   CardTitle,
 } from '@/components/ui/card';
+import { SECard, Wordmark } from '@/components/show-experience/kit';
 
 function ResetPasswordForm() {
   const searchParams = useSearchParams();
   const token = searchParams.get('token');
+  // The set-your-first-password email adds &first=1 to the link.
+  const isFirstPassword = searchParams.get('first') === '1';
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showPasswordVisible, setShowPasswordVisible] = useState(false);
@@ -27,11 +29,11 @@ function ResetPasswordForm() {
 
   if (!token) {
     return (
-      <div className="flex min-h-screen items-center justify-center px-3 sm:px-4">
-        <Card className="w-full max-w-sm">
+      <div className="flex min-h-screen items-center justify-center bg-se-paper px-3 sm:px-4">
+        <SECard className="flex w-full max-w-sm flex-col gap-6">
           <CardHeader className="text-center">
-            <div className="mx-auto mb-3 flex size-12 items-center justify-center rounded-full bg-red-100">
-              <XCircle className="size-6 text-red-600" />
+            <div className="mx-auto mb-3 flex size-12 items-center justify-center rounded-full bg-destructive/10">
+              <XCircle className="size-6 text-destructive" />
             </div>
             <CardTitle className="font-serif text-lg sm:text-xl">Invalid Link</CardTitle>
             <p className="mt-2 text-sm sm:text-[0.9375rem] text-muted-foreground">
@@ -46,22 +48,22 @@ function ResetPasswordForm() {
               Back to sign in
             </Link>
           </CardFooter>
-        </Card>
+        </SECard>
       </div>
     );
   }
 
   if (success) {
     return (
-      <div className="flex min-h-screen items-center justify-center px-3 sm:px-4">
-        <Card className="w-full max-w-sm">
+      <div className="flex min-h-screen items-center justify-center bg-se-paper px-3 sm:px-4">
+        <SECard className="flex w-full max-w-sm flex-col gap-6">
           <CardHeader className="text-center">
-            <div className="mx-auto mb-3 flex size-12 items-center justify-center rounded-full bg-green-100">
-              <CheckCircle2 className="size-6 text-green-600" />
+            <div className="mx-auto mb-3 flex size-12 items-center justify-center rounded-full bg-se-fresh-soft">
+              <CheckCircle2 className="size-6 text-se-fresh-deep" />
             </div>
-            <CardTitle className="font-serif text-lg sm:text-xl">Password Reset</CardTitle>
+            <CardTitle className="font-serif text-lg sm:text-xl">{isFirstPassword ? 'Password set' : 'Password Reset'}</CardTitle>
             <p className="mt-2 text-sm sm:text-[0.9375rem] text-muted-foreground">
-              Your password has been reset successfully. You can now sign in with your new password.
+              {isFirstPassword ? 'Your password is set. You can now sign in with it.' : 'Your password has been reset successfully. You can now sign in with your new password.'}
             </p>
           </CardHeader>
           <CardFooter className="justify-center">
@@ -69,7 +71,7 @@ function ResetPasswordForm() {
               <Link href="/login?reset=success">Sign in</Link>
             </Button>
           </CardFooter>
-        </Card>
+        </SECard>
       </div>
     );
   }
@@ -110,19 +112,19 @@ function ResetPasswordForm() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center px-3 sm:px-4">
+    <div className="flex min-h-screen items-center justify-center bg-se-paper px-3 sm:px-4">
       <div className="w-full max-w-sm space-y-4 sm:space-y-5">
         <div className="text-center">
-          <Link href="/" className="font-serif text-2xl sm:text-3xl font-bold tracking-tight text-primary">
-            Remi
+          <Link href="/" className="inline-flex justify-center">
+            <Wordmark size={26} />
           </Link>
         </div>
 
-        <Card>
+        <SECard className="flex flex-col gap-6">
           <CardHeader className="text-center">
-            <CardTitle className="font-serif text-lg sm:text-xl">Set a new password</CardTitle>
+            <CardTitle className="font-serif text-lg sm:text-xl">{isFirstPassword ? 'Set your password' : 'Set a new password'}</CardTitle>
             <p className="mt-2 text-sm sm:text-[0.9375rem] text-muted-foreground">
-              Choose a new password for your account. Must be at least 8 characters.
+              {isFirstPassword ? 'Choose a password for your account.' : 'Choose a new password for your account.'} Must be at least 8 characters.
             </p>
           </CardHeader>
           <CardContent>
@@ -169,13 +171,13 @@ function ResetPasswordForm() {
               </div>
 
               {error && (
-                <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+                <div className="rounded-lg border border-destructive/20 bg-destructive/10 px-4 py-3 text-sm text-destructive">
                   {error}
                 </div>
               )}
 
               <Button type="submit" className="h-11 sm:h-12 w-full text-sm sm:text-[0.9375rem]" disabled={loading}>
-                {loading ? 'Resetting...' : 'Reset password'}
+                {loading ? (isFirstPassword ? 'Saving...' : 'Resetting...') : (isFirstPassword ? 'Set password' : 'Reset password')}
               </Button>
             </form>
           </CardContent>
@@ -184,7 +186,7 @@ function ResetPasswordForm() {
               Back to sign in
             </Link>
           </CardFooter>
-        </Card>
+        </SECard>
       </div>
     </div>
   );

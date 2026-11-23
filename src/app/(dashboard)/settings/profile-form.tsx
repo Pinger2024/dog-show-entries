@@ -5,7 +5,7 @@ import { trpc } from '@/lib/trpc';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { PostcodeLookup, formatAddress } from '@/components/postcode-lookup';
+import { ownerNameIssue } from '@/lib/owner-name';
 import {
   Card,
   CardContent,
@@ -34,6 +34,10 @@ export function ProfileForm() {
       setKcAccountNo(profile.kcAccountNo ?? '');
     }
   }, [profile]);
+
+  // Same rule the server applies (lib/owner-name.ts): this name is copied in
+  // as Owner 1 on every dog, so two people or an address in it is refused.
+  const nameIssue = ownerNameIssue(name, 'account');
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -84,22 +88,17 @@ export function ProfileForm() {
               onChange={(e) => setName(e.target.value)}
               placeholder="Your full name"
               className="h-11"
+              aria-invalid={nameIssue ? true : undefined}
             />
+            {nameIssue && <p className="text-sm text-destructive">{nameIssue}</p>}
           </div>
-          <PostcodeLookup
-            compact
-            onSelect={(result) => {
-              setAddress(formatAddress(result));
-              setPostcode(result.postcode);
-            }}
-          />
           <div className="space-y-2">
             <Label htmlFor="address">Address</Label>
             <Input
               id="address"
               value={address}
               onChange={(e) => setAddress(e.target.value)}
-              placeholder="Your address"
+              placeholder="House/flat, street, town"
               className="h-11"
             />
           </div>
@@ -141,7 +140,7 @@ export function ProfileForm() {
             <Button
               type="submit"
               className="h-11 w-full sm:w-auto"
-              disabled={updateProfile.isPending}
+              disabled={updateProfile.isPending || !!nameIssue}
             >
               {updateProfile.isPending ? 'Saving...' : 'Save changes'}
             </Button>

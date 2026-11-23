@@ -81,11 +81,11 @@ describe('POST /api/upload/presign', () => {
     const res = await presignPOST(jsonRequest({
       fileName: 'huge.jpg',
       contentType: 'image/jpeg',
-      sizeBytes: 6 * 1024 * 1024, // > 5MB image limit
+      sizeBytes: 16 * 1024 * 1024, // > 15MB image limit
     }) as never);
     expect(res.status).toBe(400);
     const body = await res.json();
-    expect(body.error).toMatch(/under 5MB/);
+    expect(body.error).toMatch(/under 15MB/);
   });
 
   it('rejects missing fields with 400', async () => {
